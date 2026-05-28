@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vector_store/
+.java_ts_vectors.jsonl
+dist/
+build/
+*.egg-info/
+java/.m2/
+java/target/
