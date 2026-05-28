@@ -4,6 +4,7 @@ from java_ts_analyzer.models import JavaFileAnalysis, JavaVectorChunk, SourceSpa
 
 
 def build_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
+    # 将每类语义表面拆成独立 chunk，便于搜索结果区分类、方法、接口、组件和 SQL。
     chunks: list[JavaVectorChunk] = []
     chunks.extend(_type_chunks(analysis))
     chunks.extend(_field_chunks(analysis))
@@ -91,6 +92,7 @@ def _field_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
 def _method_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
     chunks: list[JavaVectorChunk] = []
     for item in analysis.methods:
+        # 把当前方法里的调用点附加到 chunk 中，提升“哪里用了 X”这类查询的命中率。
         calls = [
             call.name
             for call in analysis.calls
@@ -135,6 +137,7 @@ def _method_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
 
 
 def _component_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
+    # 组件 chunk 让框架角色可检索，即使用户查询词没有命中任何方法名也能召回。
     chunks: list[JavaVectorChunk] = []
     for item in analysis.components:
         lines = [
@@ -165,6 +168,7 @@ def _component_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
 
 
 def _endpoint_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
+    # 接口切块将路由、HTTP 动词、控制器和处理方法放在一个小型检索单元里。
     chunks: list[JavaVectorChunk] = []
     for item in analysis.endpoints:
         methods = ", ".join(item.http_methods)
@@ -198,6 +202,7 @@ def _endpoint_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
 
 
 def _sql_reference_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
+    # SQL 注解切块将语句从 Java 方法里单独保留下来，方便直接检索 SQL 中的业务词。
     chunks: list[JavaVectorChunk] = []
     for item in analysis.sql_references:
         lines = [
@@ -240,6 +245,7 @@ def _chunk_id(
     symbol_name: str,
     span: SourceSpan,
 ) -> str:
+    # 只要文件路径和符号位置稳定，ID 在多次运行之间就是确定的，这让 JSONL upsert 更简单。
     file_path = analysis.file_path or "<memory>"
     return f"{file_path}::{kind}::{symbol_name}::{span.start_line}"
 
@@ -252,6 +258,7 @@ def _metadata(
     span: SourceSpan,
     extra: dict[str, str],
 ) -> dict[str, str | int]:
+    # 共享 metadata schema 让代码 chunk 和未来的向量后端复用同一套过滤与展示逻辑。
     metadata: dict[str, str | int] = {
         "source_type": "code",
         "file_path": analysis.file_path or "",

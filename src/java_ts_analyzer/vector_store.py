@@ -26,6 +26,8 @@ class SearchResult:
 
 
 class JsonlVectorStore:
+    """用于确定性开发和测试的本地向量库。"""
+
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
 
@@ -34,6 +36,7 @@ class JsonlVectorStore:
         chunks: Iterable[JavaVectorChunk],
         embedder: HashingEmbedder | None = None,
     ) -> list[VectorRecord]:
+        # 覆盖写入适合完整重建索引。
         records = self._records_for_chunks(chunks, embedder=embedder)
         self._write_records(records)
         return records
@@ -43,6 +46,7 @@ class JsonlVectorStore:
         chunks: Iterable[JavaVectorChunk],
         embedder: HashingEmbedder | None = None,
     ) -> list[VectorRecord]:
+        # upsert 会保留当前索引轮次没有重新生成、但 ID 仍存在的旧记录。
         new_records = self._records_for_chunks(chunks, embedder=embedder)
         records_by_id = {record.id: record for record in self.read_records()}
         records_by_id.update({record.id: record for record in new_records})
@@ -50,6 +54,7 @@ class JsonlVectorStore:
         return new_records
 
     def _write_records(self, records: Iterable[VectorRecord]) -> None:
+        # JSONL 便于人工检查，也方便测试直接读取。
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("w", encoding="utf-8") as file:
             for record in records:
@@ -60,6 +65,7 @@ class JsonlVectorStore:
         chunks: Iterable[JavaVectorChunk],
         embedder: HashingEmbedder | None = None,
     ) -> list[VectorRecord]:
+        # 先把 chunks 物化一次，因为向量化和记录构建都需要遍历同一组数据。
         embedder = embedder or HashingEmbedder()
         chunk_list = list(chunks)
         embeddings = embedder.embed_many([chunk.text for chunk in chunk_list])
@@ -99,6 +105,7 @@ class JsonlVectorStore:
         metadata_filter: dict[str, Any] | None = None,
         embedder: HashingEmbedder | None = None,
     ) -> list[SearchResult]:
+        # 排序前先应用 metadata 过滤，以支持只查代码或只查知识库。
         embedder = embedder or HashingEmbedder()
         query_embedding = embedder.embed(query)
         results = [

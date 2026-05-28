@@ -17,6 +17,8 @@ TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+")
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # 将所有面向用户的模式集中到一个解析器中，让 CLI 同时承担分析、索引、
+    # 检索、报告和图生成工具的职责。
     parser = argparse.ArgumentParser(
         prog="java-ts-analyze",
         description="Analyze Java source code with Tree-sitter.",
@@ -84,6 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     analyzer = JavaAnalyzer()
+    # 提前构建向量器，确保索引和查询使用同一套参数处理逻辑。
     embedder = _build_embedder(
         name=args.embedder,
         model_name=args.embedding_model,
@@ -91,6 +94,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     if args.query:
+        # 查询模式不需要源码路径，只读取已有向量库。
         _search_store(args.store, args.query, args.top_k, args.filter_source, embedder)
         return 0
 
@@ -106,12 +110,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.report:
+        # 报告模式会合并代码分析和可选知识库 chunk，但不写入索引。
         code_results = analyzer.analyze_path(args.path) if args.source in {"code", "mixed"} else []
         kb_chunks = build_kb_chunks(args.path) if args.source in {"kb", "mixed"} else []
         print(_build_report(args.path, args.source, code_results, kb_chunks))
         return 0
 
     if args.graph:
+        # 图输出只来自代码表面：endpoint、组件、SQL 引用和推断出的组件依赖。
         if args.source == "kb":
             raise SystemExit("--graph requires --source code or --source mixed.")
         code_results = analyzer.analyze_path(args.path)
@@ -163,6 +169,7 @@ def _build_source_chunks(
     path: Path,
     source: str,
 ) -> list[JavaVectorChunk]:
+    # 来源模式决定哪些表面进入同一条下游切块/索引流水线。
     chunks: list[JavaVectorChunk] = []
     if source in {"code", "mixed"}:
         chunks.extend(
@@ -176,6 +183,7 @@ def _build_source_chunks(
 
 
 def _print_summary(result: object) -> None:
+    # 人类可读输出刻意保持紧凑；JSON 模式会暴露完整嵌套模型给自动化使用。
     print(result.file_path or "<memory>")
     print(f"  package: {result.package or '-'}")
     print(
@@ -255,6 +263,7 @@ def _search_store(
     filter_source: str | None,
     embedder: object,
 ) -> None:
+    # 通过 source_type 过滤，调用方无需维护多个索引库也能只查代码或只查知识库。
     metadata_filter = {"source_type": filter_source} if filter_source else None
     try:
         results = JsonlVectorStore(store_path).search(
@@ -309,6 +318,7 @@ def _build_report(
     code_results: list[JavaFileAnalysis],
     kb_chunks: list[JavaVectorChunk],
 ) -> str:
+    # 将逐文件指标聚合成 Markdown 报告，适合交接说明或 Obsidian 页面。
     metrics = [result.metrics for result in code_results if result.metrics is not None]
     total_types = sum(metric.type_count for metric in metrics)
     total_fields = sum(metric.field_count for metric in metrics)
@@ -399,6 +409,7 @@ def _kb_report_lines(chunks: list[JavaVectorChunk]) -> list[str]:
 
 
 def _build_graph(results: list[JavaFileAnalysis]) -> str:
+    # 图刻意保持高层视角：endpoint 指向处理器，组件依赖由字段类型和构造器参数推断。
     components = [component for result in results for component in result.components]
     endpoints = [endpoint for result in results for endpoint in result.endpoints]
     sql_references = [reference for result in results for reference in result.sql_references]
@@ -458,6 +469,7 @@ def _component_dependencies(
     results: list[JavaFileAnalysis],
     component_names: set[str],
 ) -> list[tuple[str, str]]:
+    # 依赖推断保持保守，只连接类型名精确匹配的已知组件。
     dependencies: set[tuple[str, str]] = set()
     for result in results:
         for field in result.fields:

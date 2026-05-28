@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+# 所有分析结果都使用 1 基行列号，方便 CLI 输出直接复制到编辑器或
+# Markdown 报告中定位源码。
 @dataclass(frozen=True)
 class SourceSpan:
     start_line: int
@@ -40,6 +42,7 @@ class JavaParameter:
 
 @dataclass(frozen=True)
 class JavaSymbol:
+    # 轻量、向后兼容的符号视图；给不需要下方类型/字段/方法详细模型的调用方使用。
     kind: str
     name: str
     span: SourceSpan
@@ -96,6 +99,7 @@ class JavaCall:
 
 @dataclass(frozen=True)
 class JavaComponent:
+    # 从类级注解推断出的 Spring 风格组件。
     kind: str
     name: str
     annotation: str
@@ -104,6 +108,7 @@ class JavaComponent:
 
 @dataclass(frozen=True)
 class JavaEndpoint:
+    # 由类级和方法级 mapping 注解合并得到的 HTTP 路由。
     path: str
     http_methods: tuple[str, ...]
     annotation: str
@@ -114,6 +119,7 @@ class JavaEndpoint:
 
 @dataclass(frozen=True)
 class JavaSqlReference:
+    # MyBatis 注解 SQL 表面；后续 XML Mapper 支持也可以复用这个结构。
     operation: str
     statement: str
     annotation: str
@@ -141,6 +147,7 @@ class JavaMetrics:
 
 @dataclass(frozen=True)
 class JavaVectorChunk:
+    # 代码 chunk 和知识库 chunk 共用的结构。
     id: str
     text: str
     metadata: dict[str, Any]
@@ -148,6 +155,8 @@ class JavaVectorChunk:
 
 @dataclass(frozen=True)
 class JavaFileAnalysis:
+    # 单个源码文件的顶层分析结果。各列表按关注点拆分，便于 CLI、切块、
+    # 报告和图生成复用同一次分析结果。
     file_path: str | None
     package: str | None
     imports: list[JavaImport]

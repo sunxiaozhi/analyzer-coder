@@ -32,6 +32,8 @@ class KbSection:
 
 
 def build_kb_chunks(path: str | Path, max_chars: int = 1200) -> list[JavaVectorChunk]:
+    # 知识库 chunk 复用 JavaVectorChunk，这样代码和文档可以写入同一个索引，
+    # 再通过 source_type 过滤。
     chunks: list[JavaVectorChunk] = []
     for file_path in _iter_kb_files(Path(path)):
         chunks.extend(_chunks_for_file(file_path, max_chars=max_chars))
@@ -39,6 +41,7 @@ def build_kb_chunks(path: str | Path, max_chars: int = 1200) -> list[JavaVectorC
 
 
 def _iter_kb_files(path: Path) -> Iterable[Path]:
+    # 跳过生成目录和缓存目录，保证文档索引稳定，也避免误索引依赖或构建产物。
     if path.is_file():
         if path.suffix.lower() in KB_EXTENSIONS:
             yield path
@@ -58,6 +61,7 @@ def _chunks_for_file(path: Path, max_chars: int) -> list[JavaVectorChunk]:
     chunks: list[JavaVectorChunk] = []
     for section in _split_sections(text):
         for index, part in enumerate(_split_long_text(section.text, max_chars=max_chars), start=1):
+            # 保留近似行号，方便搜索结果回链到原始文档。
             part_start_line = section.start_line + _line_offset(section.text, part)
             part_end_line = part_start_line + part.count("\n")
             chunks.append(
@@ -83,6 +87,7 @@ def _chunks_for_file(path: Path, max_chars: int) -> list[JavaVectorChunk]:
 
 
 def _split_sections(text: str) -> list[KbSection]:
+    # Markdown 风格标题作为检索边界；没有标题的文件退化为单个“文档”分节。
     lines = text.splitlines()
     sections: list[KbSection] = []
     current_title = "document"
@@ -122,6 +127,7 @@ def _split_sections(text: str) -> list[KbSection]:
 
 
 def _split_long_text(text: str, max_chars: int) -> list[str]:
+    # 优先按段落边界切分以保持可读性；超过目标大小的超长段落再硬切分。
     if len(text) <= max_chars:
         return [text]
 

@@ -73,6 +73,8 @@ STRING_LITERAL_PATTERN = re.compile(r'"((?:\\.|[^"\\])*)"')
 
 
 class JavaAnalyzer:
+    """基于 Tree-sitter 的分析器，把 Java 源码转换成类型化模型。"""
+
     def __init__(self) -> None:
         self.parser = Parser(JAVA_LANGUAGE)
 
@@ -88,6 +90,8 @@ class JavaAnalyzer:
         tree = self.parser.parse(source_bytes)
         root = tree.root_node
 
+        # 对同一棵 AST 运行一组相互独立的提取器；切块、报告、图生成等下游功能
+        # 都消费这一个分析结果。
         package = _extract_package(root, source_bytes)
         imports = _extract_imports(root, source_bytes)
         symbols = list(_extract_symbols(root, source_bytes))
@@ -95,6 +99,8 @@ class JavaAnalyzer:
         fields = list(_extract_field_details(root, source_bytes))
         methods = list(_extract_methods(root, source_bytes))
         calls = list(_extract_calls(root, source_bytes))
+
+        # 框架相关表面从通用的类型/方法模型中派生，避免把 Tree-sitter 遍历逻辑分散到各处。
         components = _extract_components(types)
         endpoints = _extract_endpoints(types, methods)
         sql_references = _extract_sql_references(methods)
@@ -170,6 +176,7 @@ def _child_text(node: Node, source: bytes, field_name: str) -> str | None:
 
 
 def _walk(node: Node) -> Iterable[Node]:
+    """按深度优先顺序产出所有节点。"""
     yield node
     for child in node.children:
         yield from _walk(child)
@@ -208,6 +215,7 @@ def _extract_imports(root: Node, source: bytes) -> list[JavaImport]:
 
 
 def _extract_symbols(root: Node, source: bytes) -> Iterable[JavaSymbol]:
+    # 遍历嵌套声明时，用栈保存外层类型名，比反复回溯父节点更简单可靠。
     type_stack: list[str] = []
 
     def visit(node: Node) -> Iterable[JavaSymbol]:
@@ -274,6 +282,7 @@ def _extract_fields(
 
 
 def _extract_types(root: Node, source: bytes) -> Iterable[JavaType]:
+    # 将嵌套类/接口挂到它们直接所属的外层类型上。
     type_stack: list[str] = []
 
     def visit(node: Node) -> Iterable[JavaType]:
@@ -343,6 +352,7 @@ def _extract_field_details(root: Node, source: bytes) -> Iterable[JavaField]:
 
 
 def _extract_methods(root: Node, source: bytes) -> Iterable[JavaMethod]:
+    # 构造器和普通方法共享大部分元数据，因此统一表示为 JavaMethod，并用 kind 区分。
     type_stack: list[str] = []
 
     def visit(node: Node) -> Iterable[JavaMethod]:
@@ -380,6 +390,7 @@ def _extract_methods(root: Node, source: bytes) -> Iterable[JavaMethod]:
 
 
 def _extract_calls(root: Node, source: bytes) -> Iterable[JavaCall]:
+    # 方法调用会附带所属类型和所属方法，让方法级 chunk 在检索时更有上下文。
     type_stack: list[str] = []
     method_stack: list[str] = []
 
@@ -449,6 +460,8 @@ def _declared_type(node: Node, source: bytes) -> str | None:
     if typed is not None:
         return _node_text(typed, source)
 
+    # 不同声明里的 Tree-sitter 字段名并不完全一致；如果没有 type 字段，
+    # 就跳过语法符号和方法体，取第一个看起来像类型的子节点。
     skip = {
         ",",
         ";",
@@ -553,6 +566,7 @@ def _argument_count(node: Node) -> int:
 
 
 def _extract_components(types: list[JavaType]) -> list[JavaComponent]:
+    # 组件识别基于注解名，因此全限定注解和普通导入后的短注解可以用同一套逻辑处理。
     components: list[JavaComponent] = []
     for item in types:
         for annotation in item.annotations:
@@ -572,6 +586,7 @@ def _extract_components(types: list[JavaType]) -> list[JavaComponent]:
 
 def _extract_endpoints(types: list[JavaType], methods: list[JavaMethod]) -> list[JavaEndpoint]:
     base_paths_by_type: dict[str, tuple[str, ...]] = {}
+    # 类级 mapping 提供基础路径；方法级 mapping 提供最终路由片段和 HTTP 动词。
     for item in types:
         route_annotations = [
             annotation
@@ -609,6 +624,7 @@ def _extract_endpoints(types: list[JavaType], methods: list[JavaMethod]) -> list
 
 
 def _extract_sql_references(methods: list[JavaMethod]) -> list[JavaSqlReference]:
+    # 注解里的 SQL 单独作为检索表面，因为它常包含方法名里看不到的业务词。
     references: list[JavaSqlReference] = []
     for item in methods:
         for annotation in item.annotations:
@@ -648,6 +664,7 @@ def _http_methods(annotation_name: str, annotation: str) -> tuple[str, ...]:
     mapped = ROUTE_ANNOTATIONS.get(annotation_name)
     if mapped:
         return mapped
+    # 裸 @RequestMapping 没有固定 HTTP 动词，除非显式出现 RequestMethod.*。
     methods = tuple(REQUEST_METHOD_PATTERN.findall(annotation))
     return methods or ("ANY",)
 
@@ -672,6 +689,7 @@ def _extract_metrics(
     endpoints: list[JavaEndpoint],
     sql_references: list[JavaSqlReference],
 ) -> JavaMetrics:
+    # 节点类型计数用于诊断，也方便后续检查解析器覆盖面。
     node_type_counts: dict[str, int] = {}
     node_count = 0
     for node in _walk(root):
