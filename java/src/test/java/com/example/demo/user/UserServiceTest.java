@@ -31,4 +31,28 @@ class UserServiceTest {
                 .isInstanceOf(DuplicatePhoneException.class)
                 .hasMessageContaining("13800138000");
     }
+
+    @Test
+    void searchesUpdatesAndDeletesUser() {
+        service.register(new UserRegistrationRequest("13800138000", "Alice Zhang"));
+        service.register(new UserRegistrationRequest("13900139000", "Bob Li"));
+
+        assertThat(service.searchUsersByName("alice"))
+                .extracting(User::phone)
+                .containsExactly("13800138000");
+
+        User updated = service.updateProfile(
+                        "13800138000",
+                        new UserProfileUpdateRequest(" Alice Chen ")
+                )
+                .orElseThrow();
+
+        assertThat(updated.name()).isEqualTo("Alice Chen");
+        assertThat(updated.createdAt()).isEqualTo(Instant.parse("2026-05-28T00:00:00Z"));
+        assertThat(service.findByPhone("13800138000")).get().extracting(User::name).isEqualTo("Alice Chen");
+
+        assertThat(service.deleteByPhone("13800138000")).isTrue();
+        assertThat(service.findByPhone("13800138000")).isEmpty();
+        assertThat(service.deleteByPhone("13800138000")).isFalse();
+    }
 }

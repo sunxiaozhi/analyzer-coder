@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "flask-api-development": {
+      "source": "aj-geddes/useful-ai-prompts",
+      "sourceType": "github",
+      "skillPath": "skills/flask-api-development/SKILL.md",
+      "computedHash": "9e5213f9fa4bde4175b717ab679d5a46497bd9edfff6673724a05320c741c6a9"
+    },
+    "vue-best-practices": {
+      "source": "hyf0/vue-skills",
+      "sourceType": "github",
+      "skillPath": "skills/vue-best-practices/SKILL.md",
+      "computedHash": "21132f6c11c765bd11d0d6ad081122dd858630073e2123b651e58f17b399b131"
+    }
+  }
+}

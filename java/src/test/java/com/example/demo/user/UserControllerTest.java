@@ -1,7 +1,9 @@
 package com.example.demo.user;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -86,5 +88,49 @@ class UserControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void searchesUpdatesAndDeletesUser() throws Exception {
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "phone": "13800138000",
+                                  "name": "Alice Zhang"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "phone": "13900139000",
+                                  "name": "Bob Li"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/users").param("name", "alice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].phone").value("13800138000"));
+
+        mockMvc.perform(patch("/api/users/13800138000")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Alice Chen"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Alice Chen"));
+
+        mockMvc.perform(delete("/api/users/13800138000"))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/users/13800138000"))
+                .andExpect(status().isNotFound());
     }
 }

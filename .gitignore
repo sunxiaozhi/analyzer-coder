@@ -6,8 +6,14 @@ __pycache__/
 .ruff_cache/
 .vector_store/
 .java_ts_vectors.jsonl
+.java_ts_results/
+obsidian-vault/
+web/frontend/node_modules/
+web/frontend/dist/
 dist/
 build/
 *.egg-info/
 java/.m2/
 java/target/
+/.idea
+/.java_ts_projects

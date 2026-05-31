@@ -14,6 +14,7 @@ SKIP_DIRS = {
     ".pytest_cache",
     ".ruff_cache",
     ".venv",
+    ".java_ts_results",
     ".vector_store",
     "__pycache__",
     "build",

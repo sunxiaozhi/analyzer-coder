@@ -36,6 +36,45 @@ def test_cli_graph_includes_endpoints_and_component_dependencies(tmp_path: Path)
     assert "component_UserMapper -->|executes| sql_1" in result.stdout
 
 
+def test_cli_saves_each_command_result(tmp_path: Path) -> None:
+    java_file = tmp_path / "UserController.java"
+    java_file.write_text(_spring_source(), encoding="utf-8")
+    results_dir = tmp_path / "results"
+
+    result = _run_cli(tmp_path, "--json", "--results-dir", results_dir)
+
+    assert result.returncode == 0
+    saved_files = list(results_dir.glob("*-json.json"))
+    assert len(saved_files) == 1
+    assert saved_files[0].read_text(encoding="utf-8").strip() == result.stdout.strip()
+    assert "saved result to" in result.stderr
+
+
+def test_cli_generates_obsidian_notes(tmp_path: Path) -> None:
+    java_file = tmp_path / "UserController.java"
+    java_file.write_text(_spring_source(), encoding="utf-8")
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "registration.md").write_text(
+        "# Registration\n\nPhone number must be unique during registration.",
+        encoding="utf-8",
+    )
+    vault_dir = tmp_path / "vault"
+
+    result = _run_cli(tmp_path, "--source", "mixed", "--obsidian", vault_dir)
+
+    assert result.returncode == 0
+    assert "generated" in result.stdout
+    index = vault_dir / "Java Analysis.md"
+    controller = vault_dir / "Components" / "UserController.md"
+    endpoint = vault_dir / "Endpoints" / "POST -api-users.md"
+    assert index.exists()
+    assert controller.exists()
+    assert endpoint.exists()
+    assert "[[UserController]]" in index.read_text(encoding="utf-8")
+    assert "Related Knowledge" in controller.read_text(encoding="utf-8")
+
+
 def test_cli_indexes_queries_and_prints_match_terms(tmp_path: Path) -> None:
     java_file = tmp_path / "UserController.java"
     java_file.write_text(_spring_source(), encoding="utf-8")

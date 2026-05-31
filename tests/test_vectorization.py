@@ -89,3 +89,18 @@ def test_kb_chunks_can_be_combined_with_code_chunks(tmp_path) -> None:
     assert kb_results[0].metadata["source_type"] == "kb"
     assert code_results
     assert code_results[0].metadata["source_type"] == "code"
+
+
+def test_kb_chunks_skip_saved_results_directory(tmp_path) -> None:
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "guide.md").write_text("# Guide\n\nReal project knowledge.", encoding="utf-8")
+    results_dir = tmp_path / ".java_ts_results"
+    results_dir.mkdir()
+    (results_dir / "20260530-report.md").write_text("# Generated\n\nOld output.", encoding="utf-8")
+
+    chunks = build_kb_chunks(tmp_path)
+
+    file_paths = {chunk.metadata["file_path"] for chunk in chunks}
+    assert str(docs_dir / "guide.md") in file_paths
+    assert str(results_dir / "20260530-report.md") not in file_paths

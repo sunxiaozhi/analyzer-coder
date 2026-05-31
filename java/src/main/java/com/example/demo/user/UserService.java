@@ -38,8 +38,25 @@ public class UserService {
         return repository.findAll();
     }
 
+    public List<User> searchUsersByName(String name) {
+        return repository.findByNameContaining(name.trim());
+    }
+
     public Optional<User> findByPhone(String phone) {
         return repository.findByPhone(normalize(phone));
+    }
+
+    public Optional<User> updateProfile(String phone, UserProfileUpdateRequest request) {
+        String normalizedPhone = normalize(phone);
+        String name = request.name().trim();
+        return repository.updateByPhone(
+                normalizedPhone,
+                existing -> new User(existing.id(), existing.phone(), name, existing.createdAt())
+        );
+    }
+
+    public boolean deleteByPhone(String phone) {
+        return repository.deleteByPhone(normalize(phone));
     }
 
     private static String normalize(String phone) {
