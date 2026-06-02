@@ -1,1 +1,0 @@
-indexed 1063 chunks into .java_ts_projects\witboot\vector_store\project.jsonl
