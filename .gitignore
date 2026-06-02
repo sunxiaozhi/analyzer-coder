@@ -10,10 +10,9 @@ __pycache__/
 obsidian-vault/
 web/frontend/node_modules/
 web/frontend/dist/
+logs/
 dist/
 build/
 *.egg-info/
-java/.m2/
-java/target/
 /.idea
-/.java_ts_projects
+/.analzer_projects

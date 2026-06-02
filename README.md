@@ -116,7 +116,7 @@ print(results[0].text)
 
 ## Web 应用
 
-项目包含一个 Flask 后端和 Vue 3 前端，位于 `web` 目录。
+项目包含一个 Flask 后端和 Vue 3 前端，位于 `web` 目录，用于维护项目、知识库和代码知识索引。
 
 安装后端依赖：
 
@@ -150,7 +150,7 @@ npm run dev
 http://127.0.0.1:5173
 ```
 
-前端通过 Vite 代理访问 `/api`，对应 Flask 后端的分析、索引和查询接口。
+前端通过 Vite 代理访问 `/api`，对应 Flask 后端的项目、知识库、分析、索引和查询接口。
 
 ## 源码结构
 
@@ -167,8 +167,8 @@ Python 包位于 `src/java_ts_analyzer`：
 
 Web 子项目位于 `web`：
 
-- `web/backend/app.py`：Flask API 服务，提供健康检查、分析、索引和查询接口，并复用现有 Java 分析器能力。
-- `web/frontend`：Vue 3 + Vite 前端，用于输入路径、选择分析模式、建立索引、查询向量库并查看结果。
+- `web/backend/app.py`：Flask API 服务，提供健康检查、项目、知识库、分析、索引和查询接口，并复用现有分析器能力。
+- `web/frontend`：Vue 3 + Vite 前端，用于维护项目和知识库、选择分析模式、建立索引、查询向量库并查看结果。
 
 ## 可提取的信息
 

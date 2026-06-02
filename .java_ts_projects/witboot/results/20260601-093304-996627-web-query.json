@@ -1,0 +1,103 @@
+[
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-client\\src\\main\\java\\com\\witboot\\client\\menu\\api\\IMenuService.java::type::IMenuService::17",
+    "score": 0.23249527748763857,
+    "text": "Java interface IMenuService\nPackage: com.witboot.client.menu.api\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-client\\src\\main\\java\\com\\witboot\\client\\menu\\api\\IMenuService.java\nModifiers: public",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-client\\src\\main\\java\\com\\witboot\\client\\menu\\api\\IMenuService.java",
+      "package": "com.witboot.client.menu.api",
+      "kind": "type",
+      "type_name": "IMenuService",
+      "symbol_name": "IMenuService",
+      "start_line": 17,
+      "start_column": 1,
+      "end_line": 57,
+      "end_column": 2,
+      "type_kind": "interface",
+      "enclosing_type": "",
+      "superclass": "",
+      "interfaces": ""
+    }
+  },
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-client\\src\\main\\java\\com\\witboot\\client\\menu\\dto\\MenuAddCmd.java::field::name::24",
+    "score": 0.2279211529192759,
+    "text": "Java field name\nPackage: com.witboot.client.menu.dto\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-client\\src\\main\\java\\com\\witboot\\client\\menu\\dto\\MenuAddCmd.java\nEnclosing type: MenuAddCmd\nType: String\nModifiers: private",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-client\\src\\main\\java\\com\\witboot\\client\\menu\\dto\\MenuAddCmd.java",
+      "package": "com.witboot.client.menu.dto",
+      "kind": "field",
+      "type_name": "MenuAddCmd",
+      "symbol_name": "name",
+      "start_line": 24,
+      "start_column": 20,
+      "end_line": 24,
+      "end_column": 24,
+      "field_type": "String",
+      "initializer": ""
+    }
+  },
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-client\\src\\main\\java\\com\\witboot\\client\\menu\\dto\\MenuAddCmd.java::field::parentId::29",
+    "score": 0.2279211529192759,
+    "text": "Java field parentId\nPackage: com.witboot.client.menu.dto\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-client\\src\\main\\java\\com\\witboot\\client\\menu\\dto\\MenuAddCmd.java\nEnclosing type: MenuAddCmd\nType: Long\nModifiers: private",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-client\\src\\main\\java\\com\\witboot\\client\\menu\\dto\\MenuAddCmd.java",
+      "package": "com.witboot.client.menu.dto",
+      "kind": "field",
+      "type_name": "MenuAddCmd",
+      "symbol_name": "parentId",
+      "start_line": 29,
+      "start_column": 18,
+      "end_line": 29,
+      "end_column": 26,
+      "field_type": "Long",
+      "initializer": ""
+    }
+  },
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-app\\src\\main\\java\\com\\witboot\\app\\menu\\assembler\\MenuAssembler.java::type::MenuAssembler::17",
+    "score": 0.22360679774997896,
+    "text": "Java class MenuAssembler\nPackage: com.witboot.app.menu.assembler\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-app\\src\\main\\java\\com\\witboot\\app\\menu\\assembler\\MenuAssembler.java\nModifiers: public",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-app\\src\\main\\java\\com\\witboot\\app\\menu\\assembler\\MenuAssembler.java",
+      "package": "com.witboot.app.menu.assembler",
+      "kind": "type",
+      "type_name": "MenuAssembler",
+      "symbol_name": "MenuAssembler",
+      "start_line": 17,
+      "start_column": 1,
+      "end_line": 41,
+      "end_column": 2,
+      "type_kind": "class",
+      "enclosing_type": "",
+      "superclass": "",
+      "interfaces": ""
+    }
+  },
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-app\\src\\main\\java\\com\\witboot\\app\\menu\\validator\\MenuValidator.java::type::MenuValidator::8",
+    "score": 0.22360679774997896,
+    "text": "Java class MenuValidator\nPackage: com.witboot.app.menu.validator\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-app\\src\\main\\java\\com\\witboot\\app\\menu\\validator\\MenuValidator.java\nModifiers: public",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-app\\src\\main\\java\\com\\witboot\\app\\menu\\validator\\MenuValidator.java",
+      "package": "com.witboot.app.menu.validator",
+      "kind": "type",
+      "type_name": "MenuValidator",
+      "symbol_name": "MenuValidator",
+      "start_line": 8,
+      "start_column": 1,
+      "end_line": 10,
+      "end_column": 2,
+      "type_kind": "class",
+      "enclosing_type": "",
+      "superclass": "",
+      "interfaces": ""
+    }
+  }
+]

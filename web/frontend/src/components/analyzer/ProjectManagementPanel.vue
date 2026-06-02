@@ -20,7 +20,6 @@ const projectForm = defineModel<ProjectForm>('projectForm', { required: true })
 defineProps<{
   projectBusy: boolean
   projects: ProjectRecord[]
-  selectedProject: ProjectRecord | null
 }>()
 
 const emit = defineEmits<{
@@ -30,10 +29,6 @@ const emit = defineEmits<{
 }>()
 
 const pullDialogOpen = shallowRef(false)
-
-function selectProject(projectId: string) {
-  form.value.projectId = projectId
-}
 
 function submitCreateProject() {
   emit('createProject')
@@ -59,18 +54,13 @@ function submitCreateProject() {
     <ElScrollbar class="project-list card-project-list">
       <div class="project-card-grid">
         <ProjectCard
-          :selected="!form.projectId"
-          workspace
-          @select="selectProject('')"
-        />
-        <ProjectCard
           v-for="project in projects"
           :key="project.id"
           :busy="projectBusy"
           :project="project"
           :selected="form.projectId === project.id"
           @pull="$emit('pullProject')"
-          @select="selectProject(project.id)"
+          @select="form.projectId = project.id"
         />
       </div>
     </ElScrollbar>

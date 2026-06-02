@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, FolderOpened, Refresh, House } from '@element-plus/icons-vue'
+import { Check, FolderOpened, Refresh } from '@element-plus/icons-vue'
 import { ElButton, ElCard, ElIcon, ElTag } from 'element-plus'
 import type { ProjectRecord } from '../../types'
 
@@ -7,7 +7,6 @@ defineProps<{
   busy?: boolean
   project?: ProjectRecord
   selected: boolean
-  workspace?: boolean
 }>()
 
 defineEmits<{
@@ -26,8 +25,7 @@ defineEmits<{
     <div class="project-card-header">
       <div class="project-card-icon">
         <ElIcon>
-          <House v-if="workspace" />
-          <FolderOpened v-else />
+          <FolderOpened />
         </ElIcon>
       </div>
       <ElTag v-if="selected" type="success" effect="plain">
@@ -38,18 +36,18 @@ defineEmits<{
     </div>
 
     <div class="project-card-main">
-      <h3>{{ workspace ? '当前工作区' : project?.name }}</h3>
-      <p>{{ workspace ? '使用 analyzer-coder 当前目录中的源码。' : project?.gitUrl }}</p>
+      <h3>{{ project?.name }}</h3>
+      <p>{{ project?.gitUrl }}</p>
     </div>
 
     <div class="project-card-meta">
-      <span>{{ workspace ? 'workspace' : project?.id }}</span>
-      <span>{{ workspace ? '本地目录' : project?.path }}</span>
+      <span>{{ project?.id }}</span>
+      <span>{{ project?.path }}</span>
       <span v-if="project">更新：{{ project.updatedAt }}</span>
     </div>
 
     <div class="project-card-actions">
-      <ElButton size="small" type="primary" plain @click.stop="$emit('select')">
+      <ElButton class="project-select-button" size="small" type="primary" plain @click.stop="$emit('select')">
         选择
       </ElButton>
       <ElButton

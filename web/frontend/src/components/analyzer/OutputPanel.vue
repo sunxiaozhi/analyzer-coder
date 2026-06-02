@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { Document, FolderChecked } from '@element-plus/icons-vue'
 import {
   ElCard,
+  ElDivider,
   ElEmpty,
   ElIcon,
   ElMain,
@@ -11,7 +12,7 @@ import {
   ElSpace,
   ElTag
 } from 'element-plus'
-import type { ActiveView, JsonValue, OutputType, QueryResult } from '../../types'
+import type { ActiveView, JsonValue, OutputType, QueryEvidence, QueryResult } from '../../types'
 import JsonViewer from './JsonViewer.vue'
 
 const props = defineProps<{
@@ -20,6 +21,7 @@ const props = defineProps<{
   outputTitle: string
   outputType: OutputType
   parsedJson: JsonValue | null
+  queryEvidence: QueryEvidence | null
   queryResults: QueryResult[]
   savedPath: string
 }>()
@@ -49,6 +51,13 @@ const renderedMarkdown = computed(() => markdown.render(props.output || ''))
     <ElScrollbar v-if="activeView === 'query'" class="results-list">
       <ElEmpty v-if="!queryResults.length" description="暂无检索结果。" />
       <template v-else>
+        <section class="evidence-section">
+          <div class="section-title">
+            <span>直接命中</span>
+            <ElTag type="info" effect="plain">{{ queryResults.length }}</ElTag>
+          </div>
+        </section>
+
         <ElCard v-for="item in queryResults" :key="item.id" class="result-item" shadow="never">
           <template #header>
             <div class="result-meta">
@@ -62,6 +71,60 @@ const renderedMarkdown = computed(() => markdown.render(props.output || ''))
           <p>{{ item.metadata.file_path }}:{{ item.metadata.start_line }}</p>
           <pre>{{ item.text }}</pre>
         </ElCard>
+
+        <template v-if="queryEvidence">
+          <ElDivider />
+
+          <section v-if="queryEvidence.relatedCode.length" class="evidence-section">
+            <div class="section-title">
+              <span>关联代码</span>
+              <ElTag type="success" effect="plain">{{ queryEvidence.relatedCode.length }}</ElTag>
+            </div>
+            <ElCard
+              v-for="item in queryEvidence.relatedCode"
+              :key="item.id"
+              class="result-item related-item"
+              shadow="never"
+            >
+              <template #header>
+                <div class="result-meta">
+                  <ElSpace>
+                    <ElIcon><Document /></ElIcon>
+                    <strong>{{ item.metadata.kind }} / {{ item.metadata.symbol_name }}</strong>
+                  </ElSpace>
+                  <ElTag type="success" effect="plain">关联 {{ item.score }}</ElTag>
+                </div>
+              </template>
+              <p>{{ item.metadata.file_path }}:{{ item.metadata.start_line }}</p>
+              <pre>{{ item.text }}</pre>
+            </ElCard>
+          </section>
+
+          <section v-if="queryEvidence.relatedKnowledge.length" class="evidence-section">
+            <div class="section-title">
+              <span>关联知识库</span>
+              <ElTag type="warning" effect="plain">{{ queryEvidence.relatedKnowledge.length }}</ElTag>
+            </div>
+            <ElCard
+              v-for="item in queryEvidence.relatedKnowledge"
+              :key="item.id"
+              class="result-item related-item"
+              shadow="never"
+            >
+              <template #header>
+                <div class="result-meta">
+                  <ElSpace>
+                    <ElIcon><Document /></ElIcon>
+                    <strong>{{ item.metadata.doc_name || item.metadata.file_path }}</strong>
+                  </ElSpace>
+                  <ElTag type="warning" effect="plain">关联 {{ item.score }}</ElTag>
+                </div>
+              </template>
+              <p>{{ item.metadata.file_path }}:{{ item.metadata.start_line }}</p>
+              <pre>{{ item.text }}</pre>
+            </ElCard>
+          </section>
+        </template>
       </template>
     </ElScrollbar>
 

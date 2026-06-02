@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Search } from '@element-plus/icons-vue'
 import { ElButton, ElCard, ElForm, ElFormItem, ElIcon, ElInput, ElOption, ElSelect } from 'element-plus'
-import type { ActiveView, AnalyzerForm, JsonValue, OutputType, QueryResult } from '../../types'
+import type { ActiveView, AnalyzerForm, JsonValue, OutputType, QueryEvidence, QueryResult } from '../../types'
 import OutputPanel from './OutputPanel.vue'
 
 const form = defineModel<AnalyzerForm>('form', { required: true })
@@ -13,6 +13,7 @@ defineProps<{
   outputTitle: string
   outputType: OutputType
   parsedJson: JsonValue | null
+  queryEvidence: QueryEvidence | null
   queryResults: QueryResult[]
   savedPath: string
 }>()
@@ -63,6 +64,7 @@ defineEmits<{
       :output-title="outputTitle"
       :output-type="outputType"
       :parsed-json="parsedJson"
+      :query-evidence="queryEvidence"
       :query-results="queryResults"
       :saved-path="savedPath"
     />

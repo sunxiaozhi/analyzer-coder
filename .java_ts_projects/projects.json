@@ -1,0 +1,13 @@
+{
+  "projects": [
+    {
+      "id": "witboot",
+      "name": "WitBoot",
+      "gitUrl": "https://github.com/sunxiaozhi/WitBoot.git",
+      "branch": "main",
+      "path": ".java_ts_projects\\witboot\\repo",
+      "createdAt": "2026-06-01T01:31:58.143463+00:00",
+      "updatedAt": "2026-06-01T01:31:58.143479+00:00"
+    }
+  ]
+}

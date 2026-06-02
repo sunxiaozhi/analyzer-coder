@@ -1,0 +1,103 @@
+[
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java::type::SystemMonitorTask::10",
+    "score": 0.0,
+    "text": "Java class SystemMonitorTask\nPackage: com.witboot.adapter.task\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java\nModifiers: public\nAnnotations: @Slf4j @Component",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java",
+      "package": "com.witboot.adapter.task",
+      "kind": "type",
+      "type_name": "SystemMonitorTask",
+      "symbol_name": "SystemMonitorTask",
+      "start_line": 10,
+      "start_column": 1,
+      "end_line": 24,
+      "end_column": 2,
+      "type_kind": "class",
+      "enclosing_type": "",
+      "superclass": "",
+      "interfaces": ""
+    }
+  },
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java::field::systemMonitorService::17",
+    "score": 0.0,
+    "text": "Java field systemMonitorService\nPackage: com.witboot.adapter.task\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java\nEnclosing type: SystemMonitorTask\nType: ISystemMonitorService\nModifiers: private\nAnnotations: @Autowired",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java",
+      "package": "com.witboot.adapter.task",
+      "kind": "field",
+      "type_name": "SystemMonitorTask",
+      "symbol_name": "systemMonitorService",
+      "start_line": 17,
+      "start_column": 35,
+      "end_line": 17,
+      "end_column": 55,
+      "field_type": "ISystemMonitorService",
+      "initializer": ""
+    }
+  },
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java::method::monitorInfo::19",
+    "score": 0.0,
+    "text": "Java method monitorInfo\nPackage: com.witboot.adapter.task\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java\nEnclosing type: SystemMonitorTask\nSignature: void monitorInfo()\nReturn type: void\nModifiers: public\nAnnotations: @Scheduled(cron = \"${cron.monitor-info}\")\nCalls: info, success, monitorInfo",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java",
+      "package": "com.witboot.adapter.task",
+      "kind": "method",
+      "type_name": "SystemMonitorTask",
+      "symbol_name": "monitorInfo",
+      "start_line": 19,
+      "start_column": 5,
+      "end_line": 23,
+      "end_column": 6,
+      "signature": "void monitorInfo()",
+      "return_type": "void",
+      "parameters": "",
+      "calls": "info, success, monitorInfo"
+    }
+  },
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java::component::SystemMonitorTask::10",
+    "score": 0.0,
+    "text": "Java Spring component SystemMonitorTask\nComponent kind: component\nAnnotation: @Component\nPackage: com.witboot.adapter.task\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\task\\SystemMonitorTask.java",
+      "package": "com.witboot.adapter.task",
+      "kind": "component",
+      "type_name": "SystemMonitorTask",
+      "symbol_name": "SystemMonitorTask",
+      "start_line": 10,
+      "start_column": 1,
+      "end_line": 24,
+      "end_column": 2,
+      "component_kind": "component",
+      "annotation": "@Component"
+    }
+  },
+  {
+    "id": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\web\\DepartmentController.java::type::DepartmentController::23",
+    "score": 0.0,
+    "text": "Java class DepartmentController\nPackage: com.witboot.adapter.web\nFile: C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\web\\DepartmentController.java\nModifiers: public\nAnnotations: @RestController @RequestMapping(\"department/\") @Tag(name = \"部门\")\nExtends: BaseController",
+    "metadata": {
+      "source_type": "code",
+      "file_path": "C:\\Users\\admin\\Desktop\\coder\\.java_ts_projects\\witboot\\repo\\witboot-server\\witboot-adapter\\src\\main\\java\\com\\witboot\\adapter\\web\\DepartmentController.java",
+      "package": "com.witboot.adapter.web",
+      "kind": "type",
+      "type_name": "DepartmentController",
+      "symbol_name": "DepartmentController",
+      "start_line": 23,
+      "start_column": 1,
+      "end_line": 44,
+      "end_column": 2,
+      "type_kind": "class",
+      "enclosing_type": "",
+      "superclass": "BaseController",
+      "interfaces": ""
+    }
+  }
+]
