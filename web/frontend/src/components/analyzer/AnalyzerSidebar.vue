@@ -59,11 +59,11 @@ defineEmits<{
         </ElMenuItem>
         <ElMenuItem index="analysis">
           <ElIcon><Cpu /></ElIcon>
-          <span>分析</span>
+          <span>代码分析</span>
         </ElMenuItem>
         <ElMenuItem index="vectors">
           <ElIcon><Files /></ElIcon>
-          <span>索引</span>
+          <span>向量管理</span>
         </ElMenuItem>
       </ElMenu>
 
