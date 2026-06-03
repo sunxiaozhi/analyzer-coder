@@ -41,6 +41,11 @@ def me() -> Any:
     return jsonify(analyzer_service().current_user(session.get("user_id")))
 
 
+@api_bp.put("/auth/last-project")
+def update_last_project() -> Any:
+    return jsonify(analyzer_service().update_last_project(json_payload(request), current_user()))
+
+
 @api_bp.get("/users")
 def list_users() -> Any:
     return jsonify(analyzer_service().list_users(current_user()))
@@ -51,19 +56,22 @@ def create_user() -> Any:
     return jsonify(analyzer_service().create_user(json_payload(request), current_user())), 201
 
 
-@api_bp.put("/users/<user_id>")
-def update_user(user_id: str) -> Any:
-    return jsonify(analyzer_service().update_user(user_id, json_payload(request), current_user()))
+@api_bp.put("/users")
+def update_user() -> Any:
+    payload = json_payload(request)
+    return jsonify(analyzer_service().update_user(str(payload.get("id", "")).strip(), payload, current_user()))
 
 
-@api_bp.put("/users/<user_id>/password")
-def update_user_password(user_id: str) -> Any:
-    return jsonify(analyzer_service().update_user_password(user_id, json_payload(request), current_user()))
+@api_bp.put("/users/password")
+def update_user_password() -> Any:
+    payload = json_payload(request)
+    return jsonify(analyzer_service().update_user_password(str(payload.get("id", "")).strip(), payload, current_user()))
 
 
-@api_bp.put("/users/<user_id>/access")
-def update_user_access(user_id: str) -> Any:
-    return jsonify(analyzer_service().update_user_access(user_id, json_payload(request), current_user()))
+@api_bp.put("/users/access")
+def update_user_access() -> Any:
+    payload = json_payload(request)
+    return jsonify(analyzer_service().update_user_access(str(payload.get("id", "")).strip(), payload, current_user()))
 
 
 @api_bp.get("/projects")

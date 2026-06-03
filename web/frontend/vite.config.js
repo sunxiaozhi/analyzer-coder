@@ -8,5 +8,11 @@ export default defineConfig({
     proxy: {
       '/api': 'http://127.0.0.1:5050'
     }
+  },
+  preview: {
+    port: 5173,
+    proxy: {
+      '/api': 'http://127.0.0.1:5050'
+    }
   }
 })

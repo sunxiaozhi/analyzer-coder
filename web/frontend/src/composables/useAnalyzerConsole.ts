@@ -12,8 +12,7 @@ import type {
   QueryEvidence,
   QueryResult,
   UserEditForm,
-  UserForm,
-  UserPasswordForm
+  UserForm
 } from '../types'
 
 interface AnalyzeResponse {
@@ -59,6 +58,32 @@ interface KnowledgeFileResponse {
   root: string
 }
 
+type ApiPayload = Record<string, unknown>
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const text = await response.text()
+  let data: unknown = {}
+
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      const preview = text.replace(/\s+/g, ' ').slice(0, 80)
+      throw new Error(`接口未返回 JSON：${response.status} ${preview}`)
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof data === 'object' && data !== null && 'error' in data
+        ? String((data as ApiPayload).error)
+        : `请求失败：${response.status}`
+    throw new Error(message)
+  }
+
+  return data as T
+}
+
 export function useAnalyzerConsole() {
   const form = reactive<AnalyzerForm>({
     projectId: '',
@@ -92,10 +117,6 @@ export function useAnalyzerConsole() {
     username: '',
     displayName: '',
     isAdmin: false
-  })
-  const userPasswordForm = reactive<UserPasswordForm>({
-    id: '',
-    password: ''
   })
 
   const status = shallowRef('未连接')
@@ -157,11 +178,7 @@ export function useAnalyzerConsole() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || `请求失败：${response.status}`)
-      }
-      return data as T
+      return await readJsonResponse<T>(response)
     } finally {
       busy.value = false
     }
@@ -169,11 +186,7 @@ export function useAnalyzerConsole() {
 
   async function getJson<T>(url: string): Promise<T> {
     const response = await fetch(url, { credentials: 'same-origin' })
-    const data = await response.json()
-    if (!response.ok) {
-      throw new Error(data.error || `请求失败：${response.status}`)
-    }
-    return data as T
+    return await readJsonResponse<T>(response)
   }
 
   async function projectRequest<T>(url: string, payload: Record<string, unknown>): Promise<T> {
@@ -185,11 +198,7 @@ export function useAnalyzerConsole() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || `请求失败：${response.status}`)
-      }
-      return data as T
+      return await readJsonResponse<T>(response)
     } finally {
       projectBusy.value = false
     }
@@ -207,11 +216,7 @@ export function useAnalyzerConsole() {
     kbBusy.value = true
     try {
       const response = await fetch(url, { credentials: 'same-origin', ...options })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || `请求失败：${response.status}`)
-      }
-      return data as T
+      return await readJsonResponse<T>(response)
     } finally {
       kbBusy.value = false
     }
@@ -228,11 +233,8 @@ export function useAnalyzerConsole() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(loginForm)
       })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || `登录失败：${response.status}`)
-      }
-      currentUser.value = (data as AuthResponse).user
+      const data = await readJsonResponse<AuthResponse>(response)
+      currentUser.value = data.user
       if (!currentUser.value.isAdmin && activeSection.value === 'accounts') {
         activeSection.value = 'projects'
       }
@@ -313,11 +315,8 @@ export function useAnalyzerConsole() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userForm)
       })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || `创建账号失败：${response.status}`)
-      }
-      users.value = [...users.value, (data as AuthResponse).user]
+      const data = await readJsonResponse<AuthResponse>(response)
+      users.value = [...users.value, data.user]
       userForm.username = ''
       userForm.displayName = ''
       userForm.password = ''
@@ -336,21 +335,19 @@ export function useAnalyzerConsole() {
     authBusy.value = true
     authMessage.value = ''
     try {
-      const response = await fetch(`/api/users/${userEditForm.id}`, {
+      const response = await fetch('/api/users', {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: userEditForm.id,
           username: userEditForm.username,
           displayName: userEditForm.displayName,
           isAdmin: userEditForm.isAdmin
         })
       })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || `保存账号失败：${response.status}`)
-      }
-      const updated = (data as AuthResponse).user
+      const data = await readJsonResponse<AuthResponse>(response)
+      const updated = data.user
       users.value = users.value.map((user) => (user.id === updated.id ? updated : user))
       if (currentUser.value.id === updated.id) {
         currentUser.value = updated
@@ -363,24 +360,20 @@ export function useAnalyzerConsole() {
     }
   }
 
-  async function updateUserPassword() {
-    if (!currentUser.value?.isAdmin || !userPasswordForm.id) return
+  async function updateUserPassword(userId: string, password: string) {
+    if (!currentUser.value?.isAdmin || !userId) return
     authBusy.value = true
     authMessage.value = ''
     try {
-      const response = await fetch(`/api/users/${userPasswordForm.id}/password`, {
+      const response = await fetch('/api/users/password', {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: userPasswordForm.password })
+        body: JSON.stringify({ id: userId, password })
       })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || `修改密码失败：${response.status}`)
-      }
-      const updated = (data as AuthResponse).user
+      const data = await readJsonResponse<AuthResponse>(response)
+      const updated = data.user
       users.value = users.value.map((user) => (user.id === updated.id ? updated : user))
-      userPasswordForm.password = ''
       authMessage.value = '密码已修改'
     } catch (error) {
       authMessage.value = error instanceof Error ? error.message : '修改密码失败'
@@ -394,17 +387,14 @@ export function useAnalyzerConsole() {
     authBusy.value = true
     authMessage.value = ''
     try {
-      const response = await fetch(`/api/users/${userId}/access`, {
+      const response = await fetch('/api/users/access', {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectIds })
+        body: JSON.stringify({ id: userId, projectIds })
       })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || `保存授权失败：${response.status}`)
-      }
-      const updated = (data as AuthResponse).user
+      const data = await readJsonResponse<AuthResponse>(response)
+      const updated = data.user
       users.value = users.value.map((user) => (user.id === updated.id ? updated : user))
       authMessage.value = '授权已保存'
     } catch (error) {
@@ -414,10 +404,26 @@ export function useAnalyzerConsole() {
     }
   }
 
+  async function updateLastProject(projectId: string) {
+    if (!currentUser.value) return
+    try {
+      const response = await fetch('/api/auth/last-project', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId })
+      })
+      const data = await readJsonResponse<AuthResponse>(response)
+      currentUser.value = data.user
+    } catch {
+      // 选择项目不应被偏好保存失败阻断。
+    }
+  }
+
   async function checkHealth() {
     try {
       const response = await fetch('/api/health', { credentials: 'same-origin' })
-      const data = await response.json()
+      const data = await readJsonResponse<{ ok: boolean; workspace: string }>(response)
       status.value = data.ok ? `已连接：${data.workspace}` : '后端不可用'
     } catch {
       status.value = '后端未启动'
@@ -432,6 +438,13 @@ export function useAnalyzerConsole() {
       if (form.projectId && !projects.value.some((project) => project.id === form.projectId)) {
         form.projectId = ''
       }
+      if (
+        !form.projectId &&
+        currentUser.value.lastProjectId &&
+        projects.value.some((project) => project.id === currentUser.value?.lastProjectId)
+      ) {
+        form.projectId = currentUser.value.lastProjectId
+      }
       if (!form.projectId && projects.value.length > 0 && !currentUser.value.isAdmin) {
         form.projectId = projects.value[0].id
       }
@@ -441,7 +454,11 @@ export function useAnalyzerConsole() {
   }
 
   async function loadKbFiles() {
-    if (!currentUser.value) return
+    if (!currentUser.value || !form.projectId) {
+      kbFiles.value = []
+      kbRoot.value = ''
+      return
+    }
     try {
       const data = await kbRequest<KnowledgeFilesResponse>(`/api/kb/files?${kbParams()}`)
       kbFiles.value = data.files
@@ -637,6 +654,7 @@ export function useAnalyzerConsole() {
       }
       selectedKbPath.value = ''
       kbContent.value = ''
+      updateLastProject(projectId)
       loadKbFiles()
     }
   )
@@ -660,7 +678,6 @@ export function useAnalyzerConsole() {
     loginForm,
     userForm,
     userEditForm,
-    userPasswordForm,
     status,
     busy,
     projectBusy,

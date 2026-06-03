@@ -22,6 +22,7 @@ export interface AnalyzerForm {
 
 export interface ProjectRecord {
   id: string
+  projectKey?: string
   name: string
   gitUrl: string
   branch: string
@@ -41,6 +42,7 @@ export interface AuthUser {
   username: string
   displayName: string
   isAdmin: boolean
+  lastProjectId: string
   projectIds: string[]
   createdAt: string
   updatedAt: string
@@ -59,11 +61,6 @@ export interface UserEditForm {
   username: string
   displayName: string
   isAdmin: boolean
-}
-
-export interface UserPasswordForm {
-  id: string
-  password: string
 }
 
 export interface KnowledgeFile {

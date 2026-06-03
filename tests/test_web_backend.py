@@ -6,8 +6,12 @@ from web.backend.config import BackendConfig
 from web.backend.services import ProjectRecord
 
 
+class JsonTestConfig(BackendConfig):
+    STATE_BACKEND = "json"
+
+
 def test_web_backend_health() -> None:
-    client = create_app().test_client()
+    client = create_app(JsonTestConfig).test_client()
 
     response = client.get("/api/health")
 
@@ -15,10 +19,20 @@ def test_web_backend_health() -> None:
     assert response.get_json()["ok"] is True
 
 
+def test_web_backend_http_errors_are_json() -> None:
+    client = create_app(JsonTestConfig).test_client()
+
+    response = client.get("/api/users/password")
+
+    assert response.status_code == 405
+    assert response.content_type.startswith("application/json")
+    assert response.get_json()["error"]
+
+
 def test_web_backend_report(tmp_path) -> None:
     workspace = _java_workspace(tmp_path)
 
-    class TestConfig(BackendConfig):
+    class TestConfig(JsonTestConfig):
         WORKSPACE_ROOT = workspace
         RESULTS_DIR = ".results"
         DEFAULT_STORE = ".store/default.jsonl"
@@ -41,7 +55,7 @@ def test_web_backend_report(tmp_path) -> None:
 def test_web_backend_report_accepts_null_project_id(tmp_path) -> None:
     workspace = _java_workspace(tmp_path)
 
-    class TestConfig(BackendConfig):
+    class TestConfig(JsonTestConfig):
         WORKSPACE_ROOT = workspace
         RESULTS_DIR = ".results"
         DEFAULT_STORE = ".store/default.jsonl"
@@ -99,7 +113,7 @@ def test_web_backend_mixed_index_and_query_returns_fusion_evidence(tmp_path) -> 
         encoding="utf-8",
     )
 
-    class TestConfig(BackendConfig):
+    class TestConfig(JsonTestConfig):
         WORKSPACE_ROOT = workspace
         PROJECTS_DIR = ".projects"
         RESULTS_DIR = ".results"
@@ -141,7 +155,7 @@ def test_web_backend_mixed_index_and_query_returns_fusion_evidence(tmp_path) -> 
 
 
 def test_web_backend_knowledge_file_crud(tmp_path) -> None:
-    class TestConfig(BackendConfig):
+    class TestConfig(JsonTestConfig):
         WORKSPACE_ROOT = tmp_path
         PROJECTS_DIR = ".projects"
         RESULTS_DIR = ".results"
@@ -224,7 +238,7 @@ def test_web_backend_project_clone_and_isolated_report(tmp_path) -> None:
     subprocess.run(["git", "add", "."], cwd=source_repo, check=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=source_repo, check=True, capture_output=True)
 
-    class TestConfig(BackendConfig):
+    class TestConfig(JsonTestConfig):
         WORKSPACE_ROOT = tmp_path / "workspace"
         PROJECTS_DIR = ".projects"
         RESULTS_DIR = ".results"
@@ -258,7 +272,7 @@ def test_web_backend_project_clone_and_isolated_report(tmp_path) -> None:
 
 
 def test_web_backend_project_rejects_path_escape(tmp_path) -> None:
-    class TestConfig(BackendConfig):
+    class TestConfig(JsonTestConfig):
         WORKSPACE_ROOT = tmp_path
         PROJECTS_DIR = ".projects"
         TESTING = True
@@ -273,7 +287,7 @@ def test_web_backend_project_rejects_path_escape(tmp_path) -> None:
 
 
 def test_web_backend_project_access_is_user_scoped(tmp_path) -> None:
-    class TestConfig(BackendConfig):
+    class TestConfig(JsonTestConfig):
         WORKSPACE_ROOT = tmp_path
         PROJECTS_DIR = ".projects"
         TESTING = True
@@ -308,13 +322,13 @@ def test_web_backend_project_access_is_user_scoped(tmp_path) -> None:
     assert create_user_response.status_code == 201
 
     update_user_response = client.put(
-        "/api/users/viewer",
-        json={"username": "viewer2", "displayName": "Viewer Two", "isAdmin": False},
+        "/api/users",
+        json={"id": "viewer", "username": "viewer2", "displayName": "Viewer Two", "isAdmin": False},
     )
     assert update_user_response.status_code == 200
     assert update_user_response.get_json()["user"]["username"] == "viewer2"
 
-    password_response = client.put("/api/users/viewer/password", json={"password": "secret2"})
+    password_response = client.put("/api/users/password", json={"id": "viewer", "password": "secret2"})
     assert password_response.status_code == 200
 
     client.post("/api/auth/logout")
@@ -328,13 +342,18 @@ def test_web_backend_project_access_is_user_scoped(tmp_path) -> None:
 
     client.post("/api/auth/logout")
     _login(client)
-    update_response = client.put("/api/users/viewer/access", json={"projectIds": ["demo"]})
+    update_response = client.put("/api/users/access", json={"id": "viewer", "projectIds": ["demo"]})
     assert update_response.status_code == 200
 
     client.post("/api/auth/logout")
     _login(client, username="viewer2", password="secret2")
     visible_projects = client.get("/api/projects").get_json()["projects"]
     assert [project["id"] for project in visible_projects] == ["demo"]
+
+    last_project_response = client.put("/api/auth/last-project", json={"projectId": "demo"})
+    assert last_project_response.status_code == 200
+    assert last_project_response.get_json()["user"]["lastProjectId"] == "demo"
+    assert client.get("/api/auth/me").get_json()["user"]["lastProjectId"] == "demo"
 
 
 def _login(client, username: str = "admin", password: str = "admin123") -> None:

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from flask import Flask, jsonify
+from werkzeug.exceptions import HTTPException
 
 
 @dataclass
@@ -24,3 +25,7 @@ def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(ValueError)
     def value_error(error: ValueError) -> tuple[Any, int]:
         return error_response(str(error), 400)
+
+    @app.errorhandler(HTTPException)
+    def http_error(error: HTTPException) -> tuple[Any, int]:
+        return error_response(error.description or error.name, error.code or 500)

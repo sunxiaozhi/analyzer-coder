@@ -25,6 +25,7 @@ from java_ts_analyzer.cli import (
 )
 from web.backend.errors import APIError
 from web.backend.fusion import build_evidence, serialize_result
+from web.backend.mysql_state import MySqlStateStore
 from web.backend.paths import relative_to_workspace, workspace_path
 from web.backend.validation import source_value
 
@@ -40,6 +41,8 @@ class AnalyzerService:
         projects_dir: Path,
         admin_username: str = "admin",
         admin_password: str = "admin123",
+        state_backend: str = "mysql",
+        mysql_config: dict[str, Any] | None = None,
         analyzer: JavaAnalyzer | None = None,
         embedder: HashingEmbedder | None = None,
     ) -> None:
@@ -51,8 +54,21 @@ class AnalyzerService:
         self.users_file = self.projects_dir / "users.json"
         self.admin_username = admin_username
         self.admin_password = admin_password
+        self.state_backend = state_backend
+        self.mysql_store: MySqlStateStore | None = None
         self.analyzer = analyzer or JavaAnalyzer()
         self.embedder = embedder or HashingEmbedder()
+        if self.state_backend == "mysql":
+            config = mysql_config or {}
+            self.mysql_store = MySqlStateStore(
+                host=str(config.get("host", "127.0.0.1")),
+                port=int(config.get("port", 3306)),
+                user=str(config.get("user", "root")),
+                password=str(config.get("password", "root")),
+                database=str(config.get("database", "code_knowledge")),
+            )
+            self.mysql_store.initialize()
+            self.mysql_store.migrate_from_json(self.users_file, self.projects_file)
         self._ensure_default_admin()
 
     @classmethod
@@ -64,6 +80,14 @@ class AnalyzerService:
             projects_dir=Path(config["PROJECTS_DIR"]),
             admin_username=str(config["ADMIN_USERNAME"]),
             admin_password=str(config["ADMIN_PASSWORD"]),
+            state_backend=str(config.get("STATE_BACKEND", "mysql")),
+            mysql_config={
+                "host": config.get("MYSQL_HOST", "127.0.0.1"),
+                "port": config.get("MYSQL_PORT", 3306),
+                "user": config.get("MYSQL_USER", "root"),
+                "password": config.get("MYSQL_PASSWORD", "root"),
+                "database": config.get("MYSQL_DATABASE", "code_knowledge"),
+            },
         )
 
     def health(self) -> dict[str, Any]:
@@ -108,21 +132,27 @@ class AnalyzerService:
         self._validate_project_ids(project_ids)
         now = utc_now()
         user = UserRecord(
-            id=self._unique_user_id(username, users),
+            id=self._unique_user_id(username, users) if self.state_backend != "mysql" else "",
             username=username,
             displayName=display_name,
             passwordHash=generate_password_hash(password),
             isAdmin=bool(payload.get("isAdmin", False)),
+            lastProjectId="",
             projectIds=project_ids,
             createdAt=now,
             updatedAt=now,
         )
-        users.append(user)
-        self._save_users(users)
+        if self.mysql_store:
+            user = UserRecord(**self.mysql_store.insert_user(asdict(user)))
+        else:
+            users.append(user)
+            self._save_users(users)
         return {"user": self._public_user(user)}
 
     def update_user(self, user_id: str, payload: dict[str, Any], actor: "UserRecord") -> dict[str, Any]:
         self._require_admin(actor)
+        if not user_id:
+            raise APIError("user id is required.", 400)
         username = str(payload.get("username", "")).strip()
         display_name = str(payload.get("displayName", "")).strip() or username
         if not username:
@@ -143,6 +173,8 @@ class AnalyzerService:
 
     def update_user_password(self, user_id: str, payload: dict[str, Any], actor: "UserRecord") -> dict[str, Any]:
         self._require_admin(actor)
+        if not user_id:
+            raise APIError("user id is required.", 400)
         password = str(payload.get("password", "")).strip()
         if len(password) < 6:
             raise APIError("password must be at least 6 characters.", 400)
@@ -157,12 +189,27 @@ class AnalyzerService:
 
     def update_user_access(self, user_id: str, payload: dict[str, Any], actor: "UserRecord") -> dict[str, Any]:
         self._require_admin(actor)
+        if not user_id:
+            raise APIError("user id is required.", 400)
         project_ids = [str(item).strip() for item in payload.get("projectIds", []) if str(item).strip()]
         self._validate_project_ids(project_ids)
         users = self._load_users()
         for user in users:
             if user.id == user_id:
                 user.projectIds = project_ids
+                user.updatedAt = utc_now()
+                self._save_users(users)
+                return {"user": self._public_user(user)}
+        raise APIError("user not found.", 404)
+
+    def update_last_project(self, payload: dict[str, Any], actor: "UserRecord") -> dict[str, Any]:
+        project_id = str(payload.get("projectId") or "").strip()
+        if project_id:
+            self._require_project(project_id, actor)
+        users = self._load_users()
+        for user in users:
+            if user.id == actor.id:
+                user.lastProjectId = project_id
                 user.updatedAt = utc_now()
                 self._save_users(users)
                 return {"user": self._public_user(user)}
@@ -181,8 +228,8 @@ class AnalyzerService:
             raise APIError("gitUrl is required.", 400)
 
         projects = self._load_projects()
-        project_id = self._unique_project_id(name, projects)
-        project_root = self.projects_dir / project_id
+        project_key = self._unique_project_id(name, projects)
+        project_root = self.projects_dir / project_key
         repo_path = project_root / "repo"
         project_root.mkdir(parents=True, exist_ok=False)
 
@@ -197,16 +244,20 @@ class AnalyzerService:
             raise
 
         project = ProjectRecord(
-            id=project_id,
+            id=project_key if self.state_backend != "mysql" else "",
             name=name,
             gitUrl=git_url,
             branch=branch or "",
             path=self._relative(repo_path),
             createdAt=utc_now(),
             updatedAt=utc_now(),
+            projectKey=project_key,
         )
-        projects.append(project)
-        self._save_projects(projects)
+        if self.mysql_store:
+            project = ProjectRecord(**self.mysql_store.insert_project(asdict(project)))
+        else:
+            projects.append(project)
+            self._save_projects(projects)
         self._grant_project_access(user.id, project.id)
         return {"project": asdict(project)}
 
@@ -471,6 +522,9 @@ class AnalyzerService:
         )
 
     def _ensure_default_admin(self) -> None:
+        if self.mysql_store:
+            self.mysql_store.ensure_admin(self.admin_username, self.admin_password, utc_now())
+            return
         users = self._load_users()
         if users:
             return
@@ -488,6 +542,8 @@ class AnalyzerService:
         self._save_users([admin])
 
     def _load_users(self) -> list["UserRecord"]:
+        if self.mysql_store:
+            return [UserRecord(**item) for item in self.mysql_store.list_users()]
         if not self.users_file.exists():
             return []
         data = json.loads(self.users_file.read_text(encoding="utf-8"))
@@ -500,6 +556,7 @@ class AnalyzerService:
                     displayName=item.get("displayName") or item["username"],
                     passwordHash=item["passwordHash"],
                     isAdmin=bool(item.get("isAdmin", False)),
+                    lastProjectId=str(item.get("lastProjectId") or ""),
                     projectIds=list(item.get("projectIds", [])),
                     createdAt=item.get("createdAt", utc_now()),
                     updatedAt=item.get("updatedAt", utc_now()),
@@ -508,6 +565,9 @@ class AnalyzerService:
         return users
 
     def _save_users(self, users: list["UserRecord"]) -> None:
+        if self.mysql_store:
+            self.mysql_store.save_users(users)
+            return
         self.projects_dir.mkdir(parents=True, exist_ok=True)
         payload = {"users": [asdict(user) for user in users]}
         self.users_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -548,6 +608,9 @@ class AnalyzerService:
         return user.isAdmin or project_id in set(user.projectIds)
 
     def _grant_project_access(self, user_id: str, project_id: str) -> None:
+        if self.mysql_store:
+            self.mysql_store.grant_access(user_id, project_id, utc_now())
+            return
         users = self._load_users()
         for user in users:
             if user.id == user_id:
@@ -568,12 +631,21 @@ class AnalyzerService:
         return f"{base}-{index}"
 
     def _load_projects(self) -> list["ProjectRecord"]:
+        if self.mysql_store:
+            return [ProjectRecord(**item) for item in self.mysql_store.list_projects()]
         if not self.projects_file.exists():
             return []
         data = json.loads(self.projects_file.read_text(encoding="utf-8"))
-        return [ProjectRecord(**item) for item in data.get("projects", [])]
+        projects: list[ProjectRecord] = []
+        for item in data.get("projects", []):
+            item.setdefault("projectKey", item["id"])
+            projects.append(ProjectRecord(**item))
+        return projects
 
     def _save_projects(self, projects: list["ProjectRecord"]) -> None:
+        if self.mysql_store:
+            self.mysql_store.save_projects(projects)
+            return
         self.projects_dir.mkdir(parents=True, exist_ok=True)
         payload = {"projects": [asdict(project) for project in projects]}
         self.projects_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -587,14 +659,14 @@ class AnalyzerService:
         raise APIError("project not found.", 404)
 
     def _project_root(self, project: "ProjectRecord") -> Path:
-        return workspace_path(self.workspace_root, self.projects_dir / project.id)
+        return workspace_path(self.workspace_root, self.projects_dir / (project.projectKey or project.id))
 
     def _project_repo_path(self, project: "ProjectRecord") -> Path:
-        return workspace_path(self.workspace_root, self._project_root(project) / "repo")
+        return workspace_path(self.workspace_root, project.path)
 
     def _unique_project_id(self, name: str, projects: list["ProjectRecord"]) -> str:
         base = slugify(name)
-        existing = {project.id for project in projects}
+        existing = {project.projectKey or project.id for project in projects}
         if base not in existing:
             return base
         index = 2
@@ -630,6 +702,7 @@ class ProjectRecord:
     path: str
     createdAt: str
     updatedAt: str
+    projectKey: str = ""
 
 
 @dataclass
@@ -642,6 +715,7 @@ class UserRecord:
     projectIds: list[str]
     createdAt: str
     updatedAt: str
+    lastProjectId: str = ""
 
 
 @dataclass

@@ -19,6 +19,7 @@ semantic = [
 ]
 web = [
     "flask>=3.0",
+    "pymysql>=1.1",
 ]
 dev = [
     "pytest>=8.0",

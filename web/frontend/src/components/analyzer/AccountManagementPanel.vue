@@ -14,11 +14,10 @@ import {
   ElSwitch,
   ElTag
 } from 'element-plus'
-import type { AuthUser, ProjectRecord, UserEditForm, UserForm, UserPasswordForm } from '../../types'
+import type { AuthUser, ProjectRecord, UserEditForm, UserForm } from '../../types'
 
 const userForm = defineModel<UserForm>('userForm', { required: true })
 const userEditForm = defineModel<UserEditForm>('userEditForm', { required: true })
-const userPasswordForm = defineModel<UserPasswordForm>('userPasswordForm', { required: true })
 
 const props = defineProps<{
   authBusy: boolean
@@ -31,11 +30,12 @@ const emit = defineEmits<{
   createUser: []
   refreshUsers: []
   updateUser: []
-  updateUserPassword: []
+  updateUserPassword: [userId: string, password: string]
   updateUserAccess: [userId: string, projectIds: string[]]
 }>()
 
 const accessDrafts = reactive<Record<string, string[]>>({})
+const passwordForm = reactive({ userId: '', username: '', password: '' })
 const createDialogOpen = shallowRef(false)
 const editDialogOpen = shallowRef(false)
 const passwordDialogOpen = shallowRef(false)
@@ -50,17 +50,24 @@ function projectNames(projectIds: string[]) {
 }
 
 function openEditDialog(user: AuthUser) {
-  userEditForm.value.id = user.id
-  userEditForm.value.username = user.username
-  userEditForm.value.displayName = user.displayName
-  userEditForm.value.isAdmin = user.isAdmin
+  userEditForm.value = {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    isAdmin: user.isAdmin
+  }
   editDialogOpen.value = true
 }
 
 function openPasswordDialog(user: AuthUser) {
-  userPasswordForm.value.id = user.id
-  userPasswordForm.value.password = ''
+  passwordForm.userId = user.id
+  passwordForm.username = user.username
+  passwordForm.password = ''
   passwordDialogOpen.value = true
+}
+
+function submitPassword() {
+  emit('updateUserPassword', passwordForm.userId, passwordForm.password)
 }
 
 watch(
@@ -88,9 +95,9 @@ watch(
     if (editDialogOpen.value && userEditForm.value.id) {
       editDialogOpen.value = false
     }
-    if (passwordDialogOpen.value && userPasswordForm.value.id) {
+    if (passwordDialogOpen.value && passwordForm.userId) {
       passwordDialogOpen.value = false
-      userPasswordForm.value.password = ''
+      passwordForm.password = ''
     }
   }
 )
@@ -223,8 +230,11 @@ watch(
 
     <ElDialog v-model="passwordDialogOpen" title="修改密码" width="460px">
       <ElForm label-position="top" class="control-form account-dialog-form">
+        <ElFormItem label="账号">
+          <ElInput v-model="passwordForm.username" disabled />
+        </ElFormItem>
         <ElFormItem label="新密码">
-          <ElInput v-model="userPasswordForm.password" show-password type="password" placeholder="至少 6 位" />
+          <ElInput v-model="passwordForm.password" show-password type="password" placeholder="至少 6 位" />
         </ElFormItem>
         <p v-if="authMessage" class="account-message">{{ authMessage }}</p>
       </ElForm>
@@ -232,7 +242,7 @@ watch(
       <template #footer>
         <div class="dialog-actions">
           <ElButton :disabled="authBusy" @click="passwordDialogOpen = false">取消</ElButton>
-          <ElButton type="primary" :loading="authBusy" @click="$emit('updateUserPassword')">
+          <ElButton type="primary" :loading="authBusy" @click="submitPassword">
             修改密码
           </ElButton>
         </div>

@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { Collection, Connection, Cpu, Files, FolderOpened, Search, SwitchButton, UserFilled } from '@element-plus/icons-vue'
-import { ElButton, ElIcon, ElMenu, ElMenuItem, ElScrollbar } from 'element-plus'
+import { Collection, Connection, Cpu, Files, FolderOpened, Search, UserFilled } from '@element-plus/icons-vue'
+import { ElButton, ElIcon, ElMenu, ElMenuItem, ElOption, ElScrollbar, ElSelect } from 'element-plus'
 import type { AuthUser, ConsoleSection, ProjectRecord } from '../../types'
 import BrandLogo from './BrandLogo.vue'
 
 const activeSection = defineModel<ConsoleSection>('activeSection', { required: true })
+const projectId = defineModel<string>('projectId', { required: true })
 
 defineProps<{
   currentUser: AuthUser
-  selectedProject: ProjectRecord | null
+  projects: ProjectRecord[]
 }>()
 
 defineEmits<{
   checkHealth: []
-  logout: []
 }>()
 </script>
 
@@ -28,53 +28,48 @@ defineEmits<{
         </div>
       </div>
 
-      <div v-if="selectedProject" class="selected-project-chip">
+      <div class="sidebar-project-select">
         <span>当前项目</span>
-        <strong>{{ selectedProject.name }}</strong>
-      </div>
-
-      <div class="sidebar-user-card">
-        <div>
-          <span>当前账号</span>
-          <strong>{{ currentUser.displayName }}</strong>
-        </div>
-        <b class="sidebar-user-role" :class="{ admin: currentUser.isAdmin }">
-          {{ currentUser.isAdmin ? '管理员' : '项目成员' }}
-        </b>
+        <ElSelect
+          v-model="projectId"
+          class="sidebar-project-control"
+          :disabled="projects.length === 0"
+          filterable
+          placeholder="选择项目"
+        >
+          <ElOption v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+        </ElSelect>
       </div>
 
       <ElMenu :default-active="activeSection" class="main-menu" @select="activeSection = $event as ConsoleSection">
+        <ElMenuItem index="search">
+          <ElIcon><Search /></ElIcon>
+          <span>知识检索</span>
+        </ElMenuItem>
+        <ElMenuItem index="knowledge">
+          <ElIcon><Collection /></ElIcon>
+          <span>知识库维护</span>
+        </ElMenuItem>
         <ElMenuItem index="projects">
           <ElIcon><FolderOpened /></ElIcon>
-          <span>项目</span>
+          <span>项目管理</span>
         </ElMenuItem>
         <ElMenuItem v-if="currentUser.isAdmin" index="accounts">
           <ElIcon><UserFilled /></ElIcon>
-          <span>账号</span>
+          <span>账号管理</span>
         </ElMenuItem>
         <ElMenuItem index="analysis">
           <ElIcon><Cpu /></ElIcon>
           <span>分析</span>
         </ElMenuItem>
-        <ElMenuItem index="knowledge">
-          <ElIcon><Collection /></ElIcon>
-          <span>知识库</span>
-        </ElMenuItem>
         <ElMenuItem index="vectors">
           <ElIcon><Files /></ElIcon>
           <span>索引</span>
-        </ElMenuItem>
-        <ElMenuItem index="search">
-          <ElIcon><Search /></ElIcon>
-          <span>检索</span>
         </ElMenuItem>
       </ElMenu>
 
       <ElButton class="health-button" :icon="Connection" @click="$emit('checkHealth')">
         检查后端
-      </ElButton>
-      <ElButton class="logout-button" :icon="SwitchButton" @click="$emit('logout')">
-        退出登录
       </ElButton>
     </aside>
   </ElScrollbar>

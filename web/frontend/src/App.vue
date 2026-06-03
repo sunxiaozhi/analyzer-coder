@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ElAside, ElContainer, ElHeader, ElTag } from 'element-plus'
+import { SwitchButton } from '@element-plus/icons-vue'
+import { ElAside, ElBreadcrumb, ElBreadcrumbItem, ElButton, ElContainer, ElHeader, ElTag } from 'element-plus'
 import AccountManagementPanel from './components/analyzer/AccountManagementPanel.vue'
 import AnalyzerSidebar from './components/analyzer/AnalyzerSidebar.vue'
 import AnalysisResultPanel from './components/analyzer/AnalysisResultPanel.vue'
@@ -17,7 +18,6 @@ const {
   loginForm,
   userForm,
   userEditForm,
-  userPasswordForm,
   status,
   busy,
   projectBusy,
@@ -78,16 +78,18 @@ const sectionTitle = computed(() => {
   return titles[activeSection.value]
 })
 
-const sectionSummary = computed(() => {
-  const summaries = {
-    projects: '选择工作区或拉取外部项目',
-    accounts: '以账号列表维护项目访问权限',
-    analysis: '查看结构化代码分析和项目报告',
-    knowledge: '维护 docs 文档并同步混合索引',
-    vectors: '构建代码与知识库向量索引',
-    search: '检索代码证据、知识库证据和关联结果'
+const breadcrumbItems = computed(() => {
+  if (selectedProject.value && activeSection.value !== 'projects' && activeSection.value !== 'accounts') {
+    return [
+      { label: '代码智库', section: 'projects' as const },
+      { label: selectedProject.value.name, section: 'projects' as const },
+      { label: sectionTitle.value, section: activeSection.value }
+    ]
   }
-  return summaries[activeSection.value]
+  return [
+    { label: '代码智库', section: 'projects' as const },
+    { label: sectionTitle.value, section: activeSection.value }
+  ]
 })
 
 const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value || authBusy.value)
@@ -108,18 +110,28 @@ const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value
     <ElAside class="shell-aside">
       <AnalyzerSidebar
         v-model:active-section="activeSection"
+        v-model:project-id="form.projectId"
         :current-user="currentUser"
-        :selected-project="selectedProject"
+        :projects="projects"
         @check-health="checkHealth"
-        @logout="logout"
       />
     </ElAside>
 
     <ElContainer v-if="currentUser" class="workspace">
       <ElHeader class="topbar">
         <div class="topbar-title">
-          <p>{{ sectionSummary }}</p>
-          <h2>{{ sectionTitle }}</h2>
+          <ElBreadcrumb class="app-breadcrumb" separator="/">
+            <ElBreadcrumbItem v-for="(item, index) in breadcrumbItems" :key="`${item.section}-${index}`">
+              <button
+                class="breadcrumb-link"
+                :class="{ current: index === breadcrumbItems.length - 1 }"
+                type="button"
+                @click="activeSection = item.section"
+              >
+                {{ item.label }}
+              </button>
+            </ElBreadcrumbItem>
+          </ElBreadcrumb>
         </div>
         <div class="topbar-state">
           <div class="connection-state">
@@ -127,6 +139,22 @@ const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value
             <span>{{ status }}</span>
           </div>
           <ElTag v-if="isWorking" type="warning" effect="plain">运行中</ElTag>
+          <div class="topbar-account">
+            <div class="topbar-user">
+              <strong>{{ currentUser.displayName }}</strong>
+            </div>
+            <ElTag class="topbar-role" :type="currentUser.isAdmin ? 'warning' : 'info'" effect="plain">
+              {{ currentUser.isAdmin ? '管理员' : '项目成员' }}
+            </ElTag>
+            <ElButton
+              aria-label="退出登录"
+              class="topbar-logout"
+              :disabled="authBusy"
+              :icon="SwitchButton"
+              title="退出登录"
+              @click="logout"
+            />
+          </div>
         </div>
       </ElHeader>
 
@@ -145,7 +173,6 @@ const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value
         v-else-if="activeSection === 'accounts' && currentUser.isAdmin"
         v-model:user-form="userForm"
         v-model:user-edit-form="userEditForm"
-        v-model:user-password-form="userPasswordForm"
         :auth-busy="authBusy"
         :auth-message="authMessage"
         :projects="projects"
