@@ -107,7 +107,6 @@ watch(
   <ElMain class="page-surface accounts-page">
     <div class="page-header">
       <div>
-        <p class="eyebrow">Accounts</p>
         <h2>账号管理</h2>
       </div>
       <div class="page-actions">

@@ -44,13 +44,6 @@ defineEmits<{
             <ElOption label="仅知识库" value="kb" />
           </ElSelect>
         </ElFormItem>
-        <ElFormItem label="向量库文件">
-          <ElInput
-            v-model="form.store"
-            clearable
-            :placeholder="form.projectId ? '默认使用项目独立向量库' : '.vector_store/web-project.jsonl'"
-          />
-        </ElFormItem>
       </ElForm>
 
       <ElButton type="primary" :loading="busy" :icon="Search" @click="$emit('queryStore')">

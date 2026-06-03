@@ -21,7 +21,6 @@ defineEmits<{
       <div class="login-brand">
         <BrandLogo />
         <div>
-          <p class="eyebrow">Analyzer Console</p>
           <h1>代码智库</h1>
         </div>
       </div>

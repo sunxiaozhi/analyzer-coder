@@ -37,25 +37,12 @@ defineEmits<{
         <ElFormItem v-if="form.source !== 'mixed'" label="索引路径">
           <ElInput v-model="form.path" clearable />
         </ElFormItem>
-        <ElFormItem v-if="form.source === 'mixed'" label="代码路径">
-          <ElInput v-model="form.codePath" clearable />
-        </ElFormItem>
-        <ElFormItem v-if="form.source === 'mixed'" label="知识库路径">
-          <ElInput v-model="form.kbPath" clearable />
-        </ElFormItem>
         <ElFormItem label="数据来源">
           <ElSelect v-model="form.source" class="control-select">
             <ElOption label="代码" value="code" />
             <ElOption label="知识库" value="kb" />
             <ElOption label="代码 + 知识库" value="mixed" />
           </ElSelect>
-        </ElFormItem>
-        <ElFormItem label="向量库文件">
-          <ElInput
-            v-model="form.store"
-            clearable
-            :placeholder="form.projectId ? '默认使用项目独立向量库' : '.vector_store/web-project.jsonl'"
-          />
         </ElFormItem>
       </ElForm>
 

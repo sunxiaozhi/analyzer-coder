@@ -37,12 +37,6 @@ defineEmits<{
         <ElFormItem label="分析路径">
           <ElInput v-model="form.path" clearable />
         </ElFormItem>
-        <ElFormItem v-if="form.source === 'mixed'" label="代码路径">
-          <ElInput v-model="form.codePath" clearable />
-        </ElFormItem>
-        <ElFormItem v-if="form.source === 'mixed'" label="知识库路径">
-          <ElInput v-model="form.kbPath" clearable />
-        </ElFormItem>
         <ElFormItem label="数据来源">
           <ElSelect v-model="form.source" class="control-select">
             <ElOption label="代码" value="code" />

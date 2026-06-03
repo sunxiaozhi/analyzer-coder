@@ -546,7 +546,7 @@ export function useAnalyzerConsole() {
       kbPath: form.kbPath,
       projectId: form.projectId,
       source: 'mixed',
-      store: form.store || null
+      store: null
     })
     kbMessage.value = data.message
     savedPath.value = data.savedPath
@@ -609,7 +609,7 @@ export function useAnalyzerConsole() {
       kbPath: form.kbPath,
       projectId: form.projectId,
       source: form.source,
-      store: form.store || null
+      store: null
     })
     output.value = data.message
     savedPath.value = data.savedPath
@@ -621,7 +621,7 @@ export function useAnalyzerConsole() {
     output.value = ''
     queryEvidence.value = null
     const data = await requestJson<QueryResponse>('/api/query', {
-      store: form.store || null,
+      store: null,
       projectId: form.projectId,
       query: form.query,
       filterSource: form.filterSource || null,

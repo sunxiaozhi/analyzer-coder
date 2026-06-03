@@ -40,7 +40,6 @@ function submitCreateProject() {
   <ElMain class="page-surface">
     <div class="page-header">
       <div>
-        <p class="eyebrow">Projects</p>
         <h2>项目管理</h2>
       </div>
       <div class="page-actions">

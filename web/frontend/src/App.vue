@@ -33,7 +33,6 @@ const {
   kbDraftPath,
   kbContent,
   kbRoot,
-  kbMessage,
   projects,
   users,
   currentUser,
@@ -201,12 +200,10 @@ const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value
 
       <KnowledgeBasePanel
         v-else-if="activeSection === 'knowledge'"
-        v-model:form="form"
         v-model:draft-path="kbDraftPath"
         v-model:content="kbContent"
         :busy="kbBusy || busy"
         :files="kbFiles"
-        :message="kbMessage"
         :root="kbRoot"
         :selected-path="selectedKbPath"
         @create-file="createKbFile"

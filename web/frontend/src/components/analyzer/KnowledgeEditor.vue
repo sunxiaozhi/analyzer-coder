@@ -116,9 +116,12 @@ function createFile() {
 <template>
   <ElCard class="panel kb-editor-panel" shadow="never">
     <template #header>
-      <div class="panel-title">
-        <ElIcon><Notebook /></ElIcon>
-        <span>{{ selectedPath || '新建知识文档' }}</span>
+      <div class="kb-editor-head">
+        <div class="panel-title">
+          <ElIcon><Notebook /></ElIcon>
+          <span>文档内容</span>
+        </div>
+        <strong>{{ selectedPath || path || '新建知识文档' }}</strong>
       </div>
     </template>
 

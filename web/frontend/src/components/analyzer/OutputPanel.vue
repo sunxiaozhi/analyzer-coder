@@ -39,7 +39,6 @@ const renderedMarkdown = computed(() => markdown.render(props.output || ''))
   <ElMain class="result-surface">
     <div class="result-header">
       <div>
-        <p class="eyebrow">Output</p>
         <h2>{{ outputTitle }}</h2>
       </div>
       <ElTag v-if="savedPath" class="saved" type="success" effect="plain">

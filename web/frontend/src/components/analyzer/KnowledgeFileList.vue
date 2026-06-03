@@ -19,14 +19,15 @@ defineEmits<{
 <template>
   <ElCard class="panel kb-list-panel" shadow="never">
     <template #header>
-      <div class="panel-title split-title">
-        <span>文档</span>
+      <div class="panel-title split-title kb-list-header">
+        <span>文档列表</span>
+        <ElTag size="small" effect="plain">{{ files.length }} 个</ElTag>
         <ElButton text :icon="Refresh" :loading="busy" @click="$emit('refresh')" />
       </div>
     </template>
 
     <ElScrollbar class="kb-file-scroll">
-      <ElEmpty v-if="!files.length" description="暂无知识库文档。" />
+      <ElEmpty v-if="!files.length" description="暂无知识库文档" />
       <div v-else class="kb-file-list">
         <button
           v-for="file in files"
@@ -36,11 +37,16 @@ defineEmits<{
           type="button"
           @click="$emit('selectFile', file.path)"
         >
-          <span>
-            <ElIcon><Document /></ElIcon>
-            <strong>{{ file.path }}</strong>
+          <span class="kb-file-main">
+            <span class="kb-file-icon">
+              <ElIcon><Document /></ElIcon>
+            </span>
+            <span class="kb-file-copy">
+              <strong>{{ file.name || file.path }}</strong>
+              <small>{{ file.path }}</small>
+            </span>
           </span>
-          <ElSpace>
+          <ElSpace class="kb-file-actions">
             <ElTag size="small" effect="plain">{{ Math.max(1, Math.ceil(file.size / 1024)) }} KB</ElTag>
             <ElButton
               text
