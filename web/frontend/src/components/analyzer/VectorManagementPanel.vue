@@ -6,7 +6,6 @@ import {
   Document,
   Files,
   FolderChecked,
-  Operation,
   Refresh
 } from '@element-plus/icons-vue'
 import {
@@ -194,8 +193,23 @@ function changeRecordPage(nextPage: number) {
       </div>
 
       <div class="vector-command-actions">
+        <ElSelect v-model="form.source" class="rebuild-source-select" placeholder="重建范围">
+          <ElOption
+            v-for="option in sourceOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </ElSelect>
         <ElTag :type="statusTagType" effect="plain">{{ statusBadge }}</ElTag>
         <ElTag :type="outputTagType" effect="plain">{{ outputBadge }}</ElTag>
+        <ElButton @click="advancedOpen = !advancedOpen">
+          <ElIcon>
+            <ArrowDown v-if="advancedOpen" />
+            <ArrowRight v-else />
+          </ElIcon>
+          高级选项
+        </ElButton>
         <ElButton :icon="Refresh" @click="refreshAll">
           刷新状态
         </ElButton>
@@ -205,154 +219,115 @@ function changeRecordPage(nextPage: number) {
       </div>
     </section>
 
+    <section class="vector-status-strip">
+      <div class="vector-status-title">
+        <ElIcon><FolderChecked /></ElIcon>
+        <span>索引状态</span>
+      </div>
+      <dl class="vector-summary">
+        <div class="vector-summary-item">
+          <dt>总数</dt>
+          <dd>{{ status?.total ?? 0 }}</dd>
+        </div>
+        <div class="vector-summary-item">
+          <dt>代码</dt>
+          <dd>{{ codeCount }}</dd>
+        </div>
+        <div class="vector-summary-item">
+          <dt>知识库</dt>
+          <dd>{{ kbCount }}</dd>
+        </div>
+        <div class="vector-summary-item">
+          <dt>大小</dt>
+          <dd>{{ indexSize }}</dd>
+        </div>
+        <div class="vector-summary-item">
+          <dt>更新时间</dt>
+          <dd>{{ indexUpdatedAt }}</dd>
+        </div>
+        <div class="vector-summary-item wide">
+          <dt>索引文件</dt>
+          <dd>{{ status?.store || '选择项目后加载' }}</dd>
+        </div>
+        <div class="vector-summary-item wide">
+          <dt>结果文件</dt>
+          <dd>{{ savedPath || '运行后生成' }}</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section v-if="advancedOpen" class="vector-advanced-panel">
+      <ElForm label-position="top" class="vector-advanced-grid">
+        <ElFormItem label="基础路径">
+          <ElInput v-model="form.path" clearable />
+        </ElFormItem>
+        <ElFormItem label="代码路径">
+          <ElInput v-model="form.codePath" clearable />
+        </ElFormItem>
+        <ElFormItem label="知识库路径">
+          <ElInput v-model="form.kbPath" clearable />
+        </ElFormItem>
+      </ElForm>
+    </section>
+
     <section class="vector-workbench">
-      <aside class="vector-config-stack">
-        <ElCard class="panel vector-config-panel" shadow="never">
-          <template #header>
-            <div class="panel-title">
-              <ElIcon><Operation /></ElIcon>
-              <span>索引参数</span>
-            </div>
-          </template>
-
-          <ElForm label-position="top" class="vector-form">
-            <ElFormItem label="数据来源">
-              <ElSelect v-model="form.source" class="control-select">
-                <ElOption
-                  v-for="option in sourceOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                />
-              </ElSelect>
-            </ElFormItem>
-
-            <ElFormItem label="基础路径">
-              <ElInput v-model="form.path" clearable />
-            </ElFormItem>
-
-            <div class="vector-advanced">
-              <button class="vector-advanced-toggle" type="button" @click="advancedOpen = !advancedOpen">
-                <ElIcon>
-                  <ArrowDown v-if="advancedOpen" />
-                  <ArrowRight v-else />
-                </ElIcon>
-                <span>高级路径</span>
-              </button>
-
-              <div v-if="advancedOpen" class="vector-advanced-fields">
-                <ElFormItem label="代码路径">
-                  <ElInput v-model="form.codePath" clearable />
-                </ElFormItem>
-                <ElFormItem label="知识库路径">
-                  <ElInput v-model="form.kbPath" clearable />
-                </ElFormItem>
-              </div>
-            </div>
-          </ElForm>
-        </ElCard>
-
-        <ElCard class="panel vector-summary-panel" shadow="never">
-          <template #header>
-            <div class="panel-title">
-              <ElIcon><FolderChecked /></ElIcon>
-              <span>索引状态</span>
-            </div>
-          </template>
-
-          <dl class="vector-summary">
-            <div class="vector-summary-item">
-              <dt>状态</dt>
-              <dd>{{ statusBadge }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>总数</dt>
-              <dd>{{ status?.total ?? 0 }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>代码</dt>
-              <dd>{{ codeCount }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>知识库</dt>
-              <dd>{{ kbCount }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>大小</dt>
-              <dd>{{ indexSize }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>更新时间</dt>
-              <dd>{{ indexUpdatedAt }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>来源</dt>
-              <dd>{{ sourceLabel }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>基础路径</dt>
-              <dd>{{ form.path || '-' }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>代码路径</dt>
-              <dd>{{ form.codePath || '-' }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>知识库路径</dt>
-              <dd>{{ form.kbPath || '-' }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>索引文件</dt>
-              <dd>{{ status?.store || '选择项目后加载' }}</dd>
-            </div>
-            <div class="vector-summary-item">
-              <dt>结果文件</dt>
-              <dd>{{ savedPath || '运行后生成' }}</dd>
-            </div>
-          </dl>
-        </ElCard>
-      </aside>
-
-      <ElCard class="panel vector-output-panel" shadow="never">
+      <ElCard class="panel index-detail-panel" shadow="never">
         <template #header>
           <div class="panel-title split-title">
             <span>
               <ElIcon><Document /></ElIcon>
               <span>索引明细</span>
             </span>
+            <ElTag :type="statusTagType" effect="plain">{{ statusBadge }}</ElTag>
+          </div>
+        </template>
+
+        <div class="index-detail-stack">
+          <div class="index-distribution-group">
+            <h3>来源分布</h3>
+            <div class="index-bars">
+              <div v-for="item in sourceBars" :key="item.key" class="index-bar-row">
+                <span>{{ item.label }}</span>
+                <div class="index-bar-track">
+                  <i :style="{ width: barWidth(item.count) }"></i>
+                </div>
+                <strong>{{ item.count }}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="index-distribution-group">
+            <h3>类型分布</h3>
+            <div class="index-bars">
+              <div v-for="item in kindBars" :key="item.key" class="index-bar-row">
+                <span>{{ item.label }}</span>
+                <div class="index-bar-track">
+                  <i :style="{ width: barWidth(item.count) }"></i>
+                </div>
+                <strong>{{ item.count }}</strong>
+              </div>
+            </div>
+          </div>
+
+          <section v-if="output" class="index-operation-result">
+            <span>最近操作</span>
+            <code>{{ output }}</code>
+          </section>
+        </div>
+      </ElCard>
+
+      <ElCard class="panel index-list-panel" shadow="never">
+        <template #header>
+          <div class="panel-title split-title">
+            <span>
+              <ElIcon><Files /></ElIcon>
+              <span>索引列表</span>
+            </span>
             <ElTag type="info" effect="plain">{{ recordTotal }}</ElTag>
           </div>
         </template>
 
-        <div class="index-visualization">
-          <section class="index-distribution">
-            <div class="index-distribution-group">
-              <h3>来源分布</h3>
-              <div class="index-bars">
-                <div v-for="item in sourceBars" :key="item.key" class="index-bar-row">
-                  <span>{{ item.label }}</span>
-                  <div class="index-bar-track">
-                    <i :style="{ width: barWidth(item.count) }"></i>
-                  </div>
-                  <strong>{{ item.count }}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div class="index-distribution-group">
-              <h3>类型分布</h3>
-              <div class="index-bars">
-                <div v-for="item in kindBars" :key="item.key" class="index-bar-row">
-                  <span>{{ item.label }}</span>
-                  <div class="index-bar-track">
-                    <i :style="{ width: barWidth(item.count) }"></i>
-                  </div>
-                  <strong>{{ item.count }}</strong>
-                </div>
-              </div>
-            </div>
-          </section>
-
+        <div class="index-list-stack">
           <section class="index-record-tools">
             <ElInput
               v-model="recordFilters.query"
@@ -404,11 +379,6 @@ function changeRecordPage(nextPage: number) {
               <ElButton :disabled="recordPage >= pageCount" @click="changeRecordPage(recordPage + 1)">下一页</ElButton>
             </div>
           </footer>
-
-          <section v-if="output" class="index-operation-result">
-            <span>最近操作</span>
-            <code>{{ output }}</code>
-          </section>
         </div>
       </ElCard>
     </section>
@@ -470,89 +440,83 @@ function changeRecordPage(nextPage: number) {
 .vector-command-actions {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+  justify-content: flex-end;
 }
 
 .vector-command-actions .el-button {
   min-width: 112px;
 }
 
+.rebuild-source-select {
+  width: 176px;
+}
+
+.vector-status-strip {
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 112px minmax(0, 1fr);
+  padding: 14px 24px;
+}
+
+.vector-status-title {
+  align-items: center;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 760;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.vector-status-title .el-icon {
+  color: var(--accent);
+}
+
+.vector-advanced-panel {
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 24px 4px;
+}
+
+.vector-advanced-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.vector-advanced-grid .el-form-item {
+  margin-bottom: 10px;
+}
+
 .vector-workbench {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   padding: 18px 24px 24px;
 }
 
-.vector-config-stack {
-  display: grid;
-  gap: 16px;
-  grid-template-rows: auto auto;
-  min-height: 0;
-}
-
-.vector-form {
-  display: grid;
-  gap: 12px;
-}
-
-.vector-form .el-form-item {
-  margin-bottom: 0;
-}
-
-.vector-advanced {
-  border-top: 1px solid var(--line);
-  display: grid;
-  gap: 10px;
-  padding-top: 2px;
-}
-
-.vector-advanced-toggle {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: var(--accent);
-  cursor: pointer;
-  display: inline-flex;
-  font-weight: 760;
-  gap: 6px;
-  justify-self: start;
-  padding: 4px 0;
-}
-
-.vector-advanced-toggle:hover,
-.vector-advanced-toggle:focus {
-  color: var(--accent-strong);
-}
-
-.vector-advanced-fields {
-  display: grid;
-  gap: 12px;
-}
-
 .vector-summary {
   display: grid;
-  gap: 0;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(96px, 1fr)) repeat(2, minmax(180px, 1.5fr));
   margin: 0;
+  min-width: 0;
 }
 
 .vector-summary-item {
-  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
   display: grid;
-  gap: 6px;
-  grid-template-columns: 74px minmax(0, 1fr);
-  padding: 10px 0;
-}
-
-.vector-summary-item:first-child {
-  padding-top: 0;
-}
-
-.vector-summary-item:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+  gap: 5px;
+  min-width: 0;
+  padding: 9px 11px;
 }
 
 .vector-summary-item dt {
@@ -566,17 +530,22 @@ function changeRecordPage(nextPage: number) {
   font-size: 0.84rem;
   font-weight: 700;
   margin: 0;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.vector-output-panel.el-card {
+.index-detail-panel.el-card,
+.index-list-panel.el-card {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
 
-.vector-output-panel :deep(.el-card__body) {
+.index-detail-panel :deep(.el-card__body),
+.index-list-panel :deep(.el-card__body) {
   display: grid;
   min-height: 0;
   padding: 12px;
@@ -617,17 +586,18 @@ function changeRecordPage(nextPage: number) {
   white-space: pre-wrap;
 }
 
-.index-visualization {
+.index-detail-stack {
+  align-content: start;
   display: grid;
   gap: 12px;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   min-height: 0;
 }
 
-.index-distribution {
+.index-list-stack {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
 }
 
 .index-distribution-group {
@@ -791,16 +761,22 @@ function changeRecordPage(nextPage: number) {
 }
 
 @media (max-width: 1100px) {
+  .vector-status-strip {
+    grid-template-columns: 1fr;
+  }
+
   .vector-workbench {
     grid-template-columns: 1fr;
   }
 
-  .vector-config-stack {
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
-    grid-template-rows: auto;
+  .vector-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .index-distribution,
+  .vector-advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
   .index-record-tools {
     grid-template-columns: 1fr;
   }
@@ -818,17 +794,26 @@ function changeRecordPage(nextPage: number) {
     display: grid;
   }
 
+  .rebuild-source-select,
   .vector-command-actions .el-button {
     width: 100%;
+  }
+
+  .vector-status-strip {
+    padding: 12px 16px;
+  }
+
+  .vector-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .vector-advanced-panel {
+    padding: 12px 16px 2px;
   }
 
   .vector-workbench {
     grid-template-columns: 1fr;
     padding: 14px 16px;
-  }
-
-  .vector-config-stack {
-    grid-template-columns: 1fr;
   }
 
   .vector-markdown,
