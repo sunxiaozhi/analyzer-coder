@@ -129,8 +129,7 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
 function resolveAnalysisOutputType(mode: AnalyzerForm['mode']): OutputType {
   if (mode === 'report') return 'markdown'
   if (mode === 'graph') return 'mermaid'
-  if (['json', 'chunks'].includes(mode)) return 'json'
-  return 'text'
+  return 'json'
 }
 
 function emptyAnalysisResult(mode: AnalyzerForm['mode']) {
@@ -208,9 +207,7 @@ export function useAnalyzerConsole() {
   const authReady = shallowRef(false)
   const analysisResultsByMode = reactive({
     report: emptyAnalysisResult('report'),
-    summary: emptyAnalysisResult('summary'),
     json: emptyAnalysisResult('json'),
-    chunks: emptyAnalysisResult('chunks'),
     graph: emptyAnalysisResult('graph')
   })
   const indexOutput = shallowRef('')

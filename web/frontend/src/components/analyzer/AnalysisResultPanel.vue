@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import MarkdownIt from 'markdown-it'
 import { computed, shallowRef } from 'vue'
-import { Cpu, DataAnalysis, Document, Files, Grid, Operation, Tickets } from '@element-plus/icons-vue'
+import { Cpu, DataAnalysis, Document, Files, Operation } from '@element-plus/icons-vue'
 import {
   ElButton,
   ElCard,
@@ -33,9 +33,7 @@ defineEmits<{
 
 const modeOptions = [
   { label: '报告', value: 'report', badge: 'MD', icon: Document },
-  { label: '摘要', value: 'summary', badge: 'TXT', icon: Tickets },
   { label: 'JSON', value: 'json', badge: 'JSON', icon: DataAnalysis },
-  { label: '切块', value: 'chunks', badge: 'JSON', icon: Grid },
   { label: 'Mermaid 图', value: 'graph', badge: 'MMD', icon: Files }
 ] as const
 
@@ -570,7 +568,7 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
   }
 
   .analysis-mode-grid {
-    grid-template-columns: repeat(5, minmax(92px, 1fr));
+    grid-template-columns: repeat(3, minmax(92px, 1fr));
   }
 
   .analysis-mode-option {

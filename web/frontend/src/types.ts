@@ -1,6 +1,6 @@
 export type SourceType = 'code' | 'kb' | 'mixed'
 
-export type AnalysisMode = 'report' | 'summary' | 'json' | 'chunks' | 'graph'
+export type AnalysisMode = 'report' | 'json' | 'graph'
 
 export type ActiveView = 'analysis' | 'index' | 'query'
 
