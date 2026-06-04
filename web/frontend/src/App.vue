@@ -33,9 +33,6 @@ const {
   analysisParsedJson,
   indexOutput,
   indexSavedPath,
-  indexOutputTitle,
-  indexOutputType,
-  indexParsedJson,
   indexStatus,
   indexRecords,
   indexRecordTotal,
@@ -133,9 +130,11 @@ async function refreshIndexData() {
     @login="login"
   />
 
-  <div v-else-if="!authReady" class="app-boot-screen" aria-busy="true"></div>
+  <main v-else-if="!authReady" class="app-session-loading" aria-busy="true">
+    <span>正在恢复会话</span>
+  </main>
 
-  <ElContainer v-else class="shell">
+  <ElContainer v-else-if="authReady && currentUser" class="shell">
     <ElAside class="shell-aside">
       <AnalyzerSidebar
         v-model:active-section="activeSection"
@@ -262,9 +261,6 @@ async function refreshIndexData() {
         v-model:form="form"
         :busy="busy"
         :output="indexOutput"
-        :output-title="indexOutputTitle"
-        :output-type="indexOutputType"
-        :parsed-json="indexParsedJson"
         :saved-path="indexSavedPath"
         :status="indexStatus"
         :records="indexRecords"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import MarkdownIt from 'markdown-it'
-import { computed, shallowRef, watch } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { Cpu, DataAnalysis, Document, Files, Grid, Operation, Tickets } from '@element-plus/icons-vue'
 import {
   ElButton,
@@ -12,15 +12,10 @@ import {
 } from 'element-plus'
 import type { AnalyzerForm, JsonValue, OutputType } from '../../types'
 import JsonViewer from './JsonViewer.vue'
+import MermaidDiagram from './MermaidDiagram.vue'
 
 const form = defineModel<AnalyzerForm>('form', { required: true })
 const mermaidView = shallowRef<'preview' | 'source'>('preview')
-const mermaidSvg = shallowRef('')
-const mermaidError = shallowRef('')
-const mermaidRendering = shallowRef(false)
-
-let mermaidRenderId = 0
-let mermaidInitialized = false
 
 const props = defineProps<{
   busy: boolean
@@ -84,52 +79,6 @@ const updatedAtLabel = computed(() => {
 })
 
 const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boolean(props.output))
-
-watch(
-  () => [props.outputType, props.output, mermaidView.value] as const,
-  async ([outputType, output, view]) => {
-    if (outputType !== 'mermaid' || !output || view !== 'preview') {
-      mermaidSvg.value = ''
-      mermaidError.value = ''
-      mermaidRendering.value = false
-      return
-    }
-
-    const renderId = ++mermaidRenderId
-    mermaidRendering.value = true
-    mermaidError.value = ''
-    try {
-      const { default: mermaid } = await import('mermaid')
-      if (!mermaidInitialized) {
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: 'strict',
-          theme: 'base',
-          flowchart: {
-            curve: 'basis',
-            htmlLabels: false,
-            useMaxWidth: true
-          }
-        })
-        mermaidInitialized = true
-      }
-      const result = await mermaid.render(`analysis-mermaid-${renderId}`, output)
-      if (renderId === mermaidRenderId) {
-        mermaidSvg.value = result.svg
-      }
-    } catch (error) {
-      if (renderId === mermaidRenderId) {
-        mermaidSvg.value = ''
-        mermaidError.value = error instanceof Error ? error.message : 'Mermaid 图渲染失败'
-      }
-    } finally {
-      if (renderId === mermaidRenderId) {
-        mermaidRendering.value = false
-      }
-    }
-  },
-  { immediate: true }
-)
 </script>
 
 <template>
@@ -238,9 +187,7 @@ watch(
         <JsonViewer v-else-if="outputType === 'json' && parsedJson" :value="parsedJson" />
 
         <ElScrollbar v-else-if="outputType === 'mermaid' && mermaidView === 'preview'" class="analysis-mermaid-preview">
-          <ElEmpty v-if="mermaidRendering" description="正在渲染 Mermaid 图。" />
-          <ElEmpty v-else-if="mermaidError" :description="mermaidError" />
-          <div v-else class="analysis-mermaid-canvas" v-html="mermaidSvg"></div>
+          <MermaidDiagram :code="output" />
         </ElScrollbar>
 
         <ElScrollbar v-else class="analysis-output-scroll">
@@ -519,20 +466,6 @@ watch(
   justify-content: center;
   min-height: 100%;
   padding: 24px;
-}
-
-.analysis-mermaid-canvas {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-  min-height: 100%;
-  min-width: 100%;
-  overflow: auto;
-}
-
-.analysis-mermaid-canvas :deep(svg) {
-  height: auto;
-  max-width: 100%;
 }
 
 .analysis-markdown :deep(.el-scrollbar__view) {

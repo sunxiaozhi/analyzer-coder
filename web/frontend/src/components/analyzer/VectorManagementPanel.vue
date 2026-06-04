@@ -21,7 +21,7 @@ import {
   ElSelect,
   ElTag
 } from 'element-plus'
-import type { AnalyzerForm, IndexStatus, JsonValue, OutputType } from '../../types'
+import type { AnalyzerForm, IndexStatus } from '../../types'
 import type { IndexRecord, IndexRecordFilters } from '../../types'
 
 const form = defineModel<AnalyzerForm>('form', { required: true })
@@ -33,9 +33,6 @@ const advancedOpen = shallowRef(false)
 const props = defineProps<{
   busy: boolean
   output: string
-  outputTitle: string
-  outputType: OutputType
-  parsedJson: JsonValue | null
   savedPath: string
   status: IndexStatus | null
   records: IndexRecord[]
@@ -387,8 +384,10 @@ function changeRecordPage(nextPage: number) {
 
 <style scoped>
 .vector-page {
+  display: flex;
+  flex-direction: column;
   gap: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
 }
 
 .vector-command {
@@ -400,6 +399,7 @@ function changeRecordPage(nextPage: number) {
   gap: 16px;
   justify-content: space-between;
   padding: 16px 24px;
+  flex: 0 0 auto;
 }
 
 .vector-heading {
@@ -457,6 +457,7 @@ function changeRecordPage(nextPage: number) {
   align-items: start;
   border-bottom: 1px solid var(--line);
   display: grid;
+  flex: 0 0 auto;
   gap: 16px;
   grid-template-columns: 112px minmax(0, 1fr);
   padding: 14px 24px;
@@ -479,6 +480,7 @@ function changeRecordPage(nextPage: number) {
 .vector-advanced-panel {
   background: var(--surface-muted);
   border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
   padding: 14px 24px 4px;
 }
 
@@ -494,6 +496,7 @@ function changeRecordPage(nextPage: number) {
 
 .vector-workbench {
   display: grid;
+  flex: 1 1 auto;
   gap: 16px;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   min-height: 0;
@@ -556,34 +559,6 @@ function changeRecordPage(nextPage: number) {
   display: inline-flex;
   gap: 7px;
   min-width: 0;
-}
-
-.vector-markdown,
-.vector-output-scroll {
-  background: #ffffff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.vector-markdown :deep(.el-scrollbar__view) {
-  color: #263846;
-  line-height: 1.6;
-  min-height: 100%;
-  padding: 20px 24px;
-}
-
-.vector-output {
-  color: #263846;
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  margin: 0;
-  min-height: 100%;
-  padding: 18px;
-  white-space: pre-wrap;
 }
 
 .index-detail-stack {
@@ -814,11 +789,6 @@ function changeRecordPage(nextPage: number) {
   .vector-workbench {
     grid-template-columns: 1fr;
     padding: 14px 16px;
-  }
-
-  .vector-markdown,
-  .vector-output-scroll {
-    min-height: 320px;
   }
 
   .index-record-footer,

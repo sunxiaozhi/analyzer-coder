@@ -14,6 +14,7 @@ import {
 } from 'element-plus'
 import type { ActiveView, JsonValue, OutputType, QueryEvidence, QueryResult } from '../../types'
 import JsonViewer from './JsonViewer.vue'
+import MermaidDiagram from './MermaidDiagram.vue'
 
 const props = defineProps<{
   activeView: ActiveView
@@ -132,6 +133,10 @@ const renderedMarkdown = computed(() => markdown.render(props.output || ''))
     </ElScrollbar>
 
     <JsonViewer v-else-if="outputType === 'json' && parsedJson" :value="parsedJson" />
+
+    <ElScrollbar v-else-if="outputType === 'mermaid'" class="mermaid-preview">
+      <MermaidDiagram :code="output" />
+    </ElScrollbar>
 
     <ElScrollbar v-else class="output-scroll">
       <pre class="output" :class="{ 'mermaid-output': outputType === 'mermaid' }">{{ output || '等待运行。' }}</pre>

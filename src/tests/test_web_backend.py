@@ -52,6 +52,32 @@ def test_web_backend_report(tmp_path) -> None:
     assert payload["savedPath"].endswith(".md")
 
 
+def test_web_backend_reads_latest_analysis_result(tmp_path) -> None:
+    workspace = _java_workspace(tmp_path)
+
+    class TestConfig(JsonTestConfig):
+        WORKSPACE_ROOT = workspace
+        RESULTS_DIR = ".results"
+        DEFAULT_STORE = ".store/default.jsonl"
+        TESTING = True
+
+    client = create_app(TestConfig).test_client()
+    _login(client)
+
+    analyze_response = client.post("/api/analyze", json={"path": "src", "source": "code", "mode": "report"})
+    saved_path = analyze_response.get_json()["savedPath"]
+
+    result_response = client.get("/api/analysis/result", query_string={"mode": "report"})
+    result_payload = result_response.get_json()
+
+    assert result_response.status_code == 200
+    assert result_payload["exists"] is True
+    assert result_payload["savedPath"] == saved_path
+    assert result_payload["mode"] == "report"
+    assert "HTTP Endpoints" in result_payload["output"]
+    assert result_payload["updatedAt"]
+
+
 def test_web_backend_report_accepts_null_project_id(tmp_path) -> None:
     workspace = _java_workspace(tmp_path)
 

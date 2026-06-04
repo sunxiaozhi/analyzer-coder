@@ -24,6 +24,14 @@ interface AnalyzeResponse {
   savedPath: string
 }
 
+interface AnalysisResultResponse {
+  exists: boolean
+  output: string
+  savedPath: string
+  mode: AnalyzerForm['mode']
+  updatedAt: string
+}
+
 interface IndexResponse {
   message: string
   savedPath: string
@@ -83,6 +91,17 @@ interface KnowledgeFileResponse {
 
 type ApiPayload = Record<string, unknown>
 
+const ACTIVE_SECTION_STORAGE_KEY = 'analyzer-console-active-section'
+const consoleSections: readonly ConsoleSection[] = [
+  'projects',
+  'accounts',
+  'knowledge',
+  'templates',
+  'analysis',
+  'vectors',
+  'search'
+]
+
 async function readJsonResponse<T>(response: Response): Promise<T> {
   const text = await response.text()
   let data: unknown = {}
@@ -120,6 +139,23 @@ function emptyAnalysisResult(mode: AnalyzerForm['mode']) {
     savedPath: '',
     outputType: resolveAnalysisOutputType(mode),
     updatedAt: ''
+  }
+}
+
+function readStoredActiveSection(): ConsoleSection {
+  try {
+    const section = window.localStorage.getItem(ACTIVE_SECTION_STORAGE_KEY)
+    return consoleSections.includes(section as ConsoleSection) ? (section as ConsoleSection) : 'projects'
+  } catch {
+    return 'projects'
+  }
+}
+
+function writeStoredActiveSection(section: ConsoleSection) {
+  try {
+    window.localStorage.setItem(ACTIVE_SECTION_STORAGE_KEY, section)
+  } catch {
+    // 本地偏好保存失败不影响控制台使用。
   }
 }
 
@@ -179,7 +215,6 @@ export function useAnalyzerConsole() {
   })
   const indexOutput = shallowRef('')
   const indexSavedPath = shallowRef('')
-  const indexOutputType = shallowRef<OutputType>('text')
   const indexStatus = shallowRef<IndexStatus | null>(null)
   const indexRecords = ref<IndexRecord[]>([])
   const indexRecordTotal = shallowRef(0)
@@ -207,7 +242,7 @@ export function useAnalyzerConsole() {
   const users = ref<AuthUser[]>([])
   const currentUser = ref<AuthUser | null>(null)
   const authMessage = shallowRef('')
-  const activeSection = shallowRef<ConsoleSection>('projects')
+  const activeSection = shallowRef<ConsoleSection>(readStoredActiveSection())
 
   const selectedProject = computed(() =>
     projects.value.find((project) => project.id === form.projectId) ?? null
@@ -224,17 +259,6 @@ export function useAnalyzerConsole() {
     if (analysisOutputType.value !== 'json' || !analysisOutput.value) return null
     try {
       return JSON.parse(analysisOutput.value) as JsonValue
-    } catch {
-      return null
-    }
-  })
-
-  const indexOutputTitle = computed(() => '索引结果')
-
-  const indexParsedJson = computed<JsonValue | null>(() => {
-    if (indexOutputType.value !== 'json' || !indexOutput.value) return null
-    try {
-      return JSON.parse(indexOutput.value) as JsonValue
     } catch {
       return null
     }
@@ -312,6 +336,7 @@ export function useAnalyzerConsole() {
       authMessage.value = ''
       await checkHealth()
       await loadProjects()
+      await loadAnalysisResult()
       if (currentUser.value.isAdmin) {
         await loadUsers()
       }
@@ -359,8 +384,10 @@ export function useAnalyzerConsole() {
       if (!currentUser.value.isAdmin && activeSection.value === 'accounts') {
         activeSection.value = 'projects'
       }
+      authReady.value = true
       await checkHealth()
       await loadProjects()
+      await loadAnalysisResult()
       if (currentUser.value.isAdmin) {
         await loadUsers()
       }
@@ -369,9 +396,11 @@ export function useAnalyzerConsole() {
       await loadIndexStatus()
       await loadIndexRecords()
     } catch {
-      currentUser.value = null
-      projects.value = []
-      users.value = []
+      if (!authReady.value) {
+        currentUser.value = null
+        projects.value = []
+        users.value = []
+      }
     } finally {
       authReady.value = true
     }
@@ -757,10 +786,26 @@ export function useAnalyzerConsole() {
     }
   }
 
+  async function loadAnalysisResult(mode: AnalyzerForm['mode'] = form.mode) {
+    if (!currentUser.value || !form.projectId) return
+    const params = new URLSearchParams({
+      projectId: form.projectId,
+      mode
+    })
+    const data = await getJson<AnalysisResultResponse>(`/api/analysis/result?${params}`)
+    analysisResultsByMode[mode] = data.exists
+      ? {
+          output: data.output,
+          savedPath: data.savedPath,
+          outputType: resolveAnalysisOutputType(mode),
+          updatedAt: data.updatedAt
+        }
+      : emptyAnalysisResult(mode)
+  }
+
   async function indexProject() {
     activeSection.value = 'vectors'
     indexSavedPath.value = ''
-    indexOutputType.value = 'text'
     const data = await requestJson<IndexResponse>('/api/index', {
       path: form.path,
       codePath: form.codePath,
@@ -829,7 +874,6 @@ export function useAnalyzerConsole() {
       }
       indexOutput.value = ''
       indexSavedPath.value = ''
-      indexOutputType.value = 'text'
       indexStatus.value = null
       indexRecords.value = []
       indexRecordTotal.value = 0
@@ -856,8 +900,16 @@ export function useAnalyzerConsole() {
       updateLastProject(projectId)
       loadKbFiles()
       loadKbTemplates()
+      loadAnalysisResult()
       loadIndexStatus()
       loadIndexRecords()
+    }
+  )
+
+  watch(
+    () => form.mode,
+    (mode) => {
+      loadAnalysisResult(mode)
     }
   )
 
@@ -871,6 +923,10 @@ export function useAnalyzerConsole() {
       loadKbTemplates()
     }
   )
+
+  watch(activeSection, (section) => {
+    writeStoredActiveSection(section)
+  })
 
   onMounted(() => {
     loadCurrentUser()
@@ -896,9 +952,6 @@ export function useAnalyzerConsole() {
     analysisParsedJson,
     indexOutput,
     indexSavedPath,
-    indexOutputTitle,
-    indexOutputType,
-    indexParsedJson,
     indexStatus,
     indexRecords,
     indexRecordTotal,
@@ -926,6 +979,7 @@ export function useAnalyzerConsole() {
     selectedProject,
     activeSection,
     analyze,
+    loadAnalysisResult,
     login,
     logout,
     indexProject,

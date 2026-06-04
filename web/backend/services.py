@@ -358,6 +358,32 @@ class AnalyzerService:
             "projectId": context.project_id,
         }
 
+    def analysis_result(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        mode = str(payload.get("mode", "report"))
+        context = self._analysis_context(payload, user)
+        extension, normalized_mode = self._analysis_result_extension(mode)
+        result_path = context.results_dir / f"web-{normalized_mode}{extension}"
+        if not result_path.exists():
+            return {
+                "exists": False,
+                "output": "",
+                "savedPath": "",
+                "mode": normalized_mode,
+                "source": "code",
+                "projectId": context.project_id,
+                "updatedAt": "",
+            }
+
+        return {
+            "exists": True,
+            "output": result_path.read_text(encoding="utf-8", errors="replace"),
+            "savedPath": self._relative(result_path),
+            "mode": normalized_mode,
+            "source": "code",
+            "projectId": context.project_id,
+            "updatedAt": datetime.fromtimestamp(result_path.stat().st_mtime, timezone.utc).isoformat(),
+        }
+
     def index_project(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         source = source_value(payload)
         context = self._analysis_context(payload, user)
@@ -635,6 +661,17 @@ class AnalyzerService:
 
         code_results = self.analyzer.analyze_path(code_target)
         return _build_report(code_target, "code", code_results, []), ".md", "report"
+
+    def _analysis_result_extension(self, mode: str) -> tuple[str, str]:
+        if mode == "json":
+            return ".json", "json"
+        if mode == "graph":
+            return ".mmd", "graph"
+        if mode == "chunks":
+            return ".json", "chunks"
+        if mode == "summary":
+            return ".txt", "summary"
+        return ".md", "report"
 
     def _save_latest_analysis_result(self, results_dir: Path, mode: str, extension: str, output: str) -> Path:
         result_path = results_dir / f"web-{mode}{extension}"
