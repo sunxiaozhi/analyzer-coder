@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Files, Refresh } from '@element-plus/icons-vue'
 import { ElButton, ElMain, ElTag } from 'element-plus'
-import type { KnowledgeFile } from '../../types'
+import type { KnowledgeFile, KnowledgeTemplate } from '../../types'
 import KnowledgeEditor from './KnowledgeEditor.vue'
 import KnowledgeFileList from './KnowledgeFileList.vue'
 
@@ -13,6 +13,7 @@ defineProps<{
   files: KnowledgeFile[]
   root: string
   selectedPath: string
+  templates: KnowledgeTemplate[]
 }>()
 
 const emit = defineEmits<{
@@ -60,6 +61,7 @@ function forwardCreateFile(path: string, fileContent: string) {
         v-model:content="content"
         :busy="busy"
         :selected-path="selectedPath"
+        :templates="templates"
         @create-file="forwardCreateFile"
         @save-file="emit('saveFile')"
       />

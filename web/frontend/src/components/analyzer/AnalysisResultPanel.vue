@@ -1,54 +1,47 @@
 <script setup lang="ts">
 import MarkdownIt from 'markdown-it'
-import { computed, shallowRef } from 'vue'
-import { ArrowDown, ArrowRight, Cpu, Document, Operation } from '@element-plus/icons-vue'
+import { computed, shallowRef, watch } from 'vue'
+import { Cpu, DataAnalysis, Document, Files, Grid, Operation, Tickets } from '@element-plus/icons-vue'
 import {
   ElButton,
   ElCard,
   ElEmpty,
-  ElForm,
-  ElFormItem,
   ElIcon,
-  ElInput,
-  ElOption,
   ElScrollbar,
-  ElSelect,
   ElTag
 } from 'element-plus'
-import type { ActiveView, AnalyzerForm, JsonValue, OutputType, QueryEvidence, QueryResult } from '../../types'
+import type { AnalyzerForm, JsonValue, OutputType } from '../../types'
 import JsonViewer from './JsonViewer.vue'
 
 const form = defineModel<AnalyzerForm>('form', { required: true })
-const advancedOpen = shallowRef(false)
+const mermaidView = shallowRef<'preview' | 'source'>('preview')
+const mermaidSvg = shallowRef('')
+const mermaidError = shallowRef('')
+const mermaidRendering = shallowRef(false)
+
+let mermaidRenderId = 0
+let mermaidInitialized = false
 
 const props = defineProps<{
-  activeView: ActiveView
   busy: boolean
   output: string
   outputTitle: string
   outputType: OutputType
   parsedJson: JsonValue | null
-  queryEvidence: QueryEvidence | null
-  queryResults: QueryResult[]
   savedPath: string
+  updatedAt: string
 }>()
 
 defineEmits<{
   analyze: []
 }>()
 
-const sourceOptions = [
-  { label: '代码', value: 'code' },
-  { label: '知识库', value: 'kb' },
-  { label: '代码 + 知识库', value: 'mixed' }
-] as const
-
 const modeOptions = [
-  { label: '报告', value: 'report' },
-  { label: '摘要', value: 'summary' },
-  { label: 'JSON', value: 'json' },
-  { label: '切块', value: 'chunks' },
-  { label: 'Mermaid 图', value: 'graph' }
+  { label: '报告', value: 'report', badge: 'MD', icon: Document },
+  { label: '摘要', value: 'summary', badge: 'TXT', icon: Tickets },
+  { label: 'JSON', value: 'json', badge: 'JSON', icon: DataAnalysis },
+  { label: '切块', value: 'chunks', badge: 'JSON', icon: Grid },
+  { label: 'Mermaid 图', value: 'graph', badge: 'MMD', icon: Files }
 ] as const
 
 const markdown = new MarkdownIt({
@@ -59,23 +52,84 @@ const markdown = new MarkdownIt({
 
 const renderedMarkdown = computed(() => markdown.render(props.output || ''))
 
-const sourceLabel = computed(() => {
-  const option = sourceOptions.find((item) => item.value === form.value.source)
-  return option?.label ?? '代码'
-})
-
 const modeLabel = computed(() => {
   const option = modeOptions.find((item) => item.value === form.value.mode)
   return option?.label ?? '报告'
+})
+
+const modeBadge = computed(() => {
+  const option = modeOptions.find((item) => item.value === form.value.mode)
+  return option?.badge ?? 'MD'
 })
 
 const outputBadge = computed(() => {
   if (!props.output) return '等待运行'
   if (props.outputType === 'json') return '结构化结果'
   if (props.outputType === 'markdown') return '报告结果'
-  if (props.outputType === 'mermaid') return '图谱源码'
+  if (props.outputType === 'mermaid') return mermaidView.value === 'preview' ? '图谱预览' : '图谱源码'
   return '文本结果'
 })
+
+const updatedAtLabel = computed(() => {
+  if (!props.updatedAt) return ''
+  const date = new Date(props.updatedAt)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }).format(date)
+})
+
+const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boolean(props.output))
+
+watch(
+  () => [props.outputType, props.output, mermaidView.value] as const,
+  async ([outputType, output, view]) => {
+    if (outputType !== 'mermaid' || !output || view !== 'preview') {
+      mermaidSvg.value = ''
+      mermaidError.value = ''
+      mermaidRendering.value = false
+      return
+    }
+
+    const renderId = ++mermaidRenderId
+    mermaidRendering.value = true
+    mermaidError.value = ''
+    try {
+      const { default: mermaid } = await import('mermaid')
+      if (!mermaidInitialized) {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          theme: 'base',
+          flowchart: {
+            curve: 'basis',
+            htmlLabels: false,
+            useMaxWidth: true
+          }
+        })
+        mermaidInitialized = true
+      }
+      const result = await mermaid.render(`analysis-mermaid-${renderId}`, output)
+      if (renderId === mermaidRenderId) {
+        mermaidSvg.value = result.svg
+      }
+    } catch (error) {
+      if (renderId === mermaidRenderId) {
+        mermaidSvg.value = ''
+        mermaidError.value = error instanceof Error ? error.message : 'Mermaid 图渲染失败'
+      }
+    } finally {
+      if (renderId === mermaidRenderId) {
+        mermaidRendering.value = false
+      }
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -85,15 +139,13 @@ const outputBadge = computed(() => {
         <ElIcon><Cpu /></ElIcon>
         <div>
           <h2>代码分析</h2>
-          <span>{{ sourceLabel }} · {{ modeLabel }}</span>
+          <span>当前项目代码 · {{ modeLabel }}</span>
         </div>
       </div>
 
       <div class="analysis-command-actions">
+        <ElTag type="info" effect="plain">{{ modeBadge }}</ElTag>
         <ElTag :type="output ? 'success' : 'info'" effect="plain">{{ outputBadge }}</ElTag>
-        <ElButton type="primary" :loading="busy" :icon="Cpu" @click="$emit('analyze')">
-          运行分析
-        </ElButton>
       </div>
     </section>
 
@@ -103,54 +155,46 @@ const outputBadge = computed(() => {
           <template #header>
             <div class="panel-title">
               <ElIcon><Operation /></ElIcon>
-              <span>分析参数</span>
+              <span>输出模式</span>
             </div>
           </template>
 
-          <ElForm label-position="top" class="analysis-form">
-            <ElFormItem label="数据来源">
-              <ElSelect v-model="form.source" class="control-select">
-                <ElOption
-                  v-for="option in sourceOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                />
-              </ElSelect>
-            </ElFormItem>
-            <ElFormItem label="输出模式">
-              <ElSelect v-model="form.mode" class="control-select">
-                <ElOption
-                  v-for="option in modeOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                />
-              </ElSelect>
-            </ElFormItem>
+          <div class="analysis-mode-grid">
+            <button
+              v-for="option in modeOptions"
+              :key="option.value"
+              class="analysis-mode-option"
+              :class="{ active: form.mode === option.value }"
+              type="button"
+              @click="form.mode = option.value"
+            >
+              <ElIcon>
+                <component :is="option.icon" />
+              </ElIcon>
+              <span>{{ option.label }}</span>
+              <small>{{ option.badge }}</small>
+            </button>
+          </div>
 
-            <div class="analysis-advanced">
-              <button class="analysis-advanced-toggle" type="button" @click="advancedOpen = !advancedOpen">
-                <ElIcon>
-                  <ArrowDown v-if="advancedOpen" />
-                  <ArrowRight v-else />
-                </ElIcon>
-                <span>高级路径</span>
-              </button>
-
-              <div v-if="advancedOpen" class="analysis-advanced-fields">
-                <ElFormItem label="基础路径">
-                  <ElInput v-model="form.path" clearable />
-                </ElFormItem>
-                <ElFormItem label="代码路径">
-                  <ElInput v-model="form.codePath" clearable />
-                </ElFormItem>
-                <ElFormItem label="知识库路径">
-                  <ElInput v-model="form.kbPath" clearable />
-                </ElFormItem>
+          <div class="analysis-run-box">
+            <dl>
+              <div>
+                <dt>范围</dt>
+                <dd>当前项目代码</dd>
               </div>
-            </div>
-          </ElForm>
+              <div>
+                <dt>模式</dt>
+                <dd>{{ modeLabel }}</dd>
+              </div>
+              <div>
+                <dt>最新结果</dt>
+                <dd>{{ updatedAtLabel || '暂无' }}</dd>
+              </div>
+            </dl>
+            <ElButton class="analysis-run-button" type="primary" :loading="busy" :icon="Cpu" @click="$emit('analyze')">
+              运行分析
+            </ElButton>
+          </div>
         </ElCard>
       </aside>
 
@@ -161,11 +205,31 @@ const outputBadge = computed(() => {
               <ElIcon><Document /></ElIcon>
               <span>{{ outputTitle }}</span>
             </span>
-            <ElTag type="info" effect="plain">{{ outputType }}</ElTag>
+            <span class="analysis-output-meta">
+              <span v-if="canPreviewMermaid" class="analysis-view-toggle">
+                <button
+                  type="button"
+                  :class="{ active: mermaidView === 'preview' }"
+                  @click="mermaidView = 'preview'"
+                >
+                  预览
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: mermaidView === 'source' }"
+                  @click="mermaidView = 'source'"
+                >
+                  源码
+                </button>
+              </span>
+              <ElTag type="info" effect="plain">{{ outputType }}</ElTag>
+              <ElTag v-if="savedPath" type="success" effect="plain">已保存</ElTag>
+              <ElTag v-if="updatedAtLabel" type="info" effect="plain">{{ updatedAtLabel }}</ElTag>
+            </span>
           </div>
         </template>
 
-        <ElEmpty v-if="!output" description="配置参数后运行分析，结果会显示在这里。" />
+        <ElEmpty v-if="!output" description="运行分析后显示结果。" />
 
         <ElScrollbar v-else-if="outputType === 'markdown'" class="analysis-markdown">
           <article v-html="renderedMarkdown"></article>
@@ -173,9 +237,20 @@ const outputBadge = computed(() => {
 
         <JsonViewer v-else-if="outputType === 'json' && parsedJson" :value="parsedJson" />
 
+        <ElScrollbar v-else-if="outputType === 'mermaid' && mermaidView === 'preview'" class="analysis-mermaid-preview">
+          <ElEmpty v-if="mermaidRendering" description="正在渲染 Mermaid 图。" />
+          <ElEmpty v-else-if="mermaidError" :description="mermaidError" />
+          <div v-else class="analysis-mermaid-canvas" v-html="mermaidSvg"></div>
+        </ElScrollbar>
+
         <ElScrollbar v-else class="analysis-output-scroll">
           <pre class="analysis-output" :class="{ 'mermaid-output': outputType === 'mermaid' }">{{ output }}</pre>
         </ElScrollbar>
+
+        <div v-if="savedPath" class="analysis-saved-path">
+          <span>保存位置</span>
+          <code>{{ savedPath }}</code>
+        </div>
       </ElCard>
     </section>
   </div>
@@ -189,7 +264,7 @@ const outputBadge = computed(() => {
 
 .analysis-command {
   align-items: center;
-  background: var(--surface);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
   border-bottom: 1px solid var(--line);
   box-shadow: var(--shadow-sm);
   display: flex;
@@ -201,7 +276,7 @@ const outputBadge = computed(() => {
 .analysis-heading {
   align-items: center;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -211,10 +286,10 @@ const outputBadge = computed(() => {
   border-radius: 8px;
   color: var(--accent);
   display: inline-flex;
-  flex: 0 0 36px;
-  height: 36px;
+  flex: 0 0 40px;
+  height: 40px;
   justify-content: center;
-  width: 36px;
+  width: 40px;
 }
 
 .analysis-heading h2 {
@@ -243,7 +318,7 @@ const outputBadge = computed(() => {
 .analysis-workbench {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   padding: 18px 24px 24px;
@@ -252,47 +327,119 @@ const outputBadge = computed(() => {
 .analysis-config-stack {
   display: grid;
   gap: 16px;
-  grid-template-rows: auto;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
 
-.analysis-form {
+.analysis-config-panel.el-card {
   display: grid;
-  gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
 }
 
-.analysis-form .el-form-item {
-  margin-bottom: 0;
+.analysis-config-panel :deep(.el-card__body) {
+  display: grid;
+  gap: 16px;
+  grid-template-rows: auto auto;
+  min-height: 0;
 }
 
-.analysis-advanced {
-  border-top: 1px solid var(--line);
+.analysis-mode-grid {
   display: grid;
   gap: 10px;
-  padding-top: 2px;
 }
 
-.analysis-advanced-toggle {
+.analysis-mode-option {
   align-items: center;
-  background: transparent;
-  border: 0;
-  color: var(--accent);
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
   cursor: pointer;
-  display: inline-flex;
-  font-weight: 760;
-  gap: 6px;
-  justify-self: start;
-  padding: 4px 0;
-}
-
-.analysis-advanced-toggle:hover,
-.analysis-advanced-toggle:focus {
-  color: var(--accent-strong);
-}
-
-.analysis-advanced-fields {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  min-height: 50px;
+  padding: 9px 10px;
+  text-align: left;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  width: 100%;
+}
+
+.analysis-mode-option:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.analysis-mode-option.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset, var(--shadow-sm);
+}
+
+.analysis-mode-option > .el-icon {
+  align-items: center;
+  background: var(--surface-muted);
+  border-radius: 8px;
+  color: var(--accent);
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.analysis-mode-option span {
+  font-size: 0.88rem;
+  font-weight: 760;
+  min-width: 0;
+}
+
+.analysis-mode-option small {
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: 0.66rem;
+  font-weight: 760;
+  padding: 2px 6px;
+}
+
+.analysis-run-box {
+  align-self: end;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.analysis-run-box dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.analysis-run-box dl > div {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.analysis-run-box dt {
+  color: var(--text-faint);
+  font-size: 0.74rem;
+}
+
+.analysis-run-box dd {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 760;
+  margin: 0;
+}
+
+.analysis-run-button {
+  width: 100%;
 }
 
 .analysis-output-panel.el-card {
@@ -304,6 +451,8 @@ const outputBadge = computed(() => {
 
 .analysis-output-panel :deep(.el-card__body) {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
   min-height: 0;
   padding: 12px;
 }
@@ -315,7 +464,46 @@ const outputBadge = computed(() => {
   min-width: 0;
 }
 
+.analysis-output-meta {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.analysis-view-toggle {
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+}
+
+.analysis-view-toggle button {
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 760;
+  line-height: 1;
+  min-width: 44px;
+  padding: 7px 9px;
+}
+
+.analysis-view-toggle button.active {
+  background: #ffffff;
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+
+.analysis-output-panel :deep(.el-empty) {
+  align-self: center;
+  justify-self: center;
+}
+
 .analysis-markdown,
+.analysis-mermaid-preview,
 .analysis-output-scroll {
   background: #ffffff;
   border: 1px solid var(--line);
@@ -323,6 +511,28 @@ const outputBadge = computed(() => {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.analysis-mermaid-preview :deep(.el-scrollbar__view) {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100%;
+  padding: 24px;
+}
+
+.analysis-mermaid-canvas {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100%;
+  min-width: 100%;
+  overflow: auto;
+}
+
+.analysis-mermaid-canvas :deep(svg) {
+  height: auto;
+  max-width: 100%;
 }
 
 .analysis-markdown :deep(.el-scrollbar__view) {
@@ -385,14 +595,60 @@ const outputBadge = computed(() => {
   white-space: pre-wrap;
 }
 
+.analysis-saved-path {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  color: var(--text-faint);
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 2px 0;
+}
+
+.analysis-saved-path span {
+  flex: 0 0 auto;
+  font-size: 0.74rem;
+  font-weight: 760;
+}
+
+.analysis-saved-path code {
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: #263846;
+  display: block;
+  flex: 1;
+  font-size: 0.76rem;
+  min-width: 0;
+  overflow: hidden;
+  padding: 5px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1100px) {
   .analysis-workbench {
     grid-template-columns: 1fr;
   }
 
   .analysis-config-stack {
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+    grid-template-columns: 1fr;
     grid-template-rows: auto;
+  }
+
+  .analysis-mode-grid {
+    grid-template-columns: repeat(5, minmax(92px, 1fr));
+  }
+
+  .analysis-mode-option {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    min-height: 88px;
+    text-align: center;
+  }
+
+  .analysis-run-box {
+    align-self: auto;
   }
 }
 
@@ -421,9 +677,24 @@ const outputBadge = computed(() => {
     grid-template-columns: 1fr;
   }
 
+  .analysis-mode-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analysis-mode-option {
+    min-height: 82px;
+  }
+
   .analysis-markdown,
+  .analysis-mermaid-preview,
   .analysis-output-scroll {
     min-height: 320px;
+  }
+
+  .analysis-saved-path {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 6px;
   }
 }
 </style>

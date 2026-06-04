@@ -6,6 +6,7 @@ import AccountManagementPanel from './components/analyzer/AccountManagementPanel
 import AnalyzerSidebar from './components/analyzer/AnalyzerSidebar.vue'
 import AnalysisResultPanel from './components/analyzer/AnalysisResultPanel.vue'
 import KnowledgeBasePanel from './components/analyzer/KnowledgeBasePanel.vue'
+import KnowledgeTemplatePanel from './components/analyzer/KnowledgeTemplatePanel.vue'
 import LoginPanel from './components/analyzer/LoginPanel.vue'
 import ProjectManagementPanel from './components/analyzer/ProjectManagementPanel.vue'
 import SemanticSearchPanel from './components/analyzer/SemanticSearchPanel.vue'
@@ -24,29 +25,48 @@ const {
   kbBusy,
   authBusy,
   authReady,
-  output,
-  savedPath,
-  queryResults,
-  queryEvidence,
+  analysisOutput,
+  analysisSavedPath,
+  analysisOutputTitle,
+  analysisOutputType,
+  analysisUpdatedAt,
+  analysisParsedJson,
+  indexOutput,
+  indexSavedPath,
+  indexOutputTitle,
+  indexOutputType,
+  indexParsedJson,
+  indexStatus,
+  indexRecords,
+  indexRecordTotal,
+  indexRecordFilters,
+  indexRecordPage,
+  indexRecordPageSize,
+  searchResults,
+  searchEvidence,
+  searchSavedPath,
   kbFiles,
+  kbTemplates,
   selectedKbPath,
   kbDraftPath,
   kbContent,
   kbRoot,
+  templateForm,
+  templateMessage,
+  projectMessage,
+  projectMessageProjectId,
   projects,
   users,
   currentUser,
   authMessage,
   selectedProject,
-  activeView,
   activeSection,
-  outputTitle,
-  outputType,
-  parsedJson,
   login,
   logout,
   analyze,
   indexProject,
+  loadIndexStatus,
+  loadIndexRecords,
   queryStore,
   checkHealth,
   createProject,
@@ -58,10 +78,14 @@ const {
   updateUserPassword,
   updateUserAccess,
   loadKbFiles,
+  loadKbTemplates,
   loadKbFile,
   createKbFile,
   saveKbFile,
   deleteKbFile,
+  createKbTemplate,
+  updateKbTemplate,
+  deleteKbTemplate,
   rebuildKnowledgeIndex
 } = useAnalyzerConsole()
 
@@ -71,7 +95,8 @@ const sectionTitle = computed(() => {
     accounts: '账号管理',
     analysis: '代码分析',
     knowledge: '知识库维护',
-    vectors: '向量管理',
+    templates: '知识库模板',
+    vectors: '索引运维',
     search: '语义检索'
   }
   return titles[activeSection.value]
@@ -92,6 +117,11 @@ const breadcrumbItems = computed(() => {
 })
 
 const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value || authBusy.value)
+
+async function refreshIndexData() {
+  await loadIndexStatus()
+  await loadIndexRecords()
+}
 </script>
 
 <template>
@@ -162,6 +192,8 @@ const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value
         v-model:form="form"
         v-model:project-form="projectForm"
         :project-busy="projectBusy"
+        :project-message="projectMessage"
+        :project-message-project-id="projectMessageProjectId"
         :projects="projects"
         @create-project="createProject"
         @pull-project="pullProject"
@@ -186,15 +218,13 @@ const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value
       <AnalysisResultPanel
         v-else-if="activeSection === 'analysis'"
         v-model:form="form"
-        :active-view="activeView"
         :busy="busy"
-        :output="output"
-        :output-title="outputTitle"
-        :output-type="outputType"
-        :parsed-json="parsedJson"
-        :query-results="queryResults"
-        :query-evidence="queryEvidence"
-        :saved-path="savedPath"
+        :output="analysisOutput"
+        :output-title="analysisOutputTitle"
+        :output-type="analysisOutputType"
+        :parsed-json="analysisParsedJson"
+        :saved-path="analysisSavedPath"
+        :updated-at="analysisUpdatedAt"
         @analyze="analyze"
       />
 
@@ -206,6 +236,7 @@ const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value
         :files="kbFiles"
         :root="kbRoot"
         :selected-path="selectedKbPath"
+        :templates="kbTemplates"
         @create-file="createKbFile"
         @delete-file="deleteKbFile"
         @refresh-files="loadKbFiles"
@@ -214,33 +245,45 @@ const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value
         @select-file="loadKbFile"
       />
 
+      <KnowledgeTemplatePanel
+        v-else-if="activeSection === 'templates'"
+        v-model:template-form="templateForm"
+        :busy="kbBusy"
+        :message="templateMessage"
+        :templates="kbTemplates"
+        @create-template="createKbTemplate"
+        @delete-template="deleteKbTemplate"
+        @refresh-templates="loadKbTemplates"
+        @update-template="updateKbTemplate"
+      />
+
       <VectorManagementPanel
         v-else-if="activeSection === 'vectors'"
         v-model:form="form"
-        :active-view="activeView"
         :busy="busy"
-        :output="output"
-        :output-title="outputTitle"
-        :output-type="outputType"
-        :parsed-json="parsedJson"
-        :query-results="queryResults"
-        :query-evidence="queryEvidence"
-        :saved-path="savedPath"
+        :output="indexOutput"
+        :output-title="indexOutputTitle"
+        :output-type="indexOutputType"
+        :parsed-json="indexParsedJson"
+        :saved-path="indexSavedPath"
+        :status="indexStatus"
+        :records="indexRecords"
+        :record-total="indexRecordTotal"
+        v-model:record-filters="indexRecordFilters"
+        v-model:record-page="indexRecordPage"
+        v-model:record-page-size="indexRecordPageSize"
         @index-project="indexProject"
+        @refresh-status="refreshIndexData"
+        @refresh-records="loadIndexRecords"
       />
 
       <SemanticSearchPanel
         v-else
         v-model:form="form"
-        :active-view="activeView"
         :busy="busy"
-        :output="output"
-        :output-title="outputTitle"
-        :output-type="outputType"
-        :parsed-json="parsedJson"
-        :query-results="queryResults"
-        :query-evidence="queryEvidence"
-        :saved-path="savedPath"
+        :query-results="searchResults"
+        :query-evidence="searchEvidence"
+        :saved-path="searchSavedPath"
         @query-store="queryStore"
       />
     </ElContainer>

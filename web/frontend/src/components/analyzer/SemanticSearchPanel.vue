@@ -14,17 +14,12 @@ import {
   ElSelect,
   ElTag
 } from 'element-plus'
-import type { ActiveView, AnalyzerForm, JsonValue, OutputType, QueryEvidence, QueryResult } from '../../types'
+import type { AnalyzerForm, QueryEvidence, QueryResult } from '../../types'
 
 const form = defineModel<AnalyzerForm>('form', { required: true })
 
 const props = defineProps<{
-  activeView: ActiveView
   busy: boolean
-  output: string
-  outputTitle: string
-  outputType: OutputType
-  parsedJson: JsonValue | null
   queryEvidence: QueryEvidence | null
   queryResults: QueryResult[]
   savedPath: string

@@ -99,9 +99,39 @@ def index_project() -> Any:
     return jsonify(analyzer_service().index_project(json_payload(request), current_user()))
 
 
+@api_bp.get("/index/status")
+def index_status() -> Any:
+    return jsonify(analyzer_service().index_status(request.args.to_dict(), current_user()))
+
+
+@api_bp.get("/index/records")
+def index_records() -> Any:
+    return jsonify(analyzer_service().index_records(request.args.to_dict(), current_user()))
+
+
 @api_bp.post("/query")
 def query() -> Any:
     return jsonify(analyzer_service().query(json_payload(request), current_user()))
+
+
+@api_bp.get("/kb/templates")
+def list_kb_templates() -> Any:
+    return jsonify(analyzer_service().list_kb_templates(request.args.to_dict(), current_user()))
+
+
+@api_bp.post("/kb/templates")
+def create_kb_template() -> Any:
+    return jsonify(analyzer_service().create_kb_template(json_payload(request), current_user())), 201
+
+
+@api_bp.put("/kb/template")
+def update_kb_template() -> Any:
+    return jsonify(analyzer_service().update_kb_template(json_payload(request), current_user()))
+
+
+@api_bp.delete("/kb/template")
+def delete_kb_template() -> Any:
+    return jsonify(analyzer_service().delete_kb_template(json_payload(request), current_user()))
 
 
 @api_bp.get("/kb/files")

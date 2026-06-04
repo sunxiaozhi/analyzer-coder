@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Collection, Connection, Cpu, Files, FolderOpened, Search, UserFilled } from '@element-plus/icons-vue'
+import { Collection, Connection, Cpu, Files, FolderOpened, Notebook, Search, UserFilled } from '@element-plus/icons-vue'
 import { ElButton, ElIcon, ElMenu, ElMenuItem, ElOption, ElScrollbar, ElSelect } from 'element-plus'
 import type { AuthUser, ConsoleSection, ProjectRecord } from '../../types'
 import BrandLogo from './BrandLogo.vue'
@@ -49,6 +49,10 @@ defineEmits<{
           <ElIcon><Collection /></ElIcon>
           <span>知识库维护</span>
         </ElMenuItem>
+        <ElMenuItem index="templates">
+          <ElIcon><Notebook /></ElIcon>
+          <span>知识库模板</span>
+        </ElMenuItem>
         <ElMenuItem index="projects">
           <ElIcon><FolderOpened /></ElIcon>
           <span>项目管理</span>
@@ -63,7 +67,7 @@ defineEmits<{
         </ElMenuItem>
         <ElMenuItem index="vectors">
           <ElIcon><Files /></ElIcon>
-          <span>向量管理</span>
+          <span>索引运维</span>
         </ElMenuItem>
       </ElMenu>
 

@@ -6,7 +6,7 @@ export type ActiveView = 'analysis' | 'index' | 'query'
 
 export type OutputType = 'markdown' | 'mermaid' | 'json' | 'text'
 
-export type ConsoleSection = 'projects' | 'accounts' | 'knowledge' | 'analysis' | 'vectors' | 'search'
+export type ConsoleSection = 'projects' | 'accounts' | 'knowledge' | 'templates' | 'analysis' | 'vectors' | 'search'
 
 export interface AnalyzerForm {
   projectId: string
@@ -70,6 +70,22 @@ export interface KnowledgeFile {
   updatedAt: string
 }
 
+export interface KnowledgeTemplate {
+  id: string
+  name: string
+  path: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KnowledgeTemplateForm {
+  id: string
+  name: string
+  path: string
+  content: string
+}
+
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
 export interface QueryResultMetadata {
@@ -108,4 +124,27 @@ export interface QueryEvidence {
   relatedCode: RelatedEvidence[]
   relatedKnowledge: RelatedEvidence[]
   relations: EvidenceRelation[]
+}
+
+export interface IndexStatus {
+  exists: boolean
+  store: string
+  size: number
+  updatedAt: string
+  total: number
+  sources: Record<string, number>
+  kinds: Record<string, number>
+  projectId: string
+}
+
+export interface IndexRecord {
+  id: string
+  text: string
+  metadata: QueryResultMetadata
+}
+
+export interface IndexRecordFilters {
+  source: '' | 'code' | 'kb'
+  kind: string
+  query: string
 }

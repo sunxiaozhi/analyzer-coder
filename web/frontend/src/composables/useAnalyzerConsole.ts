@@ -1,11 +1,15 @@
 import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import type {
-  ActiveView,
   AnalyzerForm,
   AuthUser,
   ConsoleSection,
+  IndexRecord,
+  IndexRecordFilters,
+  IndexStatus,
   JsonValue,
   KnowledgeFile,
+  KnowledgeTemplate,
+  KnowledgeTemplateForm,
   OutputType,
   ProjectForm,
   ProjectRecord,
@@ -23,6 +27,16 @@ interface AnalyzeResponse {
 interface IndexResponse {
   message: string
   savedPath: string
+}
+
+interface IndexStatusResponse extends IndexStatus {}
+
+interface IndexRecordsResponse {
+  records: IndexRecord[]
+  total: number
+  limit: number
+  offset: number
+  store: string
 }
 
 interface QueryResponse {
@@ -50,6 +64,15 @@ interface UsersResponse {
 interface KnowledgeFilesResponse {
   files: KnowledgeFile[]
   root: string
+}
+
+interface KnowledgeTemplatesResponse {
+  templates: KnowledgeTemplate[]
+}
+
+interface KnowledgeTemplateResponse {
+  template?: KnowledgeTemplate
+  templates: KnowledgeTemplate[]
 }
 
 interface KnowledgeFileResponse {
@@ -82,6 +105,22 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
   }
 
   return data as T
+}
+
+function resolveAnalysisOutputType(mode: AnalyzerForm['mode']): OutputType {
+  if (mode === 'report') return 'markdown'
+  if (mode === 'graph') return 'mermaid'
+  if (['json', 'chunks'].includes(mode)) return 'json'
+  return 'text'
+}
+
+function emptyAnalysisResult(mode: AnalyzerForm['mode']) {
+  return {
+    output: '',
+    savedPath: '',
+    outputType: resolveAnalysisOutputType(mode),
+    updatedAt: ''
+  }
 }
 
 export function useAnalyzerConsole() {
@@ -118,6 +157,12 @@ export function useAnalyzerConsole() {
     displayName: '',
     isAdmin: false
   })
+  const templateForm = reactive<KnowledgeTemplateForm>({
+    id: '',
+    name: '',
+    path: '',
+    content: ''
+  })
 
   const status = shallowRef('未连接')
   const busy = shallowRef(false)
@@ -125,44 +170,71 @@ export function useAnalyzerConsole() {
   const kbBusy = shallowRef(false)
   const authBusy = shallowRef(false)
   const authReady = shallowRef(false)
-  const output = shallowRef('')
-  const savedPath = shallowRef('')
-  const queryResults = ref<QueryResult[]>([])
-  const queryEvidence = ref<QueryEvidence | null>(null)
+  const analysisResultsByMode = reactive({
+    report: emptyAnalysisResult('report'),
+    summary: emptyAnalysisResult('summary'),
+    json: emptyAnalysisResult('json'),
+    chunks: emptyAnalysisResult('chunks'),
+    graph: emptyAnalysisResult('graph')
+  })
+  const indexOutput = shallowRef('')
+  const indexSavedPath = shallowRef('')
+  const indexOutputType = shallowRef<OutputType>('text')
+  const indexStatus = shallowRef<IndexStatus | null>(null)
+  const indexRecords = ref<IndexRecord[]>([])
+  const indexRecordTotal = shallowRef(0)
+  const indexRecordFilters = reactive<IndexRecordFilters>({
+    source: '',
+    kind: '',
+    query: ''
+  })
+  const indexRecordPage = shallowRef(1)
+  const indexRecordPageSize = shallowRef(20)
+  const searchResults = ref<QueryResult[]>([])
+  const searchEvidence = ref<QueryEvidence | null>(null)
+  const searchSavedPath = shallowRef('')
   const kbFiles = ref<KnowledgeFile[]>([])
+  const kbTemplates = ref<KnowledgeTemplate[]>([])
   const selectedKbPath = shallowRef('')
   const kbDraftPath = shallowRef('domain/new-topic.md')
   const kbContent = shallowRef('')
   const kbRoot = shallowRef('')
   const kbMessage = shallowRef('')
+  const templateMessage = shallowRef('')
+  const projectMessage = shallowRef('')
+  const projectMessageProjectId = shallowRef('')
   const projects = ref<ProjectRecord[]>([])
   const users = ref<AuthUser[]>([])
   const currentUser = ref<AuthUser | null>(null)
   const authMessage = shallowRef('')
-  const activeView = shallowRef<ActiveView>('analysis')
   const activeSection = shallowRef<ConsoleSection>('projects')
 
   const selectedProject = computed(() =>
     projects.value.find((project) => project.id === form.projectId) ?? null
   )
 
-  const outputTitle = computed(() => {
-    if (activeView.value === 'query') return '检索结果'
-    if (activeView.value === 'index') return '索引结果'
-    return '分析结果'
-  })
+  const analysisOutputTitle = computed(() => '分析结果')
+  const currentAnalysisResult = computed(() => analysisResultsByMode[form.mode])
+  const analysisOutput = computed(() => currentAnalysisResult.value.output)
+  const analysisSavedPath = computed(() => currentAnalysisResult.value.savedPath)
+  const analysisOutputType = computed(() => currentAnalysisResult.value.outputType)
+  const analysisUpdatedAt = computed(() => currentAnalysisResult.value.updatedAt)
 
-  const outputType = computed<OutputType>(() => {
-    if (activeView.value === 'analysis' && form.mode === 'report') return 'markdown'
-    if (activeView.value === 'analysis' && form.mode === 'graph') return 'mermaid'
-    if (activeView.value === 'analysis' && ['json', 'chunks'].includes(form.mode)) return 'json'
-    return 'text'
-  })
-
-  const parsedJson = computed<JsonValue | null>(() => {
-    if (outputType.value !== 'json' || !output.value) return null
+  const analysisParsedJson = computed<JsonValue | null>(() => {
+    if (analysisOutputType.value !== 'json' || !analysisOutput.value) return null
     try {
-      return JSON.parse(output.value) as JsonValue
+      return JSON.parse(analysisOutput.value) as JsonValue
+    } catch {
+      return null
+    }
+  })
+
+  const indexOutputTitle = computed(() => '索引结果')
+
+  const indexParsedJson = computed<JsonValue | null>(() => {
+    if (indexOutputType.value !== 'json' || !indexOutput.value) return null
+    try {
+      return JSON.parse(indexOutput.value) as JsonValue
     } catch {
       return null
     }
@@ -170,7 +242,6 @@ export function useAnalyzerConsole() {
 
   async function requestJson<T>(url: string, payload: Record<string, unknown>): Promise<T> {
     busy.value = true
-    savedPath.value = ''
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -245,6 +316,9 @@ export function useAnalyzerConsole() {
         await loadUsers()
       }
       await loadKbFiles()
+      await loadKbTemplates()
+      await loadIndexStatus()
+      await loadIndexRecords()
     } catch (error) {
       authMessage.value = error instanceof Error ? error.message : '登录失败'
       currentUser.value = null
@@ -270,6 +344,8 @@ export function useAnalyzerConsole() {
       activeSection.value = 'projects'
       selectedKbPath.value = ''
       kbContent.value = ''
+      kbTemplates.value = []
+      resetTemplateForm()
       authBusy.value = false
       authMessage.value = ''
     }
@@ -289,6 +365,9 @@ export function useAnalyzerConsole() {
         await loadUsers()
       }
       await loadKbFiles()
+      await loadKbTemplates()
+      await loadIndexStatus()
+      await loadIndexRecords()
     } catch {
       currentUser.value = null
       projects.value = []
@@ -473,6 +552,79 @@ export function useAnalyzerConsole() {
     }
   }
 
+  async function loadKbTemplates() {
+    if (!currentUser.value || !form.projectId) {
+      kbTemplates.value = []
+      return
+    }
+    try {
+      const data = await kbRequest<KnowledgeTemplatesResponse>(`/api/kb/templates?${kbParams()}`)
+      kbTemplates.value = data.templates
+    } catch (error) {
+      kbTemplates.value = []
+      templateMessage.value = error instanceof Error ? error.message : '知识库模板加载失败'
+    }
+  }
+
+  function resetTemplateForm() {
+    templateForm.id = ''
+    templateForm.name = ''
+    templateForm.path = ''
+    templateForm.content = ''
+  }
+
+  async function createKbTemplate() {
+    const data = await kbRequest<KnowledgeTemplateResponse>('/api/kb/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: form.projectId,
+        kbPath: form.kbPath,
+        name: templateForm.name,
+        path: templateForm.path,
+        content: templateForm.content
+      })
+    })
+    kbTemplates.value = data.templates
+    templateMessage.value = '模板已创建'
+    resetTemplateForm()
+  }
+
+  async function updateKbTemplate() {
+    if (!templateForm.id) return
+    const data = await kbRequest<KnowledgeTemplateResponse>('/api/kb/template', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: form.projectId,
+        kbPath: form.kbPath,
+        id: templateForm.id,
+        name: templateForm.name,
+        path: templateForm.path,
+        content: templateForm.content
+      })
+    })
+    kbTemplates.value = data.templates
+    templateMessage.value = '模板已保存'
+  }
+
+  async function deleteKbTemplate(templateId: string) {
+    const data = await kbRequest<KnowledgeTemplateResponse>('/api/kb/template', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: form.projectId,
+        kbPath: form.kbPath,
+        id: templateId
+      })
+    })
+    kbTemplates.value = data.templates
+    if (templateForm.id === templateId) {
+      resetTemplateForm()
+    }
+    templateMessage.value = '模板已删除'
+  }
+
   async function loadKbFile(path: string) {
     const data = await kbRequest<KnowledgeFileResponse>(`/api/kb/file?${kbParams({ path })}`)
     selectedKbPath.value = data.file.path
@@ -549,10 +701,12 @@ export function useAnalyzerConsole() {
       store: null
     })
     kbMessage.value = data.message
-    savedPath.value = data.savedPath
+    await loadIndexStatus()
   }
 
   async function createProject() {
+    projectMessage.value = ''
+    projectMessageProjectId.value = ''
     const data = await projectRequest<ProjectResponse>('/api/projects', {
       name: projectForm.name,
       gitUrl: projectForm.gitUrl,
@@ -575,34 +729,38 @@ export function useAnalyzerConsole() {
 
   async function pullProject() {
     if (!form.projectId) return
-    const data = await projectRequest<ProjectResponse>(`/api/projects/${form.projectId}/pull`, {})
+    const projectId = form.projectId
+    projectMessage.value = ''
+    projectMessageProjectId.value = ''
+    const data = await projectRequest<ProjectResponse>(`/api/projects/${projectId}/pull`, {})
     projects.value = projects.value.map((project) =>
       project.id === data.project.id ? data.project : project
     )
+    projectMessage.value = '更新成功'
+    projectMessageProjectId.value = data.project.id
   }
 
   async function analyze() {
     activeSection.value = 'analysis'
-    activeView.value = 'analysis'
-    queryResults.value = []
-    queryEvidence.value = null
+    const mode = form.mode
+    analysisResultsByMode[mode].savedPath = ''
+    analysisResultsByMode[mode].updatedAt = ''
     const data = await requestJson<AnalyzeResponse>('/api/analyze', {
-      path: form.path,
-      codePath: form.codePath,
-      kbPath: form.kbPath,
       projectId: form.projectId,
-      source: form.source,
-      mode: form.mode
+      mode
     })
-    output.value = data.output
-    savedPath.value = data.savedPath
+    analysisResultsByMode[mode] = {
+      output: data.output,
+      savedPath: data.savedPath,
+      outputType: resolveAnalysisOutputType(mode),
+      updatedAt: new Date().toISOString()
+    }
   }
 
   async function indexProject() {
     activeSection.value = 'vectors'
-    activeView.value = 'index'
-    queryResults.value = []
-    queryEvidence.value = null
+    indexSavedPath.value = ''
+    indexOutputType.value = 'text'
     const data = await requestJson<IndexResponse>('/api/index', {
       path: form.path,
       codePath: form.codePath,
@@ -611,15 +769,45 @@ export function useAnalyzerConsole() {
       source: form.source,
       store: null
     })
-    output.value = data.message
-    savedPath.value = data.savedPath
+    indexOutput.value = data.message
+    indexSavedPath.value = data.savedPath
+    await loadIndexStatus()
+    await loadIndexRecords()
+  }
+
+  async function loadIndexStatus() {
+    if (!currentUser.value || !form.projectId) {
+      indexStatus.value = null
+      return
+    }
+    const params = new URLSearchParams({ projectId: form.projectId })
+    const data = await getJson<IndexStatusResponse>(`/api/index/status?${params}`)
+    indexStatus.value = data
+  }
+
+  async function loadIndexRecords() {
+    if (!currentUser.value || !form.projectId) {
+      indexRecords.value = []
+      indexRecordTotal.value = 0
+      return
+    }
+    const params = new URLSearchParams({
+      projectId: form.projectId,
+      limit: String(indexRecordPageSize.value),
+      offset: String((indexRecordPage.value - 1) * indexRecordPageSize.value)
+    })
+    if (indexRecordFilters.source) params.set('source', indexRecordFilters.source)
+    if (indexRecordFilters.kind) params.set('kind', indexRecordFilters.kind)
+    if (indexRecordFilters.query) params.set('query', indexRecordFilters.query)
+    const data = await getJson<IndexRecordsResponse>(`/api/index/records?${params}`)
+    indexRecords.value = data.records
+    indexRecordTotal.value = data.total
   }
 
   async function queryStore() {
     activeSection.value = 'search'
-    activeView.value = 'query'
-    output.value = ''
-    queryEvidence.value = null
+    searchSavedPath.value = ''
+    searchEvidence.value = null
     const data = await requestJson<QueryResponse>('/api/query', {
       store: null,
       projectId: form.projectId,
@@ -627,20 +815,30 @@ export function useAnalyzerConsole() {
       filterSource: form.filterSource || null,
       topK: 5
     })
-    queryResults.value = data.results
-    queryEvidence.value = data.evidence
-    savedPath.value = data.savedPath
+    searchResults.value = data.results
+    searchEvidence.value = data.evidence
+    searchSavedPath.value = data.savedPath
   }
 
   watch(
     () => form.projectId,
     (projectId, previousProjectId) => {
       if (projectId === previousProjectId) return
-      output.value = ''
-      savedPath.value = ''
-      queryResults.value = []
-      queryEvidence.value = null
-      activeView.value = 'analysis'
+      for (const mode of Object.keys(analysisResultsByMode) as Array<AnalyzerForm['mode']>) {
+        analysisResultsByMode[mode] = emptyAnalysisResult(mode)
+      }
+      indexOutput.value = ''
+      indexSavedPath.value = ''
+      indexOutputType.value = 'text'
+      indexStatus.value = null
+      indexRecords.value = []
+      indexRecordTotal.value = 0
+      indexRecordPage.value = 1
+      searchResults.value = []
+      searchEvidence.value = null
+      searchSavedPath.value = ''
+      projectMessage.value = ''
+      projectMessageProjectId.value = ''
       if (projectId) {
         form.path = '.'
         form.codePath = '.'
@@ -654,8 +852,12 @@ export function useAnalyzerConsole() {
       }
       selectedKbPath.value = ''
       kbContent.value = ''
+      resetTemplateForm()
       updateLastProject(projectId)
       loadKbFiles()
+      loadKbTemplates()
+      loadIndexStatus()
+      loadIndexRecords()
     }
   )
 
@@ -664,7 +866,9 @@ export function useAnalyzerConsole() {
     () => {
       selectedKbPath.value = ''
       kbContent.value = ''
+      resetTemplateForm()
       loadKbFiles()
+      loadKbTemplates()
     }
   )
 
@@ -684,30 +888,49 @@ export function useAnalyzerConsole() {
     kbBusy,
     authBusy,
     authReady,
-    output,
-    savedPath,
-    queryResults,
-    queryEvidence,
+    analysisOutput,
+    analysisSavedPath,
+    analysisOutputTitle,
+    analysisOutputType,
+    analysisUpdatedAt,
+    analysisParsedJson,
+    indexOutput,
+    indexSavedPath,
+    indexOutputTitle,
+    indexOutputType,
+    indexParsedJson,
+    indexStatus,
+    indexRecords,
+    indexRecordTotal,
+    indexRecordFilters,
+    indexRecordPage,
+    indexRecordPageSize,
+    searchResults,
+    searchEvidence,
+    searchSavedPath,
     kbFiles,
+    kbTemplates,
     selectedKbPath,
     kbDraftPath,
     kbContent,
     kbRoot,
     kbMessage,
+    templateForm,
+    templateMessage,
+    projectMessage,
+    projectMessageProjectId,
     projects,
     users,
     currentUser,
     authMessage,
     selectedProject,
-    activeView,
     activeSection,
-    outputTitle,
-    outputType,
-    parsedJson,
     analyze,
     login,
     logout,
     indexProject,
+    loadIndexStatus,
+    loadIndexRecords,
     queryStore,
     checkHealth,
     loadCurrentUser,
@@ -720,10 +943,14 @@ export function useAnalyzerConsole() {
     updateUserPassword,
     updateUserAccess,
     loadKbFiles,
+    loadKbTemplates,
     loadKbFile,
     createKbFile,
     saveKbFile,
     deleteKbFile,
+    createKbTemplate,
+    updateKbTemplate,
+    deleteKbTemplate,
     rebuildKnowledgeIndex
   }
 }

@@ -22,6 +22,8 @@ const projectForm = defineModel<ProjectForm>('projectForm', { required: true })
 
 const props = defineProps<{
   projectBusy: boolean
+  projectMessage: string
+  projectMessageProjectId: string
   projects: ProjectRecord[]
 }>()
 
@@ -35,6 +37,11 @@ const pullDialogOpen = shallowRef(false)
 const selectedProject = computed(() =>
   props.projects.find((project) => project.id === form.value.projectId) ?? null
 )
+
+const visibleProjectMessage = computed(() => {
+  if (!selectedProject.value || selectedProject.value.id !== props.projectMessageProjectId) return ''
+  return props.projectMessage
+})
 
 function submitCreateProject() {
   emit('createProject')
@@ -101,10 +108,8 @@ function formatDate(value: string) {
             <ProjectCard
               v-for="project in projects"
               :key="project.id"
-              :busy="projectBusy"
               :project="project"
               :selected="form.projectId === project.id"
-              @pull="pullProject(project)"
               @select="selectProject(project)"
             />
           </div>
@@ -154,13 +159,18 @@ function formatDate(value: string) {
             <div class="code-project-current-actions">
               <ElButton
                 class="code-project-update-button"
+                :class="{ updating: projectBusy }"
                 type="primary"
                 :disabled="projectBusy"
                 :icon="Refresh"
+                :loading="projectBusy"
                 @click="pullProject(selectedProject)"
               >
-                <span>更新代码</span>
+                <span>{{ projectBusy ? '更新中' : '更新代码' }}</span>
               </ElButton>
+              <p v-if="visibleProjectMessage" class="code-project-success">
+                {{ visibleProjectMessage }}
+              </p>
             </div>
           </div>
         </ElCard>
@@ -362,6 +372,7 @@ function formatDate(value: string) {
 
 .code-project-current-actions {
   display: grid;
+  gap: 10px;
 }
 
 .code-project-update-button.el-button {
@@ -369,7 +380,31 @@ function formatDate(value: string) {
   border-color: var(--accent);
   color: #ffffff;
   min-width: 112px;
+  overflow: hidden;
+  position: relative;
   width: 100%;
+}
+
+.code-project-update-button.el-button::after {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 34%), transparent);
+  content: "";
+  height: 100%;
+  left: -45%;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  transform: skewX(-18deg);
+  width: 40%;
+}
+
+.code-project-update-button.el-button.updating {
+  animation: updatePulse 1.1s ease-in-out infinite;
+}
+
+.code-project-update-button.el-button.updating::after {
+  animation: updateSweep 1.2s ease-in-out infinite;
+  opacity: 1;
 }
 
 .code-project-update-button.el-button:hover,
@@ -386,6 +421,13 @@ function formatDate(value: string) {
   color: #64748b;
 }
 
+.code-project-update-button.el-button.updating.is-disabled,
+.code-project-update-button.el-button.updating.is-disabled:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
 .code-project-update-button :deep(.el-icon) {
   color: currentColor;
 }
@@ -395,6 +437,41 @@ function formatDate(value: string) {
   align-items: center;
   justify-content: center;
   min-width: max-content;
+}
+
+.code-project-success {
+  align-items: center;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  color: #047857;
+  display: flex;
+  font-size: 0.84rem;
+  font-weight: 700;
+  justify-content: center;
+  margin: 0;
+  min-height: 34px;
+}
+
+@keyframes updatePulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(37 99 235 / 22%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 5px rgb(37 99 235 / 10%);
+  }
+}
+
+@keyframes updateSweep {
+  0% {
+    left: -45%;
+  }
+
+  100% {
+    left: 110%;
+  }
 }
 
 @media (max-width: 1100px) {

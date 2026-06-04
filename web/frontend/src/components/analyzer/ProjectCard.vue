@@ -1,30 +1,16 @@
 <script setup lang="ts">
-import { FolderOpened, Refresh } from '@element-plus/icons-vue'
+import { FolderOpened } from '@element-plus/icons-vue'
 import { ElButton, ElCard, ElIcon } from 'element-plus'
 import type { ProjectRecord } from '../../types'
 
-const props = defineProps<{
-  busy?: boolean
+defineProps<{
   project?: ProjectRecord
   selected: boolean
 }>()
 
 defineEmits<{
-  pull: []
   select: []
 }>()
-
-function updatedLabel() {
-  if (!props.project?.updatedAt) return '-'
-  const date = new Date(props.project.updatedAt)
-  if (Number.isNaN(date.getTime())) return props.project.updatedAt
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date)
-}
 </script>
 
 <template>
@@ -49,23 +35,11 @@ function updatedLabel() {
 
     <div class="project-card-meta">
       <span>{{ project?.path }}</span>
-      <span v-if="project">更新：{{ updatedLabel() }}</span>
     </div>
 
     <div class="project-card-actions">
       <ElButton class="project-select-button" size="small" type="primary" plain @click.stop="$emit('select')">
         {{ selected ? '当前' : '选择' }}
-      </ElButton>
-      <ElButton
-        v-if="project"
-        class="project-update-button"
-        size="small"
-        type="primary"
-        :disabled="busy"
-        :icon="Refresh"
-        @click.stop="$emit('pull')"
-      >
-        <span>更新</span>
       </ElButton>
     </div>
   </ElCard>
@@ -151,35 +125,6 @@ function updatedLabel() {
   margin-left: 0;
   min-width: 58px;
   width: auto;
-}
-
-.project-update-button :deep(span) {
-  display: inline-flex;
-  min-width: max-content;
-}
-
-.project-update-button.el-button {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #ffffff;
-}
-
-.project-update-button.el-button:hover,
-.project-update-button.el-button:focus {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
-  color: #ffffff;
-}
-
-.project-update-button.el-button.is-disabled,
-.project-update-button.el-button.is-disabled:hover {
-  background: #d8e0e8;
-  border-color: #d8e0e8;
-  color: #64748b;
-}
-
-.project-update-button :deep(.el-icon) {
-  color: currentColor;
 }
 
 @media (max-width: 760px) {

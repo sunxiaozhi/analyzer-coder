@@ -31,6 +31,80 @@ from web.backend.validation import source_value
 
 KB_EXTENSIONS = {".adoc", ".markdown", ".md", ".rst", ".txt"}
 
+DEFAULT_KB_TEMPLATES = [
+    {
+        "id": "domain",
+        "name": "业务规则",
+        "path": "domain/user-registration.md",
+        "content": """# 用户注册
+
+## 业务规则
+- 手机号必须唯一
+
+## 相关接口
+- POST /api/users/register
+
+## 相关代码
+- UserController.register
+- UserService.createUser
+
+## 边界条件
+- 手机号为空时拒绝
+- 手机号已存在时返回业务错误
+""",
+    },
+    {
+        "id": "api",
+        "name": "接口说明",
+        "path": "api/user-api.md",
+        "content": """# 用户接口
+
+## 接口
+- POST /api/users/register
+
+## 请求
+- phone: 用户手机号
+
+## 响应
+- 注册成功返回用户信息
+- 手机号重复返回业务错误
+""",
+    },
+    {
+        "id": "decision",
+        "name": "决策记录",
+        "path": "decisions/phone-unique-rule.md",
+        "content": """# 手机号唯一规则
+
+## 决策
+注册以手机号作为唯一身份标识。
+
+## 原因
+- 降低重复账户风险
+- 便于后续登录和通知流程
+
+## 影响范围
+- 用户注册
+- 用户资料更新
+""",
+    },
+    {
+        "id": "troubleshooting",
+        "name": "故障排查",
+        "path": "troubleshooting/registration-errors.md",
+        "content": """# 注册错误排查
+
+## 现象
+用户注册失败。
+
+## 排查
+- 检查手机号是否已存在
+- 检查注册接口是否返回业务错误
+- 检查数据库唯一约束
+""",
+    },
+]
+
 
 class AnalyzerService:
     def __init__(
@@ -271,22 +345,16 @@ class AnalyzerService:
         return {"project": asdict(project)}
 
     def analyze(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
-        source = source_value(payload)
         mode = str(payload.get("mode", "report"))
         context = self._analysis_context(payload, user)
 
-        output, extension, normalized_mode = self._analysis_output(context, payload, source, mode)
-        saved_path = _save_result(
-            context.results_dir,
-            f"web-{normalized_mode}",
-            extension,
-            output,
-        )
+        output, extension, normalized_mode = self._analysis_output(context, payload, mode)
+        saved_path = self._save_latest_analysis_result(context.results_dir, normalized_mode, extension, output)
         return {
             "output": output,
             "savedPath": self._relative(saved_path),
             "mode": normalized_mode,
-            "source": source,
+            "source": "code",
             "projectId": context.project_id,
         }
 
@@ -306,6 +374,98 @@ class AnalyzerService:
             "count": len(records),
             "store": self._relative(store_path),
             "savedPath": self._relative(saved_path),
+            "projectId": context.project_id,
+        }
+
+    def index_status(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        store_path = context.store_path(payload.get("store"))
+        if not store_path.exists():
+            return {
+                "exists": False,
+                "store": self._relative(store_path),
+                "size": 0,
+                "updatedAt": "",
+                "total": 0,
+                "sources": {},
+                "kinds": {},
+                "projectId": context.project_id,
+            }
+
+        records = JsonlVectorStore(store_path).read_records()
+        sources: dict[str, int] = {}
+        kinds: dict[str, int] = {}
+        for record in records:
+            source_type = str(record.metadata.get("source_type") or "unknown")
+            kind = str(record.metadata.get("kind") or "unknown")
+            sources[source_type] = sources.get(source_type, 0) + 1
+            kinds[kind] = kinds.get(kind, 0) + 1
+        return {
+            "exists": True,
+            "store": self._relative(store_path),
+            "size": store_path.stat().st_size,
+            "updatedAt": datetime.fromtimestamp(store_path.stat().st_mtime, timezone.utc).isoformat(),
+            "total": len(records),
+            "sources": sources,
+            "kinds": kinds,
+            "projectId": context.project_id,
+        }
+
+    def index_records(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        store_path = context.store_path(payload.get("store"))
+        limit = max(1, min(int(payload.get("limit") or 50), 200))
+        offset = max(0, int(payload.get("offset") or 0))
+        source_filter = str(payload.get("source") or "").strip()
+        kind_filter = str(payload.get("kind") or "").strip()
+        query = str(payload.get("query") or "").strip().lower()
+
+        if not store_path.exists():
+            return {
+                "records": [],
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+                "store": self._relative(store_path),
+                "projectId": context.project_id,
+            }
+
+        filtered = []
+        for record in JsonlVectorStore(store_path).read_records():
+            metadata = record.metadata
+            source_type = str(metadata.get("source_type") or "")
+            kind = str(metadata.get("kind") or "")
+            if source_filter and source_type != source_filter:
+                continue
+            if kind_filter and kind != kind_filter:
+                continue
+            haystack = "\n".join(
+                [
+                    record.id,
+                    record.text,
+                    str(metadata.get("file_path") or ""),
+                    str(metadata.get("symbol_name") or ""),
+                    str(metadata.get("type_name") or ""),
+                ]
+            ).lower()
+            if query and query not in haystack:
+                continue
+            filtered.append(record)
+
+        page = filtered[offset : offset + limit]
+        return {
+            "records": [
+                {
+                    "id": record.id,
+                    "text": record.text,
+                    "metadata": record.metadata,
+                }
+                for record in page
+            ],
+            "total": len(filtered),
+            "limit": limit,
+            "offset": offset,
+            "store": self._relative(store_path),
             "projectId": context.project_id,
         }
 
@@ -341,6 +501,47 @@ class AnalyzerService:
             "store": self._relative(store_path),
             "projectId": context.project_id,
         }
+
+    def list_kb_templates(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        return {
+            "templates": self._load_kb_templates(context),
+            "projectId": context.project_id,
+        }
+
+    def create_kb_template(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        templates = self._load_kb_templates(context)
+        template = self._template_from_payload(payload, templates)
+        templates.append(template)
+        self._save_kb_templates(context, templates)
+        return {"template": template, "templates": templates, "projectId": context.project_id}
+
+    def update_kb_template(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        template_id = str(payload.get("id") or "").strip()
+        if not template_id:
+            raise APIError("template id is required.", 400)
+        templates = self._load_kb_templates(context)
+        for index, template in enumerate(templates):
+            if template["id"] == template_id:
+                updated = self._template_from_payload(payload, templates, current_id=template_id)
+                templates[index] = updated
+                self._save_kb_templates(context, templates)
+                return {"template": updated, "templates": templates, "projectId": context.project_id}
+        raise APIError("knowledge template not found.", 404)
+
+    def delete_kb_template(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        template_id = str(payload.get("id") or "").strip()
+        if not template_id:
+            raise APIError("template id is required.", 400)
+        templates = self._load_kb_templates(context)
+        remaining = [template for template in templates if template["id"] != template_id]
+        if len(remaining) == len(templates):
+            raise APIError("knowledge template not found.", 404)
+        self._save_kb_templates(context, remaining)
+        return {"deleted": template_id, "templates": remaining, "projectId": context.project_id}
 
     def list_kb_files(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
@@ -412,43 +613,34 @@ class AnalyzerService:
         self,
         context: "AnalysisContext",
         payload: dict[str, Any],
-        source: str,
         mode: str,
     ) -> tuple[str, str, str]:
-        code_target = self._source_target(context, payload, "code")
-        kb_target = self._source_target(context, payload, "kb")
-        target = code_target if source == "code" else kb_target
+        code_target = context.root
 
         if mode == "json":
-            if source == "code":
-                results = self.analyzer.analyze_path(code_target)
-                output = json.dumps([result.to_dict() for result in results], ensure_ascii=False, indent=2)
-            else:
-                chunks = self._build_source_chunks(context, payload, source)
-                output = json.dumps([chunk.__dict__ for chunk in chunks], ensure_ascii=False, indent=2)
+            results = self.analyzer.analyze_path(code_target)
+            output = json.dumps([result.to_dict() for result in results], ensure_ascii=False, indent=2)
             return output, ".json", "json"
 
         if mode == "graph":
-            if source == "kb":
-                raise APIError("--graph requires source code or mixed.", 400)
             return _build_graph(self.analyzer.analyze_path(code_target)), ".mmd", "graph"
 
         if mode == "chunks":
-            chunks = self._build_source_chunks(context, payload, source)
+            chunks = self._build_source_chunks(context, payload, "code")
             return json.dumps([chunk.__dict__ for chunk in chunks], ensure_ascii=False, indent=2), ".json", "chunks"
 
         if mode == "summary":
-            if source != "code":
-                chunks = self._build_source_chunks(context, payload, source)
-                output = f"{target}: {len(chunks)} chunks"
-            else:
-                output = "\n".join(_format_summary(result) for result in self.analyzer.analyze_path(code_target))
+            output = "\n".join(_format_summary(result) for result in self.analyzer.analyze_path(code_target))
             return output, ".txt", "summary"
 
-        code_results = self.analyzer.analyze_path(code_target) if source in {"code", "mixed"} else []
-        kb_chunks = build_kb_chunks(kb_target) if source in {"kb", "mixed"} else []
-        report_target = code_target if source == "code" else kb_target if source == "kb" else context.root
-        return _build_report(report_target, source, code_results, kb_chunks), ".md", "report"
+        code_results = self.analyzer.analyze_path(code_target)
+        return _build_report(code_target, "code", code_results, []), ".md", "report"
+
+    def _save_latest_analysis_result(self, results_dir: Path, mode: str, extension: str, output: str) -> Path:
+        result_path = results_dir / f"web-{mode}{extension}"
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        result_path.write_text(output.rstrip("\n") + "\n", encoding="utf-8")
+        return result_path
 
     def _build_source_chunks(
         self,
@@ -475,6 +667,85 @@ class AnalyzerService:
 
     def _kb_root(self, context: "AnalysisContext", payload: dict[str, Any]) -> Path:
         return context.path(payload.get("kbPath") or "docs")
+
+    def _kb_templates_file(self, context: "AnalysisContext") -> Path:
+        return context.data_root / "knowledge_templates.json"
+
+    def _load_kb_templates(self, context: "AnalysisContext") -> list[dict[str, str]]:
+        path = self._kb_templates_file(context)
+        if not path.exists():
+            now = utc_now()
+            return [
+                {
+                    **template,
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+                for template in DEFAULT_KB_TEMPLATES
+            ]
+        data = json.loads(path.read_text(encoding="utf-8"))
+        templates: list[dict[str, str]] = []
+        for item in data.get("templates", []):
+            templates.append(
+                {
+                    "id": str(item.get("id") or ""),
+                    "name": str(item.get("name") or ""),
+                    "path": str(item.get("path") or ""),
+                    "content": str(item.get("content") or ""),
+                    "createdAt": str(item.get("createdAt") or utc_now()),
+                    "updatedAt": str(item.get("updatedAt") or utc_now()),
+                }
+            )
+        return templates
+
+    def _save_kb_templates(self, context: "AnalysisContext", templates: list[dict[str, str]]) -> None:
+        path = self._kb_templates_file(context)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"templates": templates}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _template_from_payload(
+        self,
+        payload: dict[str, Any],
+        templates: list[dict[str, str]],
+        current_id: str = "",
+    ) -> dict[str, str]:
+        name = str(payload.get("name") or "").strip()
+        template_path = str(payload.get("path") or "").strip().replace("\\", "/")
+        content = str(payload.get("content") or "")
+        if not name:
+            raise APIError("template name is required.", 400)
+        if not template_path:
+            raise APIError("template path is required.", 400)
+        if Path(template_path).is_absolute():
+            raise APIError("template path must be relative.", 400)
+        if Path(template_path).suffix.lower() not in KB_EXTENSIONS:
+            raise APIError("template path extension must be markdown, text, rst, or asciidoc.", 400)
+        now = utc_now()
+        existing_ids = {template["id"] for template in templates if template["id"] != current_id}
+        template_id = current_id or self._unique_template_id(name, existing_ids)
+        created_at = now
+        if current_id:
+            for template in templates:
+                if template["id"] == current_id:
+                    created_at = template.get("createdAt") or now
+                    break
+        return {
+            "id": template_id,
+            "name": name,
+            "path": template_path,
+            "content": content,
+            "createdAt": created_at,
+            "updatedAt": now,
+        }
+
+    def _unique_template_id(self, name: str, existing: set[str]) -> str:
+        base = slugify(name)
+        if base not in existing:
+            return base
+        index = 2
+        while f"{base}-{index}" in existing:
+            index += 1
+        return f"{base}-{index}"
 
     def _kb_file_path(self, root: Path, value: object) -> Path:
         raw = str(value or "").strip().replace("\\", "/")
