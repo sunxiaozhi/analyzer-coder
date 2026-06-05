@@ -9,13 +9,21 @@ from pathlib import Path
 from typing import Sequence
 
 from java_ts_analyzer.analyzer import JavaAnalyzer
+from java_ts_analyzer.call_graph import CallChain, build_call_chains, build_call_edges
 from java_ts_analyzer.chunker import build_chunks
 from java_ts_analyzer.embedding import HashingEmbedder, SentenceTransformerEmbedder
 from java_ts_analyzer.kb_loader import build_kb_chunks
 from java_ts_analyzer.models import JavaFileAnalysis, JavaVectorChunk
+from java_ts_analyzer.sql_flow import build_endpoint_sql_flows, build_sql_usages
 from java_ts_analyzer.vector_store import JsonlVectorStore
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+")
+GRAPH_MAX_ENDPOINTS = 80
+GRAPH_MAX_COMPONENTS = 120
+GRAPH_MAX_METHOD_NODES = 160
+GRAPH_MAX_METHOD_EDGES = 180
+GRAPH_MAX_SQL_NODES = 80
+GRAPH_MAX_TABLE_NODES = 80
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -165,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.source == "kb":
             raise SystemExit("--graph requires --source code or --source mixed.")
         code_results = analyzer.analyze_path(args.path)
-        _emit_output(args, _build_graph(code_results), kind="graph", extension=".mmd")
+        _emit_output(args, _build_graph(code_results, args.path), kind="graph", extension=".mmd")
         return 0
 
     results = []
@@ -323,43 +331,43 @@ def _obsidian_index(
         "",
         f"- Project: `{project_path}`",
         f"- Java files: {len(code_results)}",
-        f"- Knowledge chunks: {len(kb_chunks)}",
-        f"- Packages: {', '.join(packages) if packages else '-'}",
+        f"- 知识库切块数：{len(kb_chunks)}",
+        f"- 包名：{', '.join(packages) if packages else '-'}",
         "",
-        "## Inventory",
+        "## 统计概览",
         "",
-        "| Metric | Count |",
+        "| 指标 | 数量 |",
         "|---|---:|",
-        f"| Types | {sum(metric.type_count for metric in metrics)} |",
-        f"| Fields | {sum(metric.field_count for metric in metrics)} |",
-        f"| Methods and constructors | {sum(metric.method_count for metric in metrics)} |",
-        f"| Method calls | {sum(metric.call_count for metric in metrics)} |",
-        f"| HTTP endpoints | {sum(metric.endpoint_count for metric in metrics)} |",
+        f"| 类型 | {sum(metric.type_count for metric in metrics)} |",
+        f"| 字段 | {sum(metric.field_count for metric in metrics)} |",
+        f"| 方法和构造器 | {sum(metric.method_count for metric in metrics)} |",
+        f"| 方法调用 | {sum(metric.call_count for metric in metrics)} |",
+        f"| HTTP 接口 | {sum(metric.endpoint_count for metric in metrics)} |",
         "",
-        "## Components",
+        "## Spring 组件",
         "",
     ]
     if components:
         for component in components:
             lines.append(f"- [[{component.name}]] `{component.annotation}`")
     else:
-        lines.append("No Spring-style components detected.")
+        lines.append("未检测到 Spring 风格组件。")
 
-    lines.extend(["", "## Endpoints", ""])
+    lines.extend(["", "## HTTP 接口", ""])
     if endpoints:
         for endpoint in endpoints:
             methods = ",".join(endpoint.http_methods)
             lines.append(f"- [[{_endpoint_note_name(endpoint)}]] `{methods} {endpoint.path}`")
     else:
-        lines.append("No Spring MVC endpoints detected.")
+        lines.append("未检测到 Spring MVC 接口。")
 
-    lines.extend(["", "## Knowledge Sources", ""])
+    lines.extend(["", "## 知识库来源", ""])
     files = sorted({str(chunk.metadata.get("file_path", "")) for chunk in kb_chunks})
     if files:
         for file_path in files:
             lines.append(f"- `{file_path}`")
     else:
-        lines.append("No knowledge-base chunks included.")
+        lines.append("未包含知识库切块。")
     return "\n".join(lines) + "\n"
 
 
@@ -392,12 +400,12 @@ def _obsidian_component_page(
         "",
         f"# {component.name}",
         "",
-        f"- Kind: `{component.kind}`",
-        f"- Annotation: `{component.annotation}`",
-        f"- File: `{result.file_path or ''}`",
-        f"- Package: `{result.package or ''}`",
+        f"- 类型：`{_display_component_kind(component.kind)}`",
+        f"- 注解：`{component.annotation}`",
+        f"- 文件：`{result.file_path or ''}`",
+        f"- 包名：`{result.package or ''}`",
         "",
-        "## Fields",
+        "## 字段",
         "",
     ]
     lines.extend(
@@ -405,22 +413,22 @@ def _obsidian_component_page(
         for field in fields
     )
     if not fields:
-        lines.append("No fields detected.")
+        lines.append("未检测到字段。")
 
-    lines.extend(["", "## Methods", ""])
+    lines.extend(["", "## 方法", ""])
     lines.extend(f"- `{method.signature or method.name}`" for method in methods)
     if not methods:
-        lines.append("No methods detected.")
+        lines.append("未检测到方法。")
 
-    lines.extend(["", "## Endpoints", ""])
+    lines.extend(["", "## HTTP 接口", ""])
     lines.extend(
         f"- [[{_endpoint_note_name(endpoint)}]] `{','.join(endpoint.http_methods)} {endpoint.path}`"
         for endpoint in endpoints
     )
     if not endpoints:
-        lines.append("No endpoints detected.")
+        lines.append("未检测到 HTTP 接口。")
 
-    lines.extend(["", "## Related Knowledge", ""])
+    lines.extend(["", "## 相关知识", ""])
     lines.extend(_knowledge_lines(related_knowledge))
     return "\n".join(lines) + "\n"
 
@@ -460,17 +468,17 @@ def _obsidian_endpoint_page(
         "",
         f"# {methods} {endpoint.path}",
         "",
-        f"- Controller: [[{endpoint.enclosing_type}]]",
-        f"- Handler: `{endpoint.enclosing_type}.{endpoint.method_name}`",
-        f"- Annotation: `{endpoint.annotation}`",
-        f"- File: `{result.file_path or ''}`",
+        f"- 控制器：[[{endpoint.enclosing_type}]]",
+        f"- 处理函数：`{endpoint.enclosing_type}.{endpoint.method_name}`",
+        f"- 注解：`{endpoint.annotation}`",
+        f"- 文件：`{result.file_path or ''}`",
         "",
-        "## Handler",
+        "## 处理函数",
         "",
-        f"- Signature: `{method.signature if method else endpoint.method_name}`",
-        f"- Return type: `{method.return_type if method and method.return_type else ''}`",
+        f"- 签名：`{method.signature if method else endpoint.method_name}`",
+        f"- 返回类型：`{method.return_type if method and method.return_type else ''}`",
         "",
-        "## Related Knowledge",
+        "## 相关知识",
         "",
     ]
     lines.extend(_knowledge_lines(related_knowledge))
@@ -493,7 +501,7 @@ def _related_kb_chunks(
 
 def _knowledge_lines(chunks: list[JavaVectorChunk]) -> list[str]:
     if not chunks:
-        return ["No related knowledge chunks found."]
+        return ["未找到相关知识切块。"]
     lines = []
     for chunk in chunks:
         file_path = chunk.metadata.get("file_path", "")
@@ -684,55 +692,58 @@ def _build_report(
     total_methods = sum(metric.method_count for metric in metrics)
     total_calls = sum(metric.call_count for metric in metrics)
     total_endpoints = sum(metric.endpoint_count for metric in metrics)
-    total_sql = sum(metric.sql_reference_count for metric in metrics)
+    sql_usages = build_sql_usages(code_results, path)
+    total_sql = len(sql_usages)
     packages = sorted({result.package for result in code_results if result.package})
 
     lines = [
-        "# Java Project Analysis Report",
+        "# Java 项目分析报告",
         "",
-        f"- Path: `{path}`",
-        f"- Source mode: `{source}`",
-        f"- Java files analyzed: {len(code_results)}",
-        f"- Knowledge chunks: {len(kb_chunks)}",
-        f"- Packages: {', '.join(packages) if packages else '-'}",
+        f"- 项目路径：`{path}`",
+        f"- 分析模式：`{_display_source_mode(source)}`",
+        f"- 已分析 Java 文件数：{len(code_results)}",
+        f"- 知识库切块数：{len(kb_chunks)}",
+        f"- 包名：{', '.join(packages) if packages else '-'}",
         "",
-        "## Inventory",
+        "## 统计概览",
         "",
-        "| Metric | Count |",
+        "| 指标 | 数量 |",
         "|---|---:|",
-        f"| Types | {total_types} |",
-        f"| Fields | {total_fields} |",
-        f"| Methods and constructors | {total_methods} |",
-        f"| Method calls | {total_calls} |",
-        f"| HTTP endpoints | {total_endpoints} |",
-        f"| SQL references | {total_sql} |",
+        f"| 类型 | {total_types} |",
+        f"| 字段 | {total_fields} |",
+        f"| 方法和构造器 | {total_methods} |",
+        f"| 方法调用 | {total_calls} |",
+        f"| HTTP 接口 | {total_endpoints} |",
+        f"| SQL 引用 | {total_sql} |",
         "",
     ]
     lines.extend(_component_report_lines(code_results))
     lines.extend(_endpoint_report_lines(code_results))
-    lines.extend(_sql_report_lines(code_results))
+    lines.extend(_endpoint_sql_flow_report_lines(path, code_results))
+    lines.extend(_call_chain_report_lines(code_results))
+    lines.extend(_sql_report_lines(code_results, path))
     lines.extend(_kb_report_lines(kb_chunks))
     return "\n".join(lines)
 
 
 def _component_report_lines(results: list[JavaFileAnalysis]) -> list[str]:
     components = [component for result in results for component in result.components]
-    lines = ["## Components", ""]
+    lines = ["## Spring 组件", ""]
     if not components:
-        return [*lines, "No Spring-style components detected.", ""]
-    lines.extend(["| Kind | Name | Annotation |", "|---|---|---|"])
+        return [*lines, "未检测到 Spring 风格组件。", ""]
+    lines.extend(["| 类型 | 名称 | 注解 |", "|---|---|---|"])
     for item in components:
-        lines.append(f"| {item.kind} | {item.name} | `{item.annotation}` |")
+        lines.append(f"| {_display_component_kind(item.kind)} | {item.name} | `{item.annotation}` |")
     lines.append("")
     return lines
 
 
 def _endpoint_report_lines(results: list[JavaFileAnalysis]) -> list[str]:
     endpoints = [endpoint for result in results for endpoint in result.endpoints]
-    lines = ["## HTTP Endpoints", ""]
+    lines = ["## HTTP 接口", ""]
     if not endpoints:
-        return [*lines, "No Spring MVC endpoints detected.", ""]
-    lines.extend(["| Methods | Path | Handler |", "|---|---|---|"])
+        return [*lines, "未检测到 Spring MVC 接口。", ""]
+    lines.extend(["| 请求方法 | 路径 | 处理函数 |", "|---|---|---|"])
     for item in endpoints:
         methods = ", ".join(item.http_methods)
         lines.append(f"| {methods} | `{item.path}` | `{item.enclosing_type}.{item.method_name}` |")
@@ -740,86 +751,210 @@ def _endpoint_report_lines(results: list[JavaFileAnalysis]) -> list[str]:
     return lines
 
 
-def _sql_report_lines(results: list[JavaFileAnalysis]) -> list[str]:
-    references = [reference for result in results for reference in result.sql_references]
-    lines = ["## SQL References", ""]
+def _endpoint_sql_flow_report_lines(path: Path, results: list[JavaFileAnalysis]) -> list[str]:
+    flows = build_endpoint_sql_flows(results, path)
+    lines = ["## 接口 SQL 流向", ""]
+    if not flows:
+        return [*lines, "未解析到接口到 SQL 的流向。", ""]
+
+    lines.extend(["| 接口 | 代码路径 | SQL 所属对象 | 操作 | 表 | SQL 来源 |", "|---|---|---|---|---|---|"])
+    for flow in flows[:100]:
+        endpoint = f"{', '.join(flow.endpoint_methods)} {flow.endpoint_path}".replace("|", "\\|")
+        code_path = " -> ".join(f"`{item}`" for item in flow.code_path).replace("|", "\\|")
+        tables = ", ".join(f"`{table}`" for table in flow.sql.tables) or "-"
+        source = f"{_display_sql_source(flow.sql.source)}：`{flow.sql.file_path}:{flow.sql.line}`".replace("|", "\\|")
+        lines.append(
+            f"| `{endpoint}` | {code_path} | `{flow.sql.owner}` | {_display_sql_operation(flow.sql.operation)} | {tables} | {source} |"
+        )
+    if len(flows) > 100:
+        lines.append(f"| ... | ... | ... | ... | ... | 已省略 {len(flows) - 100} 条流向 |")
+    lines.append("")
+    return lines
+
+
+def _call_chain_report_lines(results: list[JavaFileAnalysis]) -> list[str]:
+    chains = build_call_chains(results, max_depth=4, max_chains=60)
+    edges = build_call_edges(results)
+    resolved_count = sum(1 for edge in edges if edge.callee is not None)
+    lines = ["## 代码调用链", ""]
+    lines.append(f"- 已解析内部调用：{resolved_count}/{len(edges)}")
+    if not chains:
+        return [*lines, "- 未解析到内部调用链。", ""]
+
+    lines.extend(["", "| 入口方法 | 调用链 | 来源 |", "|---|---|---|"])
+    for chain in chains:
+        chain_text = _format_call_chain(chain).replace("|", "\\|")
+        source = _format_chain_source(chain).replace("|", "\\|")
+        lines.append(f"| `{chain.entrypoint.qualified_name}` | {chain_text} | {source} |")
+    lines.append("")
+    return lines
+
+
+def _format_call_chain(chain: CallChain) -> str:
+    names = [chain.entrypoint.qualified_name]
+    for edge in chain.edges:
+        if edge.callee is None:
+            names.append(f"{edge.call_name} ?")
+            continue
+        names.append(edge.callee.qualified_name)
+    return " -> ".join(f"`{name}`" for name in names)
+
+
+def _format_chain_source(chain: CallChain) -> str:
+    locations = []
+    for edge in chain.edges:
+        locations.append(f"{edge.caller.file_path}:{edge.line}")
+    return "<br>".join(f"`{location}`" for location in locations)
+
+
+def _sql_report_lines(results: list[JavaFileAnalysis], path: Path) -> list[str]:
+    references = build_sql_usages(results, path)
+    lines = ["## SQL 引用", ""]
     if not references:
-        return [*lines, "No MyBatis SQL annotations detected.", ""]
-    lines.extend(["| Operation | Owner | Statement |", "|---|---|---|"])
+        return [*lines, "未检测到 MyBatis SQL 注解或 XML 语句。", ""]
+    lines.extend(["| 操作 | 所属对象 | 表 | 来源 | SQL 语句 |", "|---|---|---|---|---|"])
     for item in references:
-        owner = f"{item.enclosing_type or ''}.{item.method_name or ''}".strip(".")
+        tables = ", ".join(f"`{table}`" for table in item.tables) or "-"
+        source = f"{_display_sql_source(item.source)}：`{item.file_path}:{item.line}`".replace("|", "\\|")
         statement = item.statement.replace("|", "\\|")
-        lines.append(f"| {item.operation} | `{owner}` | `{statement}` |")
+        lines.append(f"| {_display_sql_operation(item.operation)} | `{item.owner}` | {tables} | {source} | `{statement}` |")
     lines.append("")
     return lines
 
 
 def _kb_report_lines(chunks: list[JavaVectorChunk]) -> list[str]:
-    lines = ["## Knowledge Base", ""]
+    lines = ["## 知识库", ""]
     if not chunks:
-        return [*lines, "No knowledge-base chunks included.", ""]
+        return [*lines, "未包含知识库切块。", ""]
     files = sorted({str(chunk.metadata.get("file_path", "")) for chunk in chunks})
-    lines.append(f"- Files: {len(files)}")
-    lines.append(f"- Chunks: {len(chunks)}")
+    lines.append(f"- 文件数：{len(files)}")
+    lines.append(f"- 切块数：{len(chunks)}")
     for file_path in files:
         lines.append(f"- `{file_path}`")
     lines.append("")
     return lines
 
 
-def _build_graph(results: list[JavaFileAnalysis]) -> str:
-    # 图刻意保持高层视角：endpoint 指向处理器，组件依赖由字段类型和构造器参数推断。
-    components = [component for result in results for component in result.components]
-    endpoints = [endpoint for result in results for endpoint in result.endpoints]
-    sql_references = [reference for result in results for reference in result.sql_references]
-    component_names = {component.name for component in components}
+def _display_source_mode(source: str) -> str:
+    return {
+        "code": "代码",
+        "kb": "知识库",
+        "mixed": "代码 + 知识库",
+    }.get(source, source)
 
+
+def _display_component_kind(kind: str) -> str:
+    return {
+        "controller": "控制器",
+        "rest_controller": "REST 控制器",
+        "service": "服务",
+        "repository": "仓储",
+        "component": "组件",
+        "mapper": "Mapper",
+    }.get(kind, kind)
+
+
+def _display_sql_operation(operation: str) -> str:
+    return {
+        "select": "查询",
+        "insert": "新增",
+        "update": "更新",
+        "delete": "删除",
+        "unknown": "未知",
+    }.get(operation.lower(), operation)
+
+
+def _display_sql_source(source: str) -> str:
+    return {
+        "annotation": "注解",
+        "xml": "XML Mapper",
+    }.get(source.lower(), source)
+
+
+def _build_graph(results: list[JavaFileAnalysis], root: Path | None = None) -> str:
+    # 按调用链展示，避免全局组件/方法池导致真实项目图过大；全量明细保留在 Markdown 报告中。
+    endpoint_sql_flows = build_endpoint_sql_flows(results, root)
+    selected_flows = endpoint_sql_flows[:GRAPH_MAX_ENDPOINTS]
+    call_chains = [] if selected_flows else build_call_chains(results, max_depth=4, max_chains=GRAPH_MAX_ENDPOINTS)
     lines = [
         "flowchart LR",
         '    classDef endpoint fill:#e8f3ff,stroke:#2f73b7,color:#10253f',
-        '    classDef component fill:#eef8ef,stroke:#3c8c4a,color:#17351d',
+        '    classDef method fill:#f2f0ff,stroke:#6d5bd0,color:#251d59',
         '    classDef sql fill:#fff4df,stroke:#b7791f,color:#4a2d05',
+        '    classDef table fill:#f7ecff,stroke:#8b5bb7,color:#33164f',
         "",
     ]
 
-    if endpoints:
-        lines.append('    subgraph endpoints["HTTP Endpoints"]')
-        for index, endpoint in enumerate(endpoints, start=1):
-            methods = ",".join(endpoint.http_methods)
-            lines.append(f'        endpoint_{index}["{_escape_mermaid(methods + " " + endpoint.path)}"]:::endpoint')
+    if selected_flows:
+        endpoint_ids: dict[tuple[tuple[str, ...], str, str], str] = {}
+        method_ids: dict[str, str] = {}
+        sql_ids: dict[tuple[str, str, str, int], str] = {}
+        table_ids: dict[str, str] = {}
+        edge_lines: list[str] = []
+
+        for flow in selected_flows:
+            endpoint_key = (tuple(flow.endpoint_methods), flow.endpoint_path, flow.handler)
+            if endpoint_key not in endpoint_ids:
+                endpoint_ids[endpoint_key] = f"endpoint_{len(endpoint_ids) + 1}"
+            previous_node = endpoint_ids[endpoint_key]
+
+            for method_name in flow.code_path[:GRAPH_MAX_METHOD_NODES]:
+                method_ids.setdefault(method_name, _method_node_id(method_name))
+                method_node = method_ids[method_name]
+                edge_lines.append(f"    {previous_node} -->|调用| {method_node}")
+                previous_node = method_node
+
+            sql_key = _sql_usage_key(flow.sql)
+            if sql_key not in sql_ids:
+                sql_ids[sql_key] = f"sql_{len(sql_ids) + 1}"
+            sql_node = sql_ids[sql_key]
+            edge_lines.append(f"    {previous_node} -->|执行 SQL| {sql_node}")
+
+            for table in flow.sql.tables[:GRAPH_MAX_TABLE_NODES]:
+                table_ids.setdefault(table, _table_node_id(table))
+                edge_lines.append(f"    {sql_node} -->|访问表| {table_ids[table]}")
+
+        lines.append('    subgraph chains["接口调用链"]')
+        for (methods_tuple, endpoint_path, _handler), node_id in endpoint_ids.items():
+            methods = ",".join(methods_tuple)
+            lines.append(f'        {node_id}["{_escape_mermaid(methods + " " + endpoint_path)}"]:::endpoint')
+        for method_name, node_id in sorted(method_ids.items()):
+            lines.append(f'        {node_id}["{_escape_mermaid(method_name)}"]:::method')
+        for sql_key, node_id in sql_ids.items():
+            owner, source, _file_path, _line = sql_key
+            label = f"{owner}\\n{_display_sql_source(source)}"
+            lines.append(f'        {node_id}["{_escape_mermaid(label)}"]:::sql')
+        for table, node_id in sorted(table_ids.items()):
+            lines.append(f'        {node_id}["{_escape_mermaid(table)}"]:::table')
         lines.append("    end")
         lines.append("")
+        lines.extend(_dedupe_lines(edge_lines))
+        omitted = len(endpoint_sql_flows) - len(selected_flows)
+        if omitted > 0:
+            lines.append(f'    omitted["图谱已裁剪：省略接口 SQL 流向 {omitted} 条"]')
+        return "\n".join(lines)
 
-    if components:
-        lines.append('    subgraph components["Spring Components"]')
-        for component in components:
-            node_id = _component_node_id(component.name)
-            label = f"{component.name}\\n@{component.annotation.lstrip('@').split('(')[0]}"
-            lines.append(f'        {node_id}["{_escape_mermaid(label)}"]:::component')
+    if call_chains:
+        method_ids: dict[str, str] = {}
+        edge_lines: list[str] = []
+        for chain in call_chains:
+            names = [chain.entrypoint.qualified_name]
+            names.extend(edge.callee.qualified_name for edge in chain.edges if edge.callee)
+            for method_name in names:
+                method_ids.setdefault(method_name, _method_node_id(method_name))
+            for left, right in zip(names, names[1:]):
+                edge_lines.append(f"    {method_ids[left]} -->|调用| {method_ids[right]}")
+
+        lines.append('    subgraph chains["代码调用链"]')
+        for method_name, node_id in sorted(method_ids.items()):
+            lines.append(f'        {node_id}["{_escape_mermaid(method_name)}"]:::method')
         lines.append("    end")
         lines.append("")
+        lines.extend(_dedupe_lines(edge_lines))
+        return "\n".join(lines)
 
-    if sql_references:
-        lines.append('    subgraph sql["SQL References"]')
-        for index, reference in enumerate(sql_references, start=1):
-            label = f"{reference.operation}\\n{reference.method_name or ''}"
-            lines.append(f'        sql_{index}["{_escape_mermaid(label)}"]:::sql')
-        lines.append("    end")
-        lines.append("")
-
-    for index, endpoint in enumerate(endpoints, start=1):
-        target = _component_node_id(endpoint.enclosing_type)
-        lines.append(f"    endpoint_{index} -->|handles| {target}")
-
-    for owner, dependency in _component_dependencies(results, component_names):
-        lines.append(f"    {_component_node_id(owner)} -->|uses| {_component_node_id(dependency)}")
-
-    for index, reference in enumerate(sql_references, start=1):
-        if reference.enclosing_type:
-            lines.append(f"    {_component_node_id(reference.enclosing_type)} -->|executes| sql_{index}")
-
-    if not endpoints and not components and not sql_references:
-        lines.append('    empty["No graphable endpoints, components, or SQL references detected"]')
+    if not selected_flows and not call_chains:
+        lines.append('    empty["未检测到可绘制的接口、组件或 SQL 引用"]')
 
     return "\n".join(lines)
 
@@ -845,6 +980,34 @@ def _component_dependencies(
 
 def _component_node_id(name: str) -> str:
     return "component_" + re.sub(r"[^A-Za-z0-9_]", "_", name)
+
+
+def _method_node_id(name: str) -> str:
+    return "method_" + re.sub(r"[^A-Za-z0-9_]", "_", name)
+
+
+def _table_node_id(name: str) -> str:
+    return "table_" + re.sub(r"[^A-Za-z0-9_]", "_", name)
+
+
+def _sql_usage_key(usage: object) -> tuple[str, str, str, int]:
+    return (
+        str(getattr(usage, "owner", "")),
+        str(getattr(usage, "source", "")),
+        str(getattr(usage, "file_path", "")),
+        int(getattr(usage, "line", 0) or 0),
+    )
+
+
+def _dedupe_lines(lines: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for line in lines:
+        if line in seen:
+            continue
+        seen.add(line)
+        result.append(line)
+    return result
 
 
 def _escape_mermaid(text: str) -> str:

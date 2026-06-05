@@ -119,6 +119,11 @@ def query() -> Any:
     return jsonify(analyzer_service().query(json_payload(request), current_user()))
 
 
+@api_bp.post("/api-map")
+def api_mapping() -> Any:
+    return jsonify(analyzer_service().api_mapping(json_payload(request), current_user()))
+
+
 @api_bp.get("/kb/templates")
 def list_kb_templates() -> Any:
     return jsonify(analyzer_service().list_kb_templates(request.args.to_dict(), current_user()))

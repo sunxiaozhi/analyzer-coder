@@ -13,6 +13,7 @@ from flask.config import Config
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from java_ts_analyzer.analyzer import JavaAnalyzer
+from java_ts_analyzer.api_mapper import build_api_mapping
 from java_ts_analyzer.chunker import build_chunks
 from java_ts_analyzer.embedding import HashingEmbedder
 from java_ts_analyzer.kb_loader import build_kb_chunks
@@ -374,9 +375,14 @@ class AnalyzerService:
                 "updatedAt": "",
             }
 
+        output = result_path.read_text(encoding="utf-8", errors="replace")
+        if normalized_mode == "report" and _is_legacy_english_report(output):
+            output, extension, normalized_mode = self._analysis_output(context, payload, "report")
+            result_path = self._save_latest_analysis_result(context.results_dir, normalized_mode, extension, output)
+
         return {
             "exists": True,
-            "output": result_path.read_text(encoding="utf-8", errors="replace"),
+            "output": output,
             "savedPath": self._relative(result_path),
             "mode": normalized_mode,
             "source": "code",
@@ -528,6 +534,30 @@ class AnalyzerService:
             "projectId": context.project_id,
         }
 
+    def api_mapping(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        frontend_path = self._relative_to_root(
+            context.root,
+            context.path(payload.get("frontendPath") or payload.get("path") or "."),
+        )
+        backend_path = self._relative_to_root(
+            context.root,
+            context.path(payload.get("backendPath") or payload.get("path") or "."),
+        )
+        result = build_api_mapping(
+            root=context.root,
+            frontend_path=frontend_path,
+            backend_path=backend_path,
+            analyzer=self.analyzer,
+        )
+        payload_json = json.dumps(result.to_dict(), ensure_ascii=False, indent=2)
+        saved_path = self._save_latest_analysis_result(context.results_dir, "api-map", ".json", payload_json)
+        return {
+            **result.to_dict(),
+            "savedPath": self._relative(saved_path),
+            "projectId": context.project_id,
+        }
+
     def list_kb_templates(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
         return {
@@ -641,7 +671,7 @@ class AnalyzerService:
         payload: dict[str, Any],
         mode: str,
     ) -> tuple[str, str, str]:
-        code_target = context.root
+        code_target = self._source_target(context, payload, "code")
 
         if mode == "json":
             results = self.analyzer.analyze_path(code_target)
@@ -649,7 +679,7 @@ class AnalyzerService:
             return output, ".json", "json"
 
         if mode == "graph":
-            return _build_graph(self.analyzer.analyze_path(code_target)), ".mmd", "graph"
+            return _build_graph(self.analyzer.analyze_path(code_target), code_target), ".mmd", "graph"
 
         if mode == "chunks":
             chunks = self._build_source_chunks(context, payload, "code")
@@ -1051,3 +1081,15 @@ def slugify(value: str) -> str:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _is_legacy_english_report(output: str) -> bool:
+    legacy_markers = (
+        "# Java Project Analysis Report",
+        "## HTTP Endpoints",
+        "## Endpoint SQL Flows",
+        "## Code Call Chains",
+        "## SQL References",
+        "## Knowledge Base",
+    )
+    return any(marker in output for marker in legacy_markers)

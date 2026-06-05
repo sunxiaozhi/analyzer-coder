@@ -1,6 +1,7 @@
 import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import type {
   AnalyzerForm,
+  ApiMappingResult,
   AuthUser,
   ConsoleSection,
   IndexRecord,
@@ -99,6 +100,7 @@ const consoleSections: readonly ConsoleSection[] = [
   'knowledge',
   'templates',
   'analysis',
+  'api-map',
   'vectors',
   'search'
 ]
@@ -203,6 +205,8 @@ export function useAnalyzerConsole() {
     projectId: '',
     path: '.',
     codePath: '.',
+    frontendPath: 'web/frontend/src',
+    backendPath: 'src/main/java',
     kbPath: 'docs',
     source: 'code',
     mode: 'report',
@@ -265,6 +269,9 @@ export function useAnalyzerConsole() {
   const searchResults = ref<QueryResult[]>([])
   const searchEvidence = ref<QueryEvidence | null>(null)
   const searchSavedPath = shallowRef('')
+  const apiMapping = shallowRef<ApiMappingResult | null>(null)
+  const apiMappingSavedPath = shallowRef('')
+  const apiMappingMessage = shallowRef('')
   const kbFiles = ref<KnowledgeFile[]>([])
   const kbTemplates = ref<KnowledgeTemplate[]>([])
   const selectedKbPath = shallowRef('')
@@ -907,6 +914,24 @@ export function useAnalyzerConsole() {
     searchSavedPath.value = data.savedPath
   }
 
+  async function buildApiMapping() {
+    activeSection.value = 'api-map'
+    apiMappingSavedPath.value = ''
+    apiMappingMessage.value = ''
+    try {
+      const data = await requestJson<ApiMappingResult>('/api/api-map', {
+        projectId: form.projectId,
+        frontendPath: form.frontendPath,
+        backendPath: form.backendPath
+      })
+      apiMapping.value = data
+      apiMappingSavedPath.value = data.savedPath
+      apiMappingMessage.value = '映射已生成'
+    } catch (error) {
+      apiMappingMessage.value = error instanceof Error ? error.message : '接口映射生成失败'
+    }
+  }
+
   async function refreshSectionData(section: ConsoleSection = activeSection.value) {
     if (!currentUser.value) return
     if (section === 'projects') {
@@ -934,7 +959,9 @@ export function useAnalyzerConsole() {
     if (section === 'vectors') {
       await loadIndexStatus()
       await loadIndexRecords()
+      return
     }
+    if (section === 'api-map') return
   }
 
   watch(
@@ -953,16 +980,23 @@ export function useAnalyzerConsole() {
       searchResults.value = []
       searchEvidence.value = null
       searchSavedPath.value = ''
+      apiMapping.value = null
+      apiMappingSavedPath.value = ''
+      apiMappingMessage.value = ''
       projectMessage.value = ''
       projectMessageProjectId.value = ''
       if (projectId) {
         form.path = '.'
         form.codePath = '.'
+        form.frontendPath = 'web/frontend/src'
+        form.backendPath = 'src/main/java'
         form.kbPath = 'docs'
         form.store = ''
       } else {
         form.path = '.'
         form.codePath = '.'
+        form.frontendPath = 'web/frontend/src'
+        form.backendPath = 'src/main/java'
         form.kbPath = 'docs'
         form.store = '.vector_store/web-project.jsonl'
       }
@@ -1034,6 +1068,9 @@ export function useAnalyzerConsole() {
     searchResults,
     searchEvidence,
     searchSavedPath,
+    apiMapping,
+    apiMappingSavedPath,
+    apiMappingMessage,
     kbFiles,
     kbTemplates,
     selectedKbPath,
@@ -1059,6 +1096,7 @@ export function useAnalyzerConsole() {
     loadIndexStatus,
     loadIndexRecords,
     queryStore,
+    buildApiMapping,
     refreshSectionData,
     checkHealth,
     loadCurrentUser,

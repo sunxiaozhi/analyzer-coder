@@ -6,12 +6,22 @@ export type ActiveView = 'analysis' | 'index' | 'query'
 
 export type OutputType = 'markdown' | 'mermaid' | 'json' | 'text'
 
-export type ConsoleSection = 'projects' | 'accounts' | 'knowledge' | 'templates' | 'analysis' | 'vectors' | 'search'
+export type ConsoleSection =
+  | 'projects'
+  | 'accounts'
+  | 'knowledge'
+  | 'templates'
+  | 'analysis'
+  | 'api-map'
+  | 'vectors'
+  | 'search'
 
 export interface AnalyzerForm {
   projectId: string
   path: string
   codePath: string
+  frontendPath: string
+  backendPath: string
   kbPath: string
   source: SourceType
   mode: AnalysisMode
@@ -147,4 +157,50 @@ export interface IndexRecordFilters {
   source: '' | 'code' | 'kb'
   kind: string
   query: string
+}
+
+export interface FrontendApiCall {
+  method: string
+  path: string
+  normalized_path: string
+  file_path: string
+  line: number
+  callee: string
+  expression: string
+}
+
+export interface BackendApiEndpoint {
+  methods: string[]
+  path: string
+  normalized_path: string
+  file_path: string
+  line: number
+  controller: string
+  handler: string
+}
+
+export interface ApiMapping {
+  status: 'matched' | 'method_mismatch' | 'unmatched'
+  confidence: string
+  frontend: FrontendApiCall
+  backend: BackendApiEndpoint | null
+  reason: string
+  match_strategy: string
+}
+
+export interface ApiMappingSummary {
+  frontendCalls: number
+  backendEndpoints: number
+  matched: number
+  methodMismatches: number
+  unmatched: number
+}
+
+export interface ApiMappingResult {
+  frontend_calls: FrontendApiCall[]
+  backend_endpoints: BackendApiEndpoint[]
+  mappings: ApiMapping[]
+  summary: ApiMappingSummary
+  savedPath: string
+  projectId: string
 }

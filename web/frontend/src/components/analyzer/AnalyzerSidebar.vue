@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Collection, Connection, Cpu, Files, FolderOpened, Notebook, Search, UserFilled } from '@element-plus/icons-vue'
+import { Collection, Connection, Cpu, Files, FolderOpened, Link, Notebook, Search, UserFilled } from '@element-plus/icons-vue'
 import { ElButton, ElIcon, ElMenu, ElMenuItem, ElOption, ElScrollbar, ElSelect } from 'element-plus'
 import type { AuthUser, ConsoleSection, ProjectRecord } from '../../types'
 import BrandLogo from './BrandLogo.vue'
@@ -74,6 +74,10 @@ function selectSection(value: string) {
         <ElMenuItem index="analysis">
           <ElIcon><Cpu /></ElIcon>
           <span>代码分析</span>
+        </ElMenuItem>
+        <ElMenuItem index="api-map">
+          <ElIcon><Link /></ElIcon>
+          <span>接口映射</span>
         </ElMenuItem>
         <ElMenuItem index="vectors">
           <ElIcon><Files /></ElIcon>

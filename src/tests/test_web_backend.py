@@ -48,7 +48,7 @@ def test_web_backend_report(tmp_path) -> None:
 
     payload = response.get_json()
     assert response.status_code == 200
-    assert "HTTP Endpoints" in payload["output"]
+    assert "HTTP 接口" in payload["output"]
     assert payload["savedPath"].endswith(".md")
 
 
@@ -74,8 +74,37 @@ def test_web_backend_reads_latest_analysis_result(tmp_path) -> None:
     assert result_payload["exists"] is True
     assert result_payload["savedPath"] == saved_path
     assert result_payload["mode"] == "report"
-    assert "HTTP Endpoints" in result_payload["output"]
+    assert "HTTP 接口" in result_payload["output"]
     assert result_payload["updatedAt"]
+
+
+def test_web_backend_refreshes_legacy_english_report_cache(tmp_path) -> None:
+    workspace = _java_workspace(tmp_path)
+
+    class TestConfig(JsonTestConfig):
+        WORKSPACE_ROOT = workspace
+        RESULTS_DIR = ".results"
+        DEFAULT_STORE = ".store/default.jsonl"
+        TESTING = True
+
+    legacy_report = workspace / ".results" / "web-report.md"
+    legacy_report.parent.mkdir(parents=True)
+    legacy_report.write_text(
+        "# Java Project Analysis Report\n\n## HTTP Endpoints\n",
+        encoding="utf-8",
+    )
+
+    client = create_app(TestConfig).test_client()
+    _login(client)
+
+    result_response = client.get("/api/analysis/result", query_string={"mode": "report"})
+    result_payload = result_response.get_json()
+
+    assert result_response.status_code == 200
+    assert result_payload["exists"] is True
+    assert "Java 项目分析报告" in result_payload["output"]
+    assert "HTTP 接口" in result_payload["output"]
+    assert "Java Project Analysis Report" not in legacy_report.read_text(encoding="utf-8")
 
 
 def test_web_backend_report_accepts_null_project_id(tmp_path) -> None:
@@ -103,7 +132,7 @@ def test_web_backend_report_accepts_null_project_id(tmp_path) -> None:
     payload = response.get_json()
     assert response.status_code == 200
     assert payload["projectId"] == ""
-    assert "HTTP Endpoints" in payload["output"]
+    assert "HTTP 接口" in payload["output"]
 
 
 def test_web_backend_mixed_index_and_query_returns_fusion_evidence(tmp_path) -> None:
@@ -178,6 +207,76 @@ def test_web_backend_mixed_index_and_query_returns_fusion_evidence(tmp_path) -> 
     assert query_payload["evidence"]["code"]
     assert query_payload["evidence"]["knowledge"]
     assert query_payload["evidence"]["relations"]
+
+
+def test_web_backend_api_mapping(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    frontend = workspace / "web" / "frontend" / "src"
+    backend = workspace / "src" / "main" / "java" / "demo"
+    frontend.mkdir(parents=True)
+    backend.mkdir(parents=True)
+    (frontend / "UserApi.ts").write_text(
+        """
+        export async function listUsers() {
+          return await fetch('/api/users')
+        }
+
+        export async function saveUser(payload: unknown) {
+          return await request.post('/api/users', payload)
+        }
+        """,
+        encoding="utf-8",
+    )
+    (backend / "UserController.java").write_text(
+        """
+        package demo;
+
+        import org.springframework.web.bind.annotation.GetMapping;
+        import org.springframework.web.bind.annotation.PostMapping;
+        import org.springframework.web.bind.annotation.RequestMapping;
+        import org.springframework.web.bind.annotation.RestController;
+
+        @RestController
+        @RequestMapping("/api/users")
+        class UserController {
+            @GetMapping
+            String listUsers() {
+                return "ok";
+            }
+
+            @PostMapping
+            String saveUser() {
+                return "ok";
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    class TestConfig(JsonTestConfig):
+        WORKSPACE_ROOT = workspace
+        PROJECTS_DIR = ".projects"
+        RESULTS_DIR = ".results"
+        DEFAULT_STORE = ".store/default.jsonl"
+        TESTING = True
+
+    client = create_app(TestConfig).test_client()
+    _login(client)
+
+    response = client.post(
+        "/api/api-map",
+        json={
+            "frontendPath": "web/frontend/src",
+            "backendPath": "src/main/java",
+        },
+    )
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["summary"]["frontendCalls"] == 2
+    assert payload["summary"]["backendEndpoints"] == 2
+    assert payload["summary"]["matched"] == 2
+    assert payload["savedPath"].endswith("web-api-map.json")
 
 
 def test_web_backend_knowledge_file_crud(tmp_path) -> None:

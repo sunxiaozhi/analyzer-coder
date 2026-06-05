@@ -9,31 +9,44 @@ from pathlib import Path
 def test_cli_report_includes_spring_and_sql_surfaces(tmp_path: Path) -> None:
     java_file = tmp_path / "UserController.java"
     java_file.write_text(_spring_source(), encoding="utf-8")
+    mapper_xml = tmp_path / "UserMapper.xml"
+    mapper_xml.write_text(_mapper_xml(), encoding="utf-8")
 
     result = _run_cli(tmp_path, "--report")
 
     assert result.returncode == 0
-    assert "HTTP Endpoints" in result.stdout
+    assert "HTTP 接口" in result.stdout
     assert "`/api/users/{id}`" in result.stdout
     assert "`UserController.getUser`" in result.stdout
-    assert "SQL References" in result.stdout
+    assert "接口 SQL 流向" in result.stdout
+    assert "`GET /api/users/{id}`" in result.stdout
+    assert "`users`" in result.stdout
+    assert "XML Mapper：" in result.stdout
+    assert "代码调用链" in result.stdout
+    assert "`UserController.getUser` -> `UserService.findById` -> `UserMapper.findById`" in result.stdout
+    assert "SQL 引用" in result.stdout
     assert "select * from users" in result.stdout
 
 
-def test_cli_graph_includes_endpoints_and_component_dependencies(tmp_path: Path) -> None:
+def test_cli_graph_renders_endpoint_call_chains(tmp_path: Path) -> None:
     java_file = tmp_path / "UserController.java"
     java_file.write_text(_spring_source(), encoding="utf-8")
+    mapper_xml = tmp_path / "UserMapper.xml"
+    mapper_xml.write_text(_mapper_xml(), encoding="utf-8")
 
     result = _run_cli(tmp_path, "--graph")
 
     assert result.returncode == 0
     assert "flowchart LR" in result.stdout
+    assert 'subgraph chains["接口调用链"]' in result.stdout
     assert "POST /api/users" in result.stdout
     assert "GET /api/users/{id}" in result.stdout
-    assert "component_UserController" in result.stdout
-    assert "component_UserService -->|uses| component_UserMapper" in result.stdout
-    assert "component_UserController -->|uses| component_UserService" in result.stdout
-    assert "component_UserMapper -->|executes| sql_1" in result.stdout
+    assert "method_UserController_getUser -->|调用| method_UserService_findById" in result.stdout
+    assert "method_UserService_findById -->|调用| method_UserMapper_findById" in result.stdout
+    assert "method_UserMapper_findById -->|执行 SQL| sql_" in result.stdout
+    assert "table_users" in result.stdout
+    assert "-->|访问表| table_users" in result.stdout
+    assert "XML Mapper" in result.stdout
 
 
 def test_cli_saves_each_command_result(tmp_path: Path) -> None:
@@ -72,7 +85,7 @@ def test_cli_generates_obsidian_notes(tmp_path: Path) -> None:
     assert controller.exists()
     assert endpoint.exists()
     assert "[[UserController]]" in index.read_text(encoding="utf-8")
-    assert "Related Knowledge" in controller.read_text(encoding="utf-8")
+    assert "相关知识" in controller.read_text(encoding="utf-8")
 
 
 def test_cli_indexes_queries_and_prints_match_terms(tmp_path: Path) -> None:
@@ -195,4 +208,14 @@ def _spring_source() -> str:
 
         record UserRegistrationRequest(String phone) {
         }
+    """
+
+
+def _mapper_xml() -> str:
+    return """
+        <mapper namespace="com.example.UserMapper">
+            <select id="findById" resultType="User">
+                select * from users where id = #{id}
+            </select>
+        </mapper>
     """

@@ -5,6 +5,7 @@ import { ElAside, ElBreadcrumb, ElBreadcrumbItem, ElButton, ElContainer, ElHeade
 import AccountManagementPanel from './components/analyzer/AccountManagementPanel.vue'
 import AnalyzerSidebar from './components/analyzer/AnalyzerSidebar.vue'
 import AnalysisResultPanel from './components/analyzer/AnalysisResultPanel.vue'
+import ApiMappingPanel from './components/analyzer/ApiMappingPanel.vue'
 import KnowledgeBasePanel from './components/analyzer/KnowledgeBasePanel.vue'
 import KnowledgeTemplatePanel from './components/analyzer/KnowledgeTemplatePanel.vue'
 import LoginPanel from './components/analyzer/LoginPanel.vue'
@@ -42,6 +43,9 @@ const {
   searchResults,
   searchEvidence,
   searchSavedPath,
+  apiMapping,
+  apiMappingSavedPath,
+  apiMappingMessage,
   kbFiles,
   kbTemplates,
   selectedKbPath,
@@ -65,6 +69,7 @@ const {
   loadIndexStatus,
   loadIndexRecords,
   queryStore,
+  buildApiMapping,
   refreshSectionData,
   checkHealth,
   createProject,
@@ -92,6 +97,7 @@ const sectionTitle = computed(() => {
     projects: '项目管理',
     accounts: '账号管理',
     analysis: '代码分析',
+    'api-map': '接口映射',
     knowledge: '知识维护',
     templates: '知识模板',
     vectors: '索引运维',
@@ -269,6 +275,16 @@ async function refreshIndexData() {
         @index-project="indexProject"
         @refresh-status="refreshIndexData"
         @refresh-records="loadIndexRecords"
+      />
+
+      <ApiMappingPanel
+        v-else-if="activeSection === 'api-map'"
+        v-model:form="form"
+        :busy="busy"
+        :message="apiMappingMessage"
+        :result="apiMapping"
+        :saved-path="apiMappingSavedPath"
+        @build-mapping="buildApiMapping"
       />
 
       <SemanticSearchPanel
