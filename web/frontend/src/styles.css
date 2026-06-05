@@ -396,24 +396,6 @@ h2 {
   font-size: 13px;
 }
 
-.app-session-loading {
-  align-items: center;
-  background: #f5f7f9;
-  color: #64748b;
-  display: flex;
-  font-size: 13px;
-  height: 100vh;
-  justify-content: center;
-}
-
-.app-session-loading span {
-  background: #ffffff;
-  border: 1px solid #d8e0e8;
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-  padding: 10px 14px;
-}
-
 .access-admin-panel {
   margin-top: 18px;
   padding: 18px;

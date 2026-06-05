@@ -76,48 +76,55 @@ function scoreLabel(score: number) {
 <template>
   <div class="feature-page search-page">
     <section class="search-command">
-      <div class="search-command-main">
-        <div class="search-heading">
-          <ElIcon><Search /></ElIcon>
-          <div>
-            <h2>知识检索</h2>
-            <span>{{ filterLabel }} · Top 5</span>
-          </div>
+      <div class="search-heading">
+        <ElIcon><Search /></ElIcon>
+        <div>
+          <h2>知识检索</h2>
+          <span>{{ filterLabel }} · 语义检索与关联证据</span>
         </div>
-
-        <ElForm label-position="top" class="search-form">
-          <ElFormItem label="查询文本">
-            <ElInput
-              v-model="form.query"
-              class="search-query-input"
-              type="textarea"
-              :rows="2"
-              resize="none"
-              @keyup.ctrl.enter="$emit('queryStore')"
-            />
-          </ElFormItem>
-          <ElFormItem label="检索范围">
-            <ElSelect v-model="form.filterSource" class="control-select">
-              <ElOption
-                v-for="option in sourceOptions"
-                :key="option.value"
-                :label="option.label"
-                :value="option.value"
-              />
-            </ElSelect>
-          </ElFormItem>
-        </ElForm>
       </div>
 
-      <div class="search-command-side">
-        <ElButton type="primary" :loading="busy" :icon="Search" @click="$emit('queryStore')">
-          检索
-        </ElButton>
+      <div class="search-command-actions">
+        <ElTag type="info" effect="plain">命中 {{ resultSummary.direct }}</ElTag>
+        <ElTag :type="hasEvidence ? 'success' : 'info'" effect="plain">
+          {{ hasEvidence ? '有关联证据' : '无关联证据' }}
+        </ElTag>
         <ElTag v-if="savedPath" class="saved search-saved" type="success" effect="plain">
           <ElIcon><FolderChecked /></ElIcon>
           <span>{{ savedPath }}</span>
         </ElTag>
       </div>
+    </section>
+
+    <section class="search-query-strip">
+      <ElForm label-position="top" class="search-form">
+        <ElFormItem label="查询文本">
+          <ElInput
+            v-model="form.query"
+            class="search-query-input"
+            type="textarea"
+            :rows="2"
+            resize="none"
+            @keyup.ctrl.enter="$emit('queryStore')"
+          />
+        </ElFormItem>
+        <ElFormItem label="检索范围">
+          <ElSelect v-model="form.filterSource" class="control-select">
+            <ElOption
+              v-for="option in sourceOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem class="search-submit-item">
+          <template #label>&nbsp;</template>
+        <ElButton type="primary" :loading="busy" :icon="Search" @click="$emit('queryStore')">
+          检索
+        </ElButton>
+        </ElFormItem>
+      </ElForm>
     </section>
 
     <section class="search-workbench">
@@ -232,30 +239,24 @@ function scoreLabel(score: number) {
 <style scoped>
 .search-page {
   gap: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .search-command {
-  align-items: stretch;
-  background: var(--surface);
+  align-items: center;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
   border-bottom: 1px solid var(--line);
   box-shadow: var(--shadow-sm);
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
   padding: 16px 24px;
-}
-
-.search-command-main {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
 }
 
 .search-heading {
   align-items: center;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -265,10 +266,10 @@ function scoreLabel(score: number) {
   border-radius: 8px;
   color: var(--accent);
   display: inline-flex;
-  flex: 0 0 36px;
-  height: 36px;
+  flex: 0 0 40px;
+  height: 40px;
   justify-content: center;
-  width: 36px;
+  width: 40px;
 }
 
 .search-heading h2 {
@@ -284,11 +285,25 @@ function scoreLabel(score: number) {
   margin-top: 3px;
 }
 
+.search-command-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.search-query-strip {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 24px;
+}
+
 .search-form {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(0, 1fr) 180px;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
 }
 
 .search-form .el-form-item {
@@ -299,15 +314,7 @@ function scoreLabel(score: number) {
   min-height: 64px !important;
 }
 
-.search-command-side {
-  align-items: end;
-  display: grid;
-  gap: 10px;
-  justify-items: end;
-  min-width: 180px;
-}
-
-.search-command-side .el-button {
+.search-submit-item .el-button {
   height: 38px;
   min-width: 112px;
 }

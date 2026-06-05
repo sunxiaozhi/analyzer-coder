@@ -92,6 +92,7 @@ interface KnowledgeFileResponse {
 type ApiPayload = Record<string, unknown>
 
 const ACTIVE_SECTION_STORAGE_KEY = 'analyzer-console-active-section'
+const CURRENT_USER_STORAGE_KEY = 'analyzer-console-current-user'
 const consoleSections: readonly ConsoleSection[] = [
   'projects',
   'accounts',
@@ -155,6 +156,45 @@ function writeStoredActiveSection(section: ConsoleSection) {
     window.localStorage.setItem(ACTIVE_SECTION_STORAGE_KEY, section)
   } catch {
     // 本地偏好保存失败不影响控制台使用。
+  }
+}
+
+function isStoredUser(value: unknown): value is AuthUser {
+  if (typeof value !== 'object' || value === null) return false
+  const user = value as Partial<AuthUser>
+  return (
+    typeof user.id === 'string' &&
+    typeof user.username === 'string' &&
+    typeof user.displayName === 'string' &&
+    typeof user.isAdmin === 'boolean' &&
+    typeof user.lastProjectId === 'string'
+  )
+}
+
+function readStoredCurrentUser(): AuthUser | null {
+  try {
+    const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY)
+    if (!raw) return null
+    const user = JSON.parse(raw) as unknown
+    return isStoredUser(user) ? user : null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredCurrentUser(user: AuthUser) {
+  try {
+    window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(user))
+  } catch {
+    // 会话缓存失败时退化为接口恢复。
+  }
+}
+
+function clearStoredCurrentUser() {
+  try {
+    window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY)
+  } catch {
+    // 清理失败不影响退出流程。
   }
 }
 
@@ -237,7 +277,7 @@ export function useAnalyzerConsole() {
   const projectMessageProjectId = shallowRef('')
   const projects = ref<ProjectRecord[]>([])
   const users = ref<AuthUser[]>([])
-  const currentUser = ref<AuthUser | null>(null)
+  const currentUser = ref<AuthUser | null>(readStoredCurrentUser())
   const authMessage = shallowRef('')
   const activeSection = shallowRef<ConsoleSection>(readStoredActiveSection())
 
@@ -327,6 +367,7 @@ export function useAnalyzerConsole() {
       })
       const data = await readJsonResponse<AuthResponse>(response)
       currentUser.value = data.user
+      writeStoredCurrentUser(data.user)
       if (!currentUser.value.isAdmin && activeSection.value === 'accounts') {
         activeSection.value = 'projects'
       }
@@ -344,6 +385,7 @@ export function useAnalyzerConsole() {
     } catch (error) {
       authMessage.value = error instanceof Error ? error.message : '登录失败'
       currentUser.value = null
+      clearStoredCurrentUser()
     } finally {
       authBusy.value = false
     }
@@ -360,6 +402,7 @@ export function useAnalyzerConsole() {
       })
     } finally {
       currentUser.value = null
+      clearStoredCurrentUser()
       projects.value = []
       users.value = []
       form.projectId = ''
@@ -378,6 +421,7 @@ export function useAnalyzerConsole() {
     try {
       const data = await getJson<AuthResponse>('/api/auth/me')
       currentUser.value = data.user
+      writeStoredCurrentUser(data.user)
       if (!currentUser.value.isAdmin && activeSection.value === 'accounts') {
         activeSection.value = 'projects'
       }
@@ -395,6 +439,7 @@ export function useAnalyzerConsole() {
     } catch {
       if (!authReady.value) {
         currentUser.value = null
+        clearStoredCurrentUser()
         projects.value = []
         users.value = []
       }
@@ -588,7 +633,7 @@ export function useAnalyzerConsole() {
       kbTemplates.value = data.templates
     } catch (error) {
       kbTemplates.value = []
-      templateMessage.value = error instanceof Error ? error.message : '知识库模板加载失败'
+      templateMessage.value = error instanceof Error ? error.message : '知识模板加载失败'
     }
   }
 
@@ -862,6 +907,36 @@ export function useAnalyzerConsole() {
     searchSavedPath.value = data.savedPath
   }
 
+  async function refreshSectionData(section: ConsoleSection = activeSection.value) {
+    if (!currentUser.value) return
+    if (section === 'projects') {
+      await loadProjects()
+      return
+    }
+    if (section === 'accounts') {
+      if (currentUser.value.isAdmin) {
+        await loadUsers()
+      }
+      return
+    }
+    if (section === 'analysis') {
+      await loadAnalysisResult()
+      return
+    }
+    if (section === 'knowledge') {
+      await loadKbFiles()
+      return
+    }
+    if (section === 'templates') {
+      await loadKbTemplates()
+      return
+    }
+    if (section === 'vectors') {
+      await loadIndexStatus()
+      await loadIndexRecords()
+    }
+  }
+
   watch(
     () => form.projectId,
     (projectId, previousProjectId) => {
@@ -923,6 +998,7 @@ export function useAnalyzerConsole() {
 
   watch(activeSection, (section) => {
     writeStoredActiveSection(section)
+    refreshSectionData(section)
   })
 
   onMounted(() => {
@@ -983,6 +1059,7 @@ export function useAnalyzerConsole() {
     loadIndexStatus,
     loadIndexRecords,
     queryStore,
+    refreshSectionData,
     checkHealth,
     loadCurrentUser,
     loadProjects,

@@ -57,7 +57,7 @@ function createFile() {
       <div class="kb-editor-head">
         <div class="panel-title">
           <ElIcon><Notebook /></ElIcon>
-          <span>文档内容</span>
+          <span>知识内容</span>
         </div>
         <strong>{{ selectedPath || path || '新建知识文档' }}</strong>
       </div>
@@ -67,8 +67,8 @@ function createFile() {
       <ElFormItem label="文档路径">
         <ElInput v-model="path" clearable placeholder="domain/user-registration.md" />
       </ElFormItem>
-      <ElFormItem label="模板">
-        <ElSelect class="control-select" placeholder="选择模板" @change="applyTemplate">
+      <ElFormItem label="知识模版">
+        <ElSelect class="control-select" placeholder="选择知识模版" @change="applyTemplate">
           <ElOption
             v-for="template in templates"
             :key="template.id"

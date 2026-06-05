@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Edit, Key, Plus, Refresh } from '@element-plus/icons-vue'
-import { reactive, shallowRef, watch } from 'vue'
+import { Edit, Key, Plus, Refresh, UserFilled } from '@element-plus/icons-vue'
+import { computed, reactive, shallowRef, watch } from 'vue'
 import {
   ElButton,
   ElCheckbox,
@@ -8,6 +8,7 @@ import {
   ElDialog,
   ElForm,
   ElFormItem,
+  ElIcon,
   ElInput,
   ElMain,
   ElScrollbar,
@@ -39,6 +40,8 @@ const passwordForm = reactive({ userId: '', username: '', password: '' })
 const createDialogOpen = shallowRef(false)
 const editDialogOpen = shallowRef(false)
 const passwordDialogOpen = shallowRef(false)
+const adminCount = computed(() => props.users.filter((user) => user.isAdmin).length)
+const memberCount = computed(() => props.users.length - adminCount.value)
 
 function saveUserAccess(userId: string) {
   emit('updateUserAccess', userId, [...(accessDrafts[userId] ?? [])])
@@ -105,12 +108,18 @@ watch(
 
 <template>
   <ElMain class="page-surface accounts-page">
-    <div class="page-header">
-      <div>
-        <h2>账号管理</h2>
+    <section class="account-command">
+      <div class="account-heading">
+        <ElIcon><UserFilled /></ElIcon>
+        <div>
+          <h2>账号管理</h2>
+          <span>系统账号与项目授权 · {{ users.length }} 个账号</span>
+        </div>
       </div>
-      <div class="page-actions">
-        <ElTag type="info" effect="plain">{{ users.length }} 个账号</ElTag>
+
+      <div class="account-command-actions">
+        <ElTag type="warning" effect="plain">管理员 {{ adminCount }}</ElTag>
+        <ElTag type="info" effect="plain">成员 {{ memberCount }}</ElTag>
         <ElButton type="primary" :icon="Plus" @click="createDialogOpen = true">
           新建账号
         </ElButton>
@@ -118,7 +127,7 @@ watch(
           刷新
         </ElButton>
       </div>
-    </div>
+    </section>
 
     <section class="account-workbench">
       <ElScrollbar class="account-list-scroll">
@@ -249,3 +258,92 @@ watch(
     </ElDialog>
   </ElMain>
 </template>
+
+<style scoped>
+.accounts-page {
+  gap: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 0;
+}
+
+.account-command {
+  align-items: center;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 16px 24px;
+}
+
+.account-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.account-heading > .el-icon {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  color: var(--accent);
+  display: inline-flex;
+  flex: 0 0 40px;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.account-heading h2 {
+  color: var(--text);
+  font-size: 1.08rem;
+  margin: 0;
+}
+
+.account-heading span {
+  color: var(--text-faint);
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 3px;
+}
+
+.account-command-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.account-command-actions .el-button {
+  min-width: 112px;
+}
+
+.account-workbench {
+  padding: 18px 24px 24px;
+}
+
+@media (max-width: 760px) {
+  .account-command {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 14px 16px;
+  }
+
+  .account-command-actions {
+    align-items: stretch;
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .account-command-actions .el-button {
+    width: 100%;
+  }
+
+  .account-workbench {
+    padding: 14px 16px;
+  }
+}
+</style>

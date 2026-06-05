@@ -82,7 +82,7 @@ java-ts-analyze --store .vector_store\project.jsonl --query "registration rule" 
 - 业务逻辑放在 `web/backend/services.py`。
 - 面向用户的 API 错误使用 `APIError`。
 - 路径校验必须严格。项目路径和知识库路径必须限制在配置的 workspace/project 根目录内。
-- 知识库模板按项目隔离，存储在项目数据根目录下的 `knowledge_templates.json`。
+- 知识模板按项目隔离，存储在项目数据根目录下的 `knowledge_templates.json`。
 - 知识库文件支持的后缀为 `.md`、`.markdown`、`.txt`、`.rst`、`.adoc`。
 - 后端状态存储可能根据配置使用 MySQL 或 JSON；除非上下文代码明确，否则不要假设只有一种存储后端。
 

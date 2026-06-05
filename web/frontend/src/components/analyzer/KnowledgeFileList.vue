@@ -20,7 +20,7 @@ defineEmits<{
   <ElCard class="panel kb-list-panel" shadow="never">
     <template #header>
       <div class="panel-title split-title kb-list-header">
-        <span>文档列表</span>
+        <span>知识列表</span>
         <ElTag size="small" effect="plain">{{ files.length }} 个</ElTag>
         <ElButton text :icon="Refresh" :loading="busy" @click="$emit('refresh')" />
       </div>

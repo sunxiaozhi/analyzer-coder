@@ -65,6 +65,7 @@ const {
   loadIndexStatus,
   loadIndexRecords,
   queryStore,
+  refreshSectionData,
   checkHealth,
   createProject,
   pullProject,
@@ -91,8 +92,8 @@ const sectionTitle = computed(() => {
     projects: '项目管理',
     accounts: '账号管理',
     analysis: '代码分析',
-    knowledge: '知识库维护',
-    templates: '知识库模板',
+    knowledge: '知识维护',
+    templates: '知识模板',
     vectors: '索引运维',
     search: '语义检索'
   }
@@ -130,11 +131,7 @@ async function refreshIndexData() {
     @login="login"
   />
 
-  <main v-else-if="!authReady" class="app-session-loading" aria-busy="true">
-    <span>正在恢复会话</span>
-  </main>
-
-  <ElContainer v-else-if="authReady && currentUser" class="shell">
+  <ElContainer v-else-if="currentUser" class="shell">
     <ElAside class="shell-aside">
       <AnalyzerSidebar
         v-model:active-section="activeSection"
@@ -142,6 +139,7 @@ async function refreshIndexData() {
         :current-user="currentUser"
         :projects="projects"
         @check-health="checkHealth"
+        @refresh-section="refreshSectionData"
       />
     </ElAside>
 

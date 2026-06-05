@@ -12,9 +12,19 @@ defineProps<{
   projects: ProjectRecord[]
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   checkHealth: []
+  refreshSection: [section: ConsoleSection]
 }>()
+
+function selectSection(value: string) {
+  const section = value as ConsoleSection
+  if (activeSection.value === section) {
+    emit('refreshSection', section)
+    return
+  }
+  activeSection.value = section
+}
 </script>
 
 <template>
@@ -40,18 +50,18 @@ defineEmits<{
         </ElSelect>
       </div>
 
-      <ElMenu :default-active="activeSection" class="main-menu" @select="activeSection = $event as ConsoleSection">
+      <ElMenu :default-active="activeSection" class="main-menu" @select="selectSection">
         <ElMenuItem index="search">
           <ElIcon><Search /></ElIcon>
           <span>知识检索</span>
         </ElMenuItem>
         <ElMenuItem index="knowledge">
           <ElIcon><Collection /></ElIcon>
-          <span>知识库维护</span>
+          <span>知识维护</span>
         </ElMenuItem>
         <ElMenuItem index="templates">
           <ElIcon><Notebook /></ElIcon>
-          <span>知识库模板</span>
+          <span>知识模板</span>
         </ElMenuItem>
         <ElMenuItem index="projects">
           <ElIcon><FolderOpened /></ElIcon>

@@ -101,11 +101,16 @@ watch(
 
 <template>
   <ElMain class="page-surface template-page">
-    <div class="page-header">
-      <div>
-        <h2>知识库模板</h2>
+    <section class="template-command">
+      <div class="template-heading">
+        <ElIcon><Notebook /></ElIcon>
+        <div>
+          <h2>知识模板</h2>
+          <span>维护知识文档模板 · 新增、编辑、删除</span>
+        </div>
       </div>
-      <div class="page-actions">
+
+      <div class="template-command-actions">
         <ElTag type="info" effect="plain">{{ templates.length }} 个模板</ElTag>
         <ElButton :icon="Refresh" :loading="busy" @click="$emit('refreshTemplates')">
           刷新
@@ -114,7 +119,7 @@ watch(
           新建模板
         </ElButton>
       </div>
-    </div>
+    </section>
 
     <ElCard class="panel template-list-panel" shadow="never">
       <template #header>
@@ -164,7 +169,7 @@ watch(
     <ElDialog
       v-model="dialogOpen"
       class="template-dialog"
-      :title="editingExisting ? '编辑知识库模板' : '新建知识库模板'"
+      :title="editingExisting ? '编辑知识模板' : '新建知识模板'"
       width="720px"
     >
       <ElForm label-position="top" class="control-form template-form">
@@ -207,12 +212,70 @@ watch(
 
 <style scoped>
 .template-page {
-  gap: 14px;
+  gap: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 0;
+}
+
+.template-command {
+  align-items: center;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 16px 24px;
+}
+
+.template-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.template-heading > .el-icon {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  color: var(--accent);
+  display: inline-flex;
+  flex: 0 0 40px;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.template-heading h2 {
+  color: var(--text);
+  font-size: 1.08rem;
+  margin: 0;
+}
+
+.template-heading span {
+  color: var(--text-faint);
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 3px;
+}
+
+.template-command-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.template-command-actions .el-button {
+  min-width: 112px;
 }
 
 .template-list-panel.el-card {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  margin: 18px 24px 24px;
   min-height: 0;
   overflow: hidden;
 }
@@ -407,6 +470,26 @@ watch(
 }
 
 @media (max-width: 760px) {
+  .template-command {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 14px 16px;
+  }
+
+  .template-command-actions {
+    align-items: stretch;
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .template-command-actions .el-button {
+    width: 100%;
+  }
+
+  .template-list-panel.el-card {
+    margin: 14px 16px;
+  }
+
   .template-form {
     grid-template-columns: 1fr;
   }
