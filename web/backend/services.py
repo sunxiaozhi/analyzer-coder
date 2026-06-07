@@ -12,13 +12,13 @@ from typing import Any
 from flask.config import Config
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from java_ts_analyzer.analyzer import JavaAnalyzer
-from java_ts_analyzer.api_mapper import build_api_mapping
-from java_ts_analyzer.chunker import build_chunks
-from java_ts_analyzer.embedding import HashingEmbedder
-from java_ts_analyzer.kb_loader import build_kb_chunks
-from java_ts_analyzer.vector_store import JsonlVectorStore
-from java_ts_analyzer.cli import (
+from java_analyzer.analyzer import JavaAnalyzer
+from java_analyzer.api_mapper import build_api_mapping
+from java_analyzer.chunker import build_chunks
+from java_analyzer.embedding import HashingEmbedder
+from java_analyzer.kb_loader import build_kb_chunks
+from java_analyzer.vector_store import JsonlVectorStore
+from java_analyzer.cli import (
     _build_graph,
     _build_report,
     _format_summary,

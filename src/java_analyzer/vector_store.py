@@ -5,8 +5,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from java_ts_analyzer.embedding import HashingEmbedder, cosine_similarity
-from java_ts_analyzer.models import JavaVectorChunk
+from java_analyzer.embedding import HashingEmbedder, cosine_similarity
+from java_analyzer.models import JavaVectorChunk
 
 
 @dataclass(frozen=True)

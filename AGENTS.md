@@ -4,11 +4,11 @@
 
 这个仓库包含一个 Java/知识库分析器，以及一个本地 Web 控制台。
 
-- Python 包：`src/java_ts_analyzer`
+- Python 包：`src/java_analyzer`
 - Flask 后端：`web/backend`
 - Vue 3 前端：`web/frontend`
 - 文档：`docs`
-- 运行时/生成数据：`.analzer_projects`、`.vector_store`、`.java_ts_results`、`logs`
+- 运行时/生成数据：`.analzer_projects`、`.vector_store`、`.java_results`、`logs`
 
 分析器用于提取 Java 结构、Spring endpoint、MyBatis SQL 引用、知识库切块、本地 JSONL 向量索引、报告、图谱，以及 Obsidian 风格笔记。
 
@@ -70,10 +70,10 @@ npm run build
 运行命令行工具：
 
 ```powershell
-java-ts-analyze path\to\java-project --json
-java-ts-analyze . --source mixed --report
-java-ts-analyze . --source mixed --index .vector_store\project.jsonl
-java-ts-analyze --store .vector_store\project.jsonl --query "registration rule" --top-k 3
+java-analyze path\to\java-project --json
+java-analyze . --source mixed --report
+java-analyze . --source mixed --index .vector_store\project.jsonl
+java-analyze --store .vector_store\project.jsonl --query "registration rule" --top-k 3
 ```
 
 ## 后端说明
@@ -132,11 +132,11 @@ Vite/Rollup 构建时可能出现来自依赖的 PURE annotation 警告和 chunk
 
 ## 重要路径
 
-- `src/java_ts_analyzer/analyzer.py`：Tree-sitter Java 提取逻辑。
-- `src/java_ts_analyzer/chunker.py`：代码切块生成。
-- `src/java_ts_analyzer/kb_loader.py`：知识库文档加载与切块。
-- `src/java_ts_analyzer/vector_store.py`：JSONL 向量存储与检索。
-- `src/java_ts_analyzer/cli.py`：命令行入口。
+- `src/java_analyzer/analyzer.py`：Tree-sitter Java 提取逻辑。
+- `src/java_analyzer/chunker.py`：代码切块生成。
+- `src/java_analyzer/kb_loader.py`：知识库文档加载与切块。
+- `src/java_analyzer/vector_store.py`：JSONL 向量存储与检索。
+- `src/java_analyzer/cli.py`：命令行入口。
 - `web/backend/app.py`：Flask 应用入口。
 - `web/backend/routes.py`：API 路由。
 - `web/backend/services.py`：Web 服务逻辑。

@@ -5,8 +5,8 @@ from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 
-from java_ts_analyzer.call_graph import MethodRef, build_call_edges
-from java_ts_analyzer.models import JavaEndpoint, JavaFileAnalysis
+from java_analyzer.call_graph import MethodRef, build_call_edges
+from java_analyzer.models import JavaEndpoint, JavaFileAnalysis
 
 SQL_TABLE_PATTERN = re.compile(
     r"\b(?:from|join|into|update)\s+([`\"\[]?[A-Za-z_][\w$]*(?:\.[A-Za-z_][\w$]*)?[`\"\]]?)",

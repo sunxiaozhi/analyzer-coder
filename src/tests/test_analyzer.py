@@ -1,4 +1,4 @@
-from java_ts_analyzer import JavaAnalyzer, build_api_mapping, build_call_chains, build_endpoint_sql_flows
+from java_analyzer import JavaAnalyzer, build_api_mapping, build_call_chains, build_endpoint_sql_flows
 
 
 def test_analyze_source_extracts_java_structure() -> None:

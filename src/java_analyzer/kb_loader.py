@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from java_ts_analyzer.models import JavaVectorChunk
+from java_analyzer.models import JavaVectorChunk
 
 KB_EXTENSIONS = {".adoc", ".markdown", ".md", ".rst", ".txt"}
 SKIP_DIRS = {
@@ -14,7 +14,7 @@ SKIP_DIRS = {
     ".pytest_cache",
     ".ruff_cache",
     ".venv",
-    ".java_ts_results",
+    ".java_results",
     ".vector_store",
     "__pycache__",
     "build",

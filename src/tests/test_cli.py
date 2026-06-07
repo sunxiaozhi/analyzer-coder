@@ -148,7 +148,7 @@ def _run_cli(*args: object) -> subprocess.CompletedProcess[str]:
     src_path = str(Path.cwd() / "src")
     env["PYTHONPATH"] = f"{src_path}{os.pathsep}{env.get('PYTHONPATH', '')}"
     return subprocess.run(
-        [sys.executable, "-m", "java_ts_analyzer.cli", *(str(arg) for arg in args)],
+        [sys.executable, "-m", "java_analyzer.cli", *(str(arg) for arg in args)],
         cwd=Path.cwd(),
         env=env,
         text=True,

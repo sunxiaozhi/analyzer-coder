@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
-from java_ts_analyzer.vector_store import SearchResult, VectorRecord
+from java_analyzer.vector_store import SearchResult, VectorRecord
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+|[\u4e00-\u9fff]{2,}")
 STOP_WORDS = {

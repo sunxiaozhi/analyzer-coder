@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from java_ts_analyzer.models import JavaFileAnalysis, JavaVectorChunk, SourceSpan
+from java_analyzer.models import JavaFileAnalysis, JavaVectorChunk, SourceSpan
 
 
 def build_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:

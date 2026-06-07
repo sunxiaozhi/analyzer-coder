@@ -12,87 +12,87 @@ python -m pip install -e ".[dev]"
 
 ## 命令行
 
-命令每次运行都会默认把结果保存到 `.java_ts_results` 目录。
+命令每次运行都会默认把结果保存到 `.java_results` 目录。
 可以用 `--results-dir path\to\dir` 指定其他输出目录，也可以用 `--no-save`
 只打印结果而不写入结果文件。
 
 分析单个文件：
 
 ```powershell
-java-ts-analyze examples\Sample.java
+java-analyze examples\Sample.java
 ```
 
 递归分析目录并输出 JSON：
 
 ```powershell
-java-ts-analyze path\to\java-project --json
+java-analyze path\to\java-project --json
 ```
 
 打印紧凑语法树：
 
 ```powershell
-java-ts-analyze examples\Sample.java --tree
+java-analyze examples\Sample.java --tree
 ```
 
 打印向量化切块：
 
 ```powershell
-java-ts-analyze examples\Sample.java --chunks
+java-analyze examples\Sample.java --chunks
 ```
 
 打印项目级 Markdown 报告：
 
 ```powershell
-java-ts-analyze . --source mixed --report
+java-analyze . --source mixed --report
 ```
 
 根据检测到的 endpoint 和组件打印 Mermaid 图：
 
 ```powershell
-java-ts-analyze path\to\java-project --graph
+java-analyze path\to\java-project --graph
 ```
 
 生成适合 Obsidian Vault 使用的 Markdown 笔记：
 
 ```powershell
-java-ts-analyze . --source mixed --obsidian path\to\ObsidianVault\JavaAnalysis
+java-analyze . --source mixed --obsidian path\to\ObsidianVault\JavaAnalysis
 ```
 
 把切块写入本地 JSONL 向量库：
 
 ```powershell
-java-ts-analyze examples\Sample.java --index .vector_store\sample.jsonl
+java-analyze examples\Sample.java --index .vector_store\sample.jsonl
 ```
 
 索引或查询时使用 SentenceTransformer 模型：
 
 ```powershell
-java-ts-analyze . --source mixed --index .vector_store\project.jsonl --embedder sentence-transformer --embedding-model BAAI/bge-small-zh-v1.5
+java-analyze . --source mixed --index .vector_store\project.jsonl --embedder sentence-transformer --embedding-model BAAI/bge-small-zh-v1.5
 ```
 
 把知识库文档索引到同一个向量库：
 
 ```powershell
-java-ts-analyze docs --source kb --index .vector_store\project.jsonl
+java-analyze docs --source kb --index .vector_store\project.jsonl
 ```
 
 从一个项目根目录同时索引代码和知识库文档：
 
 ```powershell
-java-ts-analyze . --source mixed --index .vector_store\project.jsonl
+java-analyze . --source mixed --index .vector_store\project.jsonl
 ```
 
 查询本地向量库：
 
 ```powershell
-java-ts-analyze --store .vector_store\sample.jsonl --query "emptyList method" --top-k 3
+java-analyze --store .vector_store\sample.jsonl --query "emptyList method" --top-k 3
 ```
 
 把查询结果限制为代码切块或知识库切块：
 
 ```powershell
-java-ts-analyze --store .vector_store\project.jsonl --query "phone number unique registration" --filter-source kb
-java-ts-analyze --store .vector_store\project.jsonl --query "where is registration implemented" --filter-source code
+java-analyze --store .vector_store\project.jsonl --query "phone number unique registration" --filter-source kb
+java-analyze --store .vector_store\project.jsonl --query "where is registration implemented" --filter-source code
 ```
 
 ## Python API
@@ -100,8 +100,8 @@ java-ts-analyze --store .vector_store\project.jsonl --query "where is registrati
 ```python
 from pathlib import Path
 
-from java_ts_analyzer import JavaAnalyzer, build_chunks
-from java_ts_analyzer.vector_store import JsonlVectorStore
+from java_analyzer import JavaAnalyzer, build_chunks
+from java_analyzer.vector_store import JsonlVectorStore
 
 analyzer = JavaAnalyzer()
 result = analyzer.analyze_file(Path("examples/Sample.java"))
@@ -154,16 +154,16 @@ http://127.0.0.1:5173
 
 ## 源码结构
 
-Python 包位于 `src/java_ts_analyzer`：
+Python 包位于 `src/java_analyzer`：
 
-- `__init__.py`：包的公开导出入口。它重新导出主分析器、数据模型和切块构建函数，方便调用方直接从 `java_ts_analyzer` 导入常用 API。
+- `__init__.py`：包的公开导出入口。它重新导出主分析器、数据模型和切块构建函数，方便调用方直接从 `java_analyzer` 导入常用 API。
 - `models.py`：所有分析结果的类型化 dataclass，包括源码位置、import、符号、类型、字段、方法、调用、Spring 组件、HTTP endpoint、SQL 引用、指标、文件分析结果和向量切块。
 - `analyzer.py`：基于 Tree-sitter 的 Java 解析器和提取器。它读取 Java 源码文件，构建 AST，提取 Java 结构，检测 Spring 组件/endpoint 和 MyBatis SQL 注解，计算指标，并格式化紧凑语法树。
 - `chunker.py`：把结构化的 `JavaFileAnalysis` 转换成适合向量搜索的小文本块。它会为类型、字段、方法、组件、endpoint 和 SQL 引用分别生成切块，并附带统一的 metadata。
 - `kb_loader.py`：加载 Markdown、TXT、RST、AsciiDoc 等知识库文件。它按标题和长度切分文档，跳过生成目录/缓存目录，并生成和代码切块兼容的知识库切块。
 - `embedding.py`：向量化后端和相似度工具。默认的 `HashingEmbedder` 是确定性的本地向量器；安装可选依赖后，`SentenceTransformerEmbedder` 可以使用真实的 sentence-transformers 模型。
 - `vector_store.py`：本地 JSONL 向量库。它负责写入或 upsert 带 embedding 的切块记录，读取已有记录，应用 metadata 过滤，并返回按余弦相似度排序的搜索结果。
-- `cli.py`：`java-ts-analyze` 的命令行入口。它串联分析、切块、索引、查询、报告生成、Mermaid 图输出、Obsidian 笔记生成和结果自动保存。
+- `cli.py`：`java-analyze` 的命令行入口。它串联分析、切块、索引、查询、报告生成、Mermaid 图输出、Obsidian 笔记生成和结果自动保存。
 
 Web 子项目位于 `web`：
 

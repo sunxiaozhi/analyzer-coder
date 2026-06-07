@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-from java_ts_analyzer.models import JavaCall, JavaFileAnalysis, JavaMethod
+from java_analyzer.models import JavaCall, JavaFileAnalysis, JavaMethod
 
 
 @dataclass(frozen=True)

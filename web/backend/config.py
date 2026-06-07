@@ -7,7 +7,7 @@ from pathlib import Path
 class BackendConfig:
     WORKSPACE_ROOT = Path(os.getenv("ANALYZER_WORKSPACE_ROOT", Path(__file__).resolve().parents[2])).resolve()
     DEFAULT_STORE = Path(os.getenv("ANALYZER_DEFAULT_STORE", ".vector_store/web-project.jsonl"))
-    RESULTS_DIR = Path(os.getenv("ANALYZER_RESULTS_DIR", ".java_ts_results"))
+    RESULTS_DIR = Path(os.getenv("ANALYZER_RESULTS_DIR", ".java_results"))
     PROJECTS_DIR = Path(os.getenv("ANALYZER_PROJECTS_DIR", ".analzer_projects"))
     STATE_BACKEND = os.getenv("ANALYZER_STATE_BACKEND", "mysql")
     MYSQL_HOST = os.getenv("ANALYZER_MYSQL_HOST", "127.0.0.1")

@@ -6,7 +6,7 @@ import re
 from typing import Iterable
 from urllib.parse import urlsplit
 
-from java_ts_analyzer.analyzer import JavaAnalyzer
+from java_analyzer.analyzer import JavaAnalyzer
 
 FRONTEND_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".vue"}
 SKIP_DIRS = {"node_modules", "dist", "build", ".git", ".vite", "coverage"}

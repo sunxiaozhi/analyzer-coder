@@ -4,7 +4,7 @@
 
 本项目当前包含两部分：
 
-- `java-ts-analyzer`：一个基于 Python 和 Tree-sitter 的 Java 静态分析、切块、索引和检索工具。
+- `java-analyzer`：一个基于 Python 和 Tree-sitter 的 Java 静态分析、切块、索引和检索工具。
 - `java-demo`：一个位于 `java/` 目录下的小型 Spring Boot 示例项目，用于验证分析器对 Spring 组件、HTTP 接口和调用关系的识别能力。
 
 项目已经形成了从 Java 源码分析、结构化结果输出、向量化索引、检索查询，到 Mermaid 图生成的完整闭环。
@@ -116,52 +116,52 @@
 
 ### 5. CLI 命令行工具
 
-项目提供 `java-ts-analyze` 命令，支持以下能力：
+项目提供 `java-analyze` 命令，支持以下能力：
 
 ```powershell
-java-ts-analyze examples\Sample.java
+java-analyze examples\Sample.java
 ```
 
 分析单个 Java 文件并输出摘要。
 
 ```powershell
-java-ts-analyze path\to\java-project --json
+java-analyze path\to\java-project --json
 ```
 
 递归分析目录并输出 JSON。
 
 ```powershell
-java-ts-analyze examples\Sample.java --tree
+java-analyze examples\Sample.java --tree
 ```
 
 输出紧凑 AST 语法树。
 
 ```powershell
-java-ts-analyze examples\Sample.java --chunks
+java-analyze examples\Sample.java --chunks
 ```
 
 输出可向量化的 chunk。
 
 ```powershell
-java-ts-analyze java --source code --report
+java-analyze java --source code --report
 ```
 
 输出项目级 Markdown 分析报告。
 
 ```powershell
-java-ts-analyze java --graph
+java-analyze java --graph
 ```
 
 根据代码分析结果生成 Mermaid 架构图。
 
 ```powershell
-java-ts-analyze java --source code --index .vector_store\java.jsonl
+java-analyze java --source code --index .vector_store\java.jsonl
 ```
 
 生成本地 JSONL 向量索引。
 
 ```powershell
-java-ts-analyze --store .vector_store\java.jsonl --query "register user endpoint" --filter-source code
+java-analyze --store .vector_store\java.jsonl --query "register user endpoint" --filter-source code
 ```
 
 查询本地索引。
@@ -302,13 +302,13 @@ python -m pip install -e ".[dev]"
 分析 Spring Boot 示例项目：
 
 ```powershell
-.\.venv\Scripts\python.exe -m java_ts_analyzer.cli java --source code --report
+.\.venv\Scripts\python.exe -m java_analyzer.cli java --source code --report
 ```
 
 生成 Mermaid 图：
 
 ```powershell
-.\.venv\Scripts\python.exe -m java_ts_analyzer.cli java --graph
+.\.venv\Scripts\python.exe -m java_analyzer.cli java --graph
 ```
 
 运行 Spring Boot 示例项目测试：

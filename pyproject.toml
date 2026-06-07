@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "java-ts-analyzer"
+name = "java-analyzer"
 version = "0.1.0"
 description = "Analyze Java source code with Python and tree-sitter."
 readme = "README.md"
@@ -26,8 +26,9 @@ dev = [
 ]
 
 [project.scripts]
-java-ts-analyze = "java_ts_analyzer.cli:main"
+java-analyze = "java_analyzer.cli:main"
+java-ts-analyze = "java_analyzer.cli:main"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["src/tests"]
 pythonpath = ["src"]

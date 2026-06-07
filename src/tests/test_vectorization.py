@@ -1,5 +1,5 @@
-from java_ts_analyzer import JavaAnalyzer, build_chunks, build_kb_chunks
-from java_ts_analyzer.vector_store import JsonlVectorStore
+from java_analyzer import JavaAnalyzer, build_chunks, build_kb_chunks
+from java_analyzer.vector_store import JsonlVectorStore
 
 
 def test_build_chunks_creates_method_level_documents() -> None:
@@ -95,7 +95,7 @@ def test_kb_chunks_skip_saved_results_directory(tmp_path) -> None:
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
     (docs_dir / "guide.md").write_text("# Guide\n\nReal project knowledge.", encoding="utf-8")
-    results_dir = tmp_path / ".java_ts_results"
+    results_dir = tmp_path / ".java_results"
     results_dir.mkdir()
     (results_dir / "20260530-report.md").write_text("# Generated\n\nOld output.", encoding="utf-8")
 

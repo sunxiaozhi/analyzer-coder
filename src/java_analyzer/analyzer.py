@@ -7,7 +7,7 @@ from typing import Iterable
 import tree_sitter_java as tsjava
 from tree_sitter import Language, Node, Parser, Tree
 
-from java_ts_analyzer.models import (
+from java_analyzer.models import (
     JavaCall,
     JavaComponent,
     JavaEndpoint,

@@ -8,14 +8,14 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from java_ts_analyzer.analyzer import JavaAnalyzer
-from java_ts_analyzer.call_graph import CallChain, build_call_chains, build_call_edges
-from java_ts_analyzer.chunker import build_chunks
-from java_ts_analyzer.embedding import HashingEmbedder, SentenceTransformerEmbedder
-from java_ts_analyzer.kb_loader import build_kb_chunks
-from java_ts_analyzer.models import JavaFileAnalysis, JavaVectorChunk
-from java_ts_analyzer.sql_flow import build_endpoint_sql_flows, build_sql_usages
-from java_ts_analyzer.vector_store import JsonlVectorStore
+from java_analyzer.analyzer import JavaAnalyzer
+from java_analyzer.call_graph import CallChain, build_call_chains, build_call_edges
+from java_analyzer.chunker import build_chunks
+from java_analyzer.embedding import HashingEmbedder, SentenceTransformerEmbedder
+from java_analyzer.kb_loader import build_kb_chunks
+from java_analyzer.models import JavaFileAnalysis, JavaVectorChunk
+from java_analyzer.sql_flow import build_endpoint_sql_flows, build_sql_usages
+from java_analyzer.vector_store import JsonlVectorStore
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+")
 GRAPH_MAX_ENDPOINTS = 80
@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     # 将所有面向用户的模式集中到一个解析器中，让 CLI 同时承担分析、索引、
     # 检索、报告和图生成工具的职责。
     parser = argparse.ArgumentParser(
-        prog="java-ts-analyze",
+        prog="java-analyze",
         description="Analyze Java source code with Tree-sitter.",
     )
     parser.add_argument("path", type=Path, nargs="?", help="Java file or directory to analyze.")
@@ -75,8 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--store",
         type=Path,
-        default=Path(".java_ts_vectors.jsonl"),
-        help="Vector store path used by --query. Defaults to .java_ts_vectors.jsonl.",
+        default=Path(".java_vectors.jsonl"),
+        help="Vector store path used by --query. Defaults to .java_vectors.jsonl.",
     )
     parser.add_argument("--top-k", type=int, default=5, help="Number of search results to return.")
     parser.add_argument(
@@ -99,8 +99,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=Path(".java_ts_results"),
-        help="Directory used to save each command result. Defaults to .java_ts_results.",
+        default=Path(".java_results"),
+        help="Directory used to save each command result. Defaults to .java_results.",
     )
     parser.add_argument(
         "--no-save",
