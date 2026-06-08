@@ -9,9 +9,7 @@ __pycache__/
 .java_ts_results/
 obsidian-vault/
 web/frontend/node_modules/
-web/frontend/dist/
 logs/
-dist/
 build/
 *.egg-info/
 /.idea
