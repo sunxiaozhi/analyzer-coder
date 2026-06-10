@@ -10,6 +10,7 @@ import type {
   KnowledgeAsset,
   KnowledgeAssetFilters,
   KnowledgeAssetForm,
+  KnowledgeAssetPagination,
   KnowledgeFile,
   KnowledgeTemplate,
   KnowledgeTemplateForm,
@@ -94,6 +95,9 @@ interface KnowledgeFileResponse {
 
 interface KnowledgeAssetsResponse {
   assets: KnowledgeAsset[]
+  total: number
+  page: number
+  pageSize: number
   types: string[]
   statuses: string[]
 }
@@ -283,6 +287,11 @@ export function useAnalyzerConsole() {
     status: '',
     query: ''
   })
+  const assetPagination = reactive<KnowledgeAssetPagination>({
+    page: 1,
+    pageSize: 20,
+    total: 0
+  })
 
   const status = shallowRef('未连接')
   const busy = shallowRef(false)
@@ -453,6 +462,8 @@ export function useAnalyzerConsole() {
       kbContent.value = ''
       kbTemplates.value = []
       knowledgeAssets.value = []
+      assetPagination.total = 0
+      assetPagination.page = 1
       selectedAssetId.value = ''
       resetTemplateForm()
       resetAssetForm()
@@ -740,7 +751,11 @@ export function useAnalyzerConsole() {
   }
 
   function assetParams() {
-    const params = new URLSearchParams({ projectId: form.projectId })
+    const params = new URLSearchParams({
+      projectId: form.projectId,
+      page: String(assetPagination.page),
+      pageSize: String(assetPagination.pageSize)
+    })
     if (assetFilters.type) params.set('type', assetFilters.type)
     if (assetFilters.status) params.set('status', assetFilters.status)
     if (assetFilters.query) params.set('query', assetFilters.query)
@@ -750,19 +765,46 @@ export function useAnalyzerConsole() {
   async function loadKnowledgeAssets() {
     if (!currentUser.value || !form.projectId) {
       knowledgeAssets.value = []
+      assetPagination.total = 0
       return
     }
     try {
       const data = await kbRequest<KnowledgeAssetsResponse>(`/api/knowledge/assets?${assetParams()}`)
+      const pageCount = Math.max(1, Math.ceil(data.total / data.pageSize))
+      if (data.assets.length === 0 && data.total > 0 && data.page > pageCount) {
+        assetPagination.page = pageCount
+        await loadKnowledgeAssets()
+        return
+      }
       knowledgeAssets.value = data.assets
+      assetPagination.total = data.total
+      assetPagination.page = data.page
+      assetPagination.pageSize = data.pageSize
       if (selectedAssetId.value && !data.assets.some((asset) => asset.id === selectedAssetId.value)) {
         selectedAssetId.value = ''
         resetAssetForm()
       }
     } catch (error) {
       knowledgeAssets.value = []
+      assetPagination.total = 0
       assetMessage.value = error instanceof Error ? error.message : '知识资产加载失败'
     }
+  }
+
+  async function changeAssetPage(page: number) {
+    assetPagination.page = page
+    await loadKnowledgeAssets()
+  }
+
+  async function changeAssetPageSize(pageSize: number) {
+    assetPagination.pageSize = pageSize
+    assetPagination.page = 1
+    await loadKnowledgeAssets()
+  }
+
+  async function applyAssetFilters() {
+    assetPagination.page = 1
+    await loadKnowledgeAssets()
   }
 
   async function createKnowledgeAsset() {
@@ -771,8 +813,9 @@ export function useAnalyzerConsole() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(assetPayload())
     })
-    knowledgeAssets.value = data.assets
     if (data.asset) editAsset(data.asset)
+    assetPagination.page = Math.max(1, Math.ceil(data.assets.length / assetPagination.pageSize))
+    await loadKnowledgeAssets()
     assetMessage.value = '知识资产已创建'
   }
 
@@ -783,8 +826,8 @@ export function useAnalyzerConsole() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(assetPayload())
     })
-    knowledgeAssets.value = data.assets
     if (data.asset) editAsset(data.asset)
+    await loadKnowledgeAssets()
     assetMessage.value = '知识资产已保存'
   }
 
@@ -797,7 +840,7 @@ export function useAnalyzerConsole() {
         body: JSON.stringify({ projectId: form.projectId })
       }
     )
-    knowledgeAssets.value = data.assets
+    await loadKnowledgeAssets()
     if (assetForm.id === assetId) {
       selectedAssetId.value = ''
       resetAssetForm()
@@ -815,8 +858,8 @@ export function useAnalyzerConsole() {
         body: JSON.stringify({ projectId: form.projectId })
       }
     )
-    knowledgeAssets.value = data.assets
     if (data.asset && assetForm.id === assetId) editAsset(data.asset)
+    await loadKnowledgeAssets()
     assetMessage.value = action === 'confirm' ? '知识资产已确认' : '知识资产已标记待复审'
   }
 
@@ -1160,6 +1203,8 @@ export function useAnalyzerConsole() {
       projectMessage.value = ''
       projectMessageProjectId.value = ''
       knowledgeAssets.value = []
+      assetPagination.total = 0
+      assetPagination.page = 1
       selectedAssetId.value = ''
       assetMessage.value = ''
       if (projectId) {
@@ -1264,6 +1309,7 @@ export function useAnalyzerConsole() {
     templateMessage,
     assetForm,
     assetFilters,
+    assetPagination,
     assetMessage,
     projectMessage,
     projectMessageProjectId,
@@ -1296,6 +1342,9 @@ export function useAnalyzerConsole() {
     loadKbFiles,
     loadKbTemplates,
     loadKnowledgeAssets,
+    applyAssetFilters,
+    changeAssetPage,
+    changeAssetPageSize,
     resetAssetForm,
     editAsset,
     createKnowledgeAsset,

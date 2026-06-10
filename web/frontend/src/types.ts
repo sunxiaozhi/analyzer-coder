@@ -158,6 +158,12 @@ export interface KnowledgeAssetFilters {
   query: string
 }
 
+export interface KnowledgeAssetPagination {
+  page: number
+  pageSize: number
+  total: number
+}
+
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
 export interface QueryResultMetadata {

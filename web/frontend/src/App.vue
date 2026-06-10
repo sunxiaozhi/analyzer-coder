@@ -57,6 +57,7 @@ const {
   kbRoot,
   assetForm,
   assetFilters,
+  assetPagination,
   assetMessage,
   projectMessage,
   projectMessageProjectId,
@@ -87,6 +88,9 @@ const {
   loadKbFiles,
   loadKbTemplates,
   loadKnowledgeAssets,
+  applyAssetFilters,
+  changeAssetPage,
+  changeAssetPageSize,
   resetAssetForm,
   editAsset,
   createKnowledgeAsset,
@@ -247,12 +251,16 @@ function openSection(section: ConsoleSection) {
         v-else-if="activeSection === 'assets'"
         v-model:asset-form="assetForm"
         v-model:filters="assetFilters"
+        v-model:pagination="assetPagination"
         :assets="knowledgeAssets"
         :busy="kbBusy"
         :current-user="currentUser"
         :message="assetMessage"
         :selected-asset-id="selectedAssetId"
         :users="users"
+        @apply-filters="applyAssetFilters"
+        @change-page="changeAssetPage"
+        @change-page-size="changeAssetPageSize"
         @confirm-asset="transitionKnowledgeAsset($event, 'confirm')"
         @create-asset="createKnowledgeAsset"
         @delete-asset="deleteKnowledgeAsset"
@@ -337,12 +345,16 @@ function openSection(section: ConsoleSection) {
         v-else
         v-model:asset-form="assetForm"
         v-model:filters="assetFilters"
+        v-model:pagination="assetPagination"
         :assets="knowledgeAssets"
         :busy="kbBusy"
         :current-user="currentUser"
         :message="assetMessage"
         :selected-asset-id="selectedAssetId"
         :users="users"
+        @apply-filters="applyAssetFilters"
+        @change-page="changeAssetPage"
+        @change-page-size="changeAssetPageSize"
         @confirm-asset="transitionKnowledgeAsset($event, 'confirm')"
         @create-asset="createKnowledgeAsset"
         @delete-asset="deleteKnowledgeAsset"

@@ -576,6 +576,8 @@ class AnalyzerService:
         asset_type = str(payload.get("type") or "").strip()
         status = str(payload.get("status") or "").strip()
         query = str(payload.get("query") or "").strip().lower()
+        page = self._query_int(payload.get("page"), default=1, minimum=1, maximum=100000, field="page")
+        page_size = self._query_int(payload.get("pageSize"), default=20, minimum=1, maximum=100, field="pageSize")
         assets = self._load_knowledge_assets(context)
         filtered = []
         for asset in assets:
@@ -595,8 +597,14 @@ class AnalyzerService:
             if query and query not in haystack:
                 continue
             filtered.append(asset)
+        total = len(filtered)
+        offset = (page - 1) * page_size
+        paged = filtered[offset : offset + page_size]
         return {
-            "assets": [asdict(asset) for asset in filtered],
+            "assets": [asdict(asset) for asset in paged],
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
             "types": sorted(KNOWLEDGE_ASSET_TYPES),
             "statuses": sorted(KNOWLEDGE_ASSET_STATUSES),
             "projectId": context.project_id,
@@ -1086,6 +1094,15 @@ class AnalyzerService:
                 }
             )
         return evidence_items[:20]
+
+    def _query_int(self, value: object, *, default: int, minimum: int, maximum: int, field: str) -> int:
+        if value in (None, ""):
+            return default
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError) as error:
+            raise APIError(f"{field} must be an integer.", 400) from error
+        return max(minimum, min(parsed, maximum))
 
     def _kb_templates_file(self, context: "AnalysisContext") -> Path:
         return context.data_root / "knowledge_templates.json"
