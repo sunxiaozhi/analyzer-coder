@@ -47,8 +47,8 @@ const emit = defineEmits<{
 
 const sourceOptions = [
   { label: '代码', value: 'code', description: '为当前代码目录建立可检索索引' },
-  { label: '知识库', value: 'kb', description: '为项目文档和知识库内容建立索引' },
-  { label: '代码 + 知识库', value: 'mixed', description: '同时重建代码与知识库的融合索引' }
+  { label: '知识库', value: 'kb', description: '为项目文档和知识资产建立索引' },
+  { label: '代码 + 知识资产', value: 'mixed', description: '同时重建代码、知识文档与知识资产的融合索引' }
 ] as const
 
 const sourceLabel = computed(() => {
@@ -87,6 +87,7 @@ const statusTagType = computed(() => {
 
 const codeCount = computed(() => props.status?.sources.code ?? 0)
 const kbCount = computed(() => props.status?.sources.kb ?? 0)
+const assetCount = computed(() => props.status?.sources.knowledge_asset ?? 0)
 
 const indexSize = computed(() => {
   const size = props.status?.size ?? 0
@@ -112,7 +113,8 @@ const kindOptions = computed(() => Object.keys(props.status?.kinds ?? {}).sort()
 
 const sourceBars = computed(() => [
   { key: 'code', label: '代码', count: codeCount.value },
-  { key: 'kb', label: '知识库', count: kbCount.value }
+  { key: 'kb', label: '知识库', count: kbCount.value },
+  { key: 'knowledge_asset', label: '知识资产', count: assetCount.value }
 ])
 
 const kindBars = computed(() => {
@@ -138,6 +140,7 @@ function metadataValue(record: IndexRecord, key: string) {
 function recordSourceLabel(record: IndexRecord) {
   const sourceType = String(metadataValue(record, 'source_type') ?? '')
   if (sourceType === 'code') return '代码'
+  if (sourceType === 'knowledge_asset') return '知识资产'
   if (sourceType === 'kb') return '知识库'
   return sourceType || '未知'
 }
@@ -233,6 +236,10 @@ function changeRecordPage(nextPage: number) {
         <div class="vector-summary-item">
           <dt>知识库</dt>
           <dd>{{ kbCount }}</dd>
+        </div>
+        <div class="vector-summary-item">
+          <dt>知识资产</dt>
+          <dd>{{ assetCount }}</dd>
         </div>
         <div class="vector-summary-item">
           <dt>大小</dt>
@@ -336,6 +343,7 @@ function changeRecordPage(nextPage: number) {
             <ElSelect v-model="recordFilters.source" clearable placeholder="来源" @change="applyRecordFilters">
               <ElOption label="代码" value="code" />
               <ElOption label="知识库" value="kb" />
+              <ElOption label="知识资产" value="knowledge_asset" />
             </ElSelect>
             <ElSelect v-model="recordFilters.kind" clearable placeholder="类型" @change="applyRecordFilters">
               <ElOption v-for="kind in kindOptions" :key="kind" :label="kind" :value="kind" />
@@ -356,7 +364,7 @@ function changeRecordPage(nextPage: number) {
                 <span>文本预览</span>
               </div>
               <article v-for="record in records" :key="record.id" class="index-record-row">
-                <ElTag :type="recordSourceLabel(record) === '知识库' ? 'warning' : 'primary'" effect="plain">
+                <ElTag :type="recordSourceLabel(record) === '知识资产' ? 'success' : recordSourceLabel(record) === '知识库' ? 'warning' : 'primary'" effect="plain">
                   {{ recordSourceLabel(record) }}
                 </ElTag>
                 <span>{{ recordKind(record) }}</span>

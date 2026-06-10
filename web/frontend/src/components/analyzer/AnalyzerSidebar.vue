@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Collection, Connection, Cpu, Files, FolderOpened, Link, Notebook, Search, UserFilled } from '@element-plus/icons-vue'
-import { ElButton, ElIcon, ElMenu, ElMenuItem, ElOption, ElScrollbar, ElSelect } from 'element-plus'
+import { computed } from 'vue'
+import { Collection, Connection, FolderOpened, Memo, Search, Setting, Share, UserFilled } from '@element-plus/icons-vue'
+import { ElButton, ElIcon, ElMenu, ElMenuItem, ElOption, ElScrollbar, ElSelect, ElSubMenu } from 'element-plus'
 import type { AuthUser, ConsoleSection, ProjectRecord } from '../../types'
 import BrandLogo from './BrandLogo.vue'
 
@@ -17,7 +18,15 @@ const emit = defineEmits<{
   refreshSection: [section: ConsoleSection]
 }>()
 
+const selectableSections: readonly ConsoleSection[] = ['assets', 'evidence', 'search', 'projects', 'accounts', 'knowledge']
+
+const visibleActiveSection = computed(() => {
+  if (['analysis', 'api-map', 'vectors'].includes(activeSection.value)) return 'evidence'
+  return activeSection.value
+})
+
 function selectSection(value: string) {
+  if (!selectableSections.includes(value as ConsoleSection)) return
   const section = value as ConsoleSection
   if (activeSection.value === section) {
     emit('refreshSection', section)
@@ -33,7 +42,7 @@ function selectSection(value: string) {
       <div class="brand-block">
         <BrandLogo />
         <div class="brand-copy">
-          <h1>代码智库</h1>
+          <h1>知识资产</h1>
         </div>
       </div>
 
@@ -50,39 +59,37 @@ function selectSection(value: string) {
         </ElSelect>
       </div>
 
-      <ElMenu :default-active="activeSection" class="main-menu" @select="selectSection">
+      <ElMenu :default-active="visibleActiveSection" :default-openeds="['settings']" class="main-menu" @select="selectSection">
+        <ElMenuItem index="assets">
+          <ElIcon><Memo /></ElIcon>
+          <span>知识资产</span>
+        </ElMenuItem>
+        <ElMenuItem index="evidence">
+          <ElIcon><Share /></ElIcon>
+          <span>证据发现</span>
+        </ElMenuItem>
         <ElMenuItem index="search">
           <ElIcon><Search /></ElIcon>
-          <span>知识检索</span>
+          <span>可信检索</span>
         </ElMenuItem>
-        <ElMenuItem index="knowledge">
-          <ElIcon><Collection /></ElIcon>
-          <span>知识维护</span>
-        </ElMenuItem>
-        <ElMenuItem index="templates">
-          <ElIcon><Notebook /></ElIcon>
-          <span>知识模板</span>
-        </ElMenuItem>
-        <ElMenuItem index="projects">
-          <ElIcon><FolderOpened /></ElIcon>
-          <span>项目管理</span>
-        </ElMenuItem>
-        <ElMenuItem v-if="currentUser.isAdmin" index="accounts">
-          <ElIcon><UserFilled /></ElIcon>
-          <span>账号管理</span>
-        </ElMenuItem>
-        <ElMenuItem index="analysis">
-          <ElIcon><Cpu /></ElIcon>
-          <span>代码分析</span>
-        </ElMenuItem>
-        <ElMenuItem index="api-map">
-          <ElIcon><Link /></ElIcon>
-          <span>接口映射</span>
-        </ElMenuItem>
-        <ElMenuItem index="vectors">
-          <ElIcon><Files /></ElIcon>
-          <span>索引运维</span>
-        </ElMenuItem>
+        <ElSubMenu index="settings">
+          <template #title>
+            <ElIcon><Setting /></ElIcon>
+            <span>项目设置</span>
+          </template>
+          <ElMenuItem index="projects">
+            <ElIcon><FolderOpened /></ElIcon>
+            <span>项目管理</span>
+          </ElMenuItem>
+          <ElMenuItem v-if="currentUser.isAdmin" index="accounts">
+            <ElIcon><UserFilled /></ElIcon>
+            <span>账号权限</span>
+          </ElMenuItem>
+          <ElMenuItem index="knowledge">
+            <ElIcon><Collection /></ElIcon>
+            <span>文档库</span>
+          </ElMenuItem>
+        </ElSubMenu>
       </ElMenu>
 
       <ElButton class="health-button" :icon="Connection" @click="$emit('checkHealth')">

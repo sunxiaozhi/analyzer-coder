@@ -1,0 +1,8 @@
+1. score=0.2611 code endpoint getUser C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-47\test_cli_indexes_queries_and_p0\UserController.java:18
+   matched: endpoint, get, users
+   Java HTTP endpoint GET /api/users/{id}
+   Controller: UserController
+   Method: getUser
+   Annotation: @GetMapping("/{id}")
+   Package: com.example
+   File: C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-47\test_cli_indexes_queries_and_p0\UserController.java

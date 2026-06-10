@@ -124,6 +124,36 @@ def api_mapping() -> Any:
     return jsonify(analyzer_service().api_mapping(json_payload(request), current_user()))
 
 
+@api_bp.get("/knowledge/assets")
+def list_knowledge_assets() -> Any:
+    return jsonify(analyzer_service().list_knowledge_assets(request.args.to_dict(), current_user()))
+
+
+@api_bp.post("/knowledge/assets")
+def create_knowledge_asset() -> Any:
+    return jsonify(analyzer_service().create_knowledge_asset(json_payload(request), current_user())), 201
+
+
+@api_bp.put("/knowledge/assets/<asset_id>")
+def update_knowledge_asset(asset_id: str) -> Any:
+    return jsonify(analyzer_service().update_knowledge_asset(asset_id, json_payload(request), current_user()))
+
+
+@api_bp.delete("/knowledge/assets/<asset_id>")
+def delete_knowledge_asset(asset_id: str) -> Any:
+    return jsonify(analyzer_service().delete_knowledge_asset(asset_id, json_payload(request), current_user()))
+
+
+@api_bp.post("/knowledge/assets/<asset_id>/confirm")
+def confirm_knowledge_asset(asset_id: str) -> Any:
+    return jsonify(analyzer_service().transition_knowledge_asset(asset_id, json_payload(request), current_user(), "confirmed"))
+
+
+@api_bp.post("/knowledge/assets/<asset_id>/mark-stale")
+def mark_knowledge_asset_stale(asset_id: str) -> Any:
+    return jsonify(analyzer_service().transition_knowledge_asset(asset_id, json_payload(request), current_user(), "stale"))
+
+
 @api_bp.get("/kb/templates")
 def list_kb_templates() -> Any:
     return jsonify(analyzer_service().list_kb_templates(request.args.to_dict(), current_user()))

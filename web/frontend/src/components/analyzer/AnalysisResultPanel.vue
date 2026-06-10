@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import MarkdownIt from 'markdown-it'
 import { computed, shallowRef } from 'vue'
-import { Cpu, DataAnalysis, Document, Files, Operation } from '@element-plus/icons-vue'
+import { Cpu, Document, Files, Operation } from '@element-plus/icons-vue'
 import {
   ElButton,
   ElCard,
@@ -10,8 +10,7 @@ import {
   ElScrollbar,
   ElTag
 } from 'element-plus'
-import type { AnalyzerForm, JsonValue, OutputType } from '../../types'
-import JsonViewer from './JsonViewer.vue'
+import type { AnalyzerForm, OutputType } from '../../types'
 import MermaidDiagram from './MermaidDiagram.vue'
 
 const form = defineModel<AnalyzerForm>('form', { required: true })
@@ -22,7 +21,6 @@ const props = defineProps<{
   output: string
   outputTitle: string
   outputType: OutputType
-  parsedJson: JsonValue | null
   savedPath: string
   updatedAt: string
 }>()
@@ -33,7 +31,6 @@ defineEmits<{
 
 const modeOptions = [
   { label: '报告', value: 'report', badge: 'MD', icon: Document },
-  { label: 'JSON', value: 'json', badge: 'JSON', icon: DataAnalysis },
   { label: 'Mermaid 图', value: 'graph', badge: 'MMD', icon: Files }
 ] as const
 
@@ -57,7 +54,6 @@ const modeBadge = computed(() => {
 
 const outputBadge = computed(() => {
   if (!props.output) return '等待运行'
-  if (props.outputType === 'json') return '结构化结果'
   if (props.outputType === 'markdown') return '报告结果'
   if (props.outputType === 'mermaid') return mermaidView.value === 'preview' ? '图谱预览' : '图谱源码'
   return '文本结果'
@@ -181,8 +177,6 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
         <ElScrollbar v-else-if="outputType === 'markdown'" class="analysis-markdown">
           <article v-html="renderedMarkdown"></article>
         </ElScrollbar>
-
-        <JsonViewer v-else-if="outputType === 'json' && parsedJson" :value="parsedJson" />
 
         <ElScrollbar v-else-if="outputType === 'mermaid' && mermaidView === 'preview'" class="analysis-mermaid-preview">
           <MermaidDiagram :code="output" />

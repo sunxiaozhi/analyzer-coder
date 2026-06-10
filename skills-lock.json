@@ -7,6 +7,12 @@
       "skillPath": "skills/flask-api-development/SKILL.md",
       "computedHash": "9e5213f9fa4bde4175b717ab679d5a46497bd9edfff6673724a05320c741c6a9"
     },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "93f53fd1c0352d3d7ec17b8f73d7351bf76f4821e55d123c9d2abc2c53ba48e4"
+    },
     "vue-best-practices": {
       "source": "hyf0/vue-skills",
       "sourceType": "github",

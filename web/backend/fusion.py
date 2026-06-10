@@ -38,7 +38,7 @@ def build_evidence(
     record_list = list(records)
     result_ids = {result.id for result in results}
     code_results = [serialize_result(result) for result in results if _source(result.metadata) == "code"]
-    knowledge_results = [serialize_result(result) for result in results if _source(result.metadata) == "kb"]
+    knowledge_results = [serialize_result(result) for result in results if _is_knowledge(result.metadata)]
 
     related_code: list[dict[str, Any]] = []
     related_knowledge: list[dict[str, Any]] = []
@@ -46,12 +46,14 @@ def build_evidence(
     seen_related: set[str] = set()
 
     for result in results:
-        opposite_source = "kb" if _source(result.metadata) == "code" else "code"
+        result_is_code = _source(result.metadata) == "code"
+        opposite_source = "knowledge" if result_is_code else "code"
         anchors = _anchor_terms(query, result.text, result.metadata)
         candidates = [
             (record, _overlap(anchors, _record_terms(record)))
             for record in record_list
-            if record.id not in result_ids and _source(record.metadata) == opposite_source
+            if record.id not in result_ids
+            and ((_is_knowledge(record.metadata) if opposite_source == "knowledge" else _source(record.metadata) == opposite_source))
         ]
         candidates = [(record, score) for record, score in candidates if score > 0]
         candidates.sort(key=lambda item: item[1], reverse=True)
@@ -94,6 +96,10 @@ def _serialize_record(record: VectorRecord, relation_score: int) -> dict[str, An
 
 def _source(metadata: dict[str, Any]) -> str:
     return str(metadata.get("source_type", ""))
+
+
+def _is_knowledge(metadata: dict[str, Any]) -> bool:
+    return _source(metadata) in {"kb", "knowledge_asset"}
 
 
 def _anchor_terms(query: str, text: str, metadata: dict[str, Any]) -> set[str]:

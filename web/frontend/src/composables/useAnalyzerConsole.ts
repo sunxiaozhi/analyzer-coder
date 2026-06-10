@@ -7,7 +7,9 @@ import type {
   IndexRecord,
   IndexRecordFilters,
   IndexStatus,
-  JsonValue,
+  KnowledgeAsset,
+  KnowledgeAssetFilters,
+  KnowledgeAssetForm,
   KnowledgeFile,
   KnowledgeTemplate,
   KnowledgeTemplateForm,
@@ -90,6 +92,17 @@ interface KnowledgeFileResponse {
   root: string
 }
 
+interface KnowledgeAssetsResponse {
+  assets: KnowledgeAsset[]
+  types: string[]
+  statuses: string[]
+}
+
+interface KnowledgeAssetResponse {
+  asset?: KnowledgeAsset
+  assets: KnowledgeAsset[]
+}
+
 type ApiPayload = Record<string, unknown>
 
 const ACTIVE_SECTION_STORAGE_KEY = 'analyzer-console-active-section'
@@ -97,13 +110,19 @@ const CURRENT_USER_STORAGE_KEY = 'analyzer-console-current-user'
 const consoleSections: readonly ConsoleSection[] = [
   'projects',
   'accounts',
+  'assets',
+  'evidence',
   'knowledge',
-  'templates',
   'analysis',
   'api-map',
   'vectors',
   'search'
 ]
+
+const collapsedSectionMap: Partial<Record<ConsoleSection, ConsoleSection>> = {
+  'api-map': 'evidence',
+  analysis: 'evidence'
+}
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
   const text = await response.text()
@@ -131,8 +150,7 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
 
 function resolveAnalysisOutputType(mode: AnalyzerForm['mode']): OutputType {
   if (mode === 'report') return 'markdown'
-  if (mode === 'graph') return 'mermaid'
-  return 'json'
+  return 'mermaid'
 }
 
 function emptyAnalysisResult(mode: AnalyzerForm['mode']) {
@@ -147,9 +165,13 @@ function emptyAnalysisResult(mode: AnalyzerForm['mode']) {
 function readStoredActiveSection(): ConsoleSection {
   try {
     const section = window.localStorage.getItem(ACTIVE_SECTION_STORAGE_KEY)
-    return consoleSections.includes(section as ConsoleSection) ? (section as ConsoleSection) : 'projects'
+    if (section === 'review') return 'assets'
+    if (section === 'settings') return 'projects'
+    if (section === 'templates') return 'knowledge'
+    if (!consoleSections.includes(section as ConsoleSection)) return 'assets'
+    return collapsedSectionMap[section as ConsoleSection] ?? (section as ConsoleSection)
   } catch {
-    return 'projects'
+    return 'assets'
   }
 }
 
@@ -242,6 +264,25 @@ export function useAnalyzerConsole() {
     path: '',
     content: ''
   })
+  const assetForm = reactive<KnowledgeAssetForm>({
+    id: '',
+    type: 'business_rule',
+    title: '',
+    summary: '',
+    content: '',
+    status: 'draft',
+    ownerUserId: '',
+    reviewerUserId: '',
+    tagsText: '',
+    evidence: [],
+    sourcePath: '',
+    reviewDueAt: ''
+  })
+  const assetFilters = reactive<KnowledgeAssetFilters>({
+    type: '',
+    status: '',
+    query: ''
+  })
 
   const status = shallowRef('未连接')
   const busy = shallowRef(false)
@@ -251,7 +292,6 @@ export function useAnalyzerConsole() {
   const authReady = shallowRef(false)
   const analysisResultsByMode = reactive({
     report: emptyAnalysisResult('report'),
-    json: emptyAnalysisResult('json'),
     graph: emptyAnalysisResult('graph')
   })
   const indexOutput = shallowRef('')
@@ -274,12 +314,15 @@ export function useAnalyzerConsole() {
   const apiMappingMessage = shallowRef('')
   const kbFiles = ref<KnowledgeFile[]>([])
   const kbTemplates = ref<KnowledgeTemplate[]>([])
+  const knowledgeAssets = ref<KnowledgeAsset[]>([])
+  const selectedAssetId = shallowRef('')
   const selectedKbPath = shallowRef('')
   const kbDraftPath = shallowRef('domain/new-topic.md')
   const kbContent = shallowRef('')
   const kbRoot = shallowRef('')
   const kbMessage = shallowRef('')
   const templateMessage = shallowRef('')
+  const assetMessage = shallowRef('')
   const projectMessage = shallowRef('')
   const projectMessageProjectId = shallowRef('')
   const projects = ref<ProjectRecord[]>([])
@@ -298,15 +341,6 @@ export function useAnalyzerConsole() {
   const analysisSavedPath = computed(() => currentAnalysisResult.value.savedPath)
   const analysisOutputType = computed(() => currentAnalysisResult.value.outputType)
   const analysisUpdatedAt = computed(() => currentAnalysisResult.value.updatedAt)
-
-  const analysisParsedJson = computed<JsonValue | null>(() => {
-    if (analysisOutputType.value !== 'json' || !analysisOutput.value) return null
-    try {
-      return JSON.parse(analysisOutput.value) as JsonValue
-    } catch {
-      return null
-    }
-  })
 
   async function requestJson<T>(url: string, payload: Record<string, unknown>): Promise<T> {
     busy.value = true
@@ -387,6 +421,7 @@ export function useAnalyzerConsole() {
       }
       await loadKbFiles()
       await loadKbTemplates()
+      await loadKnowledgeAssets()
       await loadIndexStatus()
       await loadIndexRecords()
     } catch (error) {
@@ -413,11 +448,14 @@ export function useAnalyzerConsole() {
       projects.value = []
       users.value = []
       form.projectId = ''
-      activeSection.value = 'projects'
+      activeSection.value = 'assets'
       selectedKbPath.value = ''
       kbContent.value = ''
       kbTemplates.value = []
+      knowledgeAssets.value = []
+      selectedAssetId.value = ''
       resetTemplateForm()
+      resetAssetForm()
       authBusy.value = false
       authMessage.value = ''
     }
@@ -441,6 +479,7 @@ export function useAnalyzerConsole() {
       }
       await loadKbFiles()
       await loadKbTemplates()
+      await loadKnowledgeAssets()
       await loadIndexStatus()
       await loadIndexRecords()
     } catch {
@@ -651,6 +690,136 @@ export function useAnalyzerConsole() {
     templateForm.content = ''
   }
 
+  function resetAssetForm() {
+    selectedAssetId.value = ''
+    assetForm.id = ''
+    assetForm.type = 'business_rule'
+    assetForm.title = ''
+    assetForm.summary = ''
+    assetForm.content = ''
+    assetForm.status = 'draft'
+    assetForm.ownerUserId = currentUser.value?.id ?? ''
+    assetForm.reviewerUserId = ''
+    assetForm.tagsText = ''
+    assetForm.evidence = []
+    assetForm.sourcePath = ''
+    assetForm.reviewDueAt = ''
+  }
+
+  function editAsset(asset: KnowledgeAsset) {
+    assetForm.id = asset.id
+    assetForm.type = asset.type
+    assetForm.title = asset.title
+    assetForm.summary = asset.summary
+    assetForm.content = asset.content
+    assetForm.status = asset.status
+    assetForm.ownerUserId = asset.ownerUserId
+    assetForm.reviewerUserId = asset.reviewerUserId
+    assetForm.tagsText = asset.tags.join(', ')
+    assetForm.evidence = asset.evidence.map((item) => ({ ...item }))
+    assetForm.sourcePath = asset.sourcePath
+    assetForm.reviewDueAt = asset.reviewDueAt
+    selectedAssetId.value = asset.id
+  }
+
+  function assetPayload() {
+    return {
+      projectId: form.projectId,
+      type: assetForm.type,
+      title: assetForm.title,
+      summary: assetForm.summary,
+      content: assetForm.content,
+      status: assetForm.status,
+      ownerUserId: assetForm.ownerUserId,
+      reviewerUserId: assetForm.reviewerUserId,
+      tags: assetForm.tagsText,
+      evidence: assetForm.evidence,
+      sourcePath: assetForm.sourcePath,
+      reviewDueAt: assetForm.reviewDueAt
+    }
+  }
+
+  function assetParams() {
+    const params = new URLSearchParams({ projectId: form.projectId })
+    if (assetFilters.type) params.set('type', assetFilters.type)
+    if (assetFilters.status) params.set('status', assetFilters.status)
+    if (assetFilters.query) params.set('query', assetFilters.query)
+    return params
+  }
+
+  async function loadKnowledgeAssets() {
+    if (!currentUser.value || !form.projectId) {
+      knowledgeAssets.value = []
+      return
+    }
+    try {
+      const data = await kbRequest<KnowledgeAssetsResponse>(`/api/knowledge/assets?${assetParams()}`)
+      knowledgeAssets.value = data.assets
+      if (selectedAssetId.value && !data.assets.some((asset) => asset.id === selectedAssetId.value)) {
+        selectedAssetId.value = ''
+        resetAssetForm()
+      }
+    } catch (error) {
+      knowledgeAssets.value = []
+      assetMessage.value = error instanceof Error ? error.message : '知识资产加载失败'
+    }
+  }
+
+  async function createKnowledgeAsset() {
+    const data = await kbRequest<KnowledgeAssetResponse>('/api/knowledge/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(assetPayload())
+    })
+    knowledgeAssets.value = data.assets
+    if (data.asset) editAsset(data.asset)
+    assetMessage.value = '知识资产已创建'
+  }
+
+  async function updateKnowledgeAsset() {
+    if (!assetForm.id) return
+    const data = await kbRequest<KnowledgeAssetResponse>(`/api/knowledge/assets/${encodeURIComponent(assetForm.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(assetPayload())
+    })
+    knowledgeAssets.value = data.assets
+    if (data.asset) editAsset(data.asset)
+    assetMessage.value = '知识资产已保存'
+  }
+
+  async function deleteKnowledgeAsset(assetId: string) {
+    const data = await kbRequest<{ deleted: string; assets: KnowledgeAsset[] }>(
+      `/api/knowledge/assets/${encodeURIComponent(assetId)}`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: form.projectId })
+      }
+    )
+    knowledgeAssets.value = data.assets
+    if (assetForm.id === assetId) {
+      selectedAssetId.value = ''
+      resetAssetForm()
+    }
+    assetMessage.value = `已删除：${data.deleted}`
+  }
+
+  async function transitionKnowledgeAsset(assetId: string, action: 'confirm' | 'mark-stale') {
+    const endpoint = action === 'confirm' ? 'confirm' : 'mark-stale'
+    const data = await kbRequest<KnowledgeAssetResponse>(
+      `/api/knowledge/assets/${encodeURIComponent(assetId)}/${endpoint}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: form.projectId })
+      }
+    )
+    knowledgeAssets.value = data.assets
+    if (data.asset && assetForm.id === assetId) editAsset(data.asset)
+    assetMessage.value = action === 'confirm' ? '知识资产已确认' : '知识资产已标记待复审'
+  }
+
   async function createKbTemplate() {
     const data = await kbRequest<KnowledgeTemplateResponse>('/api/kb/templates', {
       method: 'POST',
@@ -792,7 +961,7 @@ export function useAnalyzerConsole() {
     })
     projects.value = [...projects.value, data.project]
     form.projectId = data.project.id
-    activeSection.value = 'analysis'
+    activeSection.value = 'assets'
     form.path = '.'
     form.codePath = '.'
     form.kbPath = 'docs'
@@ -950,10 +1119,15 @@ export function useAnalyzerConsole() {
     }
     if (section === 'knowledge') {
       await loadKbFiles()
+      await loadKbTemplates()
       return
     }
-    if (section === 'templates') {
-      await loadKbTemplates()
+    if (section === 'assets') {
+      await loadKnowledgeAssets()
+      return
+    }
+    if (section === 'evidence') {
+      await loadIndexStatus()
       return
     }
     if (section === 'vectors') {
@@ -985,6 +1159,9 @@ export function useAnalyzerConsole() {
       apiMappingMessage.value = ''
       projectMessage.value = ''
       projectMessageProjectId.value = ''
+      knowledgeAssets.value = []
+      selectedAssetId.value = ''
+      assetMessage.value = ''
       if (projectId) {
         form.path = '.'
         form.codePath = '.'
@@ -1003,9 +1180,11 @@ export function useAnalyzerConsole() {
       selectedKbPath.value = ''
       kbContent.value = ''
       resetTemplateForm()
+      resetAssetForm()
       updateLastProject(projectId)
       loadKbFiles()
       loadKbTemplates()
+      loadKnowledgeAssets()
       loadAnalysisResult()
       loadIndexStatus()
       loadIndexRecords()
@@ -1025,8 +1204,10 @@ export function useAnalyzerConsole() {
       selectedKbPath.value = ''
       kbContent.value = ''
       resetTemplateForm()
+      resetAssetForm()
       loadKbFiles()
       loadKbTemplates()
+      loadKnowledgeAssets()
     }
   )
 
@@ -1056,7 +1237,6 @@ export function useAnalyzerConsole() {
     analysisOutputTitle,
     analysisOutputType,
     analysisUpdatedAt,
-    analysisParsedJson,
     indexOutput,
     indexSavedPath,
     indexStatus,
@@ -1073,6 +1253,8 @@ export function useAnalyzerConsole() {
     apiMappingMessage,
     kbFiles,
     kbTemplates,
+    knowledgeAssets,
+    selectedAssetId,
     selectedKbPath,
     kbDraftPath,
     kbContent,
@@ -1080,6 +1262,9 @@ export function useAnalyzerConsole() {
     kbMessage,
     templateForm,
     templateMessage,
+    assetForm,
+    assetFilters,
+    assetMessage,
     projectMessage,
     projectMessageProjectId,
     projects,
@@ -1110,6 +1295,13 @@ export function useAnalyzerConsole() {
     updateUserAccess,
     loadKbFiles,
     loadKbTemplates,
+    loadKnowledgeAssets,
+    resetAssetForm,
+    editAsset,
+    createKnowledgeAsset,
+    updateKnowledgeAsset,
+    deleteKnowledgeAsset,
+    transitionKnowledgeAsset,
     loadKbFile,
     createKbFile,
     saveKbFile,

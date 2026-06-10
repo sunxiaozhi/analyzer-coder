@@ -1,0 +1,8 @@
+1. score=0.5401 kb document Registration C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_indexes_queries_and_p0\docs\registration.md:1
+   matched: phone, registration, unique
+   Knowledge document registration.md
+   Section: Registration
+   File: C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_indexes_queries_and_p0\docs\registration.md
+   # Registration
+   
+   Phone number must be unique during registration.

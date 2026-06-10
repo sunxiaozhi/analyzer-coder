@@ -31,9 +31,14 @@ defineEmits<{
 
 const sourceOptions = [
   { label: '全部来源', value: '' },
+  { label: '可信知识资产', value: 'knowledge_asset' },
+  { label: '知识文档', value: 'kb' },
   { label: '仅代码', value: 'code' },
-  { label: '仅知识库', value: 'kb' }
 ] as const
+
+const orderedResults = computed(() =>
+  [...props.queryResults].sort((left, right) => resultWeight(right) - resultWeight(left))
+)
 
 const resultSummary = computed(() => ({
   direct: props.queryResults.length,
@@ -52,14 +57,31 @@ const filterLabel = computed(() => {
 })
 
 function sourceLabel(item: QueryResult) {
+  if (item.metadata.source_type === 'knowledge_asset') return '知识资产'
   if (item.metadata.source_type === 'kb') return '知识库'
   if (item.metadata.source_type === 'code') return '代码'
   return item.metadata.source_type || '未知'
 }
 
+function resultWeight(item: QueryResult) {
+  if (item.metadata.source_type === 'knowledge_asset' && item.metadata.status === 'confirmed') return 40
+  if (item.metadata.source_type === 'knowledge_asset') return 30
+  if (item.metadata.source_type === 'kb') return 20
+  if (item.metadata.source_type === 'code') return 10
+  return 0
+}
+
+function sourceTagType(item: QueryResult) {
+  if (item.metadata.source_type === 'knowledge_asset') {
+    return item.metadata.status === 'confirmed' ? 'success' : 'warning'
+  }
+  if (item.metadata.source_type === 'kb') return 'warning'
+  return 'primary'
+}
+
 function itemTitle(item: QueryResult) {
   const metadata = item.metadata
-  return String(metadata.symbol_name || metadata.doc_name || metadata.section || metadata.kind || '检索片段')
+  return String(metadata.title || metadata.symbol_name || metadata.doc_name || metadata.section || metadata.kind || '检索片段')
 }
 
 function locationLabel(item: QueryResult) {
@@ -71,6 +93,15 @@ function locationLabel(item: QueryResult) {
 function scoreLabel(score: number) {
   return score.toFixed(4)
 }
+
+function trustLabel(item: QueryResult) {
+  if (item.metadata.source_type !== 'knowledge_asset') return ''
+  if (item.metadata.status === 'confirmed') return '已确认'
+  if (item.metadata.status === 'stale') return '待复审'
+  if (item.metadata.status === 'pending_review') return '待确认'
+  if (item.metadata.status === 'archived') return '已归档'
+  return '草稿'
+}
 </script>
 
 <template>
@@ -79,8 +110,8 @@ function scoreLabel(score: number) {
       <div class="search-heading">
         <ElIcon><Search /></ElIcon>
         <div>
-          <h2>知识检索</h2>
-          <span>{{ filterLabel }} · 语义检索与关联证据</span>
+          <h2>可信检索</h2>
+          <span>{{ filterLabel }} · 已确认知识优先，代码片段作为证据</span>
         </div>
       </div>
 
@@ -140,20 +171,21 @@ function scoreLabel(score: number) {
         </template>
 
         <ElScrollbar class="search-results-scroll">
-          <ElEmpty v-if="!queryResults.length" description="输入问题并执行检索后显示结果。" />
+          <ElEmpty v-if="!queryResults.length" description="输入问题并执行可信检索后显示结果。" />
           <div v-else class="search-result-list">
-            <article v-for="item in queryResults" :key="item.id" class="search-result-item">
+            <article v-for="item in orderedResults" :key="item.id" class="search-result-item">
               <div class="search-result-head">
                 <div class="search-result-title">
                   <ElIcon><Document /></ElIcon>
                   <strong>{{ itemTitle(item) }}</strong>
                 </div>
-                <ElTag :type="item.metadata.source_type === 'kb' ? 'warning' : 'primary'" effect="plain">
+                <ElTag :type="sourceTagType(item)" effect="plain">
                   {{ sourceLabel(item) }} / {{ item.metadata.kind }}
                 </ElTag>
               </div>
               <div class="search-result-meta">
                 <span>{{ locationLabel(item) }}</span>
+                <span v-if="trustLabel(item)">{{ trustLabel(item) }}</span>
                 <span>score {{ scoreLabel(item.score) }}</span>
               </div>
               <pre>{{ item.text }}</pre>

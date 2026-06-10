@@ -6,13 +6,15 @@ import AccountManagementPanel from './components/analyzer/AccountManagementPanel
 import AnalyzerSidebar from './components/analyzer/AnalyzerSidebar.vue'
 import AnalysisResultPanel from './components/analyzer/AnalysisResultPanel.vue'
 import ApiMappingPanel from './components/analyzer/ApiMappingPanel.vue'
+import EvidenceDiscoveryPanel from './components/analyzer/EvidenceDiscoveryPanel.vue'
+import KnowledgeAssetPanel from './components/analyzer/KnowledgeAssetPanel.vue'
 import KnowledgeBasePanel from './components/analyzer/KnowledgeBasePanel.vue'
-import KnowledgeTemplatePanel from './components/analyzer/KnowledgeTemplatePanel.vue'
 import LoginPanel from './components/analyzer/LoginPanel.vue'
 import ProjectManagementPanel from './components/analyzer/ProjectManagementPanel.vue'
 import SemanticSearchPanel from './components/analyzer/SemanticSearchPanel.vue'
 import VectorManagementPanel from './components/analyzer/VectorManagementPanel.vue'
 import { useAnalyzerConsole } from './composables/useAnalyzerConsole'
+import type { ConsoleSection } from './types'
 
 const {
   form,
@@ -31,7 +33,6 @@ const {
   analysisOutputTitle,
   analysisOutputType,
   analysisUpdatedAt,
-  analysisParsedJson,
   indexOutput,
   indexSavedPath,
   indexStatus,
@@ -48,12 +49,15 @@ const {
   apiMappingMessage,
   kbFiles,
   kbTemplates,
+  knowledgeAssets,
+  selectedAssetId,
   selectedKbPath,
   kbDraftPath,
   kbContent,
   kbRoot,
-  templateForm,
-  templateMessage,
+  assetForm,
+  assetFilters,
+  assetMessage,
   projectMessage,
   projectMessageProjectId,
   projects,
@@ -82,26 +86,31 @@ const {
   updateUserAccess,
   loadKbFiles,
   loadKbTemplates,
+  loadKnowledgeAssets,
+  resetAssetForm,
+  editAsset,
+  createKnowledgeAsset,
+  updateKnowledgeAsset,
+  deleteKnowledgeAsset,
+  transitionKnowledgeAsset,
   loadKbFile,
   createKbFile,
   saveKbFile,
   deleteKbFile,
-  createKbTemplate,
-  updateKbTemplate,
-  deleteKbTemplate,
   rebuildKnowledgeIndex
 } = useAnalyzerConsole()
 
 const sectionTitle = computed(() => {
-  const titles = {
+  const titles: Record<ConsoleSection, string> = {
     projects: '项目管理',
     accounts: '账号管理',
+    assets: '知识资产',
+    evidence: '证据发现',
     analysis: '代码分析',
     'api-map': '接口映射',
     knowledge: '知识维护',
-    templates: '知识模板',
     vectors: '索引运维',
-    search: '语义检索'
+    search: '可信检索'
   }
   return titles[activeSection.value]
 })
@@ -109,13 +118,13 @@ const sectionTitle = computed(() => {
 const breadcrumbItems = computed(() => {
   if (selectedProject.value && activeSection.value !== 'projects' && activeSection.value !== 'accounts') {
     return [
-      { label: '代码智库', section: 'projects' as const },
+      { label: '可信知识', section: 'projects' as const },
       { label: selectedProject.value.name, section: 'projects' as const },
       { label: sectionTitle.value, section: activeSection.value }
     ]
   }
   return [
-    { label: '代码智库', section: 'projects' as const },
+    { label: '可信知识', section: 'projects' as const },
     { label: sectionTitle.value, section: activeSection.value }
   ]
 })
@@ -125,6 +134,10 @@ const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value
 async function refreshIndexData() {
   await loadIndexStatus()
   await loadIndexRecords()
+}
+
+function openSection(section: ConsoleSection) {
+  activeSection.value = section
 }
 </script>
 
@@ -225,10 +238,45 @@ async function refreshIndexData() {
         :output="analysisOutput"
         :output-title="analysisOutputTitle"
         :output-type="analysisOutputType"
-        :parsed-json="analysisParsedJson"
         :saved-path="analysisSavedPath"
         :updated-at="analysisUpdatedAt"
         @analyze="analyze"
+      />
+
+      <KnowledgeAssetPanel
+        v-else-if="activeSection === 'assets'"
+        v-model:asset-form="assetForm"
+        v-model:filters="assetFilters"
+        :assets="knowledgeAssets"
+        :busy="kbBusy"
+        :current-user="currentUser"
+        :message="assetMessage"
+        :selected-asset-id="selectedAssetId"
+        :users="users"
+        @confirm-asset="transitionKnowledgeAsset($event, 'confirm')"
+        @create-asset="createKnowledgeAsset"
+        @delete-asset="deleteKnowledgeAsset"
+        @edit-asset="editAsset"
+        @mark-stale="transitionKnowledgeAsset($event, 'mark-stale')"
+        @refresh-assets="loadKnowledgeAssets"
+        @reset-asset="resetAssetForm"
+        @update-asset="updateKnowledgeAsset"
+      />
+
+      <EvidenceDiscoveryPanel
+        v-else-if="activeSection === 'evidence'"
+        :analysis-saved-path="analysisSavedPath"
+        :api-mapping="apiMapping"
+        :api-mapping-message="apiMappingMessage"
+        :api-mapping-saved-path="apiMappingSavedPath"
+        :busy="busy"
+        :index-status="indexStatus"
+        @analyze="analyze"
+        @build-api-mapping="buildApiMapping"
+        @index-project="indexProject"
+        @open-analysis="openSection('analysis')"
+        @open-api-map="openSection('api-map')"
+        @open-vectors="openSection('vectors')"
       />
 
       <KnowledgeBasePanel
@@ -246,18 +294,6 @@ async function refreshIndexData() {
         @rebuild-index="rebuildKnowledgeIndex"
         @save-file="saveKbFile"
         @select-file="loadKbFile"
-      />
-
-      <KnowledgeTemplatePanel
-        v-else-if="activeSection === 'templates'"
-        v-model:template-form="templateForm"
-        :busy="kbBusy"
-        :message="templateMessage"
-        :templates="kbTemplates"
-        @create-template="createKbTemplate"
-        @delete-template="deleteKbTemplate"
-        @refresh-templates="loadKbTemplates"
-        @update-template="updateKbTemplate"
       />
 
       <VectorManagementPanel
@@ -288,13 +324,33 @@ async function refreshIndexData() {
       />
 
       <SemanticSearchPanel
-        v-else
+        v-else-if="activeSection === 'search'"
         v-model:form="form"
         :busy="busy"
         :query-results="searchResults"
         :query-evidence="searchEvidence"
         :saved-path="searchSavedPath"
         @query-store="queryStore"
+      />
+
+      <KnowledgeAssetPanel
+        v-else
+        v-model:asset-form="assetForm"
+        v-model:filters="assetFilters"
+        :assets="knowledgeAssets"
+        :busy="kbBusy"
+        :current-user="currentUser"
+        :message="assetMessage"
+        :selected-asset-id="selectedAssetId"
+        :users="users"
+        @confirm-asset="transitionKnowledgeAsset($event, 'confirm')"
+        @create-asset="createKnowledgeAsset"
+        @delete-asset="deleteKnowledgeAsset"
+        @edit-asset="editAsset"
+        @mark-stale="transitionKnowledgeAsset($event, 'mark-stale')"
+        @refresh-assets="loadKnowledgeAssets"
+        @reset-asset="resetAssetForm"
+        @update-asset="updateKnowledgeAsset"
       />
     </ElContainer>
   </ElContainer>

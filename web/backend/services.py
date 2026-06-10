@@ -15,9 +15,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from java_analyzer.analyzer import JavaAnalyzer
 from java_analyzer.api_mapper import build_api_mapping
 from java_analyzer.chunker import build_chunks
-from java_analyzer.embedding import HashingEmbedder
+from java_analyzer.embedding import HashingEmbedder, cosine_similarity
 from java_analyzer.kb_loader import build_kb_chunks
-from java_analyzer.vector_store import JsonlVectorStore
+from java_analyzer.models import JavaVectorChunk
+from java_analyzer.vector_store import JsonlVectorStore, SearchResult, VectorRecord
 from java_analyzer.cli import (
     _build_graph,
     _build_report,
@@ -31,6 +32,16 @@ from web.backend.paths import relative_to_workspace, workspace_path
 from web.backend.validation import source_value
 
 KB_EXTENSIONS = {".adoc", ".markdown", ".md", ".rst", ".txt"}
+KNOWLEDGE_ASSET_TYPES = {
+    "business_rule",
+    "adr",
+    "incident",
+    "api_doc",
+    "standard",
+    "glossary",
+    "module_note",
+}
+KNOWLEDGE_ASSET_STATUSES = {"draft", "pending_review", "confirmed", "stale", "archived"}
 
 DEFAULT_KB_TEMPLATES = [
     {
@@ -143,7 +154,7 @@ class AnalyzerService:
                 database=str(config.get("database", "code_knowledge")),
             )
             self.mysql_store.initialize()
-            self.mysql_store.migrate_from_json(self.users_file, self.projects_file)
+            self.mysql_store.migrate_from_json(self.users_file, self.projects_file, self.projects_dir)
         self._ensure_default_admin()
 
     @classmethod
@@ -397,14 +408,20 @@ class AnalyzerService:
         append = bool(payload.get("append", False))
 
         chunks = self._build_source_chunks(context, payload, source)
-        store = JsonlVectorStore(store_path)
-        records = store.upsert_chunks(chunks, embedder=self.embedder) if append else store.write_chunks(chunks, embedder=self.embedder)
-        message = f"{'upserted' if append else 'indexed'} {len(records)} chunks into {self._relative(store_path)}"
+        if self.mysql_store and context.project_id:
+            records = self._vector_records_for_chunks(chunks)
+            self.mysql_store.save_vector_records(context.project_id, records, append=append)
+            store_label = "mysql://vector_records"
+        else:
+            store = JsonlVectorStore(store_path)
+            records = store.upsert_chunks(chunks, embedder=self.embedder) if append else store.write_chunks(chunks, embedder=self.embedder)
+            store_label = self._relative(store_path)
+        message = f"{'upserted' if append else 'indexed'} {len(records)} chunks into {store_label}"
         saved_path = _save_result(context.results_dir, "web-index", ".txt", message)
         return {
             "message": message,
             "count": len(records),
-            "store": self._relative(store_path),
+            "store": store_label,
             "savedPath": self._relative(saved_path),
             "projectId": context.project_id,
         }
@@ -412,10 +429,11 @@ class AnalyzerService:
     def index_status(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
         store_path = context.store_path(payload.get("store"))
-        if not store_path.exists():
+        records = self._load_vector_records(context, store_path)
+        if not records:
             return {
                 "exists": False,
-                "store": self._relative(store_path),
+                "store": self._vector_store_label(context, store_path),
                 "size": 0,
                 "updatedAt": "",
                 "total": 0,
@@ -424,7 +442,6 @@ class AnalyzerService:
                 "projectId": context.project_id,
             }
 
-        records = JsonlVectorStore(store_path).read_records()
         sources: dict[str, int] = {}
         kinds: dict[str, int] = {}
         for record in records:
@@ -434,9 +451,9 @@ class AnalyzerService:
             kinds[kind] = kinds.get(kind, 0) + 1
         return {
             "exists": True,
-            "store": self._relative(store_path),
-            "size": store_path.stat().st_size,
-            "updatedAt": datetime.fromtimestamp(store_path.stat().st_mtime, timezone.utc).isoformat(),
+            "store": self._vector_store_label(context, store_path),
+            "size": 0 if self.mysql_store and context.project_id else store_path.stat().st_size,
+            "updatedAt": utc_now() if self.mysql_store and context.project_id else datetime.fromtimestamp(store_path.stat().st_mtime, timezone.utc).isoformat(),
             "total": len(records),
             "sources": sources,
             "kinds": kinds,
@@ -452,18 +469,19 @@ class AnalyzerService:
         kind_filter = str(payload.get("kind") or "").strip()
         query = str(payload.get("query") or "").strip().lower()
 
-        if not store_path.exists():
+        records = self._load_vector_records(context, store_path)
+        if not records:
             return {
                 "records": [],
                 "total": 0,
                 "limit": limit,
                 "offset": offset,
-                "store": self._relative(store_path),
+                "store": self._vector_store_label(context, store_path),
                 "projectId": context.project_id,
             }
 
         filtered = []
-        for record in JsonlVectorStore(store_path).read_records():
+        for record in records:
             metadata = record.metadata
             source_type = str(metadata.get("source_type") or "")
             kind = str(metadata.get("kind") or "")
@@ -497,7 +515,7 @@ class AnalyzerService:
             "total": len(filtered),
             "limit": limit,
             "offset": offset,
-            "store": self._relative(store_path),
+            "store": self._vector_store_label(context, store_path),
             "projectId": context.project_id,
         }
 
@@ -510,16 +528,11 @@ class AnalyzerService:
         store_path = context.store_path(payload.get("store"))
         top_k = int(payload.get("topK", 5))
         filter_source = payload.get("filterSource")
-        metadata_filter = {"source_type": filter_source} if filter_source in {"code", "kb"} else None
-        store = JsonlVectorStore(store_path)
-        results = store.search(
-            query=query_text,
-            top_k=top_k,
-            metadata_filter=metadata_filter,
-            embedder=self.embedder,
-        )
+        metadata_filter = {"source_type": filter_source} if filter_source in {"code", "kb", "knowledge_asset"} else None
+        records = self._load_vector_records(context, store_path)
+        results = self._search_vector_records(records, query_text, top_k, metadata_filter)
         response = [serialize_result(result) for result in results]
-        evidence = build_evidence(query_text, results, store.read_records())
+        evidence = build_evidence(query_text, results, records)
         saved_path = _save_result(
             context.results_dir,
             "web-query",
@@ -530,7 +543,7 @@ class AnalyzerService:
             "results": response,
             "evidence": evidence,
             "savedPath": self._relative(saved_path),
-            "store": self._relative(store_path),
+            "store": self._vector_store_label(context, store_path),
             "projectId": context.project_id,
         }
 
@@ -557,6 +570,105 @@ class AnalyzerService:
             "savedPath": self._relative(saved_path),
             "projectId": context.project_id,
         }
+
+    def list_knowledge_assets(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        asset_type = str(payload.get("type") or "").strip()
+        status = str(payload.get("status") or "").strip()
+        query = str(payload.get("query") or "").strip().lower()
+        assets = self._load_knowledge_assets(context)
+        filtered = []
+        for asset in assets:
+            if asset_type and asset.type != asset_type:
+                continue
+            if status and asset.status != status:
+                continue
+            haystack = "\n".join(
+                [
+                    asset.title,
+                    asset.summary,
+                    asset.content,
+                    " ".join(asset.tags),
+                    " ".join(str(value) for evidence in asset.evidence for value in evidence.values()),
+                ]
+            ).lower()
+            if query and query not in haystack:
+                continue
+            filtered.append(asset)
+        return {
+            "assets": [asdict(asset) for asset in filtered],
+            "types": sorted(KNOWLEDGE_ASSET_TYPES),
+            "statuses": sorted(KNOWLEDGE_ASSET_STATUSES),
+            "projectId": context.project_id,
+        }
+
+    def create_knowledge_asset(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        assets = self._load_knowledge_assets(context)
+        asset = self._knowledge_asset_from_payload(payload, assets, user)
+        assets.append(asset)
+        self._save_knowledge_assets(context, assets)
+        return {
+            "asset": asdict(asset),
+            "assets": [asdict(item) for item in assets],
+            "projectId": context.project_id,
+        }
+
+    def update_knowledge_asset(self, asset_id: str, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        asset_id = asset_id.strip()
+        if not asset_id:
+            raise APIError("knowledge asset id is required.", 400)
+        assets = self._load_knowledge_assets(context)
+        for index, asset in enumerate(assets):
+            if asset.id == asset_id:
+                updated = self._knowledge_asset_from_payload(payload, assets, user, current=asset)
+                assets[index] = updated
+                self._save_knowledge_assets(context, assets)
+                return {
+                    "asset": asdict(updated),
+                    "assets": [asdict(item) for item in assets],
+                    "projectId": context.project_id,
+                }
+        raise APIError("knowledge asset not found.", 404)
+
+    def delete_knowledge_asset(self, asset_id: str, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        asset_id = asset_id.strip()
+        assets = self._load_knowledge_assets(context)
+        remaining = [asset for asset in assets if asset.id != asset_id]
+        if len(remaining) == len(assets):
+            raise APIError("knowledge asset not found.", 404)
+        self._save_knowledge_assets(context, remaining)
+        return {
+            "deleted": asset_id,
+            "assets": [asdict(item) for item in remaining],
+            "projectId": context.project_id,
+        }
+
+    def transition_knowledge_asset(
+        self,
+        asset_id: str,
+        payload: dict[str, Any],
+        user: "UserRecord",
+        status: str,
+    ) -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        assets = self._load_knowledge_assets(context)
+        for asset in assets:
+            if asset.id == asset_id:
+                asset.status = status
+                asset.updatedAt = utc_now()
+                if status == "confirmed":
+                    asset.reviewerUserId = user.id
+                    asset.confirmedAt = asset.updatedAt
+                self._save_knowledge_assets(context, assets)
+                return {
+                    "asset": asdict(asset),
+                    "assets": [asdict(item) for item in assets],
+                    "projectId": context.project_id,
+                }
+        raise APIError("knowledge asset not found.", 404)
 
     def list_kb_templates(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
@@ -665,6 +777,54 @@ class AnalyzerService:
         path.unlink()
         return {"deleted": self._relative_to_root(root, path), "root": self._relative(root), "projectId": context.project_id}
 
+    def _vector_records_for_chunks(self, chunks: list[Any]) -> list[VectorRecord]:
+        chunk_list = list(chunks)
+        embeddings = self.embedder.embed_many([chunk.text for chunk in chunk_list])
+        return [
+            VectorRecord(
+                id=chunk.id,
+                text=chunk.text,
+                metadata=chunk.metadata,
+                embedding=embedding,
+            )
+            for chunk, embedding in zip(chunk_list, embeddings, strict=True)
+        ]
+
+    def _load_vector_records(self, context: "AnalysisContext", store_path: Path) -> list[VectorRecord]:
+        if self.mysql_store and context.project_id:
+            return [VectorRecord(**item) for item in self.mysql_store.list_vector_records(context.project_id)]
+        return JsonlVectorStore(store_path).read_records()
+
+    def _vector_store_label(self, context: "AnalysisContext", store_path: Path) -> str:
+        if self.mysql_store and context.project_id:
+            return "mysql://vector_records"
+        return self._relative(store_path)
+
+    def _search_vector_records(
+        self,
+        records: list[VectorRecord],
+        query: str,
+        top_k: int,
+        metadata_filter: dict[str, Any] | None,
+    ) -> list[SearchResult]:
+        query_embedding = self.embedder.embed(query)
+        results = [
+            SearchResult(
+                id=record.id,
+                score=cosine_similarity(query_embedding, record.embedding),
+                text=record.text,
+                metadata=record.metadata,
+            )
+            for record in records
+            if self._matches_metadata_filter(record.metadata, metadata_filter)
+        ]
+        return sorted(results, key=lambda item: item.score, reverse=True)[:top_k]
+
+    def _matches_metadata_filter(self, metadata: dict[str, Any], metadata_filter: dict[str, Any] | None) -> bool:
+        if not metadata_filter:
+            return True
+        return all(metadata.get(key) == value for key, value in metadata_filter.items())
+
     def _analysis_output(
         self,
         context: "AnalysisContext",
@@ -725,6 +885,56 @@ class AnalyzerService:
             )
         if source in {"kb", "mixed"}:
             chunks.extend(build_kb_chunks(self._source_target(context, payload, "kb")))
+            chunks.extend(self._build_knowledge_asset_chunks(context))
+        return chunks
+
+    def _build_knowledge_asset_chunks(self, context: "AnalysisContext") -> list[JavaVectorChunk]:
+        chunks: list[JavaVectorChunk] = []
+        for asset in self._load_knowledge_assets(context):
+            evidence_lines = [
+                " - ".join(
+                    part
+                    for part in [
+                        str(evidence.get("type") or ""),
+                        str(evidence.get("filePath") or ""),
+                        str(evidence.get("symbolName") or ""),
+                        str(evidence.get("note") or ""),
+                    ]
+                    if part
+                )
+                for evidence in asset.evidence
+            ]
+            text = "\n".join(
+                part
+                for part in [
+                    f"Knowledge asset: {asset.title}",
+                    f"Type: {asset.type}",
+                    f"Status: {asset.status}",
+                    f"Summary: {asset.summary}" if asset.summary else "",
+                    f"Tags: {', '.join(asset.tags)}" if asset.tags else "",
+                    asset.content,
+                    "Evidence:\n" + "\n".join(evidence_lines) if evidence_lines else "",
+                ]
+                if part
+            )
+            chunks.append(
+                JavaVectorChunk(
+                    id=f"knowledge_asset:{asset.id}",
+                    text=text,
+                    metadata={
+                        "source_type": "knowledge_asset",
+                        "kind": asset.type,
+                        "asset_id": asset.id,
+                        "title": asset.title,
+                        "status": asset.status,
+                        "owner_user_id": asset.ownerUserId,
+                        "reviewer_user_id": asset.reviewerUserId,
+                        "tags": asset.tags,
+                        "file_path": asset.sourcePath,
+                        "start_line": 1,
+                    },
+                )
+            )
         return chunks
 
     def _source_target(self, context: "AnalysisContext", payload: dict[str, Any], source: str) -> Path:
@@ -735,10 +945,165 @@ class AnalyzerService:
     def _kb_root(self, context: "AnalysisContext", payload: dict[str, Any]) -> Path:
         return context.path(payload.get("kbPath") or "docs")
 
+    def _knowledge_assets_file(self, context: "AnalysisContext") -> Path:
+        return context.data_root / "knowledge_assets.json"
+
+    def _load_knowledge_assets(self, context: "AnalysisContext") -> list["KnowledgeAsset"]:
+        if self.mysql_store and context.project_id:
+            return [KnowledgeAsset(**item) for item in self.mysql_store.list_knowledge_assets(context.project_id)]
+        path = self._knowledge_assets_file(context)
+        if not path.exists():
+            return []
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assets: list[KnowledgeAsset] = []
+        for item in data.get("assets", []):
+            assets.append(
+                KnowledgeAsset(
+                    id=str(item.get("id") or ""),
+                    type=str(item.get("type") or "business_rule"),
+                    title=str(item.get("title") or ""),
+                    summary=str(item.get("summary") or ""),
+                    content=str(item.get("content") or ""),
+                    status=str(item.get("status") or "draft"),
+                    ownerUserId=str(item.get("ownerUserId") or ""),
+                    reviewerUserId=str(item.get("reviewerUserId") or ""),
+                    tags=[str(tag) for tag in item.get("tags", []) if str(tag).strip()],
+                    evidence=[
+                        {str(key): value for key, value in evidence.items()}
+                        for evidence in item.get("evidence", [])
+                        if isinstance(evidence, dict)
+                    ],
+                    sourcePath=str(item.get("sourcePath") or ""),
+                    confirmedAt=str(item.get("confirmedAt") or ""),
+                    reviewDueAt=str(item.get("reviewDueAt") or ""),
+                    createdAt=str(item.get("createdAt") or utc_now()),
+                    updatedAt=str(item.get("updatedAt") or utc_now()),
+                    createdBy=str(item.get("createdBy") or ""),
+                    updatedBy=str(item.get("updatedBy") or ""),
+                )
+            )
+        return assets
+
+    def _save_knowledge_assets(self, context: "AnalysisContext", assets: list["KnowledgeAsset"]) -> None:
+        if self.mysql_store and context.project_id:
+            self.mysql_store.save_knowledge_assets(context.project_id, assets)
+            return
+        path = self._knowledge_assets_file(context)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"assets": [asdict(asset) for asset in assets]}
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _knowledge_asset_from_payload(
+        self,
+        payload: dict[str, Any],
+        assets: list["KnowledgeAsset"],
+        user: "UserRecord",
+        current: "KnowledgeAsset | None" = None,
+    ) -> "KnowledgeAsset":
+        title = str(payload.get("title") or "").strip()
+        asset_type = str(payload.get("type") or "business_rule").strip()
+        status = str(payload.get("status") or (current.status if current else "draft")).strip()
+        if not title:
+            raise APIError("knowledge asset title is required.", 400)
+        if asset_type not in KNOWLEDGE_ASSET_TYPES:
+            raise APIError("knowledge asset type is invalid.", 400)
+        if status not in KNOWLEDGE_ASSET_STATUSES:
+            raise APIError("knowledge asset status is invalid.", 400)
+
+        now = utc_now()
+        existing_ids = {asset.id for asset in assets if not current or asset.id != current.id}
+        asset_id = current.id if current else self._unique_knowledge_asset_id(title, existing_ids)
+        confirmed_at = str(payload.get("confirmedAt") or (current.confirmedAt if current else ""))
+        reviewer_user_id = str(payload.get("reviewerUserId") or (current.reviewerUserId if current else ""))
+        if status == "confirmed" and not confirmed_at:
+            confirmed_at = now
+            reviewer_user_id = reviewer_user_id or user.id
+
+        return KnowledgeAsset(
+            id=asset_id,
+            type=asset_type,
+            title=title,
+            summary=str(payload.get("summary") or "").strip(),
+            content=str(payload.get("content") or ""),
+            status=status,
+            ownerUserId=str(payload.get("ownerUserId") or (current.ownerUserId if current else user.id)),
+            reviewerUserId=reviewer_user_id,
+            tags=self._normalize_tags(payload.get("tags")),
+            evidence=self._normalize_evidence(payload.get("evidence")),
+            sourcePath=str(payload.get("sourcePath") or (current.sourcePath if current else "")).strip(),
+            confirmedAt=confirmed_at,
+            reviewDueAt=str(payload.get("reviewDueAt") or "").strip(),
+            createdAt=current.createdAt if current else now,
+            updatedAt=now,
+            createdBy=current.createdBy if current else user.id,
+            updatedBy=user.id,
+        )
+
+    def _unique_knowledge_asset_id(self, title: str, existing: set[str]) -> str:
+        base = slugify(title)
+        if base not in existing:
+            return base
+        index = 2
+        while f"{base}-{index}" in existing:
+            index += 1
+        return f"{base}-{index}"
+
+    def _normalize_tags(self, value: object) -> list[str]:
+        if isinstance(value, str):
+            raw_tags = re.split(r"[,，\s]+", value)
+        elif isinstance(value, list):
+            raw_tags = [str(item) for item in value]
+        else:
+            raw_tags = []
+        tags: list[str] = []
+        for raw in raw_tags:
+            tag = raw.strip()
+            if tag and tag not in tags:
+                tags.append(tag)
+        return tags[:12]
+
+    def _normalize_evidence(self, value: object) -> list[dict[str, Any]]:
+        if not isinstance(value, list):
+            return []
+        evidence_items: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            evidence_type = str(item.get("type") or item.get("evidenceType") or "file").strip()
+            file_path = str(item.get("filePath") or item.get("file_path") or "").strip()
+            symbol_name = str(item.get("symbolName") or item.get("symbol_name") or "").strip()
+            note = str(item.get("note") or "").strip()
+            if not file_path and not symbol_name and not note:
+                continue
+            evidence_items.append(
+                {
+                    "type": evidence_type,
+                    "filePath": file_path,
+                    "symbolName": symbol_name,
+                    "startLine": int(item.get("startLine") or item.get("start_line") or 0),
+                    "endLine": int(item.get("endLine") or item.get("end_line") or 0),
+                    "note": note,
+                }
+            )
+        return evidence_items[:20]
+
     def _kb_templates_file(self, context: "AnalysisContext") -> Path:
         return context.data_root / "knowledge_templates.json"
 
     def _load_kb_templates(self, context: "AnalysisContext") -> list[dict[str, str]]:
+        if self.mysql_store and context.project_id:
+            templates = self.mysql_store.list_kb_templates(context.project_id)
+            if templates:
+                return templates
+            now = utc_now()
+            return [
+                {
+                    **template,
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+                for template in DEFAULT_KB_TEMPLATES
+            ]
         path = self._kb_templates_file(context)
         if not path.exists():
             now = utc_now()
@@ -766,6 +1131,9 @@ class AnalyzerService:
         return templates
 
     def _save_kb_templates(self, context: "AnalysisContext", templates: list[dict[str, str]]) -> None:
+        if self.mysql_store and context.project_id:
+            self.mysql_store.save_kb_templates(context.project_id, templates)
+            return
         path = self._kb_templates_file(context)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"templates": templates}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1029,6 +1397,27 @@ class AnalyzerService:
             raise APIError("git command timed out.", 504) from error
         if completed.stderr:
             return
+
+
+@dataclass
+class KnowledgeAsset:
+    id: str
+    type: str
+    title: str
+    summary: str
+    content: str
+    status: str
+    ownerUserId: str
+    reviewerUserId: str
+    tags: list[str]
+    evidence: list[dict[str, Any]]
+    sourcePath: str
+    confirmedAt: str
+    reviewDueAt: str
+    createdAt: str
+    updatedAt: str
+    createdBy: str
+    updatedBy: str
 
 
 @dataclass

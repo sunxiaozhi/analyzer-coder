@@ -1,6 +1,6 @@
 export type SourceType = 'code' | 'kb' | 'mixed'
 
-export type AnalysisMode = 'report' | 'json' | 'graph'
+export type AnalysisMode = 'report' | 'graph'
 
 export type ActiveView = 'analysis' | 'index' | 'query'
 
@@ -9,8 +9,9 @@ export type OutputType = 'markdown' | 'mermaid' | 'json' | 'text'
 export type ConsoleSection =
   | 'projects'
   | 'accounts'
+  | 'assets'
+  | 'evidence'
   | 'knowledge'
-  | 'templates'
   | 'analysis'
   | 'api-map'
   | 'vectors'
@@ -27,7 +28,7 @@ export interface AnalyzerForm {
   mode: AnalysisMode
   store: string
   query: string
-  filterSource: '' | 'code' | 'kb'
+  filterSource: '' | 'code' | 'kb' | 'knowledge_asset'
 }
 
 export interface ProjectRecord {
@@ -96,6 +97,67 @@ export interface KnowledgeTemplateForm {
   content: string
 }
 
+export type KnowledgeAssetType =
+  | 'business_rule'
+  | 'adr'
+  | 'incident'
+  | 'api_doc'
+  | 'standard'
+  | 'glossary'
+  | 'module_note'
+
+export type KnowledgeAssetStatus = 'draft' | 'pending_review' | 'confirmed' | 'stale' | 'archived'
+
+export interface KnowledgeEvidence {
+  type: string
+  filePath: string
+  symbolName: string
+  startLine: number
+  endLine: number
+  note: string
+}
+
+export interface KnowledgeAsset {
+  id: string
+  type: KnowledgeAssetType
+  title: string
+  summary: string
+  content: string
+  status: KnowledgeAssetStatus
+  ownerUserId: string
+  reviewerUserId: string
+  tags: string[]
+  evidence: KnowledgeEvidence[]
+  sourcePath: string
+  confirmedAt: string
+  reviewDueAt: string
+  createdAt: string
+  updatedAt: string
+  createdBy: string
+  updatedBy: string
+}
+
+export interface KnowledgeAssetForm {
+  id: string
+  type: KnowledgeAssetType
+  title: string
+  summary: string
+  content: string
+  status: KnowledgeAssetStatus
+  ownerUserId: string
+  reviewerUserId: string
+  tagsText: string
+  evidence: KnowledgeEvidence[]
+  sourcePath: string
+  reviewDueAt: string
+}
+
+export interface KnowledgeAssetFilters {
+  type: '' | KnowledgeAssetType
+  status: '' | KnowledgeAssetStatus
+  query: string
+}
+
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
 export interface QueryResultMetadata {
@@ -154,7 +216,7 @@ export interface IndexRecord {
 }
 
 export interface IndexRecordFilters {
-  source: '' | 'code' | 'kb'
+  source: '' | 'code' | 'kb' | 'knowledge_asset'
   kind: string
   query: string
 }

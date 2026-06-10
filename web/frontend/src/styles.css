@@ -2286,3 +2286,293 @@ h2 {
     padding: 14px;
   }
 }
+
+/* Frontend-design constraint: trusted knowledge archive workspace. */
+:root {
+  --archive-ink: #17201d;
+  --archive-panel: #f8faf7;
+  --archive-paper: #fffdf7;
+  --archive-line: #d9dfd1;
+  --archive-line-strong: #bbc8b7;
+  --trust: #1f7a68;
+  --trust-strong: #135e51;
+  --trust-soft: #e6f4ee;
+  --evidence: #a45c25;
+  --evidence-soft: #fff1df;
+  --archive-navy: #13231f;
+  --archive-navy-soft: #1e352f;
+  --app-bg: #eef2ec;
+  --surface: var(--archive-paper);
+  --surface-muted: var(--archive-panel);
+  --line: var(--archive-line);
+  --line-strong: var(--archive-line-strong);
+  --text: var(--archive-ink);
+  --text-soft: #53645c;
+  --text-muted: #53645c;
+  --text-faint: #7c8b83;
+  --accent: var(--trust);
+  --accent-strong: var(--trust-strong);
+  --accent-soft: var(--trust-soft);
+  --blue: var(--trust);
+  --blue-soft: var(--trust-soft);
+  --mono-font: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  --el-color-primary: var(--trust);
+  --el-color-success: var(--trust);
+  --el-color-warning: var(--evidence);
+  color: var(--text);
+  font-family: "Aptos", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: "Aptos", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+}
+
+.shell,
+.workspace {
+  background:
+    linear-gradient(90deg, rgba(19, 35, 31, 0.035) 1px, transparent 1px),
+    var(--app-bg);
+  background-size: 24px 24px;
+}
+
+.shell-aside,
+.sidebar {
+  background: var(--archive-navy);
+}
+
+.sidebar {
+  position: relative;
+}
+
+.sidebar::before {
+  background: linear-gradient(180deg, #c28a4a 0%, rgba(194, 138, 74, 0.22) 72%, transparent 100%);
+  border-radius: 999px;
+  content: "";
+  inset: 18px auto 18px 7px;
+  position: absolute;
+  width: 3px;
+}
+
+.brand-block,
+.current-project,
+.main-menu,
+.health-button {
+  position: relative;
+  z-index: 1;
+}
+
+.brand-logo {
+  filter: drop-shadow(0 10px 20px rgba(31, 122, 104, 0.26));
+}
+
+.brand-logo-link {
+  stroke: rgba(199, 240, 223, 0.9);
+}
+
+.brand-logo-node {
+  fill: #c7f0df;
+  stroke: rgba(12, 40, 34, 0.28);
+}
+
+.brand-block .eyebrow,
+.current-project span,
+.selected-project-chip span {
+  color: #b8d7ca;
+}
+
+.current-project,
+.selected-project-chip {
+  background: rgba(230, 244, 238, 0.08);
+  border-color: rgba(199, 240, 223, 0.2);
+  color: #d6efe5;
+}
+
+.main-menu.el-menu {
+  --el-menu-bg-color: transparent;
+  --el-menu-text-color: #d6efe5;
+  --el-menu-hover-bg-color: rgba(230, 244, 238, 0.1);
+  --el-menu-active-color: #fff8e7;
+}
+
+.main-menu .el-menu-item,
+.main-menu .el-sub-menu__title {
+  border-radius: 6px;
+  color: #d6efe5;
+  font-weight: 680;
+  letter-spacing: 0;
+}
+
+.main-menu .el-menu-item:hover,
+.main-menu .el-sub-menu__title:hover {
+  background: rgba(230, 244, 238, 0.1);
+  color: #fff8e7;
+}
+
+.main-menu .el-menu-item.is-active {
+  background: linear-gradient(135deg, var(--trust-strong), var(--trust));
+  box-shadow: inset 3px 0 0 #d8a15f;
+  color: #fff8e7;
+}
+
+.main-menu .el-sub-menu .el-menu-item {
+  color: #b8d7ca;
+  font-size: 0.86rem;
+  margin-left: 10px;
+  padding-left: 22px !important;
+  position: relative;
+}
+
+.main-menu .el-sub-menu .el-menu-item::before {
+  background: rgba(216, 161, 95, 0.8);
+  border-radius: 999px;
+  content: "";
+  height: 4px;
+  left: 11px;
+  position: absolute;
+  width: 4px;
+}
+
+.health-button.el-button {
+  background: rgba(230, 244, 238, 0.09);
+  border-color: rgba(199, 240, 223, 0.22);
+  color: #d6efe5;
+}
+
+.topbar,
+.asset-command,
+.evidence-command,
+.review-command,
+.settings-command,
+.search-command,
+.api-map-command,
+.vector-command,
+.kb-command,
+.template-command,
+.feature-controls.el-card {
+  background: linear-gradient(180deg, var(--archive-paper), var(--archive-panel));
+  border-color: var(--line);
+}
+
+.topbar {
+  box-shadow: 0 1px 0 rgba(23, 32, 29, 0.04);
+}
+
+.panel.el-card,
+.result-item.el-card,
+.project-card.el-card {
+  background: var(--archive-paper);
+  border-color: var(--line);
+  box-shadow: 0 8px 24px rgba(23, 32, 29, 0.06);
+}
+
+.panel .el-card__header,
+.result-item .el-card__header {
+  background:
+    linear-gradient(90deg, rgba(31, 122, 104, 0.08), transparent 42%),
+    var(--archive-panel);
+}
+
+.panel-title {
+  color: #24342f;
+}
+
+.panel-title .el-icon,
+.asset-heading > .el-icon {
+  color: var(--trust);
+}
+
+.asset-heading > .el-icon,
+.project-card-icon,
+.kb-file-icon {
+  background: var(--trust-soft);
+  color: var(--trust);
+}
+
+.asset-table :is(.el-table__row),
+.kb-file-item,
+.result-item.el-card {
+  background: rgba(255, 253, 247, 0.88);
+}
+
+.asset-table :is(.el-table__row:hover > td),
+.project-card.el-card.selected,
+.kb-file-item:hover,
+.kb-file-item.selected {
+  background: linear-gradient(90deg, rgba(31, 122, 104, 0.08), rgba(255, 253, 247, 0.96));
+}
+
+.asset-table-main strong,
+.result-title strong {
+  color: var(--archive-ink);
+}
+
+.evidence-heading strong,
+.evidence-row .el-input:first-child .el-input__wrapper,
+.result-source,
+.related-item.el-card {
+  border-color: var(--evidence);
+}
+
+.evidence-heading strong,
+.result-source,
+.related-item.el-card {
+  color: var(--evidence);
+}
+
+.evidence-row {
+  background: var(--evidence-soft);
+  border: 1px solid rgba(164, 92, 37, 0.16);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  background-color: #fffefa;
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus,
+.el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--trust) inset, 0 0 0 3px rgba(31, 122, 104, 0.12);
+}
+
+.el-button--primary {
+  background: var(--trust);
+  border-color: var(--trust);
+}
+
+.el-button--primary:hover,
+.el-button--primary:focus {
+  background: var(--trust-strong);
+  border-color: var(--trust-strong);
+}
+
+.el-tag.el-tag--success {
+  --el-tag-bg-color: var(--trust-soft);
+  --el-tag-border-color: rgba(31, 122, 104, 0.28);
+  --el-tag-text-color: var(--trust-strong);
+}
+
+.el-tag.el-tag--warning {
+  --el-tag-bg-color: var(--evidence-soft);
+  --el-tag-border-color: rgba(164, 92, 37, 0.28);
+  --el-tag-text-color: var(--evidence);
+}
+
+.markdown-output,
+.output,
+.json-viewer,
+.results-list,
+.output-scroll,
+.kb-preview,
+.result-item pre {
+  background: #fffefa;
+  border-color: var(--line);
+}
