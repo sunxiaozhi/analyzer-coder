@@ -117,14 +117,16 @@ const pendingMappingCount = computed(() => (mappingSummary.value?.methodMismatch
 .evidence-page {
   gap: 0;
   grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
   padding: 0;
 }
 
 .evidence-command {
   align-items: center;
   background:
-    linear-gradient(90deg, rgba(164, 92, 37, 0.1), transparent 48%),
-    linear-gradient(180deg, var(--archive-paper, #fffdf7), var(--archive-panel, #f8faf7));
+    linear-gradient(90deg, rgba(37, 99, 235, 0.1), transparent 48%),
+    linear-gradient(180deg, var(--archive-paper, #ffffff), var(--archive-panel, #f4f8ff));
   border-bottom: 1px solid var(--line);
   display: flex;
   gap: 16px;
@@ -141,9 +143,9 @@ const pendingMappingCount = computed(() => (mappingSummary.value?.methodMismatch
 
 .evidence-heading > .el-icon {
   align-items: center;
-  background: var(--archive-navy, #13231f);
+  background: var(--archive-navy, #071833);
   border-radius: 6px;
-  color: #fff8e7;
+  color: #dbeafe;
   display: inline-flex;
   flex: 0 0 40px;
   height: 40px;
@@ -166,18 +168,20 @@ const pendingMappingCount = computed(() => (mappingSummary.value?.methodMismatch
 }
 
 .evidence-workbench {
-  background: rgba(255, 253, 247, 0.74);
+  background: rgba(255, 255, 255, 0.86);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(23, 32, 29, 0.05);
-  display: grid;
+  box-shadow: 0 8px 24px rgba(15, 35, 70, 0.08);
+  display: flex;
+  flex-direction: column;
   margin: 18px 26px 26px;
-  overflow: hidden;
+  min-height: 0;
+  overflow: auto;
 }
 
 .evidence-ledger-head {
   align-items: center;
-  background: var(--archive-panel, #f8faf7);
+  background: var(--archive-panel, #f4f8ff);
   border-bottom: 1px solid var(--line);
   display: flex;
   gap: 12px;

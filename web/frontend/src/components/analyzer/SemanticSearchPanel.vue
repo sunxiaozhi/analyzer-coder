@@ -510,7 +510,7 @@ function trustLabel(item: QueryResult) {
 }
 
 .evidence-item.kb {
-  border-left-color: #d97706;
+  border-left-color: #0284c7;
 }
 
 .evidence-item strong,

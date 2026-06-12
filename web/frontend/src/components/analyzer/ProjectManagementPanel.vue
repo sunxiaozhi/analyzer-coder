@@ -441,10 +441,10 @@ function formatDate(value: string) {
 
 .code-project-success {
   align-items: center;
-  background: #ecfdf5;
-  border: 1px solid #bbf7d0;
+  background: #eaf2ff;
+  border: 1px solid #bfdbfe;
   border-radius: 8px;
-  color: #047857;
+  color: #1d4ed8;
   display: flex;
   font-size: 0.84rem;
   font-weight: 700;

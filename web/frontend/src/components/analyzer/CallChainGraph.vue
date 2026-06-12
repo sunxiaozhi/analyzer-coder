@@ -380,17 +380,17 @@ function kindLabel(kind: NodeKind): string {
 }
 
 .graph-node-method .node-box {
-  fill: #f2f0ff;
-  stroke: #6d5bd0;
+  fill: #eef2ff;
+  stroke: #4f46e5;
 }
 
 .graph-node-sql .node-box {
-  fill: #fff4df;
-  stroke: #b7791f;
+  fill: #e7f6ff;
+  stroke: #0284c7;
 }
 
 .graph-node-table .node-box {
-  fill: #f7ecff;
-  stroke: #8b5bb7;
+  fill: #eff6ff;
+  stroke: #2563eb;
 }
 </style>

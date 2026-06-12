@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import MarkdownIt from 'markdown-it'
 import { computed, shallowRef } from 'vue'
-import { CircleCheck, Delete, Edit, Filter, Memo, Plus, Refresh, Search, View, Warning } from '@element-plus/icons-vue'
+import { CircleCheck, Delete, Edit, Filter, Plus, Refresh, Search, View, Warning } from '@element-plus/icons-vue'
 import {
   ElButton,
-  ElCard,
   ElDialog,
   ElEmpty,
   ElForm,
@@ -20,6 +19,7 @@ import {
   ElTable,
   ElTableColumn,
   ElTag,
+  ElTooltip,
   ElTree
 } from 'element-plus'
 import type {
@@ -205,30 +205,39 @@ function submitAsset() {
 
 <template>
   <div class="feature-page asset-page">
-    <section class="asset-command">
-      <div class="asset-heading">
-        <ElIcon><Memo /></ElIcon>
-        <div>
-          <h2>知识资产</h2>
-          <span>人工确认的业务规则、决策、故障经验和代码证据</span>
-        </div>
+    <section class="asset-topbar">
+      <div class="asset-title-block">
+        <span class="asset-kicker">Knowledge assets</span>
+        <h2>知识资产</h2>
+        <p>维护团队确认过的规则、决策、接口说明和故障经验。</p>
       </div>
 
-      <div class="asset-command-actions">
-        <ElButton :icon="Refresh" :loading="busy" @click="$emit('refreshAssets')">刷新</ElButton>
-        <ElButton type="primary" :icon="Plus" @click="openCreateDialog">新建知识资产</ElButton>
+      <div class="asset-topbar-actions">
+        <ElButton class="asset-quiet-button" :icon="Refresh" :loading="busy" @click="$emit('refreshAssets')">刷新</ElButton>
+        <ElButton class="asset-primary-button" type="primary" :icon="Plus" @click="openCreateDialog">新建资产</ElButton>
       </div>
     </section>
 
-    <section class="asset-list-layout">
-      <aside class="asset-filter-tree-panel" aria-label="知识资产筛选">
-        <div class="asset-filter-tree-heading">
+    <section class="asset-workbench">
+      <aside class="asset-filter-panel" aria-label="知识资产筛选">
+        <div class="asset-filter-heading">
           <span>
             <ElIcon><Filter /></ElIcon>
-            <span>筛选树</span>
+            <span>筛选</span>
           </span>
-          <ElTag type="info" effect="plain">{{ activeFilterLabel }}</ElTag>
+          <ElTag effect="plain">{{ activeFilterLabel }}</ElTag>
         </div>
+
+        <ElInput
+          v-model="filters.query"
+          class="asset-filter-search"
+          clearable
+          :prefix-icon="Search"
+          placeholder="搜索标题、正文、证据"
+          @change="$emit('applyFilters')"
+          @clear="$emit('applyFilters')"
+        />
+
         <ElTree
           class="asset-filter-tree"
           :current-node-key="activeTreeKey"
@@ -240,73 +249,61 @@ function submitAsset() {
         />
       </aside>
 
-      <div class="asset-list-main">
-        <ElCard class="panel asset-list-panel" shadow="never">
-          <div class="asset-toolbar">
-            <ElInput
-              v-model="filters.query"
-              class="asset-search"
-              clearable
-              :prefix-icon="Search"
-              placeholder="搜索标题、正文、证据"
-              @change="$emit('applyFilters')"
-              @clear="$emit('applyFilters')"
-            />
-            <ElButton :icon="Refresh" :loading="busy" @click="$emit('applyFilters')">应用筛选</ElButton>
+      <main class="asset-data-panel">
+        <div class="asset-data-toolbar">
+          <div class="asset-data-title">
+            <strong>资产列表</strong>
+            <span>{{ pagination.total }} 条</span>
           </div>
+          <ElButton class="asset-quiet-button" size="small" :icon="Refresh" :loading="busy" @click="$emit('applyFilters')">应用筛选</ElButton>
+        </div>
 
-          <div class="asset-table-frame">
-            <ElEmpty v-if="!assets.length" description="暂无知识资产。" />
-            <ElTable v-else :data="assets" class="asset-table" height="100%" row-key="id" stripe>
-              <ElTableColumn label="知识资产" min-width="420">
-                <template #default="{ row }">
-                  <div class="asset-table-main">
-                    <strong>{{ row.title }}</strong>
-                    <p>{{ row.summary || row.content || '暂无摘要' }}</p>
-                  </div>
-                </template>
-              </ElTableColumn>
-              <ElTableColumn label="标签" min-width="160">
-                <template #default="{ row }">
-                  <div v-if="row.tags.length" class="asset-tag-list">
-                    <ElTag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</ElTag>
-                  </div>
-                  <span v-else class="asset-empty-cell">-</span>
-                </template>
-              </ElTableColumn>
-              <ElTableColumn label="治理" width="150">
-                <template #default="{ row }">
-                  <div class="asset-governance">
-                    <span class="trust-stamp" :class="`status-${row.status}`">{{ statusMeta(row.status).label }}</span>
-                    <small>{{ typeLabel(row.type) }}</small>
-                  </div>
-                </template>
-              </ElTableColumn>
-              <ElTableColumn label="责任与证据" width="150">
-                <template #default="{ row }">
-                  <div class="asset-owner-cell">
-                    <strong>{{ ownerLabel(row.ownerUserId) }}</strong>
-                    <span>{{ row.evidence.length }} 条证据</span>
-                  </div>
-                </template>
-              </ElTableColumn>
-              <ElTableColumn label="更新" width="126">
-                <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
-              </ElTableColumn>
-              <ElTableColumn label="操作" fixed="right" width="260">
-                <template #default="{ row }">
-                  <div class="asset-table-actions">
-                    <ElButton size="small" :icon="Edit" @click="openEditDialog(row)">编辑</ElButton>
-                    <ElButton size="small" type="success" :icon="CircleCheck" :loading="busy" @click="$emit('confirmAsset', row.id)">确认</ElButton>
-                    <ElButton size="small" :icon="Warning" :loading="busy" @click="$emit('markStale', row.id)">复审</ElButton>
-                    <ElButton size="small" type="danger" plain :icon="Delete" :loading="busy" @click="$emit('deleteAsset', row.id)">删除</ElButton>
-                  </div>
-                </template>
-              </ElTableColumn>
-            </ElTable>
-          </div>
-
-        </ElCard>
+        <div class="asset-table-frame">
+          <ElEmpty v-if="!assets.length" description="暂无知识资产。" />
+          <ElTable v-else :data="assets" class="asset-table" height="100%" row-key="id">
+            <ElTableColumn label="标题" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">
+                <strong class="asset-title-cell">{{ row.title }}</strong>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="类型" width="96">
+              <template #default="{ row }">
+                <span class="asset-type-cell">{{ typeLabel(row.type) }}</span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="状态" width="94">
+              <template #default="{ row }">
+                <span class="asset-status-pill" :class="`status-${row.status}`">{{ statusMeta(row.status).label }}</span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="负责人" width="104" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span class="asset-owner-name">{{ ownerLabel(row.ownerUserId) }}</span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="更新时间" width="108">
+              <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
+            </ElTableColumn>
+            <ElTableColumn label="操作" width="118" align="center" class-name="asset-actions-column">
+              <template #default="{ row }">
+                <div class="asset-table-actions">
+                  <ElTooltip content="编辑" placement="top">
+                    <ElButton aria-label="编辑" class="asset-icon-action" size="small" text :icon="Edit" title="编辑" @click="openEditDialog(row)" />
+                  </ElTooltip>
+                  <ElTooltip content="确认" placement="top">
+                    <ElButton aria-label="确认" class="asset-icon-action" size="small" text type="success" :icon="CircleCheck" :loading="busy" title="确认" @click="$emit('confirmAsset', row.id)" />
+                  </ElTooltip>
+                  <ElTooltip content="标记复审" placement="top">
+                    <ElButton aria-label="标记复审" class="asset-icon-action" size="small" text :icon="Warning" :loading="busy" title="标记复审" @click="$emit('markStale', row.id)" />
+                  </ElTooltip>
+                  <ElTooltip content="删除" placement="top">
+                    <ElButton aria-label="删除" class="asset-icon-action danger" size="small" text type="danger" :icon="Delete" :loading="busy" title="删除" @click="$emit('deleteAsset', row.id)" />
+                  </ElTooltip>
+                </div>
+              </template>
+            </ElTableColumn>
+          </ElTable>
+        </div>
 
         <footer class="asset-pagination">
           <span class="asset-pagination-total">共 {{ pagination.total }} 条</span>
@@ -322,7 +319,7 @@ function submitAsset() {
             @size-change="$emit('changePageSize', $event)"
           />
         </footer>
-      </div>
+      </main>
     </section>
 
     <ElDialog
@@ -330,10 +327,14 @@ function submitAsset() {
       class="asset-dialog"
       :close-on-click-modal="false"
       :title="editingExisting ? '编辑知识资产' : '新建知识资产'"
-      width="min(920px, 92vw)"
+      width="min(1040px, 94vw)"
     >
       <ElScrollbar class="asset-dialog-scroll">
         <ElForm label-position="top" class="control-form asset-form">
+          <ElFormItem label="标题">
+            <ElInput v-model="assetForm.title" clearable />
+          </ElFormItem>
+
           <div class="asset-form-grid">
             <ElFormItem label="知识类型">
               <ElSelect v-model="assetForm.type">
@@ -355,15 +356,15 @@ function submitAsset() {
             </ElFormItem>
           </div>
 
-          <ElFormItem label="标题">
-            <ElInput v-model="assetForm.title" clearable />
-          </ElFormItem>
-          <ElFormItem label="摘要">
-            <ElInput v-model="assetForm.summary" clearable />
-          </ElFormItem>
-          <ElFormItem label="标签">
-            <ElInput v-model="assetForm.tagsText" clearable />
-          </ElFormItem>
+          <div class="asset-form-grid secondary">
+            <ElFormItem label="摘要">
+              <ElInput v-model="assetForm.summary" clearable />
+            </ElFormItem>
+            <ElFormItem label="标签">
+              <ElInput v-model="assetForm.tagsText" clearable />
+            </ElFormItem>
+          </div>
+
           <ElFormItem label="正文（Markdown）">
             <ElTabs class="asset-markdown-tabs">
               <ElTabPane>
@@ -390,7 +391,7 @@ function submitAsset() {
           <div class="asset-selected-note">
             <template v-if="selectedAsset">
               <span>{{ typeLabel(selectedAsset.type) }}</span>
-              <span class="trust-stamp" :class="`status-${selectedAsset.status}`">{{ statusMeta(selectedAsset.status).label }}</span>
+              <span class="asset-status-pill" :class="`status-${selectedAsset.status}`">{{ statusMeta(selectedAsset.status).label }}</span>
             </template>
             <ElTag v-if="message" type="success" effect="plain">{{ message }}</ElTag>
           </div>
@@ -409,92 +410,125 @@ function submitAsset() {
 
 <style scoped>
 .asset-page {
+  --asset-accent: #2563eb;
+  --asset-accent-dark: #1d4ed8;
+  --asset-bg: #edf5ff;
+  --asset-danger: #c2413a;
+  --asset-ink: #17212b;
+  --asset-line: #d6e4f5;
+  --asset-muted: #647384;
+  --asset-panel: #ffffff;
+  --asset-soft: #eaf2ff;
+  background: var(--asset-bg);
   flex: 1 1 auto;
-  gap: 0;
+  gap: 16px;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
+  padding: 20px 24px 24px;
   width: 100%;
 }
 
-.asset-command {
-  align-items: center;
-  background:
-    linear-gradient(90deg, rgba(31, 122, 104, 0.1), transparent 46%),
-    linear-gradient(180deg, var(--archive-paper, #fffdf7) 0%, var(--archive-panel, #f8faf7) 100%);
-  border-bottom: 1px solid var(--line);
+.asset-topbar {
+  align-items: flex-end;
   display: flex;
-  gap: 16px;
+  gap: 18px;
   justify-content: space-between;
-  padding: 18px 26px 16px;
-}
-
-.asset-heading {
-  align-items: center;
-  display: flex;
-  gap: 12px;
   min-width: 0;
 }
 
-.asset-heading > .el-icon {
-  align-items: center;
-  background: var(--archive-navy, #13231f);
-  border-radius: 6px;
-  color: var(--accent);
-  display: inline-flex;
-  flex: 0 0 40px;
-  height: 40px;
-  justify-content: center;
-  width: 40px;
+.asset-title-block {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
-.asset-heading h2 {
-  color: var(--text);
-  font-size: 1.14rem;
+.asset-kicker {
+  color: var(--asset-accent);
+  font-size: 0.72rem;
   font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.asset-title-block h2 {
+  color: var(--asset-ink);
+  font-size: 1.36rem;
+  font-weight: 760;
+  line-height: 1.2;
   margin: 0;
 }
 
-.asset-heading span {
-  color: var(--text-faint);
-  display: block;
-  font-size: 0.78rem;
-  margin-top: 3px;
+.asset-title-block p {
+  color: var(--asset-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  margin: 0;
 }
 
-.asset-command-actions {
+.asset-topbar-actions {
   align-items: center;
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   justify-content: flex-end;
+  white-space: nowrap;
 }
 
-.asset-list-layout {
+.asset-primary-button.el-button {
+  background: var(--asset-accent);
+  border-color: var(--asset-accent);
+}
+
+.asset-primary-button.el-button:hover {
+  background: var(--asset-accent-dark);
+  border-color: var(--asset-accent-dark);
+}
+
+.asset-quiet-button.el-button {
+  background: #ffffff;
+  border-color: var(--asset-line);
+  color: #344456;
+}
+
+.asset-workbench {
   display: grid;
-  gap: 14px;
-  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 16px;
+  grid-template-columns: 228px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  padding: 18px 26px 26px;
 }
 
-.asset-filter-tree-panel {
-  background: rgba(255, 253, 247, 0.78);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  display: grid;
-  gap: 10px;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100%;
-  min-height: 0;
+.asset-filter-panel,
+.asset-data-panel {
+  background: var(--asset-panel);
+  border: 1px solid var(--asset-line);
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(27, 39, 51, 0.06);
   min-width: 0;
-  overflow: hidden;
-  padding: 12px;
 }
 
-.asset-filter-tree-heading {
+.asset-filter-panel {
+  display: grid;
+  gap: 12px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px;
+  position: relative;
+}
+
+.asset-filter-panel::before {
+  background: var(--asset-accent);
+  border-radius: 8px 0 0 8px;
+  content: "";
+  inset: 0 auto 0 0;
+  position: absolute;
+  width: 3px;
+}
+
+.asset-filter-heading {
   align-items: center;
   display: flex;
   gap: 8px;
@@ -502,21 +536,27 @@ function submitAsset() {
   min-width: 0;
 }
 
-.asset-filter-tree-heading > span {
+.asset-filter-heading > span {
   align-items: center;
-  color: var(--text-soft);
+  color: var(--asset-ink);
   display: inline-flex;
-  font-size: 0.82rem;
-  font-weight: 760;
-  gap: 7px;
+  font-size: 0.86rem;
+  font-weight: 740;
+  gap: 6px;
   min-width: 0;
 }
 
-.asset-filter-tree-heading :deep(.el-tag) {
-  max-width: 116px;
+.asset-filter-heading :deep(.el-tag) {
+  border-color: #cddbe6;
+  color: var(--asset-muted);
+  max-width: 112px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.asset-filter-search {
+  min-width: 0;
 }
 
 .asset-filter-tree {
@@ -526,56 +566,51 @@ function submitAsset() {
 }
 
 .asset-filter-tree :deep(.el-tree-node__content) {
-  border-radius: 5px;
-  color: var(--text-soft);
+  border-radius: 6px;
+  color: #405064;
   font-size: 0.82rem;
-  height: 34px;
+  height: 32px;
 }
 
 .asset-filter-tree :deep(.el-tree-node.is-current > .el-tree-node__content) {
-  background: rgba(31, 122, 104, 0.12);
-  color: var(--accent);
+  background: rgba(37, 99, 235, 0.11);
+  color: var(--asset-accent-dark);
   font-weight: 760;
 }
 
-.asset-list-main {
+.asset-data-panel {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.asset-list-panel {
-  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
 }
 
-.asset-list-panel :deep(.el-card__body) {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  padding: 0;
-}
-
-.asset-toolbar {
+.asset-data-toolbar {
   align-items: center;
-  background: var(--archive-panel, #f8faf7);
-  border-bottom: 1px solid var(--line);
-  display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(260px, 1fr) auto;
-  padding: 12px 14px;
+  border-bottom: 1px solid var(--asset-line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 13px 16px;
 }
 
-.asset-search {
-  max-width: 520px;
+.asset-data-title {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.asset-data-title strong {
+  color: var(--asset-ink);
+  font-size: 0.94rem;
+}
+
+.asset-data-title span {
+  color: var(--asset-muted);
+  font-size: 0.78rem;
 }
 
 .asset-table-frame {
@@ -590,27 +625,128 @@ function submitAsset() {
 }
 
 .asset-table {
+  --el-table-border-color: var(--asset-line);
+  --el-table-header-bg-color: #f7fafc;
   height: 100%;
   min-height: 0;
 }
 
+.asset-table :deep(.el-table__cell) {
+  border-bottom-color: var(--asset-line);
+}
+
+.asset-table :deep(.el-table__header th) {
+  background: #f7fafc;
+  color: #526276;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.asset-table :deep(.el-table__cell .cell) {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.asset-table :deep(.asset-actions-column .cell) {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.asset-table :deep(.el-table__row td) {
+  padding: 12px 0;
+}
+
+.asset-table :deep(.el-table__row:hover > td.el-table__cell) {
+  background: #f5f9ff;
+}
+
+.asset-title-cell {
+  color: var(--asset-ink);
+  display: block;
+  font-size: 0.94rem;
+  font-weight: 720;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-table-actions,
+.asset-editor-actions,
+.asset-action-buttons {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.asset-table-actions {
+  flex-wrap: nowrap;
+  gap: 3px;
+  justify-content: center;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.asset-table-actions :deep(.asset-icon-action) {
+  flex: 0 0 auto;
+  height: 26px;
+  justify-content: center;
+  margin-left: 0;
+  padding: 0;
+  width: 26px;
+}
+
+.asset-owner-name,
+.asset-type-cell {
+  color: #405064;
+  font-size: 0.86rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.asset-status-pill {
+  align-items: center;
+  border: 1px solid #b8c7d6;
+  border-radius: 999px;
+  color: #405064;
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 720;
+  justify-content: center;
+  line-height: 1;
+  min-width: 58px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.asset-status-pill.status-confirmed {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.3);
+  color: var(--asset-accent-dark);
+}
+
+.asset-status-pill.status-pending_review {
+  background: rgba(14, 165, 233, 0.1);
+  border-color: rgba(14, 165, 233, 0.28);
+  color: #0369a1;
+}
+
+.asset-status-pill.status-stale {
+  background: rgba(194, 65, 58, 0.1);
+  border-color: rgba(194, 65, 58, 0.28);
+  color: var(--asset-danger);
+}
+
 .asset-pagination {
   align-items: center;
-  background: var(--archive-paper, #fffdf7);
-  border: 1px solid var(--line);
-  border-top: 0;
-  border-bottom-left-radius: 6px;
-  border-bottom-right-radius: 6px;
-  color: var(--text-faint);
+  border-top: 1px solid var(--asset-line);
+  color: var(--asset-muted);
   display: flex;
   flex: 0 0 auto;
   font-size: 0.78rem;
   justify-content: flex-end;
   min-height: 54px;
   min-width: 0;
-  padding: 10px 14px;
-  position: relative;
-  z-index: 1;
+  padding: 10px 16px;
 }
 
 .asset-pagination :deep(.el-pagination) {
@@ -624,109 +760,18 @@ function submitAsset() {
   white-space: nowrap;
 }
 
-.asset-table :deep(.el-table) {
-  background: transparent;
-}
-
-.asset-table :deep(.el-table__cell) {
-  border-bottom-color: rgba(217, 223, 209, 0.82);
-}
-
-.asset-table :deep(.el-table__header th) {
-  background: #eef4ec;
-  color: var(--text-soft);
-  font-size: 0.78rem;
-  font-weight: 760;
-}
-
-.asset-table :deep(.el-table__row td) {
-  padding: 14px 0;
-}
-
-.asset-table-main {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-}
-
-.asset-table-main strong {
-  color: var(--text);
-  font-size: 0.94rem;
-  font-weight: 760;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asset-table-main p {
-  color: var(--text-muted);
-  display: -webkit-box;
-  font-size: 0.8rem;
-  line-height: 1.52;
-  margin: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.asset-tag-list,
-.asset-table-actions,
-.asset-editor-actions,
-.asset-action-buttons {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
-.asset-tag-list,
-.asset-table-actions {
-  flex-wrap: wrap;
-}
-
-.asset-table-actions {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-start;
-}
-
-.asset-table-actions :deep(.el-button) {
-  justify-content: flex-start;
-  margin-left: 0;
-  padding-left: 9px;
-  padding-right: 9px;
-}
-
-.asset-empty-cell {
-  color: var(--text-faint);
-}
-
-.asset-governance,
-.asset-owner-cell {
-  display: grid;
-  gap: 7px;
-}
-
-.asset-governance small,
-.asset-owner-cell span {
-  color: var(--text-faint);
-  font-size: 0.76rem;
-}
-
-.asset-owner-cell strong {
-  color: var(--text-soft);
-  font-size: 0.86rem;
-  font-weight: 720;
+.asset-dialog :deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 18px 24px 12px;
 }
 
 .asset-dialog :deep(.el-dialog__body) {
-  padding: 10px 20px;
+  padding: 10px 24px;
 }
 
 .asset-dialog :deep(.el-dialog__footer) {
-  border-top: 1px solid var(--line);
-  padding: 14px 20px 18px;
+  border-top: 1px solid var(--asset-line);
+  padding: 14px 24px 18px;
 }
 
 .asset-dialog-scroll {
@@ -735,7 +780,7 @@ function submitAsset() {
 
 .asset-form {
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
 .asset-form :deep(.el-form-item) {
@@ -744,14 +789,20 @@ function submitAsset() {
 
 .asset-form-grid {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 2px;
+}
+
+.asset-form-grid.secondary {
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
 }
 
 .asset-form :deep(.el-form-item__label) {
+  color: #526276;
+  font-size: 0.78rem;
+  font-weight: 720;
   line-height: 1.35;
-  margin-bottom: 7px;
+  margin-bottom: 6px;
 }
 
 .asset-markdown-tabs {
@@ -789,8 +840,8 @@ function submitAsset() {
 }
 
 .asset-markdown-scroll {
-  background: var(--archive-paper, #fffdf7);
-  border: 1px solid var(--line);
+  background: #fbfcfe;
+  border: 1px solid var(--asset-line);
   border-radius: 6px;
   height: min(34vh, 360px);
   min-width: 0;
@@ -798,7 +849,7 @@ function submitAsset() {
 }
 
 .asset-markdown-body {
-  color: var(--text);
+  color: var(--asset-ink);
   font-size: 0.84rem;
   line-height: 1.6;
   padding: 12px 14px;
@@ -808,7 +859,7 @@ function submitAsset() {
 .asset-markdown-body :deep(h1),
 .asset-markdown-body :deep(h2),
 .asset-markdown-body :deep(h3) {
-  color: var(--text);
+  color: var(--asset-ink);
   line-height: 1.25;
   margin: 12px 0 8px;
 }
@@ -827,16 +878,16 @@ function submitAsset() {
 }
 
 .asset-markdown-body :deep(code) {
-  background: rgba(19, 35, 31, 0.08);
+  background: rgba(23, 33, 43, 0.08);
   border-radius: 4px;
   font-family: var(--mono-font, "Cascadia Mono", Consolas, monospace);
   padding: 2px 5px;
 }
 
 .asset-markdown-body :deep(pre) {
-  background: #13231f;
+  background: #16212d;
   border-radius: 6px;
-  color: #f8faf7;
+  color: #f7fafc;
   overflow: auto;
   padding: 10px 12px;
 }
@@ -848,58 +899,25 @@ function submitAsset() {
 }
 
 .asset-markdown-body :deep(blockquote) {
-  border-left: 3px solid var(--accent);
-  color: var(--text-muted);
+  border-left: 3px solid var(--asset-accent);
+  color: var(--asset-muted);
   margin: 0 0 10px;
   padding-left: 10px;
 }
 
 .asset-editor-actions {
-  border-top: 1px solid var(--line);
   justify-content: space-between;
-  margin-top: 12px;
-  padding-top: 12px;
+  min-width: 0;
 }
 
 .asset-selected-note {
   align-items: center;
-  color: var(--text-faint);
+  color: var(--asset-muted);
   display: flex;
   gap: 10px;
   font-size: 0.8rem;
   min-height: 30px;
-}
-
-.trust-stamp {
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  color: var(--accent);
-  display: inline-flex;
-  font-family: var(--mono-font, "Cascadia Mono", Consolas, monospace);
-  font-size: 0.72rem;
-  font-weight: 700;
-  justify-content: center;
-  letter-spacing: 0;
-  line-height: 1;
-  padding: 7px 9px 6px;
-  transform: rotate(-1deg);
-  white-space: nowrap;
-}
-
-.trust-stamp.status-pending_review {
-  border-color: var(--evidence, #a45c25);
-  color: var(--evidence, #a45c25);
-}
-
-.trust-stamp.status-stale {
-  border-color: #b54708;
-  color: #b54708;
-}
-
-.trust-stamp.status-archived,
-.trust-stamp.status-draft {
-  border-color: var(--text-faint);
-  color: var(--text-faint);
+  min-width: 0;
 }
 
 .asset-action-buttons {
@@ -908,19 +926,26 @@ function submitAsset() {
 }
 
 @media (max-width: 980px) {
-  .asset-list-layout,
-  .asset-toolbar,
+  .asset-page {
+    padding: 16px;
+  }
+
+  .asset-workbench,
   .asset-form-grid {
     grid-template-columns: 1fr;
   }
 
-  .asset-command,
+  .asset-form-grid.secondary {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-topbar,
   .asset-editor-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .asset-command-actions,
+  .asset-topbar-actions,
   .asset-action-buttons {
     justify-content: stretch;
   }

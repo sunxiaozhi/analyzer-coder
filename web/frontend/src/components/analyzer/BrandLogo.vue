@@ -3,13 +3,13 @@
     <svg viewBox="0 0 44 44" role="img">
       <defs>
         <linearGradient id="brand-logo-bg" x1="6" x2="38" y1="5" y2="40" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stop-color="#2f6f61" />
-          <stop offset="0.55" stop-color="#174d42" />
-          <stop offset="1" stop-color="#0e2a25" />
+          <stop offset="0" stop-color="#2563eb" />
+          <stop offset="0.55" stop-color="#0f3f91" />
+          <stop offset="1" stop-color="#071833" />
         </linearGradient>
         <linearGradient id="brand-logo-line" x1="12" x2="33" y1="13" y2="32" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stop-color="#fff8e7" />
-          <stop offset="1" stop-color="#bdebdc" />
+          <stop offset="0" stop-color="#ffffff" />
+          <stop offset="1" stop-color="#93c5fd" />
         </linearGradient>
       </defs>
       <rect class="brand-logo-bg" x="3" y="3" width="38" height="38" rx="10" />
