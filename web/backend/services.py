@@ -4,7 +4,7 @@ import json
 import re
 import shutil
 import subprocess
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,7 +17,7 @@ from java_analyzer.api_mapper import build_api_mapping
 from java_analyzer.chunker import build_chunks
 from java_analyzer.embedding import HashingEmbedder, cosine_similarity
 from java_analyzer.kb_loader import build_kb_chunks
-from java_analyzer.models import JavaVectorChunk
+from java_analyzer.models import JavaFileAnalysis, JavaVectorChunk, SourceSpan
 from java_analyzer.vector_store import JsonlVectorStore, SearchResult, VectorRecord
 from java_analyzer.cli import (
     _build_graph,
@@ -26,6 +26,13 @@ from java_analyzer.cli import (
     _save_result,
 )
 from web.backend.errors import APIError
+from web.backend.external_stores import (
+    ExternalAnalysisStores,
+    ExternalStoreConfig,
+    ExternalStoreError,
+    Neo4jConfig,
+    QdrantConfig,
+)
 from web.backend.fusion import build_evidence, serialize_result
 from web.backend.mysql_state import MySqlStateStore
 from web.backend.paths import relative_to_workspace, workspace_path
@@ -129,6 +136,8 @@ class AnalyzerService:
         admin_password: str = "admin123",
         state_backend: str = "mysql",
         mysql_config: dict[str, Any] | None = None,
+        external_stores_config: ExternalStoreConfig | None = None,
+        external_stores_enabled: bool = False,
         analyzer: JavaAnalyzer | None = None,
         embedder: HashingEmbedder | None = None,
     ) -> None:
@@ -144,6 +153,8 @@ class AnalyzerService:
         self.mysql_store: MySqlStateStore | None = None
         self.analyzer = analyzer or JavaAnalyzer()
         self.embedder = embedder or HashingEmbedder()
+        self.external_stores = ExternalAnalysisStores(external_stores_config) if external_stores_config else None
+        self.external_stores_enabled = external_stores_enabled
         if self.state_backend == "mysql":
             config = mysql_config or {}
             self.mysql_store = MySqlStateStore(
@@ -174,6 +185,21 @@ class AnalyzerService:
                 "password": config.get("MYSQL_PASSWORD", "root"),
                 "database": config.get("MYSQL_DATABASE", "code_knowledge"),
             },
+            external_stores_config=ExternalStoreConfig(
+                qdrant=QdrantConfig(
+                    url=str(config.get("QDRANT_URL", "http://192.168.0.100:6333")),
+                    collection=str(config.get("QDRANT_COLLECTION", "java_analyzer_chunks")),
+                    timeout=float(config.get("EXTERNAL_STORE_TIMEOUT", 5)),
+                ),
+                neo4j=Neo4jConfig(
+                    url=str(config.get("NEO4J_URL", "http://192.168.0.100:7474")),
+                    database=str(config.get("NEO4J_DATABASE", "neo4j")),
+                    username=str(config.get("NEO4J_USERNAME", "neo4j")),
+                    password=str(config.get("NEO4J_PASSWORD", "neo4j")),
+                    timeout=float(config.get("EXTERNAL_STORE_TIMEOUT", 5)),
+                ),
+            ),
+            external_stores_enabled=bool(config.get("EXTERNAL_STORES_ENABLED", False)),
         )
 
     def health(self) -> dict[str, Any]:
@@ -360,14 +386,29 @@ class AnalyzerService:
         mode = str(payload.get("mode", "report"))
         context = self._analysis_context(payload, user)
 
-        output, extension, normalized_mode = self._analysis_output(context, payload, mode)
-        saved_path = self._save_latest_analysis_result(context.results_dir, normalized_mode, extension, output)
+        code_target = self._source_target(context, payload, "code")
+        code_results = self.analyzer.analyze_path(code_target)
+        output, extension, normalized_mode = self._analysis_output(context, payload, mode, code_results)
+        analysis_records = self._analysis_records_for_results(context, code_results)
+        analysis_record_count = self._save_analysis_records(context, analysis_records)
+        external_sync = self._sync_external_analysis_stores(context, payload, analysis_records, code_results)
+        saved_path_label = ""
+        try:
+            saved_path = self._save_latest_analysis_result(context.results_dir, normalized_mode, extension, output)
+            saved_path_label = self._relative(saved_path)
+        except OSError as exc:
+            external_sync = {
+                **external_sync,
+                "localResultWarning": f"analysis result file was not saved: {exc}",
+            }
         return {
             "output": output,
-            "savedPath": self._relative(saved_path),
+            "savedPath": saved_path_label,
             "mode": normalized_mode,
             "source": "code",
             "projectId": context.project_id,
+            "analysisRecordCount": analysis_record_count,
+            "externalSync": external_sync,
         }
 
     def analysis_result(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
@@ -610,6 +651,22 @@ class AnalyzerService:
             "projectId": context.project_id,
         }
 
+    def analysis_records(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        context = self._analysis_context(payload, user)
+        record_type = str(payload.get("type") or "").strip()
+        limit = self._query_int(payload.get("limit"), default=200, minimum=1, maximum=1000, field="limit")
+        offset = self._query_int(payload.get("offset"), default=0, minimum=0, maximum=1000000, field="offset")
+        records = self._load_analysis_records(context, record_type, limit, offset)
+        type_counts = self._analysis_record_counts(context)
+        return {
+            "records": records,
+            "total": sum(type_counts.values()) if not record_type else type_counts.get(record_type, len(records)),
+            "limit": limit,
+            "offset": offset,
+            "types": type_counts,
+            "projectId": context.project_id,
+        }
+
     def create_knowledge_asset(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
         assets = self._load_knowledge_assets(context)
@@ -808,6 +865,220 @@ class AnalyzerService:
             return "mysql://vector_records"
         return self._relative(store_path)
 
+    def _analysis_records_file(self, context: "AnalysisContext") -> Path:
+        return context.data_root / "analysis_records.json"
+
+    def _save_analysis_records(self, context: "AnalysisContext", records: list[dict[str, Any]]) -> int:
+        if self.mysql_store and context.project_id:
+            self.mysql_store.save_analysis_records(context.project_id, records)
+            return len(records)
+
+        path = self._analysis_records_file(context)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "projectId": context.project_id,
+                    "updatedAt": utc_now(),
+                    "records": records,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return len(records)
+
+    def _sync_external_analysis_stores(
+        self,
+        context: "AnalysisContext",
+        payload: dict[str, Any],
+        analysis_records: list[dict[str, Any]],
+        results: list[JavaFileAnalysis],
+    ) -> dict[str, Any]:
+        if not self.external_stores:
+            return {"enabled": False}
+        sync_requested = bool(payload.get("syncExternal")) or self.external_stores_enabled
+        if not sync_requested:
+            return {"enabled": False}
+        project_id = context.project_id or "workspace"
+
+        chunks = [chunk for result in results for chunk in build_chunks(result)]
+        vector_records = self._vector_records_for_chunks(chunks)
+        try:
+            return self.external_stores.sync(
+                project_id=project_id,
+                analysis_records=analysis_records,
+                vector_records=vector_records,
+            )
+        except ExternalStoreError as exc:
+            return {
+                "enabled": True,
+                "ok": False,
+                "error": str(exc),
+            }
+
+    def _load_analysis_records(
+        self,
+        context: "AnalysisContext",
+        record_type: str,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        if self.mysql_store and context.project_id:
+            return self.mysql_store.list_analysis_records(context.project_id, record_type, limit, offset)
+
+        path = self._analysis_records_file(context)
+        if not path.exists():
+            return []
+        data = json.loads(path.read_text(encoding="utf-8"))
+        records = list(data.get("records", []))
+        if record_type:
+            records = [record for record in records if record.get("type") == record_type]
+        return records[offset : offset + limit]
+
+    def _analysis_record_counts(self, context: "AnalysisContext") -> dict[str, int]:
+        if self.mysql_store and context.project_id:
+            return self.mysql_store.count_analysis_records_by_type(context.project_id)
+
+        path = self._analysis_records_file(context)
+        if not path.exists():
+            return {}
+        data = json.loads(path.read_text(encoding="utf-8"))
+        counts: dict[str, int] = {}
+        for record in data.get("records", []):
+            record_type = str(record.get("type") or "unknown")
+            counts[record_type] = counts.get(record_type, 0) + 1
+        return dict(sorted(counts.items()))
+
+    def _analysis_records_for_results(
+        self,
+        context: "AnalysisContext",
+        results: list[JavaFileAnalysis],
+    ) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        for result in results:
+            file_path = self._analysis_file_path(context, result.file_path)
+            records.append(
+                self._analysis_record(
+                    record_type="file",
+                    file_path=file_path,
+                    package=result.package or "",
+                    key_parts=[file_path or "<memory>"],
+                    payload={
+                        "filePath": file_path,
+                        "package": result.package,
+                        "hasError": result.has_error,
+                    },
+                )
+            )
+            if result.metrics is not None:
+                records.append(
+                    self._analysis_record(
+                        record_type="metrics",
+                        file_path=file_path,
+                        package=result.package or "",
+                        key_parts=[file_path or "<memory>", "metrics"],
+                        payload=asdict(result.metrics),
+                    )
+                )
+            for index, item in enumerate(result.imports):
+                records.append(self._record_from_item("import", file_path, result.package, item, [item.name, index]))
+            for index, item in enumerate(result.symbols):
+                records.append(self._record_from_item("symbol", file_path, result.package, item, [item.name, index]))
+            for index, item in enumerate(result.types):
+                records.append(self._record_from_item("type", file_path, result.package, item, [item.name, index]))
+            for index, item in enumerate(result.fields):
+                records.append(self._record_from_item("field", file_path, result.package, item, [item.enclosing_type or "", item.name, index]))
+            for index, item in enumerate(result.methods):
+                records.append(self._record_from_item("method", file_path, result.package, item, [item.enclosing_type or "", item.name, index]))
+            for index, item in enumerate(result.calls):
+                records.append(self._record_from_item("call", file_path, result.package, item, [item.enclosing_type or "", item.enclosing_method or "", item.name, index]))
+            for index, item in enumerate(result.local_variables):
+                records.append(self._record_from_item("local_variable", file_path, result.package, item, [item.enclosing_type or "", item.enclosing_method or "", item.name, index]))
+            for index, item in enumerate(result.returns):
+                records.append(self._record_from_item("return", file_path, result.package, item, [item.enclosing_type or "", item.enclosing_method or "", index]))
+            for index, item in enumerate(result.control_structures):
+                records.append(self._record_from_item("control_structure", file_path, result.package, item, [item.enclosing_type or "", item.enclosing_method or "", item.kind, index]))
+            for index, item in enumerate(result.components):
+                records.append(self._record_from_item("component", file_path, result.package, item, [item.name, index]))
+            for index, item in enumerate(result.endpoints):
+                records.append(self._record_from_item("endpoint", file_path, result.package, item, [item.enclosing_type, item.method_name, item.path, index]))
+            for index, item in enumerate(result.sql_references):
+                records.append(self._record_from_item("sql_reference", file_path, result.package, item, [item.enclosing_type or "", item.method_name or "", index]))
+            for index, item in enumerate(result.syntax_errors):
+                records.append(
+                    self._analysis_record(
+                        record_type="syntax_error",
+                        file_path=file_path,
+                        package=result.package or "",
+                        span=item,
+                        key_parts=[file_path or "<memory>", "syntax_error", index],
+                        payload=asdict(item),
+                    )
+                )
+        return records
+
+    def _record_from_item(
+        self,
+        record_type: str,
+        file_path: str,
+        package_name: str | None,
+        item: Any,
+        key_parts: list[Any],
+    ) -> dict[str, Any]:
+        payload = asdict(item) if is_dataclass(item) else dict(item)
+        return self._analysis_record(
+            record_type=record_type,
+            file_path=file_path,
+            package=package_name or "",
+            span=getattr(item, "span", None),
+            symbol_name=str(getattr(item, "name", "") or getattr(item, "method_name", "") or ""),
+            enclosing_type=str(getattr(item, "enclosing_type", "") or ""),
+            enclosing_method=str(getattr(item, "enclosing_method", "") or ""),
+            key_parts=[file_path or "<memory>", record_type, *key_parts],
+            payload=payload,
+        )
+
+    def _analysis_record(
+        self,
+        record_type: str,
+        file_path: str,
+        package: str,
+        key_parts: list[Any],
+        payload: dict[str, Any],
+        span: SourceSpan | None = None,
+        symbol_name: str = "",
+        enclosing_type: str = "",
+        enclosing_method: str = "",
+    ) -> dict[str, Any]:
+        key = "::".join(str(part) for part in key_parts)
+        return {
+            "key": key,
+            "type": record_type,
+            "filePath": file_path,
+            "package": package,
+            "symbolName": symbol_name,
+            "enclosingType": enclosing_type,
+            "enclosingMethod": enclosing_method,
+            "startLine": span.start_line if span else 0,
+            "startColumn": span.start_column if span else 0,
+            "endLine": span.end_line if span else 0,
+            "endColumn": span.end_column if span else 0,
+            "payload": payload,
+        }
+
+    def _analysis_file_path(self, context: "AnalysisContext", file_path: str | None) -> str:
+        if not file_path:
+            return ""
+        path = Path(file_path)
+        if path.is_absolute():
+            try:
+                return self._relative_to_root(context.root, path)
+            except ValueError:
+                return self._relative(path)
+        return str(path).replace("\\", "/")
+
     def _search_vector_records(
         self,
         records: list[VectorRecord],
@@ -838,27 +1109,27 @@ class AnalyzerService:
         context: "AnalysisContext",
         payload: dict[str, Any],
         mode: str,
+        code_results: list[JavaFileAnalysis] | None = None,
     ) -> tuple[str, str, str]:
         code_target = self._source_target(context, payload, "code")
+        results = code_results if code_results is not None else self.analyzer.analyze_path(code_target)
 
         if mode == "json":
-            results = self.analyzer.analyze_path(code_target)
             output = json.dumps([result.to_dict() for result in results], ensure_ascii=False, indent=2)
             return output, ".json", "json"
 
         if mode == "graph":
-            return _build_graph(self.analyzer.analyze_path(code_target), code_target), ".mmd", "graph"
+            return _build_graph(results, code_target), ".mmd", "graph"
 
         if mode == "chunks":
-            chunks = self._build_source_chunks(context, payload, "code")
+            chunks = [chunk for result in results for chunk in build_chunks(result)]
             return json.dumps([chunk.__dict__ for chunk in chunks], ensure_ascii=False, indent=2), ".json", "chunks"
 
         if mode == "summary":
-            output = "\n".join(_format_summary(result) for result in self.analyzer.analyze_path(code_target))
+            output = "\n".join(_format_summary(result) for result in results)
             return output, ".txt", "summary"
 
-        code_results = self.analyzer.analyze_path(code_target)
-        return _build_report(code_target, "code", code_results, []), ".md", "report"
+        return _build_report(code_target, "code", results, []), ".md", "report"
 
     def _analysis_result_extension(self, mode: str) -> tuple[str, str]:
         if mode == "json":

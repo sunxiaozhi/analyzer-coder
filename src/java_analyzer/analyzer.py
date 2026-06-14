@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 from typing import Iterable
@@ -8,15 +9,20 @@ import tree_sitter_java as tsjava
 from tree_sitter import Language, Node, Parser, Tree
 
 from java_analyzer.models import (
+    JavaAnnotation,
     JavaCall,
     JavaComponent,
     JavaEndpoint,
+    JavaEndpointParameter,
     JavaField,
     JavaFileAnalysis,
     JavaImport,
+    JavaControlStructure,
+    JavaLocalVariable,
     JavaMethod,
     JavaMetrics,
     JavaParameter,
+    JavaReturn,
     JavaSqlReference,
     JavaSymbol,
     JavaType,
@@ -67,6 +73,32 @@ SQL_ANNOTATIONS = {
     "UpdateProvider": "update_provider",
 }
 
+PARAMETER_SOURCE_ANNOTATIONS = {
+    "CookieValue": "cookie",
+    "MatrixVariable": "matrix",
+    "PathVariable": "path",
+    "RequestAttribute": "attribute",
+    "RequestBody": "body",
+    "RequestHeader": "header",
+    "RequestParam": "query",
+    "RequestPart": "part",
+}
+
+CONTROL_NODES = {
+    "catch_clause": "catch",
+    "do_statement": "do",
+    "enhanced_for_statement": "for_each",
+    "for_statement": "for",
+    "if_statement": "if",
+    "lambda_expression": "lambda",
+    "switch_expression": "switch",
+    "switch_statement": "switch",
+    "synchronized_statement": "synchronized",
+    "throw_statement": "throw",
+    "try_statement": "try",
+    "while_statement": "while",
+}
+
 ANNOTATION_NAME_PATTERN = re.compile(r"@(?:[A-Za-z_][\w]*\.)*([A-Za-z_][\w]*)")
 REQUEST_METHOD_PATTERN = re.compile(r"RequestMethod\.([A-Z]+)")
 STRING_LITERAL_PATTERN = re.compile(r'"((?:\\.|[^"\\])*)"')
@@ -99,6 +131,9 @@ class JavaAnalyzer:
         fields = list(_extract_field_details(root, source_bytes))
         methods = list(_extract_methods(root, source_bytes))
         calls = list(_extract_calls(root, source_bytes))
+        local_variables = list(_extract_local_variables(root, source_bytes))
+        returns = list(_extract_returns(root, source_bytes))
+        control_structures = list(_extract_control_structures(root, source_bytes))
 
         # 框架相关表面从通用的类型/方法模型中派生，避免把 Tree-sitter 遍历逻辑分散到各处。
         components = _extract_components(types)
@@ -117,6 +152,9 @@ class JavaAnalyzer:
             fields=fields,
             methods=methods,
             calls=calls,
+            local_variables=local_variables,
+            returns=returns,
+            control_structures=control_structures,
             syntax_errors=syntax_errors,
             components=components,
             endpoints=endpoints,
@@ -134,6 +172,9 @@ class JavaAnalyzer:
             fields=fields,
             methods=methods,
             calls=calls,
+            local_variables=local_variables,
+            returns=returns,
+            control_structures=control_structures,
             components=components,
             endpoints=endpoints,
             sql_references=sql_references,
@@ -166,6 +207,15 @@ def _to_bytes(source: str | bytes) -> bytes:
 
 def _node_text(node: Node, source: bytes) -> str:
     return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+
+
+def _string_literal_value(node: Node, source: bytes) -> str:
+    text = _node_text(node, source)
+    try:
+        value = ast.literal_eval(text)
+    except (SyntaxError, ValueError):
+        return text.strip('"')
+    return value if isinstance(value, str) else str(value)
 
 
 def _child_text(node: Node, source: bytes, field_name: str) -> str | None:
@@ -296,6 +346,7 @@ def _extract_types(root: Node, source: bytes) -> Iterable[JavaType]:
                     enclosing_type=type_stack[-1] if type_stack else None,
                     modifiers=_extract_modifiers(node, source),
                     annotations=_extract_annotations(node, source),
+                    annotation_details=_extract_annotation_details(node, source),
                     superclass=_extract_superclass(node, source),
                     interfaces=_extract_interfaces(node, source),
                 )
@@ -341,6 +392,7 @@ def _extract_field_details(root: Node, source: bytes) -> Iterable[JavaField]:
                     enclosing_type=type_stack[-1] if type_stack else None,
                     modifiers=modifiers,
                     annotations=annotations,
+                    annotation_details=_extract_annotation_details(node, source),
                     initializer=_extract_initializer(child, source),
                 )
             return
@@ -377,7 +429,9 @@ def _extract_methods(root: Node, source: bytes) -> Iterable[JavaMethod]:
                     parameters=_extract_parameters(node, source),
                     modifiers=_extract_modifiers(node, source),
                     annotations=_extract_annotations(node, source),
+                    annotation_details=_extract_annotation_details(node, source),
                     signature=_signature_text(node, source),
+                    throws=_extract_throws(node, source),
                 )
                 for child in node.children:
                     yield from visit(child)
@@ -423,7 +477,152 @@ def _extract_calls(root: Node, source: bytes) -> Iterable[JavaCall]:
                     enclosing_method=method_stack[-1] if method_stack else None,
                     qualifier=_extract_call_qualifier(node, source),
                     argument_count=_argument_count(node),
+                    arguments=_argument_texts(node, source),
+                    kind="method",
                 )
+
+        if node.type == "object_creation_expression":
+            name = _object_creation_type(node, source)
+            if name:
+                yield JavaCall(
+                    name=name,
+                    span=SourceSpan.from_node(node),
+                    enclosing_type=type_stack[-1] if type_stack else None,
+                    enclosing_method=method_stack[-1] if method_stack else None,
+                    argument_count=_argument_count(node),
+                    arguments=_argument_texts(node, source),
+                    kind="constructor",
+                )
+
+        for child in node.children:
+            yield from visit(child)
+
+    yield from visit(root)
+
+
+def _extract_local_variables(root: Node, source: bytes) -> Iterable[JavaLocalVariable]:
+    type_stack: list[str] = []
+    method_stack: list[str] = []
+
+    def visit(node: Node) -> Iterable[JavaLocalVariable]:
+        if node.type in TYPE_NODES:
+            name = _child_text(node, source, "name")
+            if name:
+                type_stack.append(name)
+                for child in node.children:
+                    yield from visit(child)
+                type_stack.pop()
+                return
+
+        if node.type in MEMBER_NODES:
+            name = _child_text(node, source, "name")
+            if name:
+                method_stack.append(name)
+                for child in node.children:
+                    yield from visit(child)
+                method_stack.pop()
+                return
+
+        if node.type == "local_variable_declaration":
+            variable_type = _declared_type(node, source)
+            modifiers = _extract_modifiers(node, source)
+            annotations = _extract_annotations(node, source)
+            annotation_details = _extract_annotation_details(node, source)
+            for child in node.children:
+                if child.type != "variable_declarator":
+                    continue
+                name = _child_text(child, source, "name")
+                if not name:
+                    continue
+                yield JavaLocalVariable(
+                    name=name,
+                    type=variable_type,
+                    span=SourceSpan.from_node(child),
+                    enclosing_type=type_stack[-1] if type_stack else None,
+                    enclosing_method=method_stack[-1] if method_stack else None,
+                    modifiers=modifiers,
+                    annotations=annotations,
+                    annotation_details=annotation_details,
+                    initializer=_extract_initializer(child, source),
+                )
+            return
+
+        for child in node.children:
+            yield from visit(child)
+
+    yield from visit(root)
+
+
+def _extract_returns(root: Node, source: bytes) -> Iterable[JavaReturn]:
+    type_stack: list[str] = []
+    method_stack: list[str] = []
+
+    def visit(node: Node) -> Iterable[JavaReturn]:
+        if node.type in TYPE_NODES:
+            name = _child_text(node, source, "name")
+            if name:
+                type_stack.append(name)
+                for child in node.children:
+                    yield from visit(child)
+                type_stack.pop()
+                return
+
+        if node.type in MEMBER_NODES:
+            name = _child_text(node, source, "name")
+            if name:
+                method_stack.append(name)
+                for child in node.children:
+                    yield from visit(child)
+                method_stack.pop()
+                return
+
+        if node.type == "return_statement":
+            expression = _return_expression(node, source)
+            yield JavaReturn(
+                expression=expression,
+                span=SourceSpan.from_node(node),
+                enclosing_type=type_stack[-1] if type_stack else None,
+                enclosing_method=method_stack[-1] if method_stack else None,
+            )
+            return
+
+        for child in node.children:
+            yield from visit(child)
+
+    yield from visit(root)
+
+
+def _extract_control_structures(root: Node, source: bytes) -> Iterable[JavaControlStructure]:
+    type_stack: list[str] = []
+    method_stack: list[str] = []
+
+    def visit(node: Node) -> Iterable[JavaControlStructure]:
+        if node.type in TYPE_NODES:
+            name = _child_text(node, source, "name")
+            if name:
+                type_stack.append(name)
+                for child in node.children:
+                    yield from visit(child)
+                type_stack.pop()
+                return
+
+        if node.type in MEMBER_NODES:
+            name = _child_text(node, source, "name")
+            if name:
+                method_stack.append(name)
+                for child in node.children:
+                    yield from visit(child)
+                method_stack.pop()
+                return
+
+        if node.type in CONTROL_NODES:
+            yield JavaControlStructure(
+                kind=CONTROL_NODES[node.type],
+                span=SourceSpan.from_node(node),
+                enclosing_type=type_stack[-1] if type_stack else None,
+                enclosing_method=method_stack[-1] if method_stack else None,
+                condition=_control_condition(node, source),
+            )
 
         for child in node.children:
             yield from visit(child)
@@ -453,6 +652,81 @@ def _extract_annotations(node: Node, source: bytes) -> tuple[str, ...]:
             if modifier.type.endswith("annotation")
         )
     return ()
+
+
+def _extract_annotation_details(node: Node, source: bytes) -> list[JavaAnnotation]:
+    for child in node.children:
+        if child.type != "modifiers":
+            continue
+        return [
+            _parse_annotation_node(modifier, source)
+            for modifier in child.children
+            if modifier.type.endswith("annotation")
+        ]
+    return []
+
+
+def _parse_annotation_node(node: Node, source: bytes) -> JavaAnnotation:
+    values: list[str] = []
+    arguments: dict[str, tuple[str, ...]] = {}
+    args = node.child_by_field_name("arguments")
+    if args is None:
+        for child in node.children:
+            if child.type == "annotation_argument_list":
+                args = child
+                break
+    if args is not None:
+        for child in args.children:
+            if child.type in {"(", ")", ","}:
+                continue
+            if child.type == "element_value_pair":
+                key, parsed_values = _annotation_pair(child, source)
+                if key:
+                    arguments[key] = tuple(parsed_values)
+                continue
+            values.extend(_annotation_values(child, source))
+
+    if values:
+        arguments.setdefault("value", tuple(values))
+
+    return JavaAnnotation(
+        name=_child_text(node, source, "name") or _annotation_name(_node_text(node, source)) or "",
+        raw=_node_text(node, source),
+        span=SourceSpan.from_node(node),
+        values=tuple(values),
+        arguments=arguments,
+    )
+
+
+def _annotation_pair(node: Node, source: bytes) -> tuple[str | None, list[str]]:
+    key: str | None = None
+    value_nodes: list[Node] = []
+    seen_equals = False
+    for child in node.children:
+        if child.type == "=":
+            seen_equals = True
+            continue
+        if not seen_equals and key is None and child.type == "identifier":
+            key = _node_text(child, source)
+            continue
+        if seen_equals:
+            value_nodes.append(child)
+    values = [value for child in value_nodes for value in _annotation_values(child, source)]
+    return key, values
+
+
+def _annotation_values(node: Node, source: bytes) -> list[str]:
+    if node.type in {"{", "}", ","}:
+        return []
+    if node.type == "element_value_array_initializer":
+        return [value for child in node.children for value in _annotation_values(child, source)]
+    if node.type == "string_literal":
+        return [_string_literal_value(node, source)]
+    if node.type == "character_literal":
+        return [_node_text(node, source).strip("'")]
+    if node.type in {"true", "false", "decimal_integer_literal", "hex_integer_literal", "floating_point_literal"}:
+        return [_node_text(node, source)]
+    return [_node_text(node, source)]
 
 
 def _declared_type(node: Node, source: bytes) -> str | None:
@@ -504,9 +778,23 @@ def _extract_parameters(node: Node, source: bytes) -> list[JavaParameter]:
                 name=name,
                 type=_declared_type(child, source),
                 span=SourceSpan.from_node(child),
+                annotations=_extract_annotations(child, source),
+                annotation_details=_extract_annotation_details(child, source),
             )
         )
     return result
+
+
+def _extract_throws(node: Node, source: bytes) -> tuple[str, ...]:
+    for child in node.children:
+        if child.type != "throws":
+            continue
+        return tuple(
+            _node_text(part, source)
+            for part in child.children
+            if part.type != "throws" and part.type != ","
+        )
+    return ()
 
 
 def _extract_superclass(node: Node, source: bytes) -> str | None:
@@ -545,6 +833,71 @@ def _extract_initializer(node: Node, source: bytes) -> str | None:
     return " ".join(parts).strip() or None
 
 
+def _return_expression(node: Node, source: bytes) -> str | None:
+    parts = [
+        _node_text(child, source)
+        for child in node.children
+        if child.type not in {"return", ";"}
+    ]
+    return " ".join(parts).strip() or None
+
+
+def _control_condition(node: Node, source: bytes) -> str | None:
+    for field_name in ("condition", "parameter", "resources"):
+        child = node.child_by_field_name(field_name)
+        if child is not None:
+            return _strip_outer_parentheses(_node_text(child, source))
+
+    skip = {
+        "(",
+        ")",
+        ";",
+        "do",
+        "else",
+        "finally",
+        "for",
+        "if",
+        "try",
+        "while",
+        "switch",
+        "synchronized",
+        "throw",
+    }
+    stop = {
+        "block",
+        "catch_clause",
+        "finally_clause",
+        "switch_block",
+    }
+    parts: list[str] = []
+    for child in node.children:
+        if child.type in stop:
+            break
+        if child.type in skip:
+            continue
+        parts.append(_node_text(child, source))
+    return _strip_outer_parentheses(" ".join(parts).strip()) or None
+
+
+def _strip_outer_parentheses(value: str) -> str:
+    value = value.strip()
+    while value.startswith("(") and value.endswith(")") and _balanced_parentheses(value[1:-1]):
+        value = value[1:-1].strip()
+    return value
+
+
+def _balanced_parentheses(value: str) -> bool:
+    depth = 0
+    for char in value:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
+
+
 def _extract_call_qualifier(node: Node, source: bytes) -> str | None:
     name = node.child_by_field_name("name")
     if name is None:
@@ -553,31 +906,57 @@ def _extract_call_qualifier(node: Node, source: bytes) -> str | None:
     return prefix.rstrip(".").strip() or None
 
 
-def _argument_count(node: Node) -> int:
+def _argument_node(node: Node) -> Node | None:
     args = node.child_by_field_name("arguments")
-    if args is None:
-        for child in node.children:
-            if child.type == "argument_list":
-                args = child
-                break
+    if args is not None:
+        return args
+    for child in node.children:
+        if child.type == "argument_list":
+            return child
+    return None
+
+
+def _argument_count(node: Node) -> int:
+    args = _argument_node(node)
     if args is None:
         return 0
     return sum(1 for child in args.children if child.type not in {"(", ")", ","})
+
+
+def _argument_texts(node: Node, source: bytes) -> tuple[str, ...]:
+    args = _argument_node(node)
+    if args is None:
+        return ()
+    return tuple(
+        _node_text(child, source)
+        for child in args.children
+        if child.type not in {"(", ")", ","}
+    )
+
+
+def _object_creation_type(node: Node, source: bytes) -> str | None:
+    typed = node.child_by_field_name("type")
+    if typed is not None:
+        return _node_text(typed, source)
+    for child in node.children:
+        if child.type in {"new", "argument_list", "class_body"}:
+            continue
+        return _node_text(child, source)
+    return None
 
 
 def _extract_components(types: list[JavaType]) -> list[JavaComponent]:
     # 组件识别基于注解名，因此全限定注解和普通导入后的短注解可以用同一套逻辑处理。
     components: list[JavaComponent] = []
     for item in types:
-        for annotation in item.annotations:
-            annotation_name = _annotation_name(annotation)
-            if annotation_name not in COMPONENT_ANNOTATIONS:
+        for annotation in item.annotation_details:
+            if annotation.name not in COMPONENT_ANNOTATIONS:
                 continue
             components.append(
                 JavaComponent(
-                    kind=COMPONENT_ANNOTATIONS[annotation_name],
+                    kind=COMPONENT_ANNOTATIONS[annotation.name],
                     name=item.name,
-                    annotation=annotation,
+                    annotation=annotation.raw,
                     span=item.span,
                 )
             )
@@ -590,8 +969,8 @@ def _extract_endpoints(types: list[JavaType], methods: list[JavaMethod]) -> list
     for item in types:
         route_annotations = [
             annotation
-            for annotation in item.annotations
-            if _annotation_name(annotation) in ROUTE_ANNOTATIONS
+            for annotation in item.annotation_details
+            if annotation.name in ROUTE_ANNOTATIONS
         ]
         paths = tuple(path for annotation in route_annotations for path in _annotation_paths(annotation))
         if paths:
@@ -602,11 +981,10 @@ def _extract_endpoints(types: list[JavaType], methods: list[JavaMethod]) -> list
         if not item.enclosing_type:
             continue
         base_paths = base_paths_by_type.get(item.enclosing_type, ("",))
-        for annotation in item.annotations:
-            annotation_name = _annotation_name(annotation)
-            if annotation_name not in ROUTE_ANNOTATIONS:
+        for annotation in item.annotation_details:
+            if annotation.name not in ROUTE_ANNOTATIONS:
                 continue
-            endpoint_methods = _http_methods(annotation_name, annotation)
+            endpoint_methods = _http_methods(annotation)
             endpoint_paths = _annotation_paths(annotation)
             for base_path in base_paths:
                 for endpoint_path in endpoint_paths:
@@ -614,10 +992,11 @@ def _extract_endpoints(types: list[JavaType], methods: list[JavaMethod]) -> list
                         JavaEndpoint(
                             path=_join_paths(base_path, endpoint_path),
                             http_methods=endpoint_methods,
-                            annotation=annotation,
+                            annotation=annotation.raw,
                             span=item.span,
                             enclosing_type=item.enclosing_type,
                             method_name=item.name,
+                            parameters=_endpoint_parameters(item),
                         )
                     )
     return endpoints
@@ -627,21 +1006,51 @@ def _extract_sql_references(methods: list[JavaMethod]) -> list[JavaSqlReference]
     # 注解里的 SQL 单独作为检索表面，因为它常包含方法名里看不到的业务词。
     references: list[JavaSqlReference] = []
     for item in methods:
-        for annotation in item.annotations:
-            annotation_name = _annotation_name(annotation)
-            if annotation_name not in SQL_ANNOTATIONS:
+        for annotation in item.annotation_details:
+            if annotation.name not in SQL_ANNOTATIONS:
                 continue
             references.append(
                 JavaSqlReference(
-                    operation=SQL_ANNOTATIONS[annotation_name],
-                    statement=" ".join(_annotation_strings(annotation)) or annotation,
-                    annotation=annotation,
+                    operation=SQL_ANNOTATIONS[annotation.name],
+                    statement=" ".join(_annotation_strings(annotation)) or annotation.raw,
+                    annotation=annotation.raw,
                     span=item.span,
                     enclosing_type=item.enclosing_type,
                     method_name=item.name,
                 )
             )
     return references
+
+
+def _endpoint_parameters(method: JavaMethod) -> list[JavaEndpointParameter]:
+    parameters: list[JavaEndpointParameter] = []
+    for parameter in method.parameters:
+        source = "unknown"
+        alias: str | None = None
+        required: bool | None = None
+        default_value: str | None = None
+        raw_annotation: str | None = None
+        for annotation in parameter.annotation_details:
+            if annotation.name not in PARAMETER_SOURCE_ANNOTATIONS:
+                continue
+            source = PARAMETER_SOURCE_ANNOTATIONS[annotation.name]
+            alias = _first_annotation_argument(annotation, "value", "name", "path")
+            required = _annotation_bool_argument(annotation, "required")
+            default_value = _first_annotation_argument(annotation, "defaultValue")
+            raw_annotation = annotation.raw
+            break
+        parameters.append(
+            JavaEndpointParameter(
+                name=parameter.name,
+                type=parameter.type,
+                source=source,
+                alias=alias,
+                required=required,
+                default_value=default_value,
+                annotation=raw_annotation,
+            )
+        )
+    return parameters
 
 
 def _annotation_name(annotation: str) -> str | None:
@@ -651,22 +1060,66 @@ def _annotation_name(annotation: str) -> str | None:
     return match.group(1)
 
 
-def _annotation_paths(annotation: str) -> tuple[str, ...]:
-    values = _annotation_strings(annotation)
+def _annotation_paths(annotation: JavaAnnotation) -> tuple[str, ...]:
+    values = tuple(
+        value
+        for key in ("value", "path")
+        for value in annotation.arguments.get(key, ())
+    )
     return values or ("",)
 
 
-def _annotation_strings(annotation: str) -> tuple[str, ...]:
-    return tuple(match.group(1) for match in STRING_LITERAL_PATTERN.finditer(annotation))
+def _annotation_strings(annotation: JavaAnnotation | str) -> tuple[str, ...]:
+    if isinstance(annotation, str):
+        return tuple(match.group(1) for match in STRING_LITERAL_PATTERN.finditer(annotation))
+    return tuple(
+        value
+        for values in annotation.arguments.values()
+        for value in values
+        if not _looks_like_non_string_annotation_value(value)
+    )
 
 
-def _http_methods(annotation_name: str, annotation: str) -> tuple[str, ...]:
-    mapped = ROUTE_ANNOTATIONS.get(annotation_name)
+def _http_methods(annotation: JavaAnnotation) -> tuple[str, ...]:
+    mapped = ROUTE_ANNOTATIONS.get(annotation.name)
     if mapped:
         return mapped
     # 裸 @RequestMapping 没有固定 HTTP 动词，除非显式出现 RequestMethod.*。
-    methods = tuple(REQUEST_METHOD_PATTERN.findall(annotation))
+    method_values = annotation.arguments.get("method", ())
+    methods = tuple(
+        match.group(1)
+        for value in method_values
+        for match in [REQUEST_METHOD_PATTERN.search(value)]
+        if match
+    )
     return methods or ("ANY",)
+
+
+def _first_annotation_argument(annotation: JavaAnnotation, *keys: str) -> str | None:
+    for key in keys:
+        values = annotation.arguments.get(key, ())
+        if values:
+            return values[0]
+    return None
+
+
+def _annotation_bool_argument(annotation: JavaAnnotation, key: str) -> bool | None:
+    value = _first_annotation_argument(annotation, key)
+    if value is None:
+        return None
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    return None
+
+
+def _looks_like_non_string_annotation_value(value: str) -> bool:
+    return (
+        value in {"true", "false"}
+        or value.endswith(".class")
+        or value.startswith("RequestMethod.")
+    )
 
 
 def _join_paths(base_path: str, endpoint_path: str) -> str:
@@ -684,6 +1137,9 @@ def _extract_metrics(
     fields: list[JavaField],
     methods: list[JavaMethod],
     calls: list[JavaCall],
+    local_variables: list[JavaLocalVariable],
+    returns: list[JavaReturn],
+    control_structures: list[JavaControlStructure],
     syntax_errors: list[SourceSpan],
     components: list[JavaComponent],
     endpoints: list[JavaEndpoint],
@@ -710,6 +1166,9 @@ def _extract_metrics(
         component_count=len(components),
         endpoint_count=len(endpoints),
         sql_reference_count=len(sql_references),
+        local_variable_count=len(local_variables),
+        return_count=len(returns),
+        control_structure_count=len(control_structures),
     )
 
 

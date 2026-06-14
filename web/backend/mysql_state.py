@@ -224,6 +224,34 @@ class MySqlStateStore:
                     ) comment='向量索引记录表'
                     """
                 )
+                cursor.execute(
+                    """
+                    create table if not exists analysis_records (
+                      id bigint unsigned not null auto_increment comment '解析记录ID',
+                      project_id bigint unsigned not null comment '项目ID',
+                      record_hash char(64) not null comment '记录标识哈希',
+                      record_key varchar(1024) not null comment '记录业务标识',
+                      record_type varchar(64) not null comment '解析数据类型',
+                      file_path varchar(1024) not null default '' comment '文件路径',
+                      package_name varchar(512) not null default '' comment '包名',
+                      symbol_name varchar(255) not null default '' comment '符号名称',
+                      enclosing_type varchar(255) not null default '' comment '所属类型',
+                      enclosing_method varchar(255) not null default '' comment '所属方法',
+                      start_line int not null default 0 comment '开始行',
+                      start_column int not null default 0 comment '开始列',
+                      end_line int not null default 0 comment '结束行',
+                      end_column int not null default 0 comment '结束列',
+                      payload_json longtext not null comment '解析数据JSON',
+                      created_at datetime(6) not null comment '创建时间',
+                      updated_at datetime(6) not null comment '更新时间',
+                      primary key (id),
+                      unique key uk_analysis_records_project_hash (project_id, record_hash),
+                      key idx_analysis_records_project_type (project_id, record_type),
+                      key idx_analysis_records_project_file (project_id, file_path(255)),
+                      key idx_analysis_records_project_symbol (project_id, symbol_name)
+                    ) comment='代码解析类型化记录表'
+                    """
+                )
             connection.commit()
 
     def migrate_from_json(self, users_file: Path, projects_file: Path, projects_dir: Path | None = None) -> None:
@@ -747,6 +775,104 @@ class MySqlStateStore:
                             data["text"],
                             json.dumps(metadata, ensure_ascii=False),
                             json.dumps(data.get("embedding", []), ensure_ascii=False),
+                            now,
+                            now,
+                        ),
+                    )
+            connection.commit()
+
+    def list_analysis_records(
+        self,
+        project_id: str,
+        record_type: str = "",
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        where = ["project_id = %s"]
+        params: list[Any] = [project_id]
+        if record_type:
+            where.append("record_type = %s")
+            params.append(record_type)
+        params.extend([limit, offset])
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    select record_key, record_type, file_path, package_name, symbol_name,
+                           enclosing_type, enclosing_method, start_line, start_column,
+                           end_line, end_column, payload_json, updated_at
+                    from analysis_records
+                    where {' and '.join(where)}
+                    order by record_type, file_path, start_line, id
+                    limit %s offset %s
+                    """,
+                    params,
+                )
+                rows = cursor.fetchall()
+        return [
+            {
+                "key": row["record_key"],
+                "type": row["record_type"],
+                "filePath": row["file_path"],
+                "package": row["package_name"],
+                "symbolName": row["symbol_name"],
+                "enclosingType": row["enclosing_type"],
+                "enclosingMethod": row["enclosing_method"],
+                "startLine": int(row["start_line"] or 0),
+                "startColumn": int(row["start_column"] or 0),
+                "endLine": int(row["end_line"] or 0),
+                "endColumn": int(row["end_column"] or 0),
+                "payload": json.loads(row["payload_json"] or "{}"),
+                "updatedAt": iso_datetime(row["updated_at"]),
+            }
+            for row in rows
+        ]
+
+    def count_analysis_records_by_type(self, project_id: str) -> dict[str, int]:
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select record_type, count(*) as count
+                    from analysis_records
+                    where project_id = %s
+                    group by record_type
+                    order by record_type
+                    """,
+                    (project_id,),
+                )
+                rows = cursor.fetchall()
+        return {str(row["record_type"]): int(row["count"]) for row in rows}
+
+    def save_analysis_records(self, project_id: str, records: list[dict[str, Any]]) -> None:
+        now = mysql_datetime(datetime.now(timezone.utc).isoformat())
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("delete from analysis_records where project_id = %s", (project_id,))
+                for record in records:
+                    cursor.execute(
+                        """
+                        insert into analysis_records
+                          (project_id, record_hash, record_key, record_type, file_path, package_name,
+                           symbol_name, enclosing_type, enclosing_method, start_line, start_column,
+                           end_line, end_column, payload_json, created_at, updated_at)
+                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            project_id,
+                            hashlib.sha256(str(record["key"]).encode("utf-8")).hexdigest(),
+                            str(record["key"]),
+                            str(record["type"]),
+                            str(record.get("filePath") or ""),
+                            str(record.get("package") or ""),
+                            str(record.get("symbolName") or ""),
+                            str(record.get("enclosingType") or ""),
+                            str(record.get("enclosingMethod") or ""),
+                            int(record.get("startLine") or 0),
+                            int(record.get("startColumn") or 0),
+                            int(record.get("endLine") or 0),
+                            int(record.get("endColumn") or 0),
+                            json.dumps(record.get("payload", {}), ensure_ascii=False),
                             now,
                             now,
                         ),

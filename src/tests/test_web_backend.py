@@ -50,6 +50,93 @@ def test_web_backend_report(tmp_path) -> None:
     assert response.status_code == 200
     assert "HTTP 接口" in payload["output"]
     assert payload["savedPath"].endswith(".md")
+    assert payload["analysisRecordCount"] > 0
+
+
+def test_web_backend_stores_analysis_records_by_type(tmp_path) -> None:
+    workspace = _java_workspace(tmp_path)
+
+    class TestConfig(JsonTestConfig):
+        WORKSPACE_ROOT = workspace
+        RESULTS_DIR = ".results"
+        DEFAULT_STORE = ".store/default.jsonl"
+        TESTING = True
+
+    client = create_app(TestConfig).test_client()
+    _login(client)
+
+    analyze_response = client.post(
+        "/api/analyze",
+        json={"path": "src", "source": "code", "mode": "summary"},
+    )
+    analyze_payload = analyze_response.get_json()
+
+    assert analyze_response.status_code == 200
+    assert analyze_payload["analysisRecordCount"] > 0
+    assert (workspace / "analysis_records.json").exists()
+
+    list_response = client.get("/api/analysis/records", query_string={"limit": 500})
+    list_payload = list_response.get_json()
+
+    assert list_response.status_code == 200
+    assert list_payload["types"]["endpoint"] == 1
+    assert list_payload["types"]["method"] == 1
+    assert list_payload["types"]["return"] == 1
+
+    endpoint_response = client.get("/api/analysis/records", query_string={"type": "endpoint"})
+    endpoint_payload = endpoint_response.get_json()
+
+    assert endpoint_response.status_code == 200
+    assert endpoint_payload["records"][0]["type"] == "endpoint"
+    assert endpoint_payload["records"][0]["payload"]["path"] == "/api/users"
+
+
+def test_web_backend_syncs_analysis_to_external_stores_when_requested(tmp_path) -> None:
+    workspace = _java_workspace(tmp_path)
+
+    class TestConfig(JsonTestConfig):
+        WORKSPACE_ROOT = workspace
+        RESULTS_DIR = ".results"
+        DEFAULT_STORE = ".store/default.jsonl"
+        TESTING = True
+
+    class FakeExternalStores:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def sync(self, *, project_id, analysis_records, vector_records):
+            self.calls.append(
+                {
+                    "project_id": project_id,
+                    "analysis_records": analysis_records,
+                    "vector_records": vector_records,
+                }
+            )
+            return {
+                "enabled": True,
+                "qdrant": {"ok": True, "count": len(vector_records)},
+                "neo4j": {"ok": True, "recordCount": len(analysis_records)},
+            }
+
+    app = create_app(TestConfig)
+    service = app.extensions["analyzer_service"]
+    fake_stores = FakeExternalStores()
+    service.external_stores = fake_stores
+    client = app.test_client()
+    _login(client)
+
+    response = client.post(
+        "/api/analyze",
+        json={"path": "src", "source": "code", "mode": "report", "syncExternal": True},
+    )
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["externalSync"]["enabled"] is True
+    assert payload["externalSync"]["qdrant"]["count"] > 0
+    assert payload["externalSync"]["neo4j"]["recordCount"] == payload["analysisRecordCount"]
+    assert fake_stores.calls[0]["analysis_records"]
+    assert fake_stores.calls[0]["vector_records"]
 
 
 def test_web_backend_reads_latest_analysis_result(tmp_path) -> None:

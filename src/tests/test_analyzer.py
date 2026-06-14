@@ -112,6 +112,112 @@ def test_analyze_source_detects_spring_and_mybatis_surfaces() -> None:
     assert result.metrics.sql_reference_count == 1
 
 
+def test_analyze_source_extracts_richer_endpoint_and_call_data() -> None:
+    source = """
+        package com.example;
+
+        @RestController
+        @RequestMapping(value = {"/api/users", "/v1/users"})
+        class UserController {
+            private UserService service = new UserService();
+
+            @GetMapping(path = "/{id}", produces = "application/json")
+            User getUser(
+                @PathVariable("id") String id,
+                @RequestParam(name = "active", required = false, defaultValue = "true") boolean active,
+                @RequestBody UserRequest request
+            ) throws IOException {
+                var user = new User(id);
+                return service.findById(id, active).orElseThrow(() -> new RuntimeException("missing"));
+            }
+        }
+    """
+
+    result = JavaAnalyzer().analyze_source(source)
+
+    controller = result.types[0]
+    request_mapping = next(item for item in controller.annotation_details if item.name == "RequestMapping")
+    assert request_mapping.arguments["value"] == ("/api/users", "/v1/users")
+
+    get_user = next(method for method in result.methods if method.name == "getUser")
+    assert get_user.throws == ("IOException",)
+    assert get_user.annotation_details[0].arguments["path"] == ("/{id}",)
+    assert get_user.annotation_details[0].arguments["produces"] == ("application/json",)
+
+    assert {endpoint.path for endpoint in result.endpoints} == {
+        "/api/users/{id}",
+        "/v1/users/{id}",
+    }
+    endpoint = next(endpoint for endpoint in result.endpoints if endpoint.path == "/api/users/{id}")
+    assert [(parameter.name, parameter.source, parameter.alias) for parameter in endpoint.parameters] == [
+        ("id", "path", "id"),
+        ("active", "query", "active"),
+        ("request", "body", None),
+    ]
+    active = endpoint.parameters[1]
+    assert active.required is False
+    assert active.default_value == "true"
+
+    calls = {(call.kind, call.name, call.arguments) for call in result.calls}
+    assert ("constructor", "UserService", ()) in calls
+    assert ("constructor", "User", ("id",)) in calls
+    assert ("method", "findById", ("id", "active")) in calls
+    assert any(kind == "constructor" and name == "RuntimeException" for kind, name, _args in calls)
+
+
+def test_analyze_source_extracts_method_body_semantics() -> None:
+    source = """
+        package com.example;
+
+        import java.util.List;
+
+        class RuleService {
+            String normalize(List<String> names) {
+                final String first = names.get(0);
+                if (first.isBlank()) {
+                    return "empty";
+                }
+                for (String name : names) {
+                    if (name.length() > 3) {
+                        return name.trim();
+                    }
+                }
+                try {
+                    return first.toLowerCase();
+                } catch (RuntimeException ex) {
+                    throw ex;
+                }
+            }
+        }
+    """
+
+    result = JavaAnalyzer().analyze_source(source)
+
+    local = result.local_variables[0]
+    assert local.name == "first"
+    assert local.type == "String"
+    assert local.initializer == "names.get(0)"
+    assert local.modifiers == ("final",)
+    assert local.enclosing_type == "RuleService"
+    assert local.enclosing_method == "normalize"
+
+    returns = [item.expression for item in result.returns]
+    assert returns == ['"empty"', "name.trim()", "first.toLowerCase()"]
+
+    controls = [(item.kind, item.condition) for item in result.control_structures]
+    assert ("if", "first.isBlank()") in controls
+    assert any(kind == "for_each" and condition and "name : names" in condition for kind, condition in controls)
+    assert ("if", "name.length() > 3") in controls
+    assert ("try", None) in controls
+    assert any(kind == "catch" and condition and "RuntimeException ex" in condition for kind, condition in controls)
+    assert ("throw", "ex") in controls
+
+    assert result.metrics is not None
+    assert result.metrics.local_variable_count == 1
+    assert result.metrics.return_count == 3
+    assert result.metrics.control_structure_count == 6
+
+
 def test_build_call_chains_resolves_field_and_same_type_calls() -> None:
     source = """
         package com.example;

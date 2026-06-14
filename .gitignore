@@ -5,6 +5,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .vector_store/
+.vite-cache/
 .java_ts_vectors.jsonl
 .java_ts_results/
 obsidian-vault/

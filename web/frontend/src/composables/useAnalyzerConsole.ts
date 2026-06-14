@@ -26,6 +26,13 @@ import type {
 interface AnalyzeResponse {
   output: string
   savedPath: string
+  externalSync?: {
+    enabled: boolean
+    ok?: boolean
+    error?: string
+    qdrant?: Record<string, unknown>
+    neo4j?: Record<string, unknown>
+  }
 }
 
 interface AnalysisResultResponse {
@@ -1037,7 +1044,8 @@ export function useAnalyzerConsole() {
     analysisResultsByMode[mode].updatedAt = ''
     const data = await requestJson<AnalyzeResponse>('/api/analyze', {
       projectId: form.projectId,
-      mode
+      mode,
+      syncExternal: true
     })
     analysisResultsByMode[mode] = {
       output: data.output,

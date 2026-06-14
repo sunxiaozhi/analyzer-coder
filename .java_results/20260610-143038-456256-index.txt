@@ -1,1 +1,0 @@
-indexed 21 chunks into C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_indexes_queries_and_p0\vectors.jsonl

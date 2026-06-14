@@ -556,6 +556,9 @@ def _format_summary(result: object) -> str:
         f"{result.metrics.field_count} fields, "
         f"{result.metrics.method_count} methods, "
         f"{result.metrics.call_count} calls, "
+        f"{result.metrics.local_variable_count} locals, "
+        f"{result.metrics.return_count} returns, "
+        f"{result.metrics.control_structure_count} controls, "
         f"{result.metrics.endpoint_count} endpoints, "
         f"{result.metrics.sql_reference_count} SQL refs, "
         f"{result.metrics.node_count} AST nodes",
@@ -591,16 +594,39 @@ def _format_summary(result: object) -> str:
                 f"{param.type or '?'} {param.name}" for param in item.parameters
             )
             return_type = f"{item.return_type} " if item.return_type else ""
+            throws = f" throws {', '.join(item.throws)}" if item.throws else ""
             modifiers = f" [{' '.join(item.modifiers)}]" if item.modifiers else ""
             annotations = f" {' '.join(item.annotations)}" if item.annotations else ""
-            lines.append(f"    - {item.kind} {return_type}{item.name}({parameters}){owner}{modifiers}{annotations}")
+            lines.append(f"    - {item.kind} {return_type}{item.name}({parameters}){throws}{owner}{modifiers}{annotations}")
 
     if result.calls:
         lines.append("  calls:")
         for item in result.calls:
             owner = f" in {item.enclosing_type}.{item.enclosing_method}" if item.enclosing_type and item.enclosing_method else ""
             qualifier = f"{item.qualifier}." if item.qualifier else ""
-            lines.append(f"    - {qualifier}{item.name}(args={item.argument_count}){owner}")
+            arguments = ", ".join(item.arguments) if item.arguments else f"args={item.argument_count}"
+            lines.append(f"    - {item.kind} {qualifier}{item.name}({arguments}){owner}")
+
+    if result.local_variables:
+        lines.append("  local variables:")
+        for item in result.local_variables:
+            owner = f" in {item.enclosing_type}.{item.enclosing_method}" if item.enclosing_type and item.enclosing_method else ""
+            initializer = f" = {item.initializer}" if item.initializer else ""
+            lines.append(f"    - {item.type or '?'} {item.name}{initializer}{owner}")
+
+    if result.returns:
+        lines.append("  returns:")
+        for item in result.returns:
+            owner = f" in {item.enclosing_type}.{item.enclosing_method}" if item.enclosing_type and item.enclosing_method else ""
+            expression = item.expression or ""
+            lines.append(f"    - {expression}{owner}")
+
+    if result.control_structures:
+        lines.append("  control structures:")
+        for item in result.control_structures:
+            owner = f" in {item.enclosing_type}.{item.enclosing_method}" if item.enclosing_type and item.enclosing_method else ""
+            condition = f" ({item.condition})" if item.condition else ""
+            lines.append(f"    - {item.kind}{condition}{owner}")
 
     if result.components:
         lines.append("  components:")
@@ -611,7 +637,12 @@ def _format_summary(result: object) -> str:
         lines.append("  endpoints:")
         for item in result.endpoints:
             methods = ",".join(item.http_methods)
-            lines.append(f"    - {methods} {item.path} -> {item.enclosing_type}.{item.method_name}")
+            parameters = ", ".join(
+                f"{parameter.source}:{parameter.alias or parameter.name}"
+                for parameter in item.parameters
+            )
+            suffix = f" [{parameters}]" if parameters else ""
+            lines.append(f"    - {methods} {item.path} -> {item.enclosing_type}.{item.method_name}{suffix}")
 
     if result.sql_references:
         lines.append("  sql:")

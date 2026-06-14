@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from java_analyzer.models import JavaFileAnalysis, JavaVectorChunk, SourceSpan
+from java_analyzer.models import JavaCall, JavaControlStructure, JavaFileAnalysis, JavaVectorChunk, SourceSpan
 
 
 def build_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
@@ -94,9 +94,24 @@ def _method_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
     for item in analysis.methods:
         # 把当前方法里的调用点附加到 chunk 中，提升“哪里用了 X”这类查询的命中率。
         calls = [
-            call.name
+            _call_summary(call)
             for call in analysis.calls
             if call.enclosing_type == item.enclosing_type and call.enclosing_method == item.name
+        ]
+        local_variables = [
+            f"{variable.type or '?'} {variable.name}"
+            for variable in analysis.local_variables
+            if variable.enclosing_type == item.enclosing_type and variable.enclosing_method == item.name
+        ]
+        returns = [
+            returned.expression or ""
+            for returned in analysis.returns
+            if returned.enclosing_type == item.enclosing_type and returned.enclosing_method == item.name
+        ]
+        controls = [
+            _control_summary(control)
+            for control in analysis.control_structures
+            if control.enclosing_type == item.enclosing_type and control.enclosing_method == item.name
         ]
         parameters = ", ".join(
             f"{parameter.type or '?'} {parameter.name}" for parameter in item.parameters
@@ -112,6 +127,9 @@ def _method_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
             f"Modifiers: {' '.join(item.modifiers)}",
             f"Annotations: {' '.join(item.annotations)}",
             f"Calls: {', '.join(calls)}",
+            f"Local variables: {', '.join(local_variables)}",
+            f"Returns: {'; '.join(returns)}",
+            f"Control flow: {', '.join(controls)}",
         ]
 
         chunks.append(
@@ -129,6 +147,9 @@ def _method_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
                         "return_type": item.return_type or "",
                         "parameters": parameters,
                         "calls": ", ".join(calls),
+                        "local_variables": ", ".join(local_variables),
+                        "returns": "; ".join(returns),
+                        "control_flow": ", ".join(controls),
                     },
                 ),
             )
@@ -172,11 +193,16 @@ def _endpoint_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
     chunks: list[JavaVectorChunk] = []
     for item in analysis.endpoints:
         methods = ", ".join(item.http_methods)
+        parameters = ", ".join(
+            f"{parameter.source}:{parameter.alias or parameter.name}"
+            for parameter in item.parameters
+        )
         lines = [
             f"Java HTTP endpoint {methods} {item.path}",
             f"Controller: {item.enclosing_type}",
             f"Method: {item.method_name}",
             f"Annotation: {item.annotation}",
+            f"Parameters: {parameters}",
             f"Package: {analysis.package or ''}",
             f"File: {analysis.file_path or ''}",
         ]
@@ -194,6 +220,7 @@ def _endpoint_chunks(analysis: JavaFileAnalysis) -> list[JavaVectorChunk]:
                         "path": item.path,
                         "http_methods": methods,
                         "annotation": item.annotation,
+                        "parameters": parameters,
                     },
                 ),
             )
@@ -277,3 +304,20 @@ def _metadata(
 
 def _clean_text(lines: list[str]) -> str:
     return "\n".join(line for line in lines if not line.endswith(": "))
+
+
+def _call_summary(call: JavaCall) -> str:
+    name = call.name
+    arguments = call.arguments
+    prefix = "new " if call.kind == "constructor" else ""
+    if arguments:
+        return f"{prefix}{name}({', '.join(arguments)})"
+    return f"{prefix}{name}"
+
+
+def _control_summary(control: JavaControlStructure) -> str:
+    kind = control.kind
+    condition = control.condition
+    if condition:
+        return f"{kind}({condition})"
+    return kind

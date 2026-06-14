@@ -38,6 +38,17 @@ class JavaParameter:
     name: str
     type: str | None
     span: SourceSpan
+    annotations: tuple[str, ...] = field(default_factory=tuple)
+    annotation_details: list["JavaAnnotation"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class JavaAnnotation:
+    name: str
+    raw: str
+    span: SourceSpan
+    values: tuple[str, ...] = field(default_factory=tuple)
+    arguments: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -59,6 +70,7 @@ class JavaType:
     enclosing_type: str | None = None
     modifiers: tuple[str, ...] = field(default_factory=tuple)
     annotations: tuple[str, ...] = field(default_factory=tuple)
+    annotation_details: list[JavaAnnotation] = field(default_factory=list)
     superclass: str | None = None
     interfaces: tuple[str, ...] = field(default_factory=tuple)
 
@@ -71,6 +83,7 @@ class JavaField:
     enclosing_type: str | None = None
     modifiers: tuple[str, ...] = field(default_factory=tuple)
     annotations: tuple[str, ...] = field(default_factory=tuple)
+    annotation_details: list[JavaAnnotation] = field(default_factory=list)
     initializer: str | None = None
 
 
@@ -84,7 +97,9 @@ class JavaMethod:
     parameters: list[JavaParameter] = field(default_factory=list)
     modifiers: tuple[str, ...] = field(default_factory=tuple)
     annotations: tuple[str, ...] = field(default_factory=tuple)
+    annotation_details: list[JavaAnnotation] = field(default_factory=list)
     signature: str | None = None
+    throws: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -95,6 +110,49 @@ class JavaCall:
     enclosing_method: str | None = None
     qualifier: str | None = None
     argument_count: int = 0
+    arguments: tuple[str, ...] = field(default_factory=tuple)
+    kind: str = "method"
+
+
+@dataclass(frozen=True)
+class JavaLocalVariable:
+    name: str
+    type: str | None
+    span: SourceSpan
+    enclosing_type: str | None = None
+    enclosing_method: str | None = None
+    modifiers: tuple[str, ...] = field(default_factory=tuple)
+    annotations: tuple[str, ...] = field(default_factory=tuple)
+    annotation_details: list[JavaAnnotation] = field(default_factory=list)
+    initializer: str | None = None
+
+
+@dataclass(frozen=True)
+class JavaReturn:
+    expression: str | None
+    span: SourceSpan
+    enclosing_type: str | None = None
+    enclosing_method: str | None = None
+
+
+@dataclass(frozen=True)
+class JavaControlStructure:
+    kind: str
+    span: SourceSpan
+    enclosing_type: str | None = None
+    enclosing_method: str | None = None
+    condition: str | None = None
+
+
+@dataclass(frozen=True)
+class JavaEndpointParameter:
+    name: str
+    type: str | None
+    source: str
+    alias: str | None = None
+    required: bool | None = None
+    default_value: str | None = None
+    annotation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -115,6 +173,7 @@ class JavaEndpoint:
     span: SourceSpan
     enclosing_type: str
     method_name: str
+    parameters: list[JavaEndpointParameter] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -143,6 +202,9 @@ class JavaMetrics:
     component_count: int = 0
     endpoint_count: int = 0
     sql_reference_count: int = 0
+    local_variable_count: int = 0
+    return_count: int = 0
+    control_structure_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -167,6 +229,9 @@ class JavaFileAnalysis:
     fields: list[JavaField] = field(default_factory=list)
     methods: list[JavaMethod] = field(default_factory=list)
     calls: list[JavaCall] = field(default_factory=list)
+    local_variables: list[JavaLocalVariable] = field(default_factory=list)
+    returns: list[JavaReturn] = field(default_factory=list)
+    control_structures: list[JavaControlStructure] = field(default_factory=list)
     components: list[JavaComponent] = field(default_factory=list)
     endpoints: list[JavaEndpoint] = field(default_factory=list)
     sql_references: list[JavaSqlReference] = field(default_factory=list)

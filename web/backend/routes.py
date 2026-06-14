@@ -99,6 +99,11 @@ def analysis_result() -> Any:
     return jsonify(analyzer_service().analysis_result(request.args.to_dict(), current_user()))
 
 
+@api_bp.get("/analysis/records")
+def analysis_records() -> Any:
+    return jsonify(analyzer_service().analysis_records(request.args.to_dict(), current_user()))
+
+
 @api_bp.post("/index")
 def index_project() -> Any:
     return jsonify(analyzer_service().index_project(json_payload(request), current_user()))

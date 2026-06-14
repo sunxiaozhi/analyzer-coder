@@ -1,7 +1,0 @@
-generated 6 Obsidian notes into C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_generates_obsidian_no0\vault
-- C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_generates_obsidian_no0\vault\Java Analysis.md
-- C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_generates_obsidian_no0\vault\Components\UserController.md
-- C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_generates_obsidian_no0\vault\Components\UserService.md
-- C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_generates_obsidian_no0\vault\Components\UserMapper.md
-- C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_generates_obsidian_no0\vault\Endpoints\POST -api-users.md
-- C:\Users\admin\AppData\Local\Temp\pytest-of-admin\pytest-48\test_cli_generates_obsidian_no0\vault\Endpoints\GET -api-users-id.md
