@@ -59,6 +59,10 @@
 
 负责 ADR、开发规范、模块边界、跨项目经验、技术债、知识质量和复审机制。基础实现可以作为项目角色或权限标签存在，不要求复杂审批流。
 
+### 4.6 核心可用版角色收敛
+
+核心可用版采用项目级角色模型：系统管理员、项目负责人、项目成员、只读成员。研发成员默认映射为项目成员；测试/运维成员可按项目需要映射为项目成员或只读成员；架构治理角色在核心可用版中由项目负责人承担，增强版再扩展为独立权限标签或细粒度角色。
+
 ## 5. 一级功能域
 
 系统划分为六个一级功能域。
@@ -94,7 +98,7 @@
 | 功能域 | 功能点 |
 |---|---|
 | 账号体系 | 登录、退出、当前用户、密码修改、账号启停、管理员创建账号 |
-| 角色体系 | 系统管理员、项目负责人、研发成员、测试/运维、架构治理角色 |
+| 角色体系 | 系统管理员、项目负责人、项目成员、只读成员；研发、测试/运维和架构治理作为使用场景或增强版权限标签 |
 | 权限控制 | 项目访问权限、模块访问权限、操作权限、管理员权限校验 |
 | 团队空间 | 团队/组织管理、成员管理、项目归属、跨项目访问控制 |
 | 项目空间 | 项目创建、项目切换、项目配置、项目数据隔离、项目归档 |
@@ -146,7 +150,7 @@
 | 知识文档 | 创建、编辑、删除、目录管理、Markdown 预览、模板创建 |
 | 结构化知识资产 | 业务规则、ADR、故障案例、接口说明、开发规范、领域术语、模块说明 |
 | 知识字段 | 标题、摘要、正文、类型、标签、模块、负责人、复审人、来源 |
-| 状态流转 | 草稿、待确认、已确认、待复审、已归档 |
+| 状态流转 | 草稿、已确认、待复审、已归档 |
 | 知识证据 | 绑定代码文件、类、方法、接口、SQL、调用链、检索结果 |
 | 确认机制 | 确认人、确认时间、复审日期、复审记录 |
 | 版本历史 | 编辑历史、状态历史、证据变化、归档原因 |
@@ -969,7 +973,7 @@ CodeFact
 |---|---|
 | 入口 | 知识资产页、知识文档页、检索结果、分析结果、影响分析结果 |
 | 前置条件 | 用户具备项目访问权限；知识类型、标题和正文满足基础校验 |
-| 主流程 | 创建知识资产 -> 选择类型、标签、负责人和正文 -> 绑定 Evidence -> 保存为草稿或待确认 -> 项目负责人确认 -> 进入可信知识集合 |
+| 主流程 | 创建知识资产 -> 选择类型、标签、负责人和正文 -> 绑定 Evidence -> 保存为草稿 -> 项目负责人确认 -> 进入可信知识集合 |
 | 异常流程 | 标题重复、证据不存在、证据跨项目、状态流转非法、确认人权限不足 |
 | 输出结果 | KnowledgeAsset、Evidence、状态记录、审计事件、可索引知识 chunk |
 | 权限要求 | 成员可创建和编辑本人草稿；负责人和治理角色可确认、标记待复审或归档 |
@@ -1034,15 +1038,17 @@ CodeFact
 
 | 对象 | 关键字段 |
 |---|---|
-| Project | id、projectKey、name、gitUrl、branch、workspacePath、defaultCodePath、defaultKbPath、ownerUserId、status、createdAt、updatedAt |
+| Project | id、projectKey、name、gitUrl、branch、workspacePath、defaultCodePath、defaultKnowledgePath、ownerUserId、status、createdAt、updatedAt |
+| ProjectMember | projectId、userId、role、status、createdAt、updatedAt |
 | RepositorySnapshot | id、projectId、branch、commitHash、commitMessage、syncedAt、analyzedAt、sourcePaths、status |
 | CodeFact | id、projectId、snapshotId、factType、filePath、packageName、symbolName、signature、startLine、endLine、metadata |
 | KnowledgeAsset | id、projectId、type、title、summary、content、status、tags、ownerUserId、reviewerUserId、reviewDueAt、confirmedAt、sourcePath |
 | Evidence | id、projectId、assetId、evidenceType、targetId、filePath、symbolName、startLine、endLine、note、confidence |
-| IndexRecord | id、projectId、sourceType、sourceId、chunkId、text、vectorId、metadata、status、indexedAt |
-| SearchResult | id、projectId、sourceType、sourceId、title、snippet、score、status、evidenceCount、explanation |
-| ContextPackage | id、projectId、taskType、taskText、selectedItems、excludedItems、content、format、createdBy、createdAt |
-| ChangeAnalysisTask | id、projectId、inputType、inputContent、baseCommit、headCommit、status、impacts、risks、testSuggestions、confidence |
+| IndexRecord | id、projectId、snapshotId、sourceType、sourceId、chunkId、title、text、vectorId、metadata、status、indexedAt |
+| SearchResult | id、projectId、sourceType、sourceId、title、snippet、score、status、updatedAt、evidenceCount、explanation |
+| ContextPackage | id、projectId、taskType、taskText、selectedItems、excludedItems、content、format、createdBy、createdAt、exportedAt |
+| ChangeAnalysisTask | id、projectId、snapshotId、inputType、inputContent、changedFiles、matchedCodeFacts、impactedEndpoints、impactedKnowledgeAssets、risks、testSuggestions、confidence、status、createdBy、createdAt、baseCommit、headCommit |
+| ReviewTask | id、projectId、assetId、sourceTaskId、reason、status、ownerUserId、dueAt、createdAt、updatedAt |
 | AuditEvent | id、projectId、actorUserId、action、targetType、targetId、detail、createdAt、ipAddress |
 
 ### 19.2 字段规则
