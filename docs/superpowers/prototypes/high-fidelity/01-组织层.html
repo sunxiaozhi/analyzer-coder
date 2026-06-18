@@ -9,95 +9,113 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <div class="brand"><strong>组织层</strong><span>项目、用户、配置</span></div>
+      <div class="brand"><strong>组织层</strong><span>项目、账号、系统配置</span></div>
       <div class="nav-section">
-        <small>功能页面</small>
-        <a class="nav-link" href="index.html">总览</a>
+        <small>功能地图</small>
+        <a class="nav-link" href="index.html">功能总览</a>
         <a class="nav-link active" href="01-组织层.html">组织层</a>
         <a class="nav-link" href="02-项目空间.html">项目空间</a>
         <a class="nav-link" href="03-代码智能.html">代码智能</a>
         <a class="nav-link" href="04-知识资产.html">知识资产</a>
         <a class="nav-link" href="05-检索与上下文.html">检索与上下文</a>
+        <a class="nav-link" href="06-变更影响.html">变更影响</a>
+        <a class="nav-link" href="07-治理审计.html">治理审计</a>
       </div>
     </aside>
+
     <main class="main">
       <div class="topbar">
         <div class="project-rail">
-          <span class="rail-pill">组织管理</span>
-          <span class="rail-pill">系统管理员 admin</span>
-          <span class="rail-pill">MySQL 正常</span>
-          <span class="rail-pill">Qdrant 正常</span>
-          <span class="rail-pill">Neo4j 异常</span>
+          <span class="rail-pill"><strong>作用域</strong> 组织</span>
+          <span class="rail-pill"><strong>项目</strong> 3 active</span>
+          <span class="rail-pill"><strong>MySQL</strong> ready</span>
+          <span class="rail-pill"><strong>Qdrant</strong> ready</span>
+          <span class="rail-pill"><strong>Neo4j</strong> failed</span>
         </div>
         <span class="tag red">图数据库连接失败</span>
       </div>
+
       <div class="page">
-        <section class="hero login-shell">
-          <div class="login-card">
-            <div class="eyebrow">Sign in</div>
-            <h1>登录研发智能平台</h1>
-            <p class="lead">登录后进入最近访问项目。账号停用、密码错误和无项目权限都显示明确原因。</p>
-            <div class="form-row"><span class="muted">用户名</span><div class="input"></div></div>
-            <div class="form-row"><span class="muted">密码</span><div class="input"></div></div>
-            <div class="toolbar"><span class="btn primary">登录</span><span class="tag amber">账号停用时联系管理员</span></div>
+        <section class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow">Organization control</div>
+            <h1>先把项目边界、账号权限和基础连接配置清楚</h1>
+            <p class="lead">组织层不展示项目内事实数据，只负责项目隔离、用户授权、连接健康和全局参数。这里的配置决定后续所有项目是否能完成分析、索引和图谱写入。</p>
+            <div class="hero-actions toolbar">
+              <span class="btn primary">新建项目</span>
+              <span class="btn">邀请用户</span>
+              <span class="btn warning">修复 Neo4j</span>
+            </div>
           </div>
-          <div class="login-visual">
-            <h2>项目数据默认隔离</h2>
-            <p>组织层只负责项目、账号、配置和系统级健康入口。</p>
-            <div class="mock-graph">
-              <div class="node n1">Project</div>
-              <div class="node n2">User</div>
-              <div class="node n3">Qdrant</div>
-              <div class="node n4">Neo4j</div>
+          <div class="command-panel">
+            <span class="tag red">阻断项</span>
+            <h2>Neo4j 不可用</h2>
+            <p class="muted">代码分析可以完成，但图关系、变更影响路径和 ReviewTask 关系写入会失败。</p>
+            <div class="timeline">
+              <div class="timeline-item"><span class="tag green">MySQL</span><div>项目、用户、任务和审计数据可写。</div></div>
+              <div class="timeline-item"><span class="tag green">Qdrant</span><div>向量索引服务可用。</div></div>
+              <div class="timeline-item"><span class="tag red">Neo4j</span><div>认证失败，需重新保存连接。</div></div>
             </div>
           </div>
         </section>
 
-        <section class="grid two">
-          <div class="table-card">
-            <div class="toolbar"><h2>项目列表</h2><span class="btn primary">新建项目</span><span class="field">项目名</span><span class="select">状态：全部</span></div>
-            <table>
-              <thead><tr><th>项目</th><th>分支</th><th>负责人</th><th>状态</th><th>操作</th></tr></thead>
-              <tbody>
-                <tr><td>order-service</td><td>main</td><td>张三</td><td><span class="tag green">active</span></td><td>进入</td></tr>
-                <tr><td>legacy-crm</td><td>dev</td><td>李四</td><td><span class="tag red">sync_failed</span></td><td>查看失败 / 重试</td></tr>
-                <tr><td>payment-gateway</td><td>release</td><td>王五</td><td><span class="tag amber">archived</span></td><td>恢复</td></tr>
-              </tbody>
-            </table>
-          </div>
+        <section class="feature-strip">
+          <div class="feature-card"><span class="tag blue">项目</span><b>3</b><p class="muted">多项目分离，项目路径和知识路径独立校验。</p></div>
+          <div class="feature-card"><span class="tag green">用户</span><b>18</b><p class="muted">系统管理员、项目负责人、项目成员、只读成员。</p></div>
+          <div class="feature-card"><span class="tag amber">待处理</span><b>2</b><p class="muted">1 个项目同步失败，1 个连接配置异常。</p></div>
+          <div class="feature-card"><span class="tag violet">审计</span><b>4,208</b><p class="muted">项目、用户、配置变更均生成 AuditEvent。</p></div>
+        </section>
 
-          <div class="card">
-            <h2>新建项目弹窗</h2>
-            <div class="grid two" style="margin-top:12px">
-              <div class="form-row"><span class="muted">项目名称</span><div class="input"></div></div>
-              <div class="form-row"><span class="muted">负责人</span><div class="input"></div></div>
-              <div class="form-row"><span class="muted">Git 地址</span><div class="input"></div></div>
-              <div class="form-row"><span class="muted">默认分支</span><div class="input"></div></div>
-              <div class="form-row"><span class="muted">代码路径</span><div class="input"></div></div>
-              <div class="form-row"><span class="muted">知识路径</span><div class="input"></div></div>
+        <section class="workbench">
+          <div class="workbench-head">
+            <h2>项目接入工作台</h2>
+            <div class="toolbar"><span class="field">搜索项目名</span><span class="select">状态：全部</span></div>
+          </div>
+          <div class="workbench-body split wide">
+            <div class="table-card">
+              <div class="section-head"><h3>项目清单</h3><span class="tag blue">隔离存储</span></div>
+              <table>
+                <thead><tr><th>项目</th><th>负责人</th><th>仓库</th><th>数据状态</th><th>下一步</th></tr></thead>
+                <tbody>
+                  <tr><td>order-service</td><td>张三</td><td>main</td><td><span class="tag green">active</span></td><td>进入项目空间</td></tr>
+                  <tr><td>legacy-crm</td><td>李四</td><td>dev</td><td><span class="tag red">sync_failed</span></td><td>查看失败原因</td></tr>
+                  <tr><td>payment-gateway</td><td>王五</td><td>release</td><td><span class="tag amber">archived</span></td><td>恢复项目</td></tr>
+                </tbody>
+              </table>
             </div>
-            <div class="toolbar"><span class="btn">测试连接</span><span class="btn primary">创建项目</span></div>
+            <div class="detail-drawer">
+              <div class="section-head"><h3>新建项目抽屉</h3><span class="tag green">必填校验</span></div>
+              <div class="form-row"><span class="muted">项目名称</span><div class="input"></div></div>
+              <div class="form-row"><span class="muted">Git 地址 / 本地路径</span><div class="input"></div></div>
+              <div class="form-row"><span class="muted">代码根目录</span><div class="input"></div></div>
+              <div class="form-row"><span class="muted">知识库目录</span><div class="input"></div></div>
+              <div class="toolbar"><span class="btn">测试路径</span><span class="btn primary">创建项目</span></div>
+            </div>
           </div>
         </section>
 
         <section class="grid two" style="margin-top:14px">
-          <div class="table-card">
-            <div class="toolbar"><h2>账号与权限</h2><span class="btn primary">新建用户</span><span class="field">用户名</span></div>
-            <table>
-              <thead><tr><th>用户</th><th>状态</th><th>系统角色</th><th>项目授权</th></tr></thead>
-              <tbody>
-                <tr><td>admin</td><td><span class="tag green">启用</span></td><td>系统管理员</td><td>全部项目</td></tr>
-                <tr><td>zhangsan</td><td><span class="tag green">启用</span></td><td>普通用户</td><td>order-service: 负责人</td></tr>
-                <tr><td>lisi</td><td><span class="tag amber">停用</span></td><td>普通用户</td><td>legacy-crm: 成员</td></tr>
-              </tbody>
-            </table>
+          <div class="workbench">
+            <div class="workbench-head"><h2>账号与项目授权</h2><span class="btn primary">新建用户</span></div>
+            <div class="workbench-body">
+              <table>
+                <thead><tr><th>用户</th><th>系统角色</th><th>项目权限</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>admin</td><td>系统管理员</td><td>全部项目</td><td><span class="tag green">启用</span></td><td>重置密码</td></tr>
+                  <tr><td>zhangsan</td><td>普通用户</td><td>order-service: 负责人</td><td><span class="tag green">启用</span></td><td>调整项目角色</td></tr>
+                  <tr><td>lisi</td><td>普通用户</td><td>legacy-crm: 成员</td><td><span class="tag amber">停用</span></td><td>启用</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="card">
-            <h2>系统配置</h2>
-            <div class="toolbar" style="margin-top:12px"><span class="btn primary">基础路径</span><span class="btn">MySQL</span><span class="btn">Qdrant</span><span class="btn">Neo4j</span><span class="btn">Embedding</span></div>
-            <div class="grid two">
-              <div class="panel"><h3>连接状态</h3><p><span class="tag green">MySQL 正常</span> <span class="tag green">Qdrant 正常</span> <span class="tag red">Neo4j 异常</span></p></div>
-              <div class="panel"><h3>配置表单</h3><div class="form-row"><span class="muted">服务地址</span><div class="input"></div></div><div class="toolbar"><span class="btn">测试连接</span><span class="btn primary">保存</span></div></div>
+          <div class="workbench">
+            <div class="workbench-head"><h2>系统配置</h2><span class="tag amber">影响全局任务</span></div>
+            <div class="workbench-body">
+              <div class="tabs"><span class="btn primary">基础路径</span><span class="btn">MySQL</span><span class="btn">Qdrant</span><span class="btn">Neo4j</span><span class="btn">Embedding</span></div>
+              <div class="grid two" style="margin-top:12px">
+                <div class="panel"><h3>连接测试</h3><p class="muted">保存前必须测试，失败原因直接展示给管理员。</p><div class="toolbar" style="margin-top:10px"><span class="btn">测试连接</span><span class="btn primary">保存</span></div></div>
+                <div class="panel"><h3>失败兜底</h3><p class="muted">连接失败不会清空旧配置；已运行项目继续使用最近成功索引和可用图快照。</p></div>
+              </div>
             </div>
           </div>
         </section>

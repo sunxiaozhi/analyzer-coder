@@ -11,83 +11,111 @@
     <aside class="sidebar">
       <div class="brand"><strong>代码智能</strong><span>CodeFact 与 Neo4j</span></div>
       <div class="nav-section">
-        <small>功能页面</small>
-        <a class="nav-link" href="index.html">总览</a>
+        <small>功能地图</small>
+        <a class="nav-link" href="index.html">功能总览</a>
         <a class="nav-link" href="02-项目空间.html">项目空间</a>
         <a class="nav-link active" href="03-代码智能.html">代码智能</a>
         <a class="nav-link" href="04-知识资产.html">知识资产</a>
         <a class="nav-link" href="05-检索与上下文.html">检索与上下文</a>
+        <a class="nav-link" href="06-变更影响.html">变更影响</a>
+        <a class="nav-link" href="07-治理审计.html">治理审计</a>
       </div>
     </aside>
+
     <main class="main">
       <div class="topbar">
         <div class="project-rail">
-          <span class="rail-pill">order-service</span>
-          <span class="rail-pill">snapshot abc123</span>
-          <span class="rail-pill">CodeFact 12,430</span>
-          <span class="rail-pill">Neo4j ready</span>
-          <span class="rail-pill">12 failed files</span>
+          <span class="rail-pill"><strong>项目</strong> order-service</span>
+          <span class="rail-pill"><strong>快照</strong> abc123</span>
+          <span class="rail-pill"><strong>CodeFact</strong> 12,430</span>
+          <span class="rail-pill"><strong>Neo4j</strong> ready</span>
+          <span class="rail-pill"><strong>失败文件</strong> 12</span>
         </div>
         <span class="tag amber">partial_failed</span>
       </div>
+
       <div class="page">
         <section class="hero">
-          <div class="eyebrow">Code intelligence</div>
-          <h1>代码事实中心</h1>
-          <p class="lead">代码智能负责把仓库转换为可检索、可绑定证据、可进入上下文包和影响分析的 CodeFact。</p>
-          <div class="toolbar"><span class="btn primary">触发分析</span><span class="btn warning">查看失败文件</span><span class="btn">重试图写入</span><span class="btn">导出 JSON 图</span></div>
+          <div class="hero-copy">
+            <div class="eyebrow">Code intelligence workbench</div>
+            <h1>把代码转换成可检索、可追踪、可进入上下文包的事实对象</h1>
+            <p class="lead">代码智能页不只是展示文件列表。它展示分析任务、失败文件、CodeFact 详情、接口关系、SQL 引用和 Neo4j 图关系，并让用户直接绑定 Evidence 或加入上下文包。</p>
+            <div class="hero-actions toolbar">
+              <span class="btn primary">触发分析</span>
+              <span class="btn warning">查看失败文件</span>
+              <span class="btn">重试图写入</span>
+              <span class="btn">导出分析结果</span>
+            </div>
+          </div>
+          <div class="command-panel">
+            <span class="tag amber">分析质量</span>
+            <div class="big-number">98.7%</div>
+            <p class="muted">成功文件 1,808 / 1,820。失败文件不会阻断已成功事实的使用。</p>
+            <div class="timeline">
+              <div class="timeline-item"><span class="tag green">解析</span><div>Java / XML / 前端 API 调用已抽取。</div></div>
+              <div class="timeline-item"><span class="tag blue">入图</span><div>CALLS、USES_SQL、EXPOSES 已写入。</div></div>
+              <div class="timeline-item"><span class="tag amber">缺口</span><div>17 个 Endpoint 缺少接口说明。</div></div>
+            </div>
+          </div>
         </section>
 
-        <section class="grid three">
-          <div class="metric"><span>文件</span><b>1,820</b><span>Java / XML / 前端调用</span></div>
-          <div class="metric"><span>Endpoint</span><b>186</b><span>17 个缺少 api_doc</span></div>
-          <div class="metric"><span>SQL</span><b>920</b><span>MyBatis 引用线索</span></div>
+        <section class="feature-strip">
+          <div class="feature-card"><span class="tag green">文件</span><b>1,820</b><p class="muted">Java、Mapper XML、前端 API 调用。</p></div>
+          <div class="feature-card"><span class="tag blue">Endpoint</span><b>186</b><p class="muted">可跳转后端方法与前端调用。</p></div>
+          <div class="feature-card"><span class="tag violet">SQL</span><b>920</b><p class="muted">MyBatis 引用和参数线索。</p></div>
+          <div class="feature-card"><span class="tag amber">缺知识</span><b>17</b><p class="muted">可一键生成知识草稿或治理任务。</p></div>
         </section>
 
-        <section class="table-card" style="margin-top:14px">
-          <div class="toolbar"><h2>代码事实列表</h2><span class="select">类型：全部</span><span class="field">文件路径</span><span class="field">符号</span></div>
-          <table>
-            <thead><tr><th>类型</th><th>文件</th><th>符号</th><th>行区间</th><th>置信度</th><th>操作</th></tr></thead>
-            <tbody>
-              <tr><td>endpoint</td><td>UserController.java</td><td>GET /api/users/{id}</td><td>22-38</td><td><span class="tag green">高</span></td><td>详情 / 绑定证据 / 加入上下文</td></tr>
-              <tr><td>method</td><td>OrderService.java</td><td>cancelOrder(Long id)</td><td>76-122</td><td><span class="tag green">高</span></td><td>详情 / 图关系</td></tr>
-              <tr><td>sql</td><td>OrderMapper.xml</td><td>selectRefundableOrders</td><td>14-31</td><td><span class="tag amber">中</span></td><td>详情 / 绑定证据</td></tr>
-            </tbody>
-          </table>
+        <section class="workbench">
+          <div class="workbench-head">
+            <h2>CodeFact 工作台</h2>
+            <div class="toolbar"><span class="select">类型：全部</span><span class="field">搜索路径、符号、接口</span></div>
+          </div>
+          <div class="workbench-body split wide">
+            <div>
+              <table>
+                <thead><tr><th>类型</th><th>对象</th><th>位置</th><th>质量</th><th>可执行动作</th></tr></thead>
+                <tbody>
+                  <tr><td>endpoint</td><td>POST /orders/{id}/cancel</td><td>OrderController.java:42</td><td><span class="tag amber">缺参数说明</span></td><td>绑定 Evidence / 生成知识草稿</td></tr>
+                  <tr><td>method</td><td>OrderService.cancelOrder</td><td>OrderService.java:76</td><td><span class="tag green">高置信</span></td><td>查看图关系 / 加入上下文</td></tr>
+                  <tr><td>sql</td><td>selectRefundableOrders</td><td>OrderMapper.xml:14</td><td><span class="tag blue">已关联方法</span></td><td>绑定 Evidence</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="detail-drawer">
+              <div class="section-head"><h3>事实详情抽屉</h3><span class="tag blue">method</span></div>
+              <div class="code">76 public CancelResult cancelOrder(Long orderId) {<br>77   Order order = orderRepo.get(orderId);<br>78   refundService.createRefund(order);<br>79   inventoryService.release(order);<br>80   auditService.record(order);<br>81 }</div>
+              <div class="toolbar" style="margin-top:12px"><span class="btn primary">加入上下文包</span><span class="btn">绑定 Evidence</span><span class="btn">复制引用</span></div>
+            </div>
+          </div>
         </section>
 
         <section class="grid two" style="margin-top:14px">
-          <div class="workspace">
-            <div class="workspace-header"><h2>代码事实详情</h2><span class="tag blue">drawer</span></div>
-            <div class="workspace-body">
-              <div class="code">76 public CancelResult cancelOrder(Long orderId) {<br>77   Order order = orderRepo.get(orderId);<br>78   refundService.createRefund(order);<br>79   inventoryService.release(order);<br>80 }</div>
-              <div class="toolbar" style="margin-top:12px"><span class="btn primary">绑定 Evidence</span><span class="btn">加入上下文包</span><span class="btn">复制引用</span></div>
-            </div>
-          </div>
-          <div class="workspace">
-            <div class="workspace-header"><h2>基础图关系</h2><span class="tag violet">Neo4j</span></div>
-            <div class="workspace-body">
+          <div class="workbench">
+            <div class="workbench-head"><h2>Neo4j 基础图谱</h2><span class="tag violet">有限深度</span></div>
+            <div class="workbench-body">
               <div class="mock-graph">
-                <div class="node n1">Endpoint</div>
-                <div class="node n2">Method</div>
-                <div class="node n3">SQL</div>
-                <div class="node n4">Knowledge</div>
+                <div class="node n1">Endpoint<br>cancel</div>
+                <div class="node n2">Method<br>cancelOrder</div>
+                <div class="node n3">SQL<br>refundables</div>
+                <div class="node n4">Knowledge<br>取消规则</div>
               </div>
-              <p class="muted">默认深度 1，可切换关系类型：CALLS、USES_SQL、EVIDENCES、SUPPORTS。</p>
+              <div class="toolbar" style="margin-top:12px"><span class="btn primary">扩展一层</span><span class="btn">只看 Evidence</span><span class="btn">进入影响分析</span></div>
             </div>
           </div>
-        </section>
-
-        <section class="table-card" style="margin-top:14px">
-          <div class="toolbar"><h2>接口关系</h2><span class="select">HTTP：全部</span><span class="field">路径</span><span class="select">风险：全部</span></div>
-          <table>
-            <thead><tr><th>方法</th><th>路径</th><th>后端方法</th><th>前端调用</th><th>接口说明</th><th>风险</th></tr></thead>
-            <tbody>
-              <tr><td>GET</td><td>/api/users/{id}</td><td>getUser</td><td>3</td><td><span class="tag green">已关联</span></td><td>低</td></tr>
-              <tr><td>POST</td><td>/api/orders/{id}/cancel</td><td>cancelOrder</td><td>2</td><td><span class="tag amber">缺参数说明</span></td><td>中</td></tr>
-              <tr><td>DELETE</td><td>/api/files/{id}</td><td>deleteFile</td><td>0</td><td><span class="tag red">无说明</span></td><td>高</td></tr>
-            </tbody>
-          </table>
+          <div class="workbench">
+            <div class="workbench-head"><h2>接口关系</h2><span class="tag amber">缺口直达治理</span></div>
+            <div class="workbench-body">
+              <table>
+                <thead><tr><th>HTTP</th><th>路径</th><th>后端方法</th><th>前端调用</th><th>说明状态</th></tr></thead>
+                <tbody>
+                  <tr><td>GET</td><td>/api/users/{id}</td><td>getUser</td><td>3</td><td><span class="tag green">已关联</span></td></tr>
+                  <tr><td>POST</td><td>/api/orders/{id}/cancel</td><td>cancelOrder</td><td>2</td><td><span class="tag amber">缺参数说明</span></td></tr>
+                  <tr><td>DELETE</td><td>/api/files/{id}</td><td>deleteFile</td><td>0</td><td><span class="tag red">无说明</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
       </div>
     </main>

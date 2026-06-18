@@ -9,10 +9,13 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <div class="brand"><strong>高保真原型</strong><span>按功能拆分</span></div>
+      <div class="brand">
+        <strong>综合研发智能平台</strong>
+        <span>按功能拆分的高保真控制台</span>
+      </div>
       <div class="nav-section">
-        <small>页面</small>
-        <a class="nav-link active" href="index.html">总览</a>
+        <small>功能地图</small>
+        <a class="nav-link active" href="index.html">功能总览</a>
         <a class="nav-link" href="01-组织层.html">组织层</a>
         <a class="nav-link" href="02-项目空间.html">项目空间</a>
         <a class="nav-link" href="03-代码智能.html">代码智能</a>
@@ -22,44 +25,88 @@
         <a class="nav-link" href="07-治理审计.html">治理审计</a>
       </div>
     </aside>
+
     <main class="main">
       <div class="topbar">
         <div class="project-rail">
-          <span class="rail-pill">项目 order-service</span>
-          <span class="rail-pill">分支 main</span>
-          <span class="rail-pill">快照 abc123</span>
-          <span class="rail-pill">索引 stale</span>
-          <span class="rail-pill">Neo4j ready</span>
+          <span class="rail-pill"><strong>项目</strong> order-service</span>
+          <span class="rail-pill"><strong>快照</strong> abc123</span>
+          <span class="rail-pill"><strong>索引</strong> 使用最近成功版本</span>
+          <span class="rail-pill"><strong>Neo4j</strong> ready</span>
         </div>
-        <span class="tag blue">高保真页面入口</span>
+        <span class="tag blue">原型入口</span>
       </div>
+
       <div class="page">
         <section class="hero">
-          <div class="eyebrow">Platform prototype</div>
-          <h1>综合研发智能平台高保真页面原型</h1>
-          <p class="lead">本目录按功能拆分高保真页面。每个页面都模拟真实控制台布局、数据密度、状态轨道、表格、任务反馈和跨模块跳转，用于产品评审和后续前端实现对齐。</p>
-          <div class="flow">
-            <span>项目接入</span><i>-></i><span>代码事实</span><i>-></i><span>知识证据</span><i>-></i><span>可信检索</span><i>-></i><span>上下文包</span><i>-></i><span>治理回流</span>
+          <div class="hero-copy">
+            <div class="eyebrow">Functional prototype</div>
+            <h1>围绕研发任务流，而不是围绕菜单，组织所有页面</h1>
+            <p class="lead">每个功能页都突出一个核心作业：项目接入、事实生成、知识确认、可信检索、上下文包装配、变更影响初判和治理闭环。页面中的按钮、状态、列表和抽屉都对应需求文档中的对象流转。</p>
+            <div class="hero-actions toolbar">
+              <a class="btn primary" href="03-代码智能.html">查看代码智能工作台</a>
+              <a class="btn" href="05-检索与上下文.html">查看检索与上下文</a>
+              <a class="btn" href="07-治理审计.html">查看治理闭环</a>
+            </div>
+          </div>
+          <div class="command-panel">
+            <span class="tag green">端到端主链路</span>
+            <div class="flow">
+              <span>项目</span><i>-></i><span>代码事实</span><i>-></i><span>知识证据</span><i>-></i><span>检索</span><i>-></i><span>上下文包</span><i>-></i><span>治理</span>
+            </div>
+            <div>
+              <div class="big-number">7</div>
+              <div class="hint">个功能域被拆成独立高保真页面，每页保留关键操作、状态反馈和跨模块跳转。</div>
+            </div>
           </div>
         </section>
 
-        <section class="grid four">
-          <a class="metric" href="01-组织层.html"><span>功能 01</span><b>组织层</b><span>登录、项目、账号、系统配置</span></a>
-          <a class="metric" href="02-项目空间.html"><span>功能 02</span><b>项目空间</b><span>总览、配置、成员、任务</span></a>
-          <a class="metric" href="03-代码智能.html"><span>功能 03</span><b>代码智能</b><span>代码事实、接口关系、图关系</span></a>
-          <a class="metric" href="04-知识资产.html"><span>功能 04</span><b>知识资产</b><span>知识文档、资产、Evidence</span></a>
-          <a class="metric" href="05-检索与上下文.html"><span>功能 05</span><b>检索上下文</b><span>Qdrant、SearchResult、ContextPackage</span></a>
-          <a class="metric" href="06-变更影响.html"><span>功能 06</span><b>变更影响</b><span>diff 初判、影响知识、ReviewTask 候选</span></a>
-          <a class="metric" href="07-治理审计.html"><span>功能 07</span><b>治理审计</b><span>治理看板、复审、低命中、审计</span></a>
-          <div class="metric"><span>视觉原则</span><b>状态轨道</b><span>所有项目页始终展示项目、快照、索引和图状态</span></div>
+        <section class="feature-strip">
+          <a class="feature-card" href="01-组织层.html">
+            <span class="tag blue">组织层</span>
+            <b>项目与权限</b>
+            <p class="muted">项目隔离、用户授权、系统健康、连接配置。</p>
+          </a>
+          <a class="feature-card" href="02-项目空间.html">
+            <span class="tag green">项目空间</span>
+            <b>项目控制塔</b>
+            <p class="muted">仓库、任务、成员、项目级状态轨道。</p>
+          </a>
+          <a class="feature-card" href="03-代码智能.html">
+            <span class="tag violet">代码智能</span>
+            <b>事实生成</b>
+            <p class="muted">CodeFact、Endpoint、SQL、Neo4j 图谱。</p>
+          </a>
+          <a class="feature-card" href="04-知识资产.html">
+            <span class="tag amber">知识资产</span>
+            <b>确认与证据</b>
+            <p class="muted">文档、知识资产、Evidence、复审日期。</p>
+          </a>
         </section>
 
-        <section class="card" style="margin-top:14px">
-          <h2>页面拆分原则</h2>
-          <div class="grid three" style="margin-top:14px">
-            <div class="panel"><h3>组织层</h3><p class="muted">只处理用户、项目和全局配置，不混入项目数据。</p></div>
-            <div class="panel"><h3>项目空间</h3><p class="muted">所有项目内页面共享状态轨道和项目级权限。</p></div>
-            <div class="panel"><h3>功能页</h3><p class="muted">每个功能页保留列表、详情、状态、失败兜底和跳转入口。</p></div>
+        <section class="workbench">
+          <div class="workbench-head">
+            <h2>功能拆分后的串联方式</h2>
+            <span class="tag blue">页面不是孤岛</span>
+          </div>
+          <div class="workbench-body">
+            <div class="relation-board">
+              <div><strong>组织层</strong><br><span class="muted">创建项目、分配负责人、配置 MySQL/Qdrant/Neo4j。</span></div>
+              <div><strong>项目空间</strong><br><span class="muted">触发仓库同步、代码分析、索引构建和任务查看。</span></div>
+              <div><strong>代码智能</strong><br><span class="muted">将源码转为 CodeFact，并写入图关系。</span></div>
+              <div><strong>知识资产</strong><br><span class="muted">把文档确认成可检索知识，并绑定证据。</span></div>
+              <div><strong>检索上下文</strong><br><span class="muted">从统一索引召回对象，装配 ContextPackage。</span></div>
+            </div>
+            <div class="grid two" style="margin-top:14px">
+              <div class="panel">
+                <div class="section-head"><h3>变更影响</h3><span class="tag amber">候选初判</span></div>
+                <p>输入文件列表或 diff，系统结合 CodeFact、Neo4j 有限路径和 Qdrant 语义召回，输出影响接口、知识和 ReviewTask 候选。</p>
+              </div>
+              <div class="panel">
+                <div class="section-head"><h3>治理审计</h3><span class="tag red">闭环</span></div>
+                <p>低命中、缺证据、复审逾期、变更命中和失败任务都会进入治理看板，处理结果写回知识、索引、图和审计事件。</p>
+              </div>
+            </div>
           </div>
         </section>
       </div>

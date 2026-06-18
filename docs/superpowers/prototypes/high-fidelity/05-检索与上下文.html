@@ -11,93 +11,118 @@
     <aside class="sidebar">
       <div class="brand"><strong>检索与上下文</strong><span>Qdrant 与 ContextPackage</span></div>
       <div class="nav-section">
-        <small>功能页面</small>
-        <a class="nav-link" href="index.html">总览</a>
+        <small>功能地图</small>
+        <a class="nav-link" href="index.html">功能总览</a>
         <a class="nav-link" href="03-代码智能.html">代码智能</a>
         <a class="nav-link" href="04-知识资产.html">知识资产</a>
         <a class="nav-link active" href="05-检索与上下文.html">检索与上下文</a>
         <a class="nav-link" href="06-变更影响.html">变更影响</a>
+        <a class="nav-link" href="07-治理审计.html">治理审计</a>
       </div>
     </aside>
+
     <main class="main">
       <div class="topbar">
         <div class="project-rail">
-          <span class="rail-pill">order-service</span>
-          <span class="rail-pill">Qdrant ready</span>
-          <span class="rail-pill">IndexRecord 23,450</span>
-          <span class="rail-pill">last build failed</span>
-          <span class="rail-pill">SearchLog 1,284</span>
+          <span class="rail-pill"><strong>项目</strong> order-service</span>
+          <span class="rail-pill"><strong>Qdrant</strong> ready</span>
+          <span class="rail-pill"><strong>IndexRecord</strong> 23,450</span>
+          <span class="rail-pill"><strong>最近构建</strong> failed</span>
+          <span class="rail-pill"><strong>SearchLog</strong> 1,284</span>
         </div>
         <span class="tag amber">使用最近成功索引</span>
       </div>
+
       <div class="page">
         <section class="hero">
-          <div class="eyebrow">Search and context</div>
-          <h1>统一索引、可信检索与 AI 上下文包</h1>
-          <p class="lead">同一套检索结果可复制、加入上下文包、绑定 Evidence 或生成知识草稿。导出上下文包前必须复检权限和引用有效性。</p>
+          <div class="hero-copy">
+            <div class="eyebrow">Search to context</div>
+            <h1>让检索结果直接变成 AI 可用的研发上下文包</h1>
+            <p class="lead">检索页的核心不是返回一组链接，而是把 CodeFact、KnowledgeAsset、Endpoint、SQL 和 Evidence 组合成可审计的 ContextPackage。每个结果都能追溯来源、状态和风险。</p>
+            <div class="hero-actions search-box">
+              <div class="query">订单取消后退款规则是什么？</div>
+              <span class="btn primary">可信检索</span>
+            </div>
+          </div>
+          <div class="command-panel">
+            <span class="tag green">上下文包候选</span>
+            <div class="big-number">8</div>
+            <p class="muted">已选 4 个对象，预计 6,420 tokens；包含 2 条已确认知识、1 个方法和 1 条 SQL。</p>
+            <div class="toolbar"><span class="btn primary">生成上下文包</span><span class="btn">复制引用清单</span></div>
+          </div>
         </section>
 
-        <section class="grid four">
-          <div class="metric"><span>索引记录</span><b>23,450</b><span>代码、知识、接口、SQL</span></div>
-          <div class="metric"><span>最近成功</span><b>10:20</b><span>今天</span></div>
-          <div class="metric"><span>低命中</span><b>18</b><span>进入治理看板</span></div>
-          <div class="metric"><span>上下文包</span><b>63</b><span>本周生成</span></div>
+        <section class="feature-strip">
+          <div class="feature-card"><span class="tag green">索引记录</span><b>23,450</b><p class="muted">代码、知识、接口、SQL 统一入库。</p></div>
+          <div class="feature-card"><span class="tag amber">低命中</span><b>18</b><p class="muted">进入治理看板。</p></div>
+          <div class="feature-card"><span class="tag blue">上下文包</span><b>63</b><p class="muted">本周生成，均保留导出审计。</p></div>
+          <div class="feature-card"><span class="tag violet">敏感复检</span><b>100%</b><p class="muted">导出前复检权限和引用有效性。</p></div>
         </section>
 
-        <section class="table-card" style="margin-top:14px">
-          <div class="toolbar"><h2>统一索引</h2><span class="btn primary">构建索引</span><span class="select">来源：全部</span><span class="select">状态：全部</span></div>
-          <table>
-            <thead><tr><th>来源</th><th>标题</th><th>状态</th><th>chunk</th><th>更新时间</th><th>操作</th></tr></thead>
-            <tbody>
-              <tr><td>knowledge_asset</td><td>订单取消规则</td><td><span class="tag green">ready</span></td><td>3</td><td>10:20</td><td>源对象</td></tr>
-              <tr><td>code_fact</td><td>OrderService.cancel</td><td><span class="tag amber">stale</span></td><td>1</td><td>09:42</td><td>重建</td></tr>
-              <tr><td>endpoint</td><td>POST /orders/{id}/cancel</td><td><span class="tag green">ready</span></td><td>2</td><td>10:20</td><td>源对象</td></tr>
-            </tbody>
-          </table>
-        </section>
-
-        <section class="workspace" style="margin-top:14px">
-          <div class="workspace-header"><h2>可信检索</h2><span class="tag blue">projectId filter</span></div>
-          <div class="workspace-body">
-            <div class="toolbar"><span class="field" style="min-width:360px">订单取消后退款规则是什么？</span><span class="btn primary">搜索</span><span class="select">来源：全部</span><span class="select">状态：已确认优先</span></div>
-            <div class="grid two">
-              <div class="card">
-                <h3>订单取消规则</h3>
-                <p class="muted">命中 KnowledgeAsset，score 0.82，状态 confirmed，Evidence 3 条。</p>
-                <p>当订单进入 paid 状态后，取消必须先创建退款单，再释放库存。</p>
-                <div class="toolbar"><span class="tag green">confirmed</span><span class="btn">查看源对象</span><span class="btn">加入上下文</span><span class="btn">绑定证据</span></div>
+        <section class="workbench">
+          <div class="workbench-head">
+            <h2>可信检索工作台</h2>
+            <div class="toolbar"><span class="select">来源：全部</span><span class="select">状态：confirmed 优先</span><span class="select">项目过滤：开启</span></div>
+          </div>
+          <div class="workbench-body split wide">
+            <div class="rail-list">
+              <div class="rail-item active">
+                <div class="section-head"><strong>订单取消规则</strong><span class="tag green">score 0.82</span></div>
+                <p>命中 KnowledgeAsset，状态 confirmed，Evidence 3 条。解释：业务规则与问题完全匹配。</p>
+                <div class="toolbar" style="margin-top:8px"><span class="btn primary">加入上下文</span><span class="btn">查看源对象</span><span class="btn">绑定 Evidence</span></div>
               </div>
-              <div class="card">
-                <h3>OrderService.cancelOrder</h3>
-                <p class="muted">命中 CodeFact，score 0.76，关联 Endpoint 与 SQL。</p>
-                <p>推荐原因：方法名、注释和绑定 Evidence 与查询高度相关。</p>
-                <div class="toolbar"><span class="tag blue">code_fact</span><span class="btn">查看代码</span><span class="btn">加入上下文</span></div>
+              <div class="rail-item">
+                <div class="section-head"><strong>OrderService.cancelOrder</strong><span class="tag blue">score 0.76</span></div>
+                <p>命中 CodeFact，关联 Endpoint 和退款 SQL。适合回答实现路径。</p>
+                <div class="toolbar" style="margin-top:8px"><span class="btn">加入上下文</span><span class="btn">查看代码</span></div>
+              </div>
+              <div class="rail-item">
+                <div class="section-head"><strong>支付超时复盘</strong><span class="tag amber">score 0.41</span></div>
+                <p>语义相关但状态 stale，加入上下文时会显示风险提示。</p>
+                <div class="toolbar" style="margin-top:8px"><span class="btn warning">加入并标风险</span></div>
+              </div>
+            </div>
+            <div class="detail-drawer">
+              <div class="section-head"><h3>结果解释</h3><span class="tag green">可信</span></div>
+              <p>该结果来源于已确认知识，并绑定 OrderService.cancelOrder、RefundMapper.selectRefundableOrders 和订单取消接口说明。</p>
+              <div class="timeline" style="margin-top:12px">
+                <div class="timeline-item"><span class="tag green">状态</span><div>confirmed，可进入上下文包。</div></div>
+                <div class="timeline-item"><span class="tag blue">证据</span><div>3 条 Evidence，覆盖代码和 SQL。</div></div>
+                <div class="timeline-item"><span class="tag amber">注意</span><div>退款失败分支说明缺失，已进入治理队列。</div></div>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="workspace" style="margin-top:14px">
-          <div class="workspace-header"><h2>AI 研发助手</h2><span class="tag violet">ContextPackage</span></div>
-          <div class="workspace-body grid three">
+        <section class="workbench" style="margin-top:14px">
+          <div class="workbench-head">
+            <h2>AI 研发助手上下文装配</h2>
+            <span class="tag violet">ContextPackage</span>
+          </div>
+          <div class="workbench-body grid three">
             <div class="panel">
               <h3>任务输入</h3>
               <div class="form-row"><span class="muted">任务类型</span><div class="input"></div></div>
               <div class="editor">实现订单取消接口，需要检查退款、库存释放、通知和审计影响。</div>
-              <div class="toolbar"><span class="btn primary">召回上下文</span></div>
+              <div class="toolbar" style="margin-top:12px"><span class="btn primary">召回上下文</span></div>
             </div>
             <div class="panel">
-              <h3>候选上下文</h3>
-              <p><input type="checkbox" checked> 订单取消规则 <span class="tag green">confirmed</span></p>
-              <p><input type="checkbox" checked> OrderService.cancelOrder <span class="tag blue">code</span></p>
-              <p><input type="checkbox"> POST /orders/{id}/cancel <span class="tag amber">api_doc stale</span></p>
-              <p><input type="checkbox" checked> RefundMapper.selectRefundableOrders <span class="tag blue">sql</span></p>
+              <h3>已选上下文</h3>
+              <div class="rail-list" style="margin-top:10px">
+                <div class="rail-item active">订单取消规则 <span class="tag green">confirmed</span></div>
+                <div class="rail-item active">OrderService.cancelOrder <span class="tag blue">code</span></div>
+                <div class="rail-item active">RefundMapper.selectRefundableOrders <span class="tag blue">sql</span></div>
+                <div class="rail-item">POST /orders/{id}/cancel <span class="tag amber">api_doc stale</span></div>
+              </div>
             </div>
             <div class="panel">
-              <h3>上下文包预览</h3>
-              <p class="muted">包含任务描述、已确认知识、风险提示、代码事实、接口、SQL、测试建议和引用清单。</p>
-              <div class="toolbar"><span class="btn primary">生成</span><span class="btn">复制</span><span class="btn">导出</span></div>
-              <p><span class="tag amber">导出前复检权限和敏感信息</span></p>
+              <h3>导出前复检</h3>
+              <p class="muted">检查权限、敏感信息、引用有效性、stale 风险和 token 预算。</p>
+              <div class="timeline" style="margin-top:12px">
+                <div class="timeline-item"><span class="tag green">权限</span><div>项目成员可导出。</div></div>
+                <div class="timeline-item"><span class="tag amber">风险</span><div>1 个 stale 对象需保留提示。</div></div>
+              </div>
+              <div class="toolbar" style="margin-top:12px"><span class="btn primary">生成</span><span class="btn">复制</span><span class="btn">导出</span></div>
             </div>
           </div>
         </section>

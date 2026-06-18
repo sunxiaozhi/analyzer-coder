@@ -9,10 +9,10 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <div class="brand"><strong>项目空间</strong><span>项目总览与设置</span></div>
+      <div class="brand"><strong>项目空间</strong><span>项目内控制塔</span></div>
       <div class="nav-section">
-        <small>功能页面</small>
-        <a class="nav-link" href="index.html">总览</a>
+        <small>功能地图</small>
+        <a class="nav-link" href="index.html">功能总览</a>
         <a class="nav-link" href="01-组织层.html">组织层</a>
         <a class="nav-link active" href="02-项目空间.html">项目空间</a>
         <a class="nav-link" href="03-代码智能.html">代码智能</a>
@@ -22,75 +22,104 @@
         <a class="nav-link" href="07-治理审计.html">治理审计</a>
       </div>
     </aside>
+
     <main class="main">
       <div class="topbar">
         <div class="project-rail">
-          <span class="rail-pill">order-service</span>
-          <span class="rail-pill">main</span>
-          <span class="rail-pill">snapshot abc123</span>
-          <span class="rail-pill">analysis partial_failed</span>
-          <span class="rail-pill">index stale</span>
+          <span class="rail-pill"><strong>项目</strong> order-service</span>
+          <span class="rail-pill"><strong>分支</strong> main</span>
+          <span class="rail-pill"><strong>快照</strong> abc123</span>
+          <span class="rail-pill"><strong>分析</strong> partial_failed</span>
+          <span class="rail-pill"><strong>索引</strong> stale</span>
         </div>
         <span class="tag amber">2 个任务需要处理</span>
       </div>
+
       <div class="page">
         <section class="hero">
-          <div class="eyebrow">Project workspace</div>
-          <h1>项目总览</h1>
-          <p class="lead">项目空间汇总仓库、分析、索引、知识和治理状态。用户从这里进入所有项目内工作流。</p>
-          <div class="toolbar"><span class="btn primary">同步仓库</span><span class="btn">触发代码分析</span><span class="btn">构建索引</span><span class="btn">打开可信检索</span><span class="btn">生成上下文包</span></div>
-        </section>
-
-        <section class="grid four">
-          <div class="metric"><span>代码事实</span><b>12,430</b><span>文件、类、方法、接口、SQL</span></div>
-          <div class="metric"><span>接口</span><b>186</b><span>17 个缺少说明</span></div>
-          <div class="metric"><span>知识资产</span><b>84</b><span>52 个已确认</span></div>
-          <div class="metric"><span>待治理</span><b>23</b><span>待复审、缺证据、低命中</span></div>
-        </section>
-
-        <section class="grid two" style="margin-top:14px">
-          <div class="table-card">
-            <div class="toolbar"><h2>最近任务</h2><span class="btn">查看全部</span></div>
-            <table>
-              <thead><tr><th>任务</th><th>状态</th><th>触发人</th><th>失败原因</th><th>操作</th></tr></thead>
-              <tbody>
-                <tr><td>代码分析</td><td><span class="tag amber">partial_failed</span></td><td>张三</td><td>12 个文件解析失败</td><td>查看文件</td></tr>
-                <tr><td>索引构建</td><td><span class="tag red">failed</span></td><td>李四</td><td>Qdrant 写入超时</td><td>重试</td></tr>
-                <tr><td>上下文包</td><td><span class="tag green">succeeded</span></td><td>王五</td><td>-</td><td>查看</td></tr>
-              </tbody>
-            </table>
+          <div class="hero-copy">
+            <div class="eyebrow">Project cockpit</div>
+            <h1>从项目空间发起所有项目内任务，并看清每个状态的后果</h1>
+            <p class="lead">项目空间是代码智能、知识资产、检索上下文、变更影响和治理审计的入口。用户不需要猜下一步：异常状态旁边直接给出可执行操作。</p>
+            <div class="hero-actions toolbar">
+              <span class="btn primary">同步仓库</span>
+              <span class="btn">触发代码分析</span>
+              <span class="btn">构建索引</span>
+              <span class="btn warning">处理失败任务</span>
+            </div>
           </div>
-          <div class="card">
-            <h2>项目健康</h2>
-            <div class="timeline" style="margin-top:12px">
-              <div class="timeline-item"><span class="tag green">代码</span><div>最近快照 abc123，可用；部分文件失败但成功事实保留。</div></div>
-              <div class="timeline-item"><span class="tag amber">索引</span><div>知识资产变更后索引已过期，最近成功版本仍可检索。</div></div>
-              <div class="timeline-item"><span class="tag red">图关系</span><div>Neo4j 正常，但上次影响分析写入 REQUIRES_REVIEW 失败。</div></div>
+          <div class="command-panel">
+            <span class="tag amber">当前推荐动作</span>
+            <h2>先修复索引构建失败</h2>
+            <p class="muted">最近一次索引写入 Qdrant 超时。可信检索仍使用最近成功版本，但新增知识不会进入结果。</p>
+            <div class="toolbar"><span class="btn primary">重试索引</span><span class="btn">查看日志</span></div>
+          </div>
+        </section>
+
+        <section class="feature-strip">
+          <div class="feature-card"><span class="tag green">代码事实</span><b>12,430</b><p class="muted">文件、类、方法、Endpoint、SQL。</p></div>
+          <div class="feature-card"><span class="tag blue">知识资产</span><b>84</b><p class="muted">52 个已确认，9 个 stale。</p></div>
+          <div class="feature-card"><span class="tag amber">治理事项</span><b>23</b><p class="muted">缺证据、复审逾期、低命中。</p></div>
+          <div class="feature-card"><span class="tag violet">上下文包</span><b>63</b><p class="muted">本周生成，全部有审计记录。</p></div>
+        </section>
+
+        <section class="workbench">
+          <div class="workbench-head">
+            <h2>项目任务队列</h2>
+            <div class="toolbar"><span class="select">任务类型：全部</span><span class="select">状态：未完成</span></div>
+          </div>
+          <div class="workbench-body split wide">
+            <div class="kanban">
+              <div class="lane">
+                <div class="section-head"><h3>阻断</h3><span class="tag red">1</span></div>
+                <div class="rail-item active"><strong>索引构建失败</strong><p class="muted">Qdrant 写入超时，新增知识未进入检索。</p><div class="toolbar"><span class="btn primary">重试</span><span class="btn">日志</span></div></div>
+              </div>
+              <div class="lane">
+                <div class="section-head"><h3>需确认</h3><span class="tag amber">2</span></div>
+                <div class="rail-item"><strong>代码分析部分失败</strong><p class="muted">12 个文件解析失败，成功事实已保留。</p></div>
+                <div class="rail-item"><strong>ReviewTask 逾期</strong><p class="muted">支付超时复盘已超过复审日。</p></div>
+              </div>
+              <div class="lane">
+                <div class="section-head"><h3>正常</h3><span class="tag green">4</span></div>
+                <div class="rail-item"><strong>Neo4j 图快照</strong><p class="muted">当前图关系可用于影响分析。</p></div>
+                <div class="rail-item"><strong>仓库同步</strong><p class="muted">main 分支已同步到 abc123。</p></div>
+              </div>
+            </div>
+            <div class="detail-drawer">
+              <div class="section-head"><h3>任务详情</h3><span class="tag red">failed</span></div>
+              <p>IndexTask #208 在写入 collection order-service-code-knowledge 时超时。</p>
+              <div class="timeline" style="margin-top:12px">
+                <div class="timeline-item"><span class="tag green">读取</span><div>23,450 个 IndexRecord 已生成。</div></div>
+                <div class="timeline-item"><span class="tag amber">写入</span><div>写入 18,920 条后超时。</div></div>
+                <div class="timeline-item"><span class="tag blue">兜底</span><div>检索自动降级到最近成功索引。</div></div>
+              </div>
             </div>
           </div>
         </section>
 
         <section class="grid two" style="margin-top:14px">
-          <div class="card">
-            <h2>项目配置</h2>
-            <div class="grid two" style="margin-top:12px">
+          <div class="workbench">
+            <div class="workbench-head"><h2>项目配置</h2><span class="tag blue">项目级隔离</span></div>
+            <div class="workbench-body grid two">
               <div class="form-row"><span class="muted">Git 地址</span><div class="input"></div></div>
               <div class="form-row"><span class="muted">默认分支</span><div class="input"></div></div>
               <div class="form-row"><span class="muted">代码路径</span><div class="input"></div></div>
               <div class="form-row"><span class="muted">知识路径</span><div class="input"></div></div>
+              <div class="toolbar"><span class="btn primary">保存配置</span><span class="btn">测试仓库</span><span class="btn danger">归档项目</span></div>
             </div>
-            <div class="toolbar"><span class="btn primary">保存配置</span><span class="btn">测试仓库</span><span class="btn danger">归档项目</span></div>
           </div>
-          <div class="table-card">
-            <div class="toolbar"><h2>项目成员</h2><span class="btn primary">添加成员</span></div>
-            <table>
-              <thead><tr><th>用户</th><th>项目角色</th><th>状态</th><th>操作</th></tr></thead>
-              <tbody>
-                <tr><td>张三</td><td>负责人</td><td><span class="tag green">启用</span></td><td>修改</td></tr>
-                <tr><td>李四</td><td>项目成员</td><td><span class="tag green">启用</span></td><td>移除</td></tr>
-                <tr><td>赵六</td><td>只读成员</td><td><span class="tag green">启用</span></td><td>修改</td></tr>
-              </tbody>
-            </table>
+          <div class="workbench">
+            <div class="workbench-head"><h2>项目成员</h2><span class="btn primary">添加成员</span></div>
+            <div class="workbench-body">
+              <table>
+                <thead><tr><th>用户</th><th>角色</th><th>可执行动作</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td>张三</td><td>负责人</td><td>全部项目内操作</td><td><span class="tag green">启用</span></td></tr>
+                  <tr><td>李四</td><td>项目成员</td><td>分析、检索、上下文包</td><td><span class="tag green">启用</span></td></tr>
+                  <tr><td>赵六</td><td>只读成员</td><td>查看与导出受限</td><td><span class="tag green">启用</span></td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       </div>

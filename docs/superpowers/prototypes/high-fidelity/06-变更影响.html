@@ -9,72 +9,100 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <div class="brand"><strong>变更影响</strong><span>初判与复审候选</span></div>
+      <div class="brand"><strong>变更影响</strong><span>diff 初判与复审候选</span></div>
       <div class="nav-section">
-        <small>功能页面</small>
-        <a class="nav-link" href="index.html">总览</a>
+        <small>功能地图</small>
+        <a class="nav-link" href="index.html">功能总览</a>
+        <a class="nav-link" href="03-代码智能.html">代码智能</a>
         <a class="nav-link" href="05-检索与上下文.html">检索与上下文</a>
         <a class="nav-link active" href="06-变更影响.html">变更影响</a>
         <a class="nav-link" href="07-治理审计.html">治理审计</a>
       </div>
     </aside>
+
     <main class="main">
       <div class="topbar">
         <div class="project-rail">
-          <span class="rail-pill">order-service</span>
-          <span class="rail-pill">基线 abc123</span>
-          <span class="rail-pill">CodeFact ready</span>
-          <span class="rail-pill">Neo4j ready</span>
-          <span class="rail-pill">Qdrant ready</span>
+          <span class="rail-pill"><strong>项目</strong> order-service</span>
+          <span class="rail-pill"><strong>基线</strong> abc123</span>
+          <span class="rail-pill"><strong>CodeFact</strong> ready</span>
+          <span class="rail-pill"><strong>Neo4j</strong> ready</span>
+          <span class="rail-pill"><strong>Qdrant</strong> ready</span>
         </div>
-        <span class="tag amber">结果为候选初判</span>
+        <span class="tag amber">候选初判，需人工确认</span>
       </div>
+
       <div class="page">
         <section class="hero">
-          <div class="eyebrow">Change analysis</div>
-          <h1>文件列表或 diff 影响初判</h1>
-          <p class="lead">系统基于直接 CodeFact、Neo4j 有限路径和 Qdrant 语义候选输出影响范围。知识状态变化必须由项目负责人确认。</p>
-        </section>
-
-        <section class="grid two">
-          <div class="card">
-            <h2>输入变更</h2>
-            <div class="toolbar"><span class="btn primary">文件列表</span><span class="btn">diff</span></div>
-            <div class="editor">src/main/java/com/acme/order/OrderService.java<br>src/main/resources/mapper/OrderMapper.xml<br>web/src/api/order.ts</div>
-            <div class="toolbar"><span class="btn primary">开始分析</span><span class="tag blue">使用当前快照 abc123</span></div>
+          <div class="hero-copy">
+            <div class="eyebrow">Change impact</div>
+            <h1>输入 diff 后，直接看到受影响代码、接口、知识和测试建议</h1>
+            <p class="lead">变更影响不是“自动判定真相”，而是把直接命中的 CodeFact、Neo4j 有限路径和 Qdrant 语义候选分层展示，并把需复审的知识转成 ReviewTask 候选。</p>
+            <div class="hero-actions toolbar">
+              <span class="btn primary">开始分析</span>
+              <span class="btn">导入文件列表</span>
+              <span class="btn">粘贴 diff</span>
+              <span class="btn warning">生成复审候选</span>
+            </div>
           </div>
-          <div class="table-card">
-            <div class="toolbar"><h2>历史任务</h2><span class="select">状态：全部</span></div>
-            <table>
-              <thead><tr><th>时间</th><th>输入</th><th>状态</th><th>影响知识</th><th>操作</th></tr></thead>
-              <tbody>
-                <tr><td>10:20</td><td>file_list</td><td><span class="tag green">succeeded</span></td><td>3</td><td>查看</td></tr>
-                <tr><td>昨天</td><td>diff</td><td><span class="tag amber">partial</span></td><td>1</td><td>查看</td></tr>
-              </tbody>
-            </table>
+          <div class="command-panel">
+            <span class="tag blue">本次输入</span>
+            <h2>3 个文件，命中 9 个对象</h2>
+            <p class="muted">OrderService.java、OrderMapper.xml、web/src/api/order.ts。</p>
+            <div class="toolbar"><span class="btn primary">查看影响详情</span><span class="btn">生成上下文包</span></div>
           </div>
         </section>
 
-        <section class="workspace" style="margin-top:14px">
-          <div class="workspace-header"><h2>影响分析详情</h2><span class="tag blue">confidence: medium</span></div>
-          <div class="workspace-body">
-            <div class="toolbar"><span class="btn primary">变更文件</span><span class="btn">命中代码事实</span><span class="btn">影响接口</span><span class="btn">影响知识</span><span class="btn">风险点</span><span class="btn">测试建议</span><span class="btn">图路径</span></div>
-            <table>
-              <thead><tr><th>对象</th><th>分层</th><th>置信度</th><th>推荐原因</th><th>动作</th></tr></thead>
-              <tbody>
-                <tr><td>OrderService.cancelOrder</td><td>确定事实</td><td><span class="tag blue">事实</span></td><td>变更文件直接命中方法行区间</td><td>查看代码</td></tr>
-                <tr><td>POST /orders/{id}/cancel</td><td>高置信候选</td><td><span class="tag green">高</span></td><td>Method EXPOSES Endpoint</td><td>查看接口</td></tr>
-                <tr><td>订单取消规则</td><td>高置信候选</td><td><span class="tag green">高</span></td><td>Evidence 指向变更方法</td><td>生成 ReviewTask</td></tr>
-                <tr><td>库存释放规则</td><td>低置信候选</td><td><span class="tag amber">低</span></td><td>Qdrant 语义召回</td><td>加入上下文</td></tr>
-              </tbody>
-            </table>
+        <section class="feature-strip">
+          <div class="feature-card"><span class="tag green">确定事实</span><b>4</b><p class="muted">变更行区间直接命中。</p></div>
+          <div class="feature-card"><span class="tag blue">高置信候选</span><b>3</b><p class="muted">由图关系和 Evidence 推导。</p></div>
+          <div class="feature-card"><span class="tag amber">低置信候选</span><b>2</b><p class="muted">语义召回，需要人工判断。</p></div>
+          <div class="feature-card"><span class="tag red">复审候选</span><b>1</b><p class="muted">订单取消规则被变更命中。</p></div>
+        </section>
+
+        <section class="workbench">
+          <div class="workbench-head">
+            <h2>影响分析工作台</h2>
+            <div class="toolbar"><span class="btn primary">变更文件</span><span class="btn">命中事实</span><span class="btn">影响知识</span><span class="btn">图路径</span><span class="btn">测试建议</span></div>
+          </div>
+          <div class="workbench-body split wide">
+            <div>
+              <table>
+                <thead><tr><th>对象</th><th>分层</th><th>置信度</th><th>推荐原因</th><th>动作</th></tr></thead>
+                <tbody>
+                  <tr><td>OrderService.cancelOrder</td><td>确定事实</td><td><span class="tag blue">事实</span></td><td>变更文件直接命中方法行区间</td><td>查看代码</td></tr>
+                  <tr><td>POST /orders/{id}/cancel</td><td>高置信候选</td><td><span class="tag green">高</span></td><td>Method EXPOSES Endpoint</td><td>查看接口</td></tr>
+                  <tr><td>订单取消规则</td><td>高置信候选</td><td><span class="tag green">高</span></td><td>Evidence 指向变更方法</td><td>生成 ReviewTask</td></tr>
+                  <tr><td>库存释放规则</td><td>低置信候选</td><td><span class="tag amber">低</span></td><td>Qdrant 语义召回</td><td>加入上下文</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="detail-drawer">
+              <div class="section-head"><h3>图路径解释</h3><span class="tag violet">Neo4j</span></div>
+              <div class="mock-graph">
+                <div class="node n1">Changed file</div>
+                <div class="node n2">Method</div>
+                <div class="node n3">Evidence</div>
+                <div class="node n4">Knowledge</div>
+              </div>
+            </div>
           </div>
         </section>
 
         <section class="grid three" style="margin-top:14px">
-          <div class="panel"><h3>风险点</h3><p>退款创建失败时订单状态可能不一致；库存释放和消息通知需回归。</p></div>
-          <div class="panel"><h3>测试建议</h3><p>覆盖 paid、cancelled、refund_failed、库存释放失败和重复取消。</p></div>
-          <div class="panel"><h3>待复审候选</h3><p>订单取消规则命中已确认知识。项目负责人确认后生成 ReviewTask。</p><span class="btn primary">打开候选抽屉</span></div>
+          <div class="panel">
+            <div class="section-head"><h3>风险点</h3><span class="tag red">需要回归</span></div>
+            <p>退款创建失败时订单状态可能不一致；库存释放和消息通知需覆盖异常分支。</p>
+          </div>
+          <div class="panel">
+            <div class="section-head"><h3>测试建议</h3><span class="tag blue">自动生成</span></div>
+            <p>覆盖 paid、cancelled、refund_failed、库存释放失败和重复取消。</p>
+          </div>
+          <div class="panel">
+            <div class="section-head"><h3>复审候选</h3><span class="tag amber">待确认</span></div>
+            <p>订单取消规则命中已确认知识。项目负责人确认后创建 ReviewTask。</p>
+            <div class="toolbar" style="margin-top:12px"><span class="btn primary">创建 ReviewTask</span></div>
+          </div>
         </section>
       </div>
     </main>

@@ -11,72 +11,107 @@
     <aside class="sidebar">
       <div class="brand"><strong>知识资产</strong><span>KnowledgeAsset 与 Evidence</span></div>
       <div class="nav-section">
-        <small>功能页面</small>
-        <a class="nav-link" href="index.html">总览</a>
+        <small>功能地图</small>
+        <a class="nav-link" href="index.html">功能总览</a>
         <a class="nav-link" href="03-代码智能.html">代码智能</a>
         <a class="nav-link active" href="04-知识资产.html">知识资产</a>
         <a class="nav-link" href="05-检索与上下文.html">检索与上下文</a>
+        <a class="nav-link" href="06-变更影响.html">变更影响</a>
         <a class="nav-link" href="07-治理审计.html">治理审计</a>
       </div>
     </aside>
+
     <main class="main">
       <div class="topbar">
         <div class="project-rail">
-          <span class="rail-pill">order-service</span>
-          <span class="rail-pill">KnowledgeAsset 84</span>
-          <span class="rail-pill">confirmed 52</span>
-          <span class="rail-pill">stale 9</span>
-          <span class="rail-pill">缺证据 12</span>
+          <span class="rail-pill"><strong>项目</strong> order-service</span>
+          <span class="rail-pill"><strong>资产</strong> 84</span>
+          <span class="rail-pill"><strong>已确认</strong> 52</span>
+          <span class="rail-pill"><strong>缺证据</strong> 12</span>
+          <span class="rail-pill"><strong>索引</strong> stale</span>
         </div>
-        <span class="tag amber">索引已过期</span>
+        <span class="tag amber">新增知识未入索引</span>
       </div>
+
       <div class="page">
         <section class="hero">
-          <div class="eyebrow">Knowledge center</div>
-          <h1>知识文档与结构化知识资产</h1>
-          <p class="lead">文档负责长期沉淀，知识资产负责确认、复审、证据绑定和进入可信检索。</p>
-          <div class="toolbar"><span class="btn primary">新建知识</span><span class="btn">新建文档</span><span class="btn">应用模板</span><span class="btn warning">查看缺证据</span></div>
+          <div class="hero-copy">
+            <div class="eyebrow">Knowledge asset desk</div>
+            <h1>把散落文档变成可验证、可检索、可复审的知识资产</h1>
+            <p class="lead">知识资产页重点不是写 Markdown，而是让知识完成确认、证据绑定、复审设置和索引回流。只有状态清楚、证据完整的知识，才应该优先进入上下文包。</p>
+            <div class="hero-actions toolbar">
+              <span class="btn primary">新建知识</span>
+              <span class="btn">应用模板</span>
+              <span class="btn warning">处理缺证据</span>
+              <span class="btn">构建索引</span>
+            </div>
+          </div>
+          <div class="command-panel">
+            <span class="tag amber">当前工作</span>
+            <h2>订单取消规则需要补充 Evidence</h2>
+            <p class="muted">知识已经确认，但 Evidence 只覆盖正常取消，未覆盖退款失败分支。</p>
+            <div class="toolbar"><span class="btn primary">绑定代码事实</span><span class="btn">打开检索候选</span></div>
+          </div>
         </section>
 
-        <section class="workspace">
-          <div class="workspace-header"><h2>知识文档</h2><span class="tag blue">Markdown</span></div>
-          <div class="workspace-body split">
-            <div class="tree">docs/<br>  adr/<br>    订单状态机.md<br>  api/<br>    用户接口.md<br>  incident/<br>    支付超时复盘.md<br>  standard/<br>    Java 开发规范.md</div>
+        <section class="feature-strip">
+          <div class="feature-card"><span class="tag green">confirmed</span><b>52</b><p class="muted">可进入可信检索和上下文包。</p></div>
+          <div class="feature-card"><span class="tag amber">draft</span><b>18</b><p class="muted">需要负责人确认。</p></div>
+          <div class="feature-card"><span class="tag red">stale</span><b>9</b><p class="muted">代码变更命中后待复审。</p></div>
+          <div class="feature-card"><span class="tag violet">模板</span><b>5</b><p class="muted">ADR、API、事故复盘、业务规则、规范。</p></div>
+        </section>
+
+        <section class="workbench">
+          <div class="workbench-head">
+            <h2>知识编辑与资产确认</h2>
+            <div class="toolbar"><span class="btn primary">保存草稿</span><span class="btn">确认知识</span><span class="btn">设置复审</span></div>
+          </div>
+          <div class="workbench-body split">
+            <div class="tree">docs/
+  adr/
+    订单状态机.md
+  api/
+    订单取消接口.md
+  incident/
+    支付超时复盘.md
+  standard/
+    Java 开发规范.md</div>
             <div class="preview">
-              <h3>订单取消规则</h3>
+              <div class="section-head"><h3>订单取消规则</h3><span class="tag green">confirmed</span></div>
               <p>当订单进入 paid 状态后，取消必须先创建退款单，再释放库存。退款失败时订单保持 paid，不进入 cancelled。</p>
-              <p><span class="tag green">已确认知识可进入团队级上下文包</span></p>
+              <div class="grid three" style="margin-top:14px">
+                <div class="panel"><h3>负责人</h3><p class="muted">张三</p></div>
+                <div class="panel"><h3>复审日期</h3><p class="muted">2026-08-01</p></div>
+                <div class="panel"><h3>索引状态</h3><p><span class="tag amber">stale</span></p></div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section class="table-card" style="margin-top:14px">
-          <div class="toolbar"><h2>知识资产</h2><span class="select">状态：全部</span><span class="select">类型：全部</span><span class="field">标签</span></div>
-          <table>
-            <thead><tr><th>标题</th><th>类型</th><th>状态</th><th>证据</th><th>复审日期</th><th>操作</th></tr></thead>
-            <tbody>
-              <tr><td>订单取消规则</td><td>business_rule</td><td><span class="tag green">confirmed</span></td><td>3</td><td>2026-08-01</td><td>详情</td></tr>
-              <tr><td>用户接口说明</td><td>api_doc</td><td><span class="tag amber">draft</span></td><td>1</td><td>-</td><td>编辑</td></tr>
-              <tr><td>支付超时复盘</td><td>incident</td><td><span class="tag red">stale</span></td><td>2</td><td>逾期</td><td>复审</td></tr>
-            </tbody>
-          </table>
-        </section>
-
-        <section class="grid three" style="margin-top:14px">
-          <div class="card">
-            <h2>知识详情抽屉</h2>
-            <p class="muted">标题、类型、状态、正文、标签、负责人、确认人、复审日期、关联上下文包。</p>
-            <div class="toolbar"><span class="btn primary">确认</span><span class="btn warning">标记待复审</span><span class="btn danger">归档</span></div>
+        <section class="grid two" style="margin-top:14px">
+          <div class="workbench">
+            <div class="workbench-head"><h2>知识资产列表</h2><div class="toolbar"><span class="select">状态：全部</span><span class="field">标题、标签</span></div></div>
+            <div class="workbench-body">
+              <table>
+                <thead><tr><th>知识</th><th>类型</th><th>状态</th><th>Evidence</th><th>下一步</th></tr></thead>
+                <tbody>
+                  <tr><td>订单取消规则</td><td>business_rule</td><td><span class="tag green">confirmed</span></td><td>3</td><td>补充退款失败证据</td></tr>
+                  <tr><td>用户接口说明</td><td>api_doc</td><td><span class="tag amber">draft</span></td><td>1</td><td>确认接口参数</td></tr>
+                  <tr><td>支付超时复盘</td><td>incident</td><td><span class="tag red">stale</span></td><td>2</td><td>发起复审</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="card">
-            <h2>证据绑定</h2>
-            <p class="muted">来源：代码事实、接口、SQL、检索结果、外部引用。绑定成功后标记索引 stale，并同步 Neo4j。</p>
-            <div class="toolbar"><span class="btn primary">绑定 Evidence</span><span class="btn">从检索结果导入</span></div>
-          </div>
-          <div class="card">
-            <h2>知识模板</h2>
-            <p class="muted">ADR、API 说明、故障复盘、业务规则、开发规范。模板按项目隔离。</p>
-            <div class="toolbar"><span class="btn">新建模板</span><span class="btn">保存模板</span></div>
+          <div class="workbench">
+            <div class="workbench-head"><h2>Evidence 绑定</h2><span class="tag blue">证据来源可追溯</span></div>
+            <div class="workbench-body">
+              <div class="rail-list">
+                <div class="rail-item active"><strong>OrderService.cancelOrder</strong><p class="muted">CodeFact: method，覆盖取消主流程。</p></div>
+                <div class="rail-item"><strong>RefundMapper.selectRefundableOrders</strong><p class="muted">CodeFact: sql，覆盖退款判断。</p></div>
+                <div class="rail-item"><strong>POST /orders/{id}/cancel</strong><p class="muted">Endpoint，缺少退款失败说明。</p></div>
+              </div>
+              <div class="toolbar" style="margin-top:12px"><span class="btn primary">绑定选中 Evidence</span><span class="btn">从检索导入</span><span class="btn">同步 Neo4j</span></div>
+            </div>
           </div>
         </section>
       </div>
