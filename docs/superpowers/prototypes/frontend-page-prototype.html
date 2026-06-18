@@ -1,0 +1,1038 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>综合研发智能平台 - 前端页面原型图</title>
+  <style>
+    :root {
+      --ink: #18212d;
+      --muted: #667487;
+      --paper: #f7f8fa;
+      --panel: #ffffff;
+      --line: #d5dce5;
+      --line-strong: #aeb9c7;
+      --blue: #315b8d;
+      --teal: #2f806f;
+      --amber: #b86d21;
+      --red: #b84b4b;
+      --violet: #6657a8;
+      --green-soft: #e7f3ef;
+      --blue-soft: #e7edf6;
+      --amber-soft: #fbefe2;
+      --red-soft: #f8e8e8;
+      --shadow: 0 10px 30px rgba(24, 33, 45, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.45;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 264px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .side {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      padding: 22px 18px;
+      background: #111820;
+      color: #e9eef5;
+      border-right: 1px solid #263342;
+    }
+
+    .brand {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 22px;
+    }
+
+    .brand strong {
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .brand span {
+      color: #9fb0c4;
+      font-size: 12px;
+    }
+
+    .nav-group {
+      margin-top: 18px;
+    }
+
+    .nav-title {
+      margin-bottom: 8px;
+      color: #8ea1b8;
+      font-size: 12px;
+    }
+
+    .nav-link {
+      display: block;
+      padding: 8px 10px;
+      margin: 3px 0;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: #dce5ef;
+      font-size: 13px;
+    }
+
+    .nav-link:hover {
+      border-color: #40536a;
+      background: #182331;
+    }
+
+    .main {
+      padding: 24px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr);
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 24px;
+    }
+
+    .hero-panel,
+    .summary-panel,
+    .section,
+    .screen {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-panel {
+      padding: 24px;
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 8px 0 10px;
+      font-size: 30px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 920px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .summary-panel {
+      padding: 18px;
+    }
+
+    .rail-title {
+      margin-bottom: 14px;
+      font-weight: 700;
+    }
+
+    .pipeline {
+      display: grid;
+      gap: 8px;
+    }
+
+    .pipe-step {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 8px;
+      align-items: center;
+      color: #314154;
+      font-size: 12px;
+    }
+
+    .pipe-dot {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .section {
+      margin: 18px 0;
+      padding: 18px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    .section-note {
+      max-width: 660px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .screen-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .screen {
+      overflow: hidden;
+      box-shadow: none;
+    }
+
+    .screen.wide {
+      grid-column: 1 / -1;
+    }
+
+    .screen-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 12px;
+      background: #f1f4f7;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .screen-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .route {
+      color: var(--muted);
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
+    }
+
+    .screen-body {
+      padding: 12px;
+    }
+
+    .app-frame {
+      min-height: 330px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #fbfcfd;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 180px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 10px;
+      background: #18212d;
+      color: #eef4fb;
+      font-size: 12px;
+    }
+
+    .project-track {
+      display: flex;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .track-pill {
+      white-space: nowrap;
+      padding: 4px 7px;
+      border-radius: 5px;
+      background: #263545;
+      color: #d8e3ef;
+      font-size: 11px;
+    }
+
+    .frame-main {
+      display: grid;
+      grid-template-columns: 136px minmax(0, 1fr);
+      min-height: 286px;
+    }
+
+    .mini-nav {
+      padding: 10px;
+      border-right: 1px solid var(--line);
+      background: #edf1f5;
+    }
+
+    .mini-nav div {
+      height: 22px;
+      margin-bottom: 7px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      color: #43556a;
+      font-size: 11px;
+    }
+
+    .mini-nav .active {
+      background: var(--blue);
+      color: white;
+    }
+
+    .content {
+      min-width: 0;
+      padding: 12px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .button {
+      min-height: 26px;
+      padding: 5px 9px;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+      background: #fff;
+      color: #2d3c4e;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .button.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: white;
+    }
+
+    .button.warn {
+      border-color: #d8ab7b;
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .input,
+    .select,
+    .textarea {
+      min-height: 26px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: white;
+      color: #6b7887;
+      font-size: 11px;
+      padding: 5px 8px;
+    }
+
+    .input {
+      min-width: 130px;
+    }
+
+    .textarea {
+      min-height: 82px;
+      width: 100%;
+      display: block;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .metric {
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: white;
+    }
+
+    .metric b {
+      display: block;
+      font-size: 18px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .panel-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .panel-row.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .mini-panel {
+      min-height: 74px;
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: white;
+    }
+
+    .mini-panel h4 {
+      margin: 0 0 8px;
+      font-size: 12px;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      font-size: 11px;
+    }
+
+    .table th,
+    .table td {
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .table th {
+      color: #4b5d72;
+      background: #f2f5f8;
+      font-weight: 700;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .tag.green {
+      background: var(--green-soft);
+      color: var(--teal);
+    }
+
+    .tag.blue {
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .tag.amber {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .tag.red {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .drawer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 170px;
+      gap: 10px;
+    }
+
+    .code-block,
+    .preview {
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #101722;
+      color: #dbe7f4;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 10px;
+      min-height: 96px;
+      overflow: hidden;
+    }
+
+    .preview {
+      background: white;
+      color: var(--ink);
+      font-family: inherit;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 210px minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .tree {
+      min-height: 190px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f5f7fa;
+      color: #3a4c60;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
+    }
+
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin: 12px 0 4px;
+    }
+
+    .flow span {
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: white;
+      font-size: 11px;
+    }
+
+    .flow i {
+      color: var(--muted);
+      font-style: normal;
+    }
+
+    .login-mock {
+      max-width: 360px;
+      margin: 22px auto;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+    }
+
+    .login-mock h3 {
+      margin: 0 0 16px;
+      font-size: 18px;
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .block {
+      height: 22px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #f8fafc;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    @media (max-width: 1180px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .side {
+        position: relative;
+        height: auto;
+      }
+
+      .hero,
+      .screen-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar,
+      .frame-main,
+      .split,
+      .drawer {
+        grid-template-columns: 1fr;
+      }
+
+      .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="side">
+      <div class="brand">
+        <strong>综合研发智能平台</strong>
+        <span>前端页面原型图</span>
+      </div>
+      <div class="nav-group">
+        <div class="nav-title">入口</div>
+        <a class="nav-link" href="#overview">总览</a>
+        <a class="nav-link" href="#navigation">信息架构</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-title">组织层</div>
+        <a class="nav-link" href="#org">登录 / 项目 / 账号 / 配置</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-title">项目空间</div>
+        <a class="nav-link" href="#project">总览 / 配置 / 成员 / 任务</a>
+        <a class="nav-link" href="#code">代码智能</a>
+        <a class="nav-link" href="#knowledge">知识资产</a>
+        <a class="nav-link" href="#search">检索与上下文</a>
+        <a class="nav-link" href="#change">变更影响</a>
+        <a class="nav-link" href="#governance">治理复审与审计</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section id="overview" class="hero">
+        <div class="hero-panel">
+          <div class="eyebrow">Prototype board</div>
+          <h1>面向项目空间的研发智能控制台</h1>
+          <p class="lead">
+            这是一套低保真但可评审的前端页面原型图，覆盖登录、项目管理、代码智能、知识资产、统一索引、
+            可信检索、AI 上下文包、变更影响、治理复审和审计。每张图保留真实业务控件、状态、列表和跳转关系。
+          </p>
+          <div class="flow">
+            <span>项目接入</span><i>-></i><span>代码事实</span><i>-></i><span>Neo4j</span><i>-></i>
+            <span>KnowledgeAsset</span><i>-></i><span>Qdrant</span><i>-></i><span>ContextPackage</span><i>-></i>
+            <span>ReviewTask</span>
+          </div>
+        </div>
+        <div class="summary-panel">
+          <div class="rail-title">贯穿页面的项目状态轨道</div>
+          <div class="pipeline">
+            <div class="pipe-step"><span class="pipe-dot">1</span><span>当前项目、分支、快照始终可见</span></div>
+            <div class="pipe-step"><span class="pipe-dot">2</span><span>分析、索引、图关系、导出状态可追踪</span></div>
+            <div class="pipe-step"><span class="pipe-dot">3</span><span>所有结果能跳转源对象和审计记录</span></div>
+            <div class="pipe-step"><span class="pipe-dot">4</span><span>任务失败保留上一份可用结果</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="navigation" class="section">
+        <div class="section-header">
+          <div>
+            <h2>信息架构与全局导航</h2>
+            <div class="section-note">组织层只承载平台管理；项目空间承载所有研发工作台。左侧菜单按任务而不是技术存储组织。</div>
+          </div>
+          <span class="tag blue">全局框架</span>
+        </div>
+        <div class="screen wide">
+          <div class="screen-bar">
+            <div class="screen-title">应用框架</div>
+            <div class="route">/app/:projectId/*</div>
+          </div>
+          <div class="screen-body">
+            <div class="app-frame">
+              <div class="topbar">
+                <strong>研发智能平台</strong>
+                <div class="project-track">
+                  <span class="track-pill">项目 order-service</span>
+                  <span class="track-pill">分支 main</span>
+                  <span class="track-pill">快照 abc123</span>
+                  <span class="track-pill">索引 stale</span>
+                  <span class="track-pill">Neo4j ready</span>
+                </div>
+                <span>张三 / 项目负责人</span>
+              </div>
+              <div class="frame-main">
+                <div class="mini-nav">
+                  <div class="active">项目总览</div>
+                  <div>代码智能</div>
+                  <div>知识资产</div>
+                  <div>检索与上下文</div>
+                  <div>变更影响</div>
+                  <div>治理复审</div>
+                  <div>项目设置</div>
+                </div>
+                <div class="content">
+                  <div class="cards">
+                    <div class="metric"><b>12,430</b><span>代码事实</span></div>
+                    <div class="metric"><b>84</b><span>知识资产</span></div>
+                    <div class="metric"><b>stale</b><span>索引状态</span></div>
+                    <div class="metric"><b>9</b><span>待复审</span></div>
+                  </div>
+                  <div class="panel-row">
+                    <div class="mini-panel"><h4>快捷入口</h4><span class="button primary">可信检索</span> <span class="button">AI 上下文包</span> <span class="button">构建索引</span></div>
+                    <div class="mini-panel"><h4>状态提醒</h4><span class="tag amber">代码分析部分失败</span> <span class="tag red">索引失败 1 次</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="org" class="section">
+        <div class="section-header">
+          <div>
+            <h2>组织层页面</h2>
+            <div class="section-note">系统管理员负责项目接入、用户授权和系统连接配置；普通用户只进入授权项目。</div>
+          </div>
+          <span class="tag green">MVP</span>
+        </div>
+        <div class="screen-grid">
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">登录页</div><div class="route">/login</div></div>
+            <div class="screen-body">
+              <div class="login-mock">
+                <h3>综合研发智能平台</h3>
+                <label class="field">用户名 <span class="block"></span></label>
+                <label class="field">密码 <span class="block"></span></label>
+                <div class="button primary" style="text-align:center">登录</div>
+                <p class="section-note">错误：账号或密码不正确 / 账号已停用</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">项目列表 + 新建项目</div><div class="route">/projects</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="input">项目名</span><span class="select">状态：全部</span><span class="select">负责人</span><span class="button primary">新建项目</span></div>
+              <table class="table">
+                <thead><tr><th>项目</th><th>分支</th><th>状态</th><th>负责人</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>order-service</td><td>main</td><td><span class="tag green">active</span></td><td>张三</td><td>进入</td></tr>
+                  <tr><td>legacy-crm</td><td>dev</td><td><span class="tag red">sync_failed</span></td><td>李四</td><td>重试</td></tr>
+                </tbody>
+              </table>
+              <div class="panel-row">
+                <div class="mini-panel"><h4>新建项目弹窗</h4>Git 地址、分支、代码路径、知识路径、负责人、成员</div>
+                <div class="mini-panel"><h4>失败状态</h4>保留失败原因，允许重试，不创建错误快照</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">账号与权限</div><div class="route">/admin/users</div></div>
+            <div class="screen-body">
+              <div class="split">
+                <table class="table">
+                  <thead><tr><th>用户</th><th>状态</th><th>系统角色</th></tr></thead>
+                  <tbody>
+                    <tr><td>admin</td><td><span class="tag green">启用</span></td><td>管理员</td></tr>
+                    <tr><td>lisi</td><td><span class="tag green">启用</span></td><td>普通用户</td></tr>
+                  </tbody>
+                </table>
+                <div class="mini-panel">
+                  <h4>用户权限详情</h4>
+                  <div class="toolbar"><span class="button primary">授权项目</span><span class="button">重置密码</span><span class="button warn">停用</span></div>
+                  <table class="table"><tbody><tr><td>order-service</td><td>项目成员</td><td>修改</td></tr><tr><td>payment-api</td><td>只读</td><td>修改</td></tr></tbody></table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">系统配置</div><div class="route">/admin/system-config</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="button primary">基础路径</span><span class="button">MySQL</span><span class="button">Qdrant</span><span class="button">Neo4j</span><span class="button">Embedding</span></div>
+              <div class="panel-row">
+                <div class="mini-panel"><h4>配置表单</h4><div class="field">服务地址 <span class="block"></span></div><div class="field">模型/库名 <span class="block"></span></div><span class="button">测试连接</span> <span class="button primary">保存</span></div>
+                <div class="mini-panel"><h4>健康摘要</h4><span class="tag green">MySQL 正常</span> <span class="tag green">Qdrant 正常</span> <span class="tag red">Neo4j 异常</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="project" class="section">
+        <div class="section-header">
+          <div>
+            <h2>项目空间页面</h2>
+            <div class="section-note">项目总览承担工作台角色；项目配置、成员、任务和审计提供项目级管理闭环。</div>
+          </div>
+          <span class="tag green">MVP</span>
+        </div>
+        <div class="screen-grid">
+          <div class="screen wide">
+            <div class="screen-bar"><div class="screen-title">项目总览</div><div class="route">/projects/:id/overview</div></div>
+            <div class="screen-body">
+              <div class="app-frame">
+                <div class="topbar"><strong>order-service</strong><div class="project-track"><span class="track-pill">分析 partial_failed</span><span class="track-pill">索引 stale</span><span class="track-pill">知识待复审 9</span></div><span>项目负责人</span></div>
+                <div class="content">
+                  <div class="cards">
+                    <div class="metric"><b>12,430</b><span>代码事实</span></div><div class="metric"><b>186</b><span>接口</span></div><div class="metric"><b>84</b><span>知识资产</span></div><div class="metric"><b>2</b><span>失败任务</span></div>
+                  </div>
+                  <div class="panel-row">
+                    <div class="mini-panel"><h4>最近任务</h4>代码分析 partial_failed<br>索引构建 failed<br>上下文包 succeeded</div>
+                    <div class="mini-panel"><h4>知识质量</h4>缺证据 12<br>待复审 9<br>逾期复审 3</div>
+                  </div>
+                  <div class="toolbar"><span class="button primary">同步仓库</span><span class="button">代码分析</span><span class="button">构建索引</span><span class="button">可信检索</span><span class="button">AI 上下文包</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">项目配置 / 成员</div><div class="route">/projects/:id/settings</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="button primary">项目配置</span><span class="button">项目成员</span><span class="button">索引策略</span></div>
+              <div class="panel-row">
+                <div class="mini-panel"><h4>仓库配置</h4>Git 地址、默认分支、默认代码路径、知识库路径</div>
+                <div class="mini-panel"><h4>成员角色</h4>负责人、项目成员、只读成员；至少保留一个负责人</div>
+              </div>
+              <table class="table"><tbody><tr><td>张三</td><td>负责人</td><td>修改</td></tr><tr><td>李四</td><td>成员</td><td>移除</td></tr></tbody></table>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">项目任务</div><div class="route">/projects/:id/tasks</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="select">类型：全部</span><span class="select">状态：全部</span><span class="select">触发人</span></div>
+              <table class="table">
+                <thead><tr><th>任务</th><th>状态</th><th>耗时</th><th>失败原因</th><th>操作</th></tr></thead>
+                <tbody><tr><td>代码分析</td><td><span class="tag amber">partial</span></td><td>2m</td><td>12 个文件解析失败</td><td>查看</td></tr><tr><td>索引构建</td><td><span class="tag red">failed</span></td><td>41s</td><td>Qdrant 写入失败</td><td>重试</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="code" class="section">
+        <div class="section-header">
+          <div>
+            <h2>代码智能页面</h2>
+            <div class="section-note">从代码事实进入证据、上下文和图关系，避免把代码分析做成孤立报表。</div>
+          </div>
+          <span class="tag blue">CodeFact + Neo4j</span>
+        </div>
+        <div class="screen-grid">
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">代码事实</div><div class="route">/projects/:id/code-facts</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="button primary">触发分析</span><span class="button">查看失败文件</span><span class="button">导出图数据</span></div>
+              <div class="toolbar"><span class="select">类型：全部</span><span class="input">文件路径</span><span class="input">符号</span></div>
+              <table class="table"><thead><tr><th>类型</th><th>文件</th><th>符号</th><th>置信度</th><th>操作</th></tr></thead><tbody><tr><td>endpoint</td><td>UserCtl.java</td><td>GET /users</td><td><span class="tag green">高</span></td><td>详情</td></tr><tr><td>sql</td><td>UserMapper.xml</td><td>selectById</td><td><span class="tag amber">中</span></td><td>详情</td></tr></tbody></table>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">代码事实详情 / 图关系</div><div class="route">drawer</div></div>
+            <div class="screen-body">
+              <div class="drawer">
+                <div>
+                  <div class="code-block">22 @GetMapping("/users/{id}")<br>23 public User getUser(...) {<br>24   return userService.getUser(id);<br>25 }</div>
+                  <div class="toolbar"><span class="button primary">绑定证据</span><span class="button">加入上下文</span><span class="button">查看图关系</span></div>
+                </div>
+                <div class="mini-panel"><h4>邻居关系</h4>Method -> Endpoint<br>Method -> SQL<br>Evidence -> CodeFact</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="screen wide">
+            <div class="screen-bar"><div class="screen-title">接口关系</div><div class="route">/projects/:id/interface-map</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="select">HTTP：全部</span><span class="input">路径</span><span class="select">匹配状态</span><span class="select">风险</span></div>
+              <table class="table"><thead><tr><th>方法</th><th>路径</th><th>后端方法</th><th>前端调用</th><th>接口说明</th><th>操作</th></tr></thead><tbody><tr><td>GET</td><td>/api/users/{id}</td><td>getUser</td><td>3</td><td><span class="tag green">已关联</span></td><td>详情</td></tr><tr><td>POST</td><td>/api/orders</td><td>createOrder</td><td>0</td><td><span class="tag amber">缺说明</span></td><td>创建 api_doc</td></tr></tbody></table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="knowledge" class="section">
+        <div class="section-header">
+          <div>
+            <h2>知识资产页面</h2>
+            <div class="section-note">知识文档承载文件化资料；知识资产承载可确认、可复审、可追溯的结构化知识。</div>
+          </div>
+          <span class="tag violet">KnowledgeAsset + Evidence</span>
+        </div>
+        <div class="screen-grid">
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">知识文档</div><div class="route">/projects/:id/knowledge/files</div></div>
+            <div class="screen-body">
+              <div class="split">
+                <div class="tree">docs/<br>  adr/<br>  api/<br>  incident/<br>  standard/</div>
+                <div>
+                  <div class="toolbar"><span class="button primary">新建文档</span><span class="button">应用模板</span><span class="button">创建知识草稿</span></div>
+                  <div class="preview"><b>订单取消规则</b><br><br>当订单进入 paid 状态后，取消需要走退款流程...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">知识资产</div><div class="route">/projects/:id/knowledge/assets</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="button primary">新建知识</span><span class="select">状态：全部</span><span class="select">类型</span><span class="input">标签</span></div>
+              <table class="table"><thead><tr><th>标题</th><th>类型</th><th>状态</th><th>证据</th><th>操作</th></tr></thead><tbody><tr><td>订单取消规则</td><td>business_rule</td><td><span class="tag green">confirmed</span></td><td>3</td><td>详情</td></tr><tr><td>用户接口说明</td><td>api_doc</td><td><span class="tag amber">draft</span></td><td>1</td><td>编辑</td></tr></tbody></table>
+            </div>
+          </div>
+
+          <div class="screen wide">
+            <div class="screen-bar"><div class="screen-title">知识资产详情 / 证据绑定 / 模板</div><div class="route">drawer + dialog</div></div>
+            <div class="screen-body">
+              <div class="panel-row three">
+                <div class="mini-panel"><h4>知识详情</h4>标题、类型、状态、标签、负责人、正文、确认时间、复审日期</div>
+                <div class="mini-panel"><h4>Evidence</h4>代码事实、接口、SQL、检索结果、外部引用；只能绑定当前项目对象</div>
+                <div class="mini-panel"><h4>模板</h4>ADR、API 说明、故障复盘、业务规则、开发规范</div>
+              </div>
+              <div class="toolbar"><span class="button primary">绑定证据</span><span class="button">确认</span><span class="button warn">标记待复审</span><span class="button">归档</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="search" class="section">
+        <div class="section-header">
+          <div>
+            <h2>检索与上下文页面</h2>
+            <div class="section-note">可信检索是上下文包、证据绑定和知识草稿的共同入口；上下文包必须保留引用清单。</div>
+          </div>
+          <span class="tag green">MVP 主链路</span>
+        </div>
+        <div class="screen-grid">
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">统一索引</div><div class="route">/projects/:id/index</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="button primary">构建索引</span><span class="tag amber">stale</span><span class="button">查看失败原因</span></div>
+              <div class="cards"><div class="metric"><b>23,450</b><span>总记录</span></div><div class="metric"><b>12,300</b><span>代码</span></div><div class="metric"><b>300</b><span>知识</span></div><div class="metric"><b>920</b><span>SQL</span></div></div>
+              <table class="table"><tbody><tr><td>knowledge_asset</td><td>订单取消规则</td><td><span class="tag green">ready</span></td></tr><tr><td>code_fact</td><td>OrderService.cancel</td><td><span class="tag amber">stale</span></td></tr></tbody></table>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">可信检索</div><div class="route">/projects/:id/search</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="input" style="min-width:250px">输入问题或关键词</span><span class="button primary">搜索</span><span class="select">来源</span><span class="select">状态</span></div>
+              <div class="mini-panel"><h4>订单取消后退款规则是什么？</h4><span class="tag green">confirmed</span> <span class="tag blue">score 0.82</span><p>命中业务规则、OrderService.cancel 和 POST /orders/{id}/cancel。</p><span class="button">查看源对象</span> <span class="button">加入上下文</span> <span class="button">绑定证据</span> <span class="button">生成知识草稿</span></div>
+            </div>
+          </div>
+
+          <div class="screen wide">
+            <div class="screen-bar"><div class="screen-title">AI 研发助手 / 上下文包</div><div class="route">/projects/:id/assistant</div></div>
+            <div class="screen-body">
+              <div class="panel-row three">
+                <div class="mini-panel"><h4>任务输入</h4><div class="field">任务类型 <span class="block"></span></div><div class="textarea">实现订单取消接口，需要检查退款、库存和通知影响</div><span class="button primary">召回上下文</span></div>
+                <div class="mini-panel"><h4>候选上下文</h4><label><input type="checkbox" checked> 订单取消规则</label><br><label><input type="checkbox" checked> OrderService.cancel()</label><br><label><input type="checkbox"> POST /orders/{id}/cancel</label></div>
+                <div class="mini-panel"><h4>上下文包预览</h4>任务描述、已确认知识、待复审风险、相关代码、接口、SQL、测试建议、引用清单<br><br><span class="button primary">生成</span> <span class="button">复制</span> <span class="button">导出</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="change" class="section">
+        <div class="section-header">
+          <div>
+            <h2>变更影响页面</h2>
+            <div class="section-note">影响分析只做初判，不输出绝对结论；命中知识后生成待复审候选，由项目负责人确认。</div>
+          </div>
+          <span class="tag amber">第二切片</span>
+        </div>
+        <div class="screen-grid">
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">变更影响输入</div><div class="route">/projects/:id/change-analysis</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="button primary">文件列表</span><span class="button">diff</span></div>
+              <div class="textarea">src/main/java/.../OrderService.java<br>src/main/resources/mapper/OrderMapper.xml</div>
+              <div class="toolbar"><span class="button primary">开始分析</span><span class="tag blue">基线 abc123</span></div>
+              <table class="table"><tbody><tr><td>2026-06-18 10:20</td><td>file_list</td><td><span class="tag green">succeeded</span></td><td>查看</td></tr></tbody></table>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">影响分析详情</div><div class="route">/projects/:id/change-analysis/:taskId</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="button primary">变更文件</span><span class="button">影响接口</span><span class="button">影响知识</span><span class="button">风险点</span><span class="button">图路径</span></div>
+              <table class="table"><thead><tr><th>对象</th><th>层级</th><th>置信度</th><th>推荐原因</th><th>操作</th></tr></thead><tbody><tr><td>订单取消规则</td><td>高置信候选</td><td><span class="tag green">高</span></td><td>Evidence 指向变更方法</td><td>生成 ReviewTask</td></tr><tr><td>POST /orders/{id}/cancel</td><td>确定事实</td><td><span class="tag blue">事实</span></td><td>直接命中 endpoint</td><td>查看</td></tr></tbody></table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="governance" class="section">
+        <div class="section-header">
+          <div>
+            <h2>治理复审与审计页面</h2>
+            <div class="section-note">治理看板把低命中、缺证据、证据失效、任务失败和变更命中回流成可处理事项。</div>
+          </div>
+          <span class="tag amber">治理闭环</span>
+        </div>
+        <div class="screen-grid">
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">治理看板</div><div class="route">/projects/:id/governance</div></div>
+            <div class="screen-body">
+              <div class="cards"><div class="metric"><b>9</b><span>待复审</span></div><div class="metric"><b>12</b><span>缺证据</span></div><div class="metric"><b>1</b><span>索引失败</span></div><div class="metric"><b>18</b><span>低命中</span></div></div>
+              <div class="panel-row"><div class="mini-panel"><h4>知识质量</h4>缺证据知识、复审逾期、低质量文档</div><div class="mini-panel"><h4>任务与索引</h4>分析失败、索引失败、导出记录</div></div>
+            </div>
+          </div>
+
+          <div class="screen">
+            <div class="screen-bar"><div class="screen-title">ReviewTask</div><div class="route">/projects/:id/review-tasks</div></div>
+            <div class="screen-body">
+              <div class="toolbar"><span class="select">状态：open</span><span class="select">原因</span><span class="select">负责人</span></div>
+              <table class="table"><thead><tr><th>知识</th><th>原因</th><th>状态</th><th>到期</th><th>操作</th></tr></thead><tbody><tr><td>订单取消规则</td><td>变更命中</td><td><span class="tag amber">open</span></td><td>2026-06-25</td><td>处理</td></tr></tbody></table>
+              <div class="mini-panel"><h4>处理抽屉</h4>触发原因、关联知识、Evidence、ChangeTask、图路径、处理说明、resolved/ignored。</div>
+            </div>
+          </div>
+
+          <div class="screen wide">
+            <div class="screen-bar"><div class="screen-title">低命中治理 / 项目审计</div><div class="route">/projects/:id/audit</div></div>
+            <div class="screen-body">
+              <div class="panel-row">
+                <div>
+                  <h4>低命中治理</h4>
+                  <table class="table"><tbody><tr><td>退款规则如何触发</td><td>0 结果</td><td>创建知识草稿</td></tr><tr><td>库存回滚时机</td><td>topScore 0.21</td><td>指派 ReviewTask</td></tr></tbody></table>
+                </div>
+                <div>
+                  <h4>项目审计</h4>
+                  <table class="table"><tbody><tr><td>10:20</td><td>张三</td><td>上下文导出</td><td>succeeded</td></tr><tr><td>10:12</td><td>李四</td><td>知识确认</td><td>succeeded</td></tr></tbody></table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
