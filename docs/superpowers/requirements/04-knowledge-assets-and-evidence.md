@@ -1,0 +1,110 @@
+# 知识资产与证据需求
+
+## 功能目标
+
+知识资产中心负责把团队经验、业务规则、接口说明、故障案例和开发规范沉淀为可确认、可复审、可追溯的结构化资产。Evidence 负责连接知识资产与代码事实、接口、SQL、调用链、检索结果或外部资料。
+
+## 功能点
+
+| 功能域 | 功能点 |
+|---|---|
+| 知识文档 | 创建、编辑、删除、目录管理、Markdown 预览、模板创建 |
+| 结构化知识资产 | 业务规则、ADR、故障案例、接口说明、开发规范、领域术语、模块说明 |
+| 知识字段 | 标题、摘要、正文、类型、标签、模块、负责人、复审人、来源 |
+| 状态流转 | 草稿、已确认、待复审、已归档 |
+| 知识证据 | 绑定代码文件、类、方法、接口、SQL、调用链、检索结果 |
+| 确认机制 | 确认人、确认时间、复审日期、复审记录 |
+| 模板体系 | 业务规则模板、ADR 模板、接口模板、故障模板、规范模板 |
+
+## 核心对象
+
+### KnowledgeAsset
+
+关键字段：
+
+- `id`
+- `projectId`
+- `type`: `business_rule | adr | incident | api_doc | standard | glossary | module_note`
+- `title`
+- `summary`
+- `content`
+- `status`: `draft | confirmed | stale | archived`
+- `tags`
+- `ownerUserId`
+- `reviewerUserId`
+- `reviewDueAt`
+- `confirmedAt`
+- `sourcePath`
+
+### Evidence
+
+关键字段：
+
+- `id`
+- `projectId`
+- `assetId`
+- `evidenceType`: `code_fact | file | endpoint | sql | search_result | external_ref`
+- `targetId`
+- `filePath`
+- `symbolName`
+- `startLine`
+- `endLine`
+- `note`
+- `confidence`
+
+## 知识沉淀闭环
+
+```text
+创建知识资产
+  -> 保存草稿
+  -> 绑定 Evidence
+  -> 校验证据 projectId
+  -> 写入 Neo4j Evidence/KnowledgeAsset 关系
+  -> 项目负责人确认
+  -> 记录确认人和确认时间
+  -> 标记 IndexRecord stale 或进入索引候选
+```
+
+草稿可以无证据。确认无证据知识时必须形成缺证据治理项。
+
+## 知识资产变更闭环
+
+```text
+新增/编辑/确认/标记待复审/归档 KnowledgeAsset
+  -> 保存 MySQL 状态
+  -> 更新 Neo4j KnowledgeAsset 节点和 Evidence 关系
+  -> 标记相关 IndexRecord stale
+  -> 触发或等待项目索引任务更新 Qdrant
+  -> 写入 AuditEvent
+```
+
+规则：
+
+- 已确认知识优先展示为可信知识。
+- 待复审知识可以参与检索和上下文包，但必须明确标识风险。
+- 草稿知识默认不进入团队级上下文包，可由作者本人显式选择。
+- 没有证据的知识可以保存为草稿，但不建议直接确认。
+- 已确认知识被编辑后，如果正文或证据变化，应回到草稿或待复审。
+- 归档知识默认不参与检索召回和上下文包。
+- Evidence 新增、删除或目标失效时，必须同步更新 Neo4j 证据边，并标记受影响知识资产需要重新索引。
+
+## 接口说明口径
+
+核心可用版不建设独立 InterfaceAsset。接口说明、入参出参、错误码、调用方、负责人和状态先通过 `api_doc` 类型的 KnowledgeAsset 承载，API 映射结果作为 Evidence 绑定。
+
+独立接口资产、参数级治理和接口负责人流转属于增强版。
+
+## 页面与操作
+
+| 页面 | 主要操作 | 关键展示 |
+|---|---|---|
+| 知识文档 | 浏览目录、创建文档、编辑文档、预览 Markdown、应用模板 | 文件树、正文、模板、更新时间 |
+| 知识资产 | 创建、编辑、绑定证据、确认、标记待复审、归档 | 类型、状态、标签、负责人、证据、复审日期 |
+
+## 验收标准
+
+- 成员可以创建草稿知识。
+- 知识资产可以绑定代码事实或检索结果作为证据。
+- 项目负责人可以确认、标记待复审、归档知识。
+- 已确认知识记录确认人和确认时间。
+- 知识正文、状态或 Evidence 变化后，系统标记相关索引为 stale，并同步更新 Neo4j 图关系。
