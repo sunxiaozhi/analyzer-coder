@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>代码智能高保真原型</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand"><strong>代码智能</strong><span>CodeFact 与 Neo4j</span></div>
+      <div class="nav-section">
+        <small>功能页面</small>
+        <a class="nav-link" href="index.html">总览</a>
+        <a class="nav-link" href="02-项目空间.html">项目空间</a>
+        <a class="nav-link active" href="03-代码智能.html">代码智能</a>
+        <a class="nav-link" href="04-知识资产.html">知识资产</a>
+        <a class="nav-link" href="05-检索与上下文.html">检索与上下文</a>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div class="project-rail">
+          <span class="rail-pill">order-service</span>
+          <span class="rail-pill">snapshot abc123</span>
+          <span class="rail-pill">CodeFact 12,430</span>
+          <span class="rail-pill">Neo4j ready</span>
+          <span class="rail-pill">12 failed files</span>
+        </div>
+        <span class="tag amber">partial_failed</span>
+      </div>
+      <div class="page">
+        <section class="hero">
+          <div class="eyebrow">Code intelligence</div>
+          <h1>代码事实中心</h1>
+          <p class="lead">代码智能负责把仓库转换为可检索、可绑定证据、可进入上下文包和影响分析的 CodeFact。</p>
+          <div class="toolbar"><span class="btn primary">触发分析</span><span class="btn warning">查看失败文件</span><span class="btn">重试图写入</span><span class="btn">导出 JSON 图</span></div>
+        </section>
+
+        <section class="grid three">
+          <div class="metric"><span>文件</span><b>1,820</b><span>Java / XML / 前端调用</span></div>
+          <div class="metric"><span>Endpoint</span><b>186</b><span>17 个缺少 api_doc</span></div>
+          <div class="metric"><span>SQL</span><b>920</b><span>MyBatis 引用线索</span></div>
+        </section>
+
+        <section class="table-card" style="margin-top:14px">
+          <div class="toolbar"><h2>代码事实列表</h2><span class="select">类型：全部</span><span class="field">文件路径</span><span class="field">符号</span></div>
+          <table>
+            <thead><tr><th>类型</th><th>文件</th><th>符号</th><th>行区间</th><th>置信度</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>endpoint</td><td>UserController.java</td><td>GET /api/users/{id}</td><td>22-38</td><td><span class="tag green">高</span></td><td>详情 / 绑定证据 / 加入上下文</td></tr>
+              <tr><td>method</td><td>OrderService.java</td><td>cancelOrder(Long id)</td><td>76-122</td><td><span class="tag green">高</span></td><td>详情 / 图关系</td></tr>
+              <tr><td>sql</td><td>OrderMapper.xml</td><td>selectRefundableOrders</td><td>14-31</td><td><span class="tag amber">中</span></td><td>详情 / 绑定证据</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="grid two" style="margin-top:14px">
+          <div class="workspace">
+            <div class="workspace-header"><h2>代码事实详情</h2><span class="tag blue">drawer</span></div>
+            <div class="workspace-body">
+              <div class="code">76 public CancelResult cancelOrder(Long orderId) {<br>77   Order order = orderRepo.get(orderId);<br>78   refundService.createRefund(order);<br>79   inventoryService.release(order);<br>80 }</div>
+              <div class="toolbar" style="margin-top:12px"><span class="btn primary">绑定 Evidence</span><span class="btn">加入上下文包</span><span class="btn">复制引用</span></div>
+            </div>
+          </div>
+          <div class="workspace">
+            <div class="workspace-header"><h2>基础图关系</h2><span class="tag violet">Neo4j</span></div>
+            <div class="workspace-body">
+              <div class="mock-graph">
+                <div class="node n1">Endpoint</div>
+                <div class="node n2">Method</div>
+                <div class="node n3">SQL</div>
+                <div class="node n4">Knowledge</div>
+              </div>
+              <p class="muted">默认深度 1，可切换关系类型：CALLS、USES_SQL、EVIDENCES、SUPPORTS。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="table-card" style="margin-top:14px">
+          <div class="toolbar"><h2>接口关系</h2><span class="select">HTTP：全部</span><span class="field">路径</span><span class="select">风险：全部</span></div>
+          <table>
+            <thead><tr><th>方法</th><th>路径</th><th>后端方法</th><th>前端调用</th><th>接口说明</th><th>风险</th></tr></thead>
+            <tbody>
+              <tr><td>GET</td><td>/api/users/{id}</td><td>getUser</td><td>3</td><td><span class="tag green">已关联</span></td><td>低</td></tr>
+              <tr><td>POST</td><td>/api/orders/{id}/cancel</td><td>cancelOrder</td><td>2</td><td><span class="tag amber">缺参数说明</span></td><td>中</td></tr>
+              <tr><td>DELETE</td><td>/api/files/{id}</td><td>deleteFile</td><td>0</td><td><span class="tag red">无说明</span></td><td>高</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>高保真页面原型 - 综合研发智能平台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand"><strong>高保真原型</strong><span>按功能拆分</span></div>
+      <div class="nav-section">
+        <small>页面</small>
+        <a class="nav-link active" href="index.html">总览</a>
+        <a class="nav-link" href="01-组织层.html">组织层</a>
+        <a class="nav-link" href="02-项目空间.html">项目空间</a>
+        <a class="nav-link" href="03-代码智能.html">代码智能</a>
+        <a class="nav-link" href="04-知识资产.html">知识资产</a>
+        <a class="nav-link" href="05-检索与上下文.html">检索与上下文</a>
+        <a class="nav-link" href="06-变更影响.html">变更影响</a>
+        <a class="nav-link" href="07-治理审计.html">治理审计</a>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div class="project-rail">
+          <span class="rail-pill">项目 order-service</span>
+          <span class="rail-pill">分支 main</span>
+          <span class="rail-pill">快照 abc123</span>
+          <span class="rail-pill">索引 stale</span>
+          <span class="rail-pill">Neo4j ready</span>
+        </div>
+        <span class="tag blue">高保真页面入口</span>
+      </div>
+      <div class="page">
+        <section class="hero">
+          <div class="eyebrow">Platform prototype</div>
+          <h1>综合研发智能平台高保真页面原型</h1>
+          <p class="lead">本目录按功能拆分高保真页面。每个页面都模拟真实控制台布局、数据密度、状态轨道、表格、任务反馈和跨模块跳转，用于产品评审和后续前端实现对齐。</p>
+          <div class="flow">
+            <span>项目接入</span><i>-></i><span>代码事实</span><i>-></i><span>知识证据</span><i>-></i><span>可信检索</span><i>-></i><span>上下文包</span><i>-></i><span>治理回流</span>
+          </div>
+        </section>
+
+        <section class="grid four">
+          <a class="metric" href="01-组织层.html"><span>功能 01</span><b>组织层</b><span>登录、项目、账号、系统配置</span></a>
+          <a class="metric" href="02-项目空间.html"><span>功能 02</span><b>项目空间</b><span>总览、配置、成员、任务</span></a>
+          <a class="metric" href="03-代码智能.html"><span>功能 03</span><b>代码智能</b><span>代码事实、接口关系、图关系</span></a>
+          <a class="metric" href="04-知识资产.html"><span>功能 04</span><b>知识资产</b><span>知识文档、资产、Evidence</span></a>
+          <a class="metric" href="05-检索与上下文.html"><span>功能 05</span><b>检索上下文</b><span>Qdrant、SearchResult、ContextPackage</span></a>
+          <a class="metric" href="06-变更影响.html"><span>功能 06</span><b>变更影响</b><span>diff 初判、影响知识、ReviewTask 候选</span></a>
+          <a class="metric" href="07-治理审计.html"><span>功能 07</span><b>治理审计</b><span>治理看板、复审、低命中、审计</span></a>
+          <div class="metric"><span>视觉原则</span><b>状态轨道</b><span>所有项目页始终展示项目、快照、索引和图状态</span></div>
+        </section>
+
+        <section class="card" style="margin-top:14px">
+          <h2>页面拆分原则</h2>
+          <div class="grid three" style="margin-top:14px">
+            <div class="panel"><h3>组织层</h3><p class="muted">只处理用户、项目和全局配置，不混入项目数据。</p></div>
+            <div class="panel"><h3>项目空间</h3><p class="muted">所有项目内页面共享状态轨道和项目级权限。</p></div>
+            <div class="panel"><h3>功能页</h3><p class="muted">每个功能页保留列表、详情、状态、失败兜底和跳转入口。</p></div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

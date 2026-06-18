@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>治理审计高保真原型</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand"><strong>治理审计</strong><span>ReviewTask 与 AuditEvent</span></div>
+      <div class="nav-section">
+        <small>功能页面</small>
+        <a class="nav-link" href="index.html">总览</a>
+        <a class="nav-link" href="06-变更影响.html">变更影响</a>
+        <a class="nav-link active" href="07-治理审计.html">治理审计</a>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div class="project-rail">
+          <span class="rail-pill">order-service</span>
+          <span class="rail-pill">ReviewTask open 9</span>
+          <span class="rail-pill">缺证据 12</span>
+          <span class="rail-pill">低命中 18</span>
+          <span class="rail-pill">审计 4,208</span>
+        </div>
+        <span class="tag red">3 个复审逾期</span>
+      </div>
+      <div class="page">
+        <section class="hero">
+          <div class="eyebrow">Governance</div>
+          <h1>治理看板、复审任务和项目审计</h1>
+          <p class="lead">治理页把知识缺失、证据失效、索引失败、低命中和变更命中统一转为可处理事项，并保留审计。</p>
+        </section>
+        <section class="grid four">
+          <div class="metric"><span>待复审</span><b>9</b><span>3 个逾期</span></div>
+          <div class="metric"><span>缺证据</span><b>12</b><span>确认时缺 Evidence</span></div>
+          <div class="metric"><span>低命中</span><b>18</b><span>近 7 天</span></div>
+          <div class="metric"><span>失败任务</span><b>3</b><span>分析 / 索引 / 图写入</span></div>
+        </section>
+
+        <section class="grid two" style="margin-top:14px">
+          <div class="table-card">
+            <div class="toolbar"><h2>ReviewTask</h2><span class="select">状态：open</span><span class="select">原因：全部</span></div>
+            <table>
+              <thead><tr><th>知识</th><th>触发原因</th><th>状态</th><th>到期</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>订单取消规则</td><td>变更命中</td><td><span class="tag amber">open</span></td><td>2026-06-25</td><td>处理</td></tr>
+                <tr><td>支付超时复盘</td><td>复审逾期</td><td><span class="tag red">open</span></td><td>已逾期</td><td>处理</td></tr>
+                <tr><td>用户接口说明</td><td>Evidence 失效</td><td><span class="tag amber">open</span></td><td>2026-06-28</td><td>处理</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h2>ReviewTask 处理抽屉</h2>
+            <p class="muted">展示触发原因、关联 KnowledgeAsset、Evidence、ChangeTask 和图路径。处理后回写知识或证据，并触发索引和图关系更新。</p>
+            <div class="form-row"><span class="muted">处理结论</span><div class="input"></div></div>
+            <div class="editor">已确认订单取消规则仍有效，补充退款失败分支说明。</div>
+            <div class="toolbar"><span class="btn primary">标记 resolved</span><span class="btn warning">忽略并记录原因</span></div>
+          </div>
+        </section>
+
+        <section class="grid two" style="margin-top:14px">
+          <div class="table-card">
+            <div class="toolbar"><h2>低命中治理</h2><span class="select">时间：近 7 天</span><span class="select">处理状态</span></div>
+            <table>
+              <thead><tr><th>查询摘要</th><th>结果</th><th>topScore</th><th>建议动作</th></tr></thead>
+              <tbody>
+                <tr><td>退款规则如何触发</td><td>0</td><td>-</td><td>创建知识草稿</td></tr>
+                <tr><td>库存回滚时机</td><td>2</td><td>0.21</td><td>指派 ReviewTask</td></tr>
+                <tr><td>订单通知失败处理</td><td>1</td><td>0.29</td><td>补充 Evidence</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-card">
+            <div class="toolbar"><h2>项目审计</h2><span class="select">动作：全部</span><span class="select">操作人</span></div>
+            <table>
+              <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>结果</th></tr></thead>
+              <tbody>
+                <tr><td>10:20</td><td>张三</td><td>上下文导出</td><td>ContextPackage #63</td><td><span class="tag green">成功</span></td></tr>
+                <tr><td>10:12</td><td>李四</td><td>知识确认</td><td>订单取消规则</td><td><span class="tag green">成功</span></td></tr>
+                <tr><td>09:48</td><td>系统</td><td>索引构建</td><td>IndexTask #208</td><td><span class="tag red">失败</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

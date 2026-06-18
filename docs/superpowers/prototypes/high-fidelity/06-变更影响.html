@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>变更影响高保真原型</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand"><strong>变更影响</strong><span>初判与复审候选</span></div>
+      <div class="nav-section">
+        <small>功能页面</small>
+        <a class="nav-link" href="index.html">总览</a>
+        <a class="nav-link" href="05-检索与上下文.html">检索与上下文</a>
+        <a class="nav-link active" href="06-变更影响.html">变更影响</a>
+        <a class="nav-link" href="07-治理审计.html">治理审计</a>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div class="project-rail">
+          <span class="rail-pill">order-service</span>
+          <span class="rail-pill">基线 abc123</span>
+          <span class="rail-pill">CodeFact ready</span>
+          <span class="rail-pill">Neo4j ready</span>
+          <span class="rail-pill">Qdrant ready</span>
+        </div>
+        <span class="tag amber">结果为候选初判</span>
+      </div>
+      <div class="page">
+        <section class="hero">
+          <div class="eyebrow">Change analysis</div>
+          <h1>文件列表或 diff 影响初判</h1>
+          <p class="lead">系统基于直接 CodeFact、Neo4j 有限路径和 Qdrant 语义候选输出影响范围。知识状态变化必须由项目负责人确认。</p>
+        </section>
+
+        <section class="grid two">
+          <div class="card">
+            <h2>输入变更</h2>
+            <div class="toolbar"><span class="btn primary">文件列表</span><span class="btn">diff</span></div>
+            <div class="editor">src/main/java/com/acme/order/OrderService.java<br>src/main/resources/mapper/OrderMapper.xml<br>web/src/api/order.ts</div>
+            <div class="toolbar"><span class="btn primary">开始分析</span><span class="tag blue">使用当前快照 abc123</span></div>
+          </div>
+          <div class="table-card">
+            <div class="toolbar"><h2>历史任务</h2><span class="select">状态：全部</span></div>
+            <table>
+              <thead><tr><th>时间</th><th>输入</th><th>状态</th><th>影响知识</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>10:20</td><td>file_list</td><td><span class="tag green">succeeded</span></td><td>3</td><td>查看</td></tr>
+                <tr><td>昨天</td><td>diff</td><td><span class="tag amber">partial</span></td><td>1</td><td>查看</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="workspace" style="margin-top:14px">
+          <div class="workspace-header"><h2>影响分析详情</h2><span class="tag blue">confidence: medium</span></div>
+          <div class="workspace-body">
+            <div class="toolbar"><span class="btn primary">变更文件</span><span class="btn">命中代码事实</span><span class="btn">影响接口</span><span class="btn">影响知识</span><span class="btn">风险点</span><span class="btn">测试建议</span><span class="btn">图路径</span></div>
+            <table>
+              <thead><tr><th>对象</th><th>分层</th><th>置信度</th><th>推荐原因</th><th>动作</th></tr></thead>
+              <tbody>
+                <tr><td>OrderService.cancelOrder</td><td>确定事实</td><td><span class="tag blue">事实</span></td><td>变更文件直接命中方法行区间</td><td>查看代码</td></tr>
+                <tr><td>POST /orders/{id}/cancel</td><td>高置信候选</td><td><span class="tag green">高</span></td><td>Method EXPOSES Endpoint</td><td>查看接口</td></tr>
+                <tr><td>订单取消规则</td><td>高置信候选</td><td><span class="tag green">高</span></td><td>Evidence 指向变更方法</td><td>生成 ReviewTask</td></tr>
+                <tr><td>库存释放规则</td><td>低置信候选</td><td><span class="tag amber">低</span></td><td>Qdrant 语义召回</td><td>加入上下文</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="grid three" style="margin-top:14px">
+          <div class="panel"><h3>风险点</h3><p>退款创建失败时订单状态可能不一致；库存释放和消息通知需回归。</p></div>
+          <div class="panel"><h3>测试建议</h3><p>覆盖 paid、cancelled、refund_failed、库存释放失败和重复取消。</p></div>
+          <div class="panel"><h3>待复审候选</h3><p>订单取消规则命中已确认知识。项目负责人确认后生成 ReviewTask。</p><span class="btn primary">打开候选抽屉</span></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
