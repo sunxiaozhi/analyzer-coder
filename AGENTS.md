@@ -8,9 +8,9 @@
 - Flask 后端：`web/backend`
 - Vue 3 前端：`web/frontend`
 - 文档：`docs`
-- 运行时/生成数据：`.analzer_projects`、`.vector_store`、`.java_results`、`logs`
+- 运行时工作区：`.analzer_projects`、`logs`
 
-分析器用于提取 Java 结构、Spring endpoint、MyBatis SQL 引用、知识库切块、本地 JSONL 向量索引、报告、图谱，以及 Obsidian 风格笔记。
+分析器用于提取 Java 结构、Spring endpoint、MyBatis SQL 引用、知识库切块、Qdrant 向量索引、MySQL 分析记录、Neo4j 图谱，以及 Obsidian 风格笔记。
 
 ## 环境准备
 
@@ -72,8 +72,6 @@ npm run build
 ```powershell
 java-analyze path\to\java-project --json
 java-analyze . --source mixed --report
-java-analyze . --source mixed --index .vector_store\project.jsonl
-java-analyze --store .vector_store\project.jsonl --query "registration rule" --top-k 3
 ```
 
 ## 后端说明
@@ -82,9 +80,9 @@ java-analyze --store .vector_store\project.jsonl --query "registration rule" --t
 - 业务逻辑放在 `web/backend/services.py`。
 - 面向用户的 API 错误使用 `APIError`。
 - 路径校验必须严格。项目路径和知识库路径必须限制在配置的 workspace/project 根目录内。
-- 知识模板按项目隔离，存储在项目数据根目录下的 `knowledge_templates.json`。
+- 知识模板按项目隔离，存储在 MySQL。
 - 知识库文件支持的后缀为 `.md`、`.markdown`、`.txt`、`.rst`、`.adoc`。
-- 后端状态存储可能根据配置使用 MySQL 或 JSON；除非上下文代码明确，否则不要假设只有一种存储后端。
+- 后端状态存储使用 MySQL；向量数据存储使用 Qdrant；图数据存储使用 Neo4j。不要新增本地 JSON/JSONL 持久化。
 
 ## 前端说明
 
@@ -125,7 +123,7 @@ Vite/Rollup 构建时可能出现来自依赖的 PURE annotation 警告和 chunk
 
 - 改动范围应聚焦在用户请求的行为上。
 - 除非任务明确要求，不要重写生成文件、缓存、运行时索引、日志或本地项目数据。
-- 不要编辑 `.venv`、`web/frontend/node_modules`、`web/frontend/dist`、`.pytest_cache`、`.vector_store`、`.analzer_projects` 或 `logs`。
+- 不要编辑 `.venv`、`web/frontend/node_modules`、`web/frontend/dist`、`.pytest_cache`、`.analzer_projects` 或 `logs`。
 - 保留工作区中已有的用户改动。不要回滚无关文件。
 - 新增项目文件默认使用 ASCII；如果已有内容或面向用户的中文文本需要，可以使用中文。
 - 优先使用结构化解析和已有辅助 API，避免临时拼字符串式处理。
@@ -135,7 +133,7 @@ Vite/Rollup 构建时可能出现来自依赖的 PURE annotation 警告和 chunk
 - `src/java_analyzer/analyzer.py`：Tree-sitter Java 提取逻辑。
 - `src/java_analyzer/chunker.py`：代码切块生成。
 - `src/java_analyzer/kb_loader.py`：知识库文档加载与切块。
-- `src/java_analyzer/vector_store.py`：JSONL 向量存储与检索。
+- `src/java_analyzer/vector_store.py`：向量记录结构与内存排序工具；运行态向量读写在 Qdrant。
 - `src/java_analyzer/cli.py`：命令行入口。
 - `web/backend/app.py`：Flask 应用入口。
 - `web/backend/routes.py`：API 路由。

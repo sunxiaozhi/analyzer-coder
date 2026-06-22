@@ -124,6 +124,11 @@ def query() -> Any:
     return jsonify(analyzer_service().query(json_payload(request), current_user()))
 
 
+@api_bp.post("/rag/search")
+def rag_search() -> Any:
+    return jsonify(analyzer_service().rag_search(json_payload(request), current_user()))
+
+
 @api_bp.post("/api-map")
 def api_mapping() -> Any:
     return jsonify(analyzer_service().api_mapping(json_payload(request), current_user()))

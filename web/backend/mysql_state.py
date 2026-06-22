@@ -4,7 +4,6 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import json
-from pathlib import Path
 from typing import Any
 
 import pymysql
@@ -205,23 +204,37 @@ class MySqlStateStore:
                 )
                 cursor.execute(
                     """
-                    create table if not exists vector_records (
-                      id bigint unsigned not null auto_increment comment '索引记录ID',
+                    create table if not exists knowledge_documents (
+                      id bigint unsigned not null auto_increment comment '知识文档ID',
                       project_id bigint unsigned not null comment '项目ID',
-                      record_hash char(64) not null comment '记录标识哈希',
-                      record_id varchar(1024) not null comment '记录业务标识',
-                      source_type varchar(64) not null default '' comment '来源类型',
-                      kind varchar(128) not null default '' comment '记录类型',
-                      text mediumtext not null comment '检索文本',
-                      metadata_json longtext not null comment '元数据JSON',
-                      embedding_json longtext not null comment '向量JSON',
+                      document_path varchar(1024) not null comment '文档路径',
+                      name varchar(255) not null comment '文件名',
+                      content mediumtext not null comment '正文',
+                      size_bytes int unsigned not null default 0 comment '字节数',
+                      updated_by varchar(64) not null default '' comment '更新人',
+                      status varchar(32) not null default 'active' comment '状态',
+                      deleted_at datetime(6) null comment '删除时间',
                       created_at datetime(6) not null comment '创建时间',
                       updated_at datetime(6) not null comment '更新时间',
                       primary key (id),
-                      unique key uk_vector_records_project_hash (project_id, record_hash),
-                      key idx_vector_records_project_source (project_id, source_type),
-                      key idx_vector_records_project_kind (project_id, kind)
-                    ) comment='向量索引记录表'
+                      unique key uk_knowledge_documents_project_path (project_id, document_path(255)),
+                      key idx_knowledge_documents_project_status (project_id, status)
+                    ) comment='知识文档表'
+                    """
+                )
+                cursor.execute(
+                    """
+                    create table if not exists analysis_outputs (
+                      id bigint unsigned not null auto_increment comment '分析输出ID',
+                      project_id bigint unsigned not null comment '项目ID',
+                      output_mode varchar(64) not null comment '输出模式',
+                      extension varchar(16) not null default '' comment '扩展名',
+                      output_text longtext not null comment '输出内容',
+                      created_at datetime(6) not null comment '创建时间',
+                      updated_at datetime(6) not null comment '更新时间',
+                      primary key (id),
+                      unique key uk_analysis_outputs_project_mode (project_id, output_mode)
+                    ) comment='分析输出快照表'
                     """
                 )
                 cursor.execute(
@@ -252,64 +265,6 @@ class MySqlStateStore:
                     ) comment='代码解析类型化记录表'
                     """
                 )
-            connection.commit()
-
-    def migrate_from_json(self, users_file: Path, projects_file: Path, projects_dir: Path | None = None) -> None:
-        with self.connect() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("select count(*) as count from users where status = 'active'")
-                has_state = int(cursor.fetchone()["count"]) > 0
-
-                project_key_to_id: dict[str, str] = {}
-                if not has_state and projects_file.exists():
-                    data = json.loads(projects_file.read_text(encoding="utf-8"))
-                    for item in data.get("projects", []):
-                        cursor.execute(
-                            """
-                            insert into projects
-                              (project_key, name, git_url, branch, path, status, created_at, updated_at)
-                            values (%s, %s, %s, %s, %s, 'active', %s, %s)
-                            """,
-                            (
-                                item["id"],
-                                item["name"],
-                                item["gitUrl"],
-                                item.get("branch", ""),
-                                item["path"],
-                                mysql_datetime(item.get("createdAt", "")),
-                                mysql_datetime(item.get("updatedAt", "")),
-                            ),
-                        )
-                        project_key_to_id[item["id"]] = str(cursor.lastrowid)
-
-                if not has_state and users_file.exists():
-                    data = json.loads(users_file.read_text(encoding="utf-8"))
-                    for item in data.get("users", []):
-                        cursor.execute(
-                            """
-                            insert into users
-                              (username, display_name, password_hash, is_admin, status, created_at, updated_at)
-                            values (%s, %s, %s, %s, 'active', %s, %s)
-                            """,
-                            (
-                                item["username"],
-                                item.get("displayName") or item["username"],
-                                item["passwordHash"],
-                                1 if item.get("isAdmin") else 0,
-                                mysql_datetime(item.get("createdAt", "")),
-                                mysql_datetime(item.get("updatedAt", "")),
-                            ),
-                        )
-                        user_id = str(cursor.lastrowid)
-                        for project_key in item.get("projectIds", []):
-                            project_id = project_key_to_id.get(str(project_key))
-                            if project_id:
-                                self._grant_access(cursor, user_id, project_id, mysql_datetime(item.get("updatedAt", "")))
-
-                cursor.execute("select id, project_key from projects where status = 'active'")
-                project_key_to_id.update({str(row["project_key"]): str(row["id"]) for row in cursor.fetchall()})
-                if projects_dir is not None:
-                    self._migrate_project_json_files(cursor, project_key_to_id, projects_dir)
             connection.commit()
 
     def ensure_admin(self, username: str, password: str, now: str) -> None:
@@ -720,66 +675,149 @@ class MySqlStateStore:
                     )
             connection.commit()
 
-    def list_vector_records(self, project_id: str) -> list[dict[str, Any]]:
+    def list_knowledge_documents(self, project_id: str, prefix: str = "") -> list[dict[str, Any]]:
+        where = ["project_id = %s", "status = 'active'"]
+        params: list[Any] = [project_id]
+        if prefix:
+            where.append("document_path like %s")
+            params.append(f"{prefix.rstrip('/')}/%")
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
-                    select record_id, text, metadata_json, embedding_json
-                    from vector_records
-                    where project_id = %s
-                    order by id
+                    f"""
+                    select document_path, name, content, size_bytes, updated_at
+                    from knowledge_documents
+                    where {' and '.join(where)}
+                    order by document_path
                     """,
-                    (project_id,),
+                    params,
                 )
                 rows = cursor.fetchall()
         return [
             {
-                "id": row["record_id"],
-                "text": row["text"],
-                "metadata": json.loads(row["metadata_json"] or "{}"),
-                "embedding": json.loads(row["embedding_json"] or "[]"),
+                "path": row["document_path"],
+                "name": row["name"],
+                "size": int(row["size_bytes"] or 0),
+                "updatedAt": iso_datetime(row["updated_at"]),
             }
             for row in rows
         ]
 
-    def save_vector_records(self, project_id: str, records: list[Any], append: bool) -> None:
+    def get_knowledge_document(self, project_id: str, path: str) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select document_path, name, content, size_bytes, updated_at
+                    from knowledge_documents
+                    where project_id = %s and document_path = %s and status = 'active'
+                    """,
+                    (project_id, path),
+                )
+                row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "path": row["document_path"],
+            "name": row["name"],
+            "content": row["content"],
+            "size": int(row["size_bytes"] or 0),
+            "updatedAt": iso_datetime(row["updated_at"]),
+        }
+
+    def save_knowledge_document(self, project_id: str, *, path: str, content: str, updated_by: str) -> dict[str, Any]:
+        now = mysql_datetime(datetime.now(timezone.utc).isoformat())
+        name = path.rsplit("/", 1)[-1]
+        size = len(content.encode("utf-8"))
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    insert into knowledge_documents
+                      (project_id, document_path, name, content, size_bytes, updated_by, status, deleted_at, created_at, updated_at)
+                    values (%s, %s, %s, %s, %s, %s, 'active', null, %s, %s)
+                    on duplicate key update
+                      name = values(name),
+                      content = values(content),
+                      size_bytes = values(size_bytes),
+                      updated_by = values(updated_by),
+                      status = 'active',
+                      deleted_at = null,
+                      updated_at = values(updated_at)
+                    """,
+                    (project_id, path, name, content, size, updated_by, now, now),
+                )
+            connection.commit()
+        return {
+            "path": path,
+            "name": name,
+            "content": content,
+            "size": size,
+            "updatedAt": iso_datetime(now),
+        }
+
+    def delete_knowledge_document(self, project_id: str, path: str) -> bool:
         now = mysql_datetime(datetime.now(timezone.utc).isoformat())
         with self.connect() as connection:
             with connection.cursor() as cursor:
-                if not append:
-                    cursor.execute("delete from vector_records where project_id = %s", (project_id,))
-                for record in records:
-                    data = asdict(record)
-                    metadata = data.get("metadata", {})
-                    cursor.execute(
-                        """
-                        insert into vector_records
-                          (project_id, record_hash, record_id, source_type, kind, text, metadata_json, embedding_json, created_at, updated_at)
-                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        on duplicate key update
-                          record_id = values(record_id),
-                          source_type = values(source_type),
-                          kind = values(kind),
-                          text = values(text),
-                          metadata_json = values(metadata_json),
-                          embedding_json = values(embedding_json),
-                          updated_at = values(updated_at)
-                        """,
-                        (
-                            project_id,
-                            hashlib.sha256(str(data["id"]).encode("utf-8")).hexdigest(),
-                            data["id"],
-                            str(metadata.get("source_type") or ""),
-                            str(metadata.get("kind") or ""),
-                            data["text"],
-                            json.dumps(metadata, ensure_ascii=False),
-                            json.dumps(data.get("embedding", []), ensure_ascii=False),
-                            now,
-                            now,
-                        ),
-                    )
+                cursor.execute(
+                    """
+                    update knowledge_documents
+                    set status = 'deleted', deleted_at = %s, updated_at = %s
+                    where project_id = %s and document_path = %s and status = 'active'
+                    """,
+                    (now, now, project_id, path),
+                )
+                deleted = cursor.rowcount > 0
             connection.commit()
+        return deleted
+
+    def save_analysis_output(self, project_id: str, *, mode: str, extension: str, output: str) -> dict[str, Any]:
+        now = mysql_datetime(datetime.now(timezone.utc).isoformat())
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    insert into analysis_outputs
+                      (project_id, output_mode, extension, output_text, created_at, updated_at)
+                    values (%s, %s, %s, %s, %s, %s)
+                    on duplicate key update
+                      extension = values(extension),
+                      output_text = values(output_text),
+                      updated_at = values(updated_at)
+                    """,
+                    (project_id, mode, extension, output, now, now),
+                )
+            connection.commit()
+        return {
+            "mode": mode,
+            "extension": extension,
+            "output": output,
+            "uri": f"mysql://analysis_outputs/{project_id}/{mode}",
+            "updatedAt": iso_datetime(now),
+        }
+
+    def get_analysis_output(self, project_id: str, mode: str) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select output_mode, extension, output_text, updated_at
+                    from analysis_outputs
+                    where project_id = %s and output_mode = %s
+                    """,
+                    (project_id, mode),
+                )
+                row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "mode": row["output_mode"],
+            "extension": row["extension"],
+            "output": row["output_text"],
+            "uri": f"mysql://analysis_outputs/{project_id}/{row['output_mode']}",
+            "updatedAt": iso_datetime(row["updated_at"]),
+        }
 
     def list_analysis_records(
         self,
@@ -910,87 +948,3 @@ class MySqlStateStore:
         if int(cursor.fetchone()["count"]) == 0:
             cursor.execute(f"alter table `{table}` add column `{column}` {definition}")
 
-    def _migrate_project_json_files(self, cursor: Any, project_key_to_id: dict[str, str], projects_dir: Path) -> None:
-        for project_key, project_id in project_key_to_id.items():
-            data_root = projects_dir / project_key
-            assets_file = data_root / "knowledge_assets.json"
-            cursor.execute("select count(*) as count from knowledge_assets where project_id = %s", (project_id,))
-            if assets_file.exists() and int(cursor.fetchone()["count"]) == 0:
-                data = json.loads(assets_file.read_text(encoding="utf-8"))
-                assets = data.get("assets", [])
-                for asset in assets:
-                    cursor.execute(
-                        """
-                        insert into knowledge_assets
-                          (project_id, asset_key, asset_type, title, summary, content, lifecycle_status,
-                           owner_user_id, reviewer_user_id, source_path, confirmed_at, review_due_at,
-                           created_by, updated_by, created_at, updated_at)
-                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            project_id,
-                            str(asset.get("id") or ""),
-                            str(asset.get("type") or "business_rule"),
-                            str(asset.get("title") or ""),
-                            str(asset.get("summary") or ""),
-                            str(asset.get("content") or ""),
-                            str(asset.get("status") or "draft"),
-                            str(asset.get("ownerUserId") or ""),
-                            str(asset.get("reviewerUserId") or ""),
-                            str(asset.get("sourcePath") or ""),
-                            str(asset.get("confirmedAt") or ""),
-                            str(asset.get("reviewDueAt") or ""),
-                            str(asset.get("createdBy") or ""),
-                            str(asset.get("updatedBy") or ""),
-                            mysql_datetime(str(asset.get("createdAt") or "")),
-                            mysql_datetime(str(asset.get("updatedAt") or "")),
-                        ),
-                    )
-                    for index, tag in enumerate(asset.get("tags", [])):
-                        cursor.execute(
-                            "insert ignore into knowledge_asset_tags (project_id, asset_key, tag, sort_order) values (%s, %s, %s, %s)",
-                            (project_id, str(asset.get("id") or ""), str(tag), index),
-                        )
-                    for index, evidence in enumerate(asset.get("evidence", [])):
-                        if not isinstance(evidence, dict):
-                            continue
-                        cursor.execute(
-                            """
-                            insert into knowledge_asset_evidence
-                              (project_id, asset_key, sort_order, evidence_type, file_path, symbol_name, start_line, end_line, note)
-                            values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            """,
-                            (
-                                project_id,
-                                str(asset.get("id") or ""),
-                                index,
-                                str(evidence.get("type") or "file"),
-                                str(evidence.get("filePath") or ""),
-                                str(evidence.get("symbolName") or ""),
-                                int(evidence.get("startLine") or 0),
-                                int(evidence.get("endLine") or 0),
-                                str(evidence.get("note") or ""),
-                            ),
-                        )
-
-            templates_file = data_root / "knowledge_templates.json"
-            cursor.execute("select count(*) as count from knowledge_templates where project_id = %s", (project_id,))
-            if templates_file.exists() and int(cursor.fetchone()["count"]) == 0:
-                data = json.loads(templates_file.read_text(encoding="utf-8"))
-                for template in data.get("templates", []):
-                    cursor.execute(
-                        """
-                        insert into knowledge_templates
-                          (project_id, template_key, name, path, content, created_at, updated_at)
-                        values (%s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            project_id,
-                            str(template.get("id") or ""),
-                            str(template.get("name") or ""),
-                            str(template.get("path") or ""),
-                            str(template.get("content") or ""),
-                            mysql_datetime(str(template.get("createdAt") or "")),
-                            mysql_datetime(str(template.get("updatedAt") or "")),
-                        ),
-                    )

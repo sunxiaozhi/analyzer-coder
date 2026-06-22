@@ -204,6 +204,39 @@ export interface QueryEvidence {
   relations: EvidenceRelation[]
 }
 
+export interface RagStep {
+  key: string
+  title: string
+  status: 'done' | 'warning'
+  summary: string
+  count: number
+}
+
+export interface RagCitation {
+  id: string
+  title: string
+  sourceType: string
+  kind: string
+  status: string
+  location: string
+  score: number
+  excerpt: string
+}
+
+export interface RagRisk {
+  level: 'low' | 'medium' | 'high'
+  message: string
+}
+
+export interface RagFlow {
+  query: string
+  steps: RagStep[]
+  answerDraft: string
+  citations: RagCitation[]
+  risks: RagRisk[]
+  contextPackage: string
+}
+
 export interface IndexStatus {
   exists: boolean
   store: string

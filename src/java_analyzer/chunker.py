@@ -272,7 +272,7 @@ def _chunk_id(
     symbol_name: str,
     span: SourceSpan,
 ) -> str:
-    # 只要文件路径和符号位置稳定，ID 在多次运行之间就是确定的，这让 JSONL upsert 更简单。
+    # 只要文件路径和符号位置稳定，ID 在多次运行之间就是确定的，便于外部索引服务更新同一条记录。
     file_path = analysis.file_path or "<memory>"
     return f"{file_path}::{kind}::{symbol_name}::{span.start_line}"
 

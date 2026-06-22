@@ -4,7 +4,6 @@ import argparse
 from datetime import datetime
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -15,7 +14,6 @@ from java_analyzer.embedding import HashingEmbedder, SentenceTransformerEmbedder
 from java_analyzer.kb_loader import build_kb_chunks
 from java_analyzer.models import JavaFileAnalysis, JavaVectorChunk
 from java_analyzer.sql_flow import build_endpoint_sql_flows, build_sql_usages
-from java_analyzer.vector_store import JsonlVectorStore
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+")
 GRAPH_MAX_ENDPOINTS = 80
@@ -55,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--index",
         metavar="STORE",
         type=Path,
-        help="Analyze path, vectorize chunks, and write a JSONL vector store.",
+        help="已停用：本地 JSONL 向量库已移除，请使用 Web/API 写入 Qdrant。",
     )
     parser.add_argument(
         "--append",
@@ -65,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--query",
         metavar="TEXT",
-        help="Search an existing JSONL vector store.",
+        help="已停用：本地 JSONL 向量检索已移除，请使用 Web/API 查询 Qdrant。",
     )
     parser.add_argument(
         "--filter-source",
@@ -75,8 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--store",
         type=Path,
-        default=Path(".java_vectors.jsonl"),
-        help="Vector store path used by --query. Defaults to .java_vectors.jsonl.",
+        default=None,
+        help="已停用：不再接受本地向量库路径。",
     )
     parser.add_argument("--top-k", type=int, default=5, help="Number of search results to return.")
     parser.add_argument(
@@ -96,17 +94,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=384,
         help="Hashing embedding dimensions used when --embedder hashing.",
     )
-    parser.add_argument(
-        "--results-dir",
-        type=Path,
-        default=Path(".java_results"),
-        help="Directory used to save each command result. Defaults to .java_results.",
-    )
-    parser.add_argument(
-        "--no-save",
-        action="store_true",
-        help="Print results only and do not write a result file.",
-    )
     return parser
 
 
@@ -121,10 +108,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     if args.query:
-        # 查询模式不需要源码路径，只读取已有向量库。
-        output = _search_store(args.store, args.query, args.top_k, args.filter_source, embedder)
-        _emit_output(args, output, kind="query", extension=".txt")
-        return 0
+        raise SystemExit("本地 JSONL 向量检索已移除，请使用 Web RAG/Qdrant 搜索接口。")
 
     if args.path is None:
         raise SystemExit("path is required unless --query is used.")
@@ -184,20 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     if args.index:
-        store = JsonlVectorStore(args.index)
-        records = (
-            store.upsert_chunks(chunks, embedder=embedder)
-            if args.append
-            else store.write_chunks(chunks, embedder=embedder)
-        )
-        mode = "upserted" if args.append else "indexed"
-        _emit_output(
-            args,
-            f"{mode} {len(records)} chunks into {args.index}",
-            kind="index",
-            extension=".txt",
-        )
-        return 0
+        raise SystemExit("本地 JSONL 向量索引已移除，请使用 Web/API 将索引写入 Qdrant。")
 
     if args.chunks:
         _emit_output(
@@ -251,19 +222,8 @@ def _build_source_chunks(
 
 
 def _emit_output(args: argparse.Namespace, output: str, kind: str, extension: str) -> None:
+    del args, kind, extension
     print(output)
-    if args.no_save:
-        return
-    saved_path = _save_result(args.results_dir, kind, extension, output)
-    print(f"saved result to {saved_path}", file=sys.stderr)
-
-
-def _save_result(results_dir: Path, kind: str, extension: str, output: str) -> Path:
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    result_path = results_dir / f"{timestamp}-{kind}{extension}"
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    result_path.write_text(output.rstrip("\n") + "\n", encoding="utf-8")
-    return result_path
 
 
 def _write_obsidian_vault(
@@ -650,47 +610,6 @@ def _format_summary(result: object) -> str:
             owner = f"{item.enclosing_type}.{item.method_name}" if item.enclosing_type and item.method_name else item.method_name or "-"
             lines.append(f"    - {item.operation} {owner}: {item.statement}")
 
-    return "\n".join(lines)
-
-
-def _search_store(
-    store_path: Path,
-    query: str,
-    top_k: int,
-    filter_source: str | None,
-    embedder: object,
-) -> str:
-    # 通过 source_type 过滤，调用方无需维护多个索引库也能只查代码或只查知识库。
-    metadata_filter = {"source_type": filter_source} if filter_source else None
-    try:
-        results = JsonlVectorStore(store_path).search(
-            query=query,
-            top_k=top_k,
-            metadata_filter=metadata_filter,
-            embedder=embedder,
-        )
-    except ValueError as exc:
-        raise SystemExit(
-            f"{exc} Use the same --embedder and embedding options that created the store."
-        ) from exc
-    if not results:
-        return f"no records found in {store_path}"
-
-    lines = []
-    for index, result in enumerate(results, start=1):
-        metadata = result.metadata
-        location = (
-            f"{metadata.get('file_path', '')}:"
-            f"{metadata.get('start_line', '')}"
-        )
-        symbol = metadata.get("symbol_name", "")
-        kind = metadata.get("kind", "")
-        source_type = metadata.get("source_type", "")
-        lines.append(f"{index}. score={result.score:.4f} {source_type} {kind} {symbol} {location}")
-        matched_terms = _matched_terms(query, result.text)
-        if matched_terms:
-            lines.append(f"   matched: {', '.join(matched_terms)}")
-        lines.append(_indent(result.text, "   "))
     return "\n".join(lines)
 
 

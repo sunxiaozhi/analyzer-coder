@@ -15,15 +15,13 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from java_analyzer.analyzer import JavaAnalyzer
 from java_analyzer.api_mapper import build_api_mapping
 from java_analyzer.chunker import build_chunks
-from java_analyzer.embedding import HashingEmbedder, cosine_similarity
-from java_analyzer.kb_loader import build_kb_chunks
+from java_analyzer.embedding import HashingEmbedder
 from java_analyzer.models import JavaFileAnalysis, JavaVectorChunk, SourceSpan
-from java_analyzer.vector_store import JsonlVectorStore, SearchResult, VectorRecord
+from java_analyzer.vector_store import SearchResult, VectorRecord
 from java_analyzer.cli import (
     _build_graph,
     _build_report,
     _format_summary,
-    _save_result,
 )
 from web.backend.errors import APIError
 from web.backend.external_stores import (
@@ -36,6 +34,7 @@ from web.backend.external_stores import (
 from web.backend.fusion import build_evidence, serialize_result
 from web.backend.mysql_state import MySqlStateStore
 from web.backend.paths import relative_to_workspace, workspace_path
+from web.backend.rag import build_rag_flow
 from web.backend.validation import source_value
 
 KB_EXTENSIONS = {".adoc", ".markdown", ".md", ".rst", ".txt"}
@@ -129,33 +128,25 @@ class AnalyzerService:
     def __init__(
         self,
         workspace_root: Path,
-        default_store: Path,
-        results_dir: Path,
         projects_dir: Path,
         admin_username: str = "admin",
         admin_password: str = "admin123",
-        state_backend: str = "mysql",
         mysql_config: dict[str, Any] | None = None,
+        mysql_store: MySqlStateStore | None = None,
         external_stores_config: ExternalStoreConfig | None = None,
-        external_stores_enabled: bool = False,
+        external_stores: ExternalAnalysisStores | None = None,
         analyzer: JavaAnalyzer | None = None,
         embedder: HashingEmbedder | None = None,
     ) -> None:
         self.workspace_root = workspace_root
-        self.default_store = default_store
-        self.results_dir = results_dir
         self.projects_dir = workspace_path(workspace_root, projects_dir)
-        self.projects_file = self.projects_dir / "projects.json"
-        self.users_file = self.projects_dir / "users.json"
         self.admin_username = admin_username
         self.admin_password = admin_password
-        self.state_backend = state_backend
-        self.mysql_store: MySqlStateStore | None = None
         self.analyzer = analyzer or JavaAnalyzer()
         self.embedder = embedder or HashingEmbedder()
-        self.external_stores = ExternalAnalysisStores(external_stores_config) if external_stores_config else None
-        self.external_stores_enabled = external_stores_enabled
-        if self.state_backend == "mysql":
+        if mysql_store is not None:
+            self.mysql_store = mysql_store
+        else:
             config = mysql_config or {}
             self.mysql_store = MySqlStateStore(
                 host=str(config.get("host", "127.0.0.1")),
@@ -165,19 +156,20 @@ class AnalyzerService:
                 database=str(config.get("database", "code_knowledge")),
             )
             self.mysql_store.initialize()
-            self.mysql_store.migrate_from_json(self.users_file, self.projects_file, self.projects_dir)
+        self.external_stores = external_stores or (
+            ExternalAnalysisStores(external_stores_config) if external_stores_config else None
+        )
+        if self.external_stores is None:
+            raise APIError("Qdrant and Neo4j stores are required.", 500)
         self._ensure_default_admin()
 
     @classmethod
     def from_config(cls, config: Config) -> "AnalyzerService":
         return cls(
             workspace_root=Path(config["WORKSPACE_ROOT"]),
-            default_store=Path(config["DEFAULT_STORE"]),
-            results_dir=Path(config["RESULTS_DIR"]),
             projects_dir=Path(config["PROJECTS_DIR"]),
             admin_username=str(config["ADMIN_USERNAME"]),
             admin_password=str(config["ADMIN_PASSWORD"]),
-            state_backend=str(config.get("STATE_BACKEND", "mysql")),
             mysql_config={
                 "host": config.get("MYSQL_HOST", "127.0.0.1"),
                 "port": config.get("MYSQL_PORT", 3306),
@@ -185,21 +177,23 @@ class AnalyzerService:
                 "password": config.get("MYSQL_PASSWORD", "root"),
                 "database": config.get("MYSQL_DATABASE", "code_knowledge"),
             },
+            mysql_store=config.get("MYSQL_STORE"),
             external_stores_config=ExternalStoreConfig(
                 qdrant=QdrantConfig(
-                    url=str(config.get("QDRANT_URL", "http://192.168.0.100:6333")),
+                    url=str(config.get("QDRANT_URL", "http://127.0.0.1:6333")),
                     collection=str(config.get("QDRANT_COLLECTION", "java_analyzer_chunks")),
+                    api_key=str(config.get("QDRANT_API_KEY", "")),
                     timeout=float(config.get("EXTERNAL_STORE_TIMEOUT", 5)),
                 ),
                 neo4j=Neo4jConfig(
-                    url=str(config.get("NEO4J_URL", "http://192.168.0.100:7474")),
+                    url=str(config.get("NEO4J_URL", "http://127.0.0.1:7474")),
                     database=str(config.get("NEO4J_DATABASE", "neo4j")),
                     username=str(config.get("NEO4J_USERNAME", "neo4j")),
                     password=str(config.get("NEO4J_PASSWORD", "neo4j")),
                     timeout=float(config.get("EXTERNAL_STORE_TIMEOUT", 5)),
                 ),
             ),
-            external_stores_enabled=bool(config.get("EXTERNAL_STORES_ENABLED", False)),
+            external_stores=config.get("EXTERNAL_STORES"),
         )
 
     def health(self) -> dict[str, Any]:
@@ -244,7 +238,7 @@ class AnalyzerService:
         self._validate_project_ids(project_ids)
         now = utc_now()
         user = UserRecord(
-            id=self._unique_user_id(username, users) if self.state_backend != "mysql" else "",
+            id="",
             username=username,
             displayName=display_name,
             passwordHash=generate_password_hash(password),
@@ -254,11 +248,7 @@ class AnalyzerService:
             createdAt=now,
             updatedAt=now,
         )
-        if self.mysql_store:
-            user = UserRecord(**self.mysql_store.insert_user(asdict(user)))
-        else:
-            users.append(user)
-            self._save_users(users)
+        user = UserRecord(**self.mysql_store.insert_user(asdict(user)))
         return {"user": self._public_user(user)}
 
     def update_user(self, user_id: str, payload: dict[str, Any], actor: "UserRecord") -> dict[str, Any]:
@@ -356,7 +346,7 @@ class AnalyzerService:
             raise
 
         project = ProjectRecord(
-            id=project_key if self.state_backend != "mysql" else "",
+            id="",
             name=name,
             gitUrl=git_url,
             branch=branch or "",
@@ -365,11 +355,7 @@ class AnalyzerService:
             updatedAt=utc_now(),
             projectKey=project_key,
         )
-        if self.mysql_store:
-            project = ProjectRecord(**self.mysql_store.insert_project(asdict(project)))
-        else:
-            projects.append(project)
-            self._save_projects(projects)
+        project = ProjectRecord(**self.mysql_store.insert_project(asdict(project)))
         self._grant_project_access(user.id, project.id)
         return {"project": asdict(project)}
 
@@ -392,18 +378,10 @@ class AnalyzerService:
         analysis_records = self._analysis_records_for_results(context, code_results)
         analysis_record_count = self._save_analysis_records(context, analysis_records)
         external_sync = self._sync_external_analysis_stores(context, payload, analysis_records, code_results)
-        saved_path_label = ""
-        try:
-            saved_path = self._save_latest_analysis_result(context.results_dir, normalized_mode, extension, output)
-            saved_path_label = self._relative(saved_path)
-        except OSError as exc:
-            external_sync = {
-                **external_sync,
-                "localResultWarning": f"analysis result file was not saved: {exc}",
-            }
+        snapshot = self._save_analysis_output(context, normalized_mode, extension, output)
         return {
             "output": output,
-            "savedPath": saved_path_label,
+            "savedPath": snapshot["uri"],
             "mode": normalized_mode,
             "source": "code",
             "projectId": context.project_id,
@@ -415,8 +393,8 @@ class AnalyzerService:
         mode = str(payload.get("mode", "report"))
         context = self._analysis_context(payload, user)
         extension, normalized_mode = self._analysis_result_extension(mode)
-        result_path = context.results_dir / f"web-{normalized_mode}{extension}"
-        if not result_path.exists():
+        snapshot = self._load_analysis_output(context, normalized_mode)
+        if not snapshot:
             return {
                 "exists": False,
                 "output": "",
@@ -427,54 +405,49 @@ class AnalyzerService:
                 "updatedAt": "",
             }
 
-        output = result_path.read_text(encoding="utf-8", errors="replace")
+        output = str(snapshot.get("output") or "")
         if normalized_mode == "report" and _is_legacy_english_report(output):
             output, extension, normalized_mode = self._analysis_output(context, payload, "report")
-            result_path = self._save_latest_analysis_result(context.results_dir, normalized_mode, extension, output)
+            snapshot = self._save_analysis_output(context, normalized_mode, extension, output)
 
         return {
             "exists": True,
             "output": output,
-            "savedPath": self._relative(result_path),
+            "savedPath": str(snapshot.get("uri") or ""),
             "mode": normalized_mode,
             "source": "code",
             "projectId": context.project_id,
-            "updatedAt": datetime.fromtimestamp(result_path.stat().st_mtime, timezone.utc).isoformat(),
+            "updatedAt": str(snapshot.get("updatedAt") or ""),
         }
 
     def index_project(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         source = source_value(payload)
         context = self._analysis_context(payload, user)
-        store_path = context.store_path(payload.get("store"))
         append = bool(payload.get("append", False))
 
         chunks = self._build_source_chunks(context, payload, source)
-        if self.mysql_store and context.project_id:
-            records = self._vector_records_for_chunks(chunks)
-            self.mysql_store.save_vector_records(context.project_id, records, append=append)
-            store_label = "mysql://vector_records"
-        else:
-            store = JsonlVectorStore(store_path)
-            records = store.upsert_chunks(chunks, embedder=self.embedder) if append else store.write_chunks(chunks, embedder=self.embedder)
-            store_label = self._relative(store_path)
-        message = f"{'upserted' if append else 'indexed'} {len(records)} chunks into {store_label}"
-        saved_path = _save_result(context.results_dir, "web-index", ".txt", message)
+        records = self._vector_records_for_chunks(chunks)
+        if not append:
+            self.external_stores.delete_qdrant_project_records(project_id=context.project_id)
+        sync_result = self.external_stores.sync(project_id=context.project_id, analysis_records=[], vector_records=records)
+        store_label = self._vector_store_label()
+        message = f"已将 {len(records)} 个切块写入 {store_label}"
         return {
             "message": message,
             "count": len(records),
             "store": store_label,
-            "savedPath": self._relative(saved_path),
+            "savedPath": "",
             "projectId": context.project_id,
+            "externalSync": sync_result,
         }
 
     def index_status(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
-        store_path = context.store_path(payload.get("store"))
-        records = self._load_vector_records(context, store_path)
+        records = self._load_vector_records(context)
         if not records:
             return {
                 "exists": False,
-                "store": self._vector_store_label(context, store_path),
+                "store": self._vector_store_label(),
                 "size": 0,
                 "updatedAt": "",
                 "total": 0,
@@ -492,9 +465,9 @@ class AnalyzerService:
             kinds[kind] = kinds.get(kind, 0) + 1
         return {
             "exists": True,
-            "store": self._vector_store_label(context, store_path),
-            "size": 0 if self.mysql_store and context.project_id else store_path.stat().st_size,
-            "updatedAt": utc_now() if self.mysql_store and context.project_id else datetime.fromtimestamp(store_path.stat().st_mtime, timezone.utc).isoformat(),
+            "store": self._vector_store_label(),
+            "size": 0,
+            "updatedAt": utc_now(),
             "total": len(records),
             "sources": sources,
             "kinds": kinds,
@@ -503,21 +476,20 @@ class AnalyzerService:
 
     def index_records(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
-        store_path = context.store_path(payload.get("store"))
         limit = max(1, min(int(payload.get("limit") or 50), 200))
         offset = max(0, int(payload.get("offset") or 0))
         source_filter = str(payload.get("source") or "").strip()
         kind_filter = str(payload.get("kind") or "").strip()
         query = str(payload.get("query") or "").strip().lower()
 
-        records = self._load_vector_records(context, store_path)
+        records = self._load_vector_records(context)
         if not records:
             return {
                 "records": [],
                 "total": 0,
                 "limit": limit,
                 "offset": offset,
-                "store": self._vector_store_label(context, store_path),
+                "store": self._vector_store_label(),
                 "projectId": context.project_id,
             }
 
@@ -556,37 +528,55 @@ class AnalyzerService:
             "total": len(filtered),
             "limit": limit,
             "offset": offset,
-            "store": self._vector_store_label(context, store_path),
+            "store": self._vector_store_label(),
             "projectId": context.project_id,
         }
 
     def query(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        return self._query(payload, user, include_rag=True)
+
+    def rag_search(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
+        return self._query(payload, user, include_rag=True)
+
+    def _query(self, payload: dict[str, Any], user: "UserRecord", *, include_rag: bool) -> dict[str, Any]:
         query_text = str(payload.get("query", "")).strip()
         if not query_text:
             raise APIError("query is required.", 400)
 
         context = self._analysis_context(payload, user)
-        store_path = context.store_path(payload.get("store"))
         top_k = int(payload.get("topK", 5))
         filter_source = payload.get("filterSource")
-        metadata_filter = {"source_type": filter_source} if filter_source in {"code", "kb", "knowledge_asset"} else None
-        records = self._load_vector_records(context, store_path)
-        results = self._search_vector_records(records, query_text, top_k, metadata_filter)
+        source_type = str(filter_source) if filter_source in {"code", "kb", "knowledge_asset"} else ""
+        query_embedding = self.embedder.embed(query_text)
+        qdrant_results = self.external_stores.search_qdrant(
+            project_id=context.project_id,
+            query_vector=query_embedding,
+            top_k=top_k,
+            source_type=source_type,
+        )
+        results = [
+            SearchResult(
+                id=str(item.get("id") or ""),
+                score=float(item.get("score") or 0),
+                text=str(item.get("text") or ""),
+                metadata=dict(item.get("metadata") or {}),
+            )
+            for item in qdrant_results
+        ]
+        records = self._load_vector_records(context)
         response = [serialize_result(result) for result in results]
         evidence = build_evidence(query_text, results, records)
-        saved_path = _save_result(
-            context.results_dir,
-            "web-query",
-            ".json",
-            json.dumps({"results": response, "evidence": evidence}, ensure_ascii=False, indent=2),
-        )
-        return {
+        rag = build_rag_flow(query_text, results, evidence) if include_rag else None
+        output = {
             "results": response,
             "evidence": evidence,
-            "savedPath": self._relative(saved_path),
-            "store": self._vector_store_label(context, store_path),
+            "savedPath": "",
+            "store": self._vector_store_label(),
             "projectId": context.project_id,
         }
+        if rag is not None:
+            output["rag"] = rag
+        return output
 
     def api_mapping(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
@@ -604,11 +594,15 @@ class AnalyzerService:
             backend_path=backend_path,
             analyzer=self.analyzer,
         )
-        payload_json = json.dumps(result.to_dict(), ensure_ascii=False, indent=2)
-        saved_path = self._save_latest_analysis_result(context.results_dir, "api-map", ".json", payload_json)
+        snapshot = self._save_analysis_output(
+            context,
+            "api-map",
+            ".json",
+            json.dumps(result.to_dict(), ensure_ascii=False, indent=2),
+        )
         return {
             **result.to_dict(),
-            "savedPath": self._relative(saved_path),
+            "savedPath": snapshot["uri"],
             "projectId": context.project_id,
         }
 
@@ -778,69 +772,58 @@ class AnalyzerService:
 
     def list_kb_files(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
-        root = self._kb_root(context, payload)
-        if not root.exists():
-            return {"files": [], "root": self._relative(root), "projectId": context.project_id}
-
-        files = [
-            {
-                "path": self._relative_to_root(root, path),
-                "name": path.name,
-                "size": path.stat().st_size,
-                "updatedAt": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
-            }
-            for path in sorted(root.rglob("*"))
-            if path.is_file() and path.suffix.lower() in KB_EXTENSIONS
-        ]
-        return {"files": files, "root": self._relative(root), "projectId": context.project_id}
+        prefix = self._kb_prefix(payload)
+        files = self.mysql_store.list_knowledge_documents(context.project_id, prefix=prefix)
+        return {"files": files, "root": "mysql://knowledge_documents", "projectId": context.project_id}
 
     def get_kb_file(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
-        root = self._kb_root(context, payload)
-        path = self._kb_file_path(root, payload.get("path"))
-        if not path.exists():
+        document_path = self._kb_document_path(payload.get("path"))
+        document = self.mysql_store.get_knowledge_document(context.project_id, document_path)
+        if not document:
             raise APIError("knowledge file not found.", 404)
         return {
             "file": {
-                "path": self._relative_to_root(root, path),
-                "name": path.name,
-                "size": path.stat().st_size,
-                "updatedAt": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
+                "path": document["path"],
+                "name": document["name"],
+                "size": document["size"],
+                "updatedAt": document["updatedAt"],
             },
-            "content": path.read_text(encoding="utf-8", errors="replace"),
-            "root": self._relative(root),
+            "content": document["content"],
+            "root": "mysql://knowledge_documents",
             "projectId": context.project_id,
         }
 
     def save_kb_file(self, payload: dict[str, Any], user: "UserRecord", create: bool = False) -> dict[str, Any]:
         context = self._analysis_context(payload, user)
-        root = self._kb_root(context, payload)
-        path = self._kb_file_path(root, payload.get("path"))
+        document_path = self._kb_document_path(payload.get("path"))
         content = str(payload.get("content", ""))
-        if create and path.exists():
+        if create and self.mysql_store.get_knowledge_document(context.project_id, document_path):
             raise APIError("knowledge file already exists.", 409)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        document = self.mysql_store.save_knowledge_document(
+            context.project_id,
+            path=document_path,
+            content=content,
+            updated_by=user.id,
+        )
         return {
             "file": {
-                "path": self._relative_to_root(root, path),
-                "name": path.name,
-                "size": path.stat().st_size,
-                "updatedAt": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
+                "path": document["path"],
+                "name": document["name"],
+                "size": document["size"],
+                "updatedAt": document["updatedAt"],
             },
             "content": content,
-            "root": self._relative(root),
+            "root": "mysql://knowledge_documents",
             "projectId": context.project_id,
         }
 
     def delete_kb_file(self, payload: dict[str, Any], user: "UserRecord") -> dict[str, Any]:
         context = self._analysis_context(payload, user)
-        root = self._kb_root(context, payload)
-        path = self._kb_file_path(root, payload.get("path"))
-        if not path.exists():
+        document_path = self._kb_document_path(payload.get("path"))
+        if not self.mysql_store.delete_knowledge_document(context.project_id, document_path):
             raise APIError("knowledge file not found.", 404)
-        path.unlink()
-        return {"deleted": self._relative_to_root(root, path), "root": self._relative(root), "projectId": context.project_id}
+        return {"deleted": document_path, "root": "mysql://knowledge_documents", "projectId": context.project_id}
 
     def _vector_records_for_chunks(self, chunks: list[Any]) -> list[VectorRecord]:
         chunk_list = list(chunks)
@@ -855,38 +838,23 @@ class AnalyzerService:
             for chunk, embedding in zip(chunk_list, embeddings, strict=True)
         ]
 
-    def _load_vector_records(self, context: "AnalysisContext", store_path: Path) -> list[VectorRecord]:
-        if self.mysql_store and context.project_id:
-            return [VectorRecord(**item) for item in self.mysql_store.list_vector_records(context.project_id)]
-        return JsonlVectorStore(store_path).read_records()
+    def _load_vector_records(self, context: "AnalysisContext", limit: int = 5000) -> list[VectorRecord]:
+        return [
+            VectorRecord(
+                id=str(item.get("id") or ""),
+                text=str(item.get("text") or ""),
+                metadata=dict(item.get("metadata") or {}),
+                embedding=[],
+            )
+            for item in self.external_stores.list_qdrant_records(project_id=context.project_id, limit=limit)
+        ]
 
-    def _vector_store_label(self, context: "AnalysisContext", store_path: Path) -> str:
-        if self.mysql_store and context.project_id:
-            return "mysql://vector_records"
-        return self._relative(store_path)
-
-    def _analysis_records_file(self, context: "AnalysisContext") -> Path:
-        return context.data_root / "analysis_records.json"
+    def _vector_store_label(self) -> str:
+        collection = self.external_stores.config.qdrant.collection
+        return f"qdrant://{collection}"
 
     def _save_analysis_records(self, context: "AnalysisContext", records: list[dict[str, Any]]) -> int:
-        if self.mysql_store and context.project_id:
-            self.mysql_store.save_analysis_records(context.project_id, records)
-            return len(records)
-
-        path = self._analysis_records_file(context)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(
-                {
-                    "projectId": context.project_id,
-                    "updatedAt": utc_now(),
-                    "records": records,
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        self.mysql_store.save_analysis_records(context.project_id, records)
         return len(records)
 
     def _sync_external_analysis_stores(
@@ -896,18 +864,11 @@ class AnalyzerService:
         analysis_records: list[dict[str, Any]],
         results: list[JavaFileAnalysis],
     ) -> dict[str, Any]:
-        if not self.external_stores:
-            return {"enabled": False}
-        sync_requested = bool(payload.get("syncExternal")) or self.external_stores_enabled
-        if not sync_requested:
-            return {"enabled": False}
-        project_id = context.project_id or "workspace"
-
         chunks = [chunk for result in results for chunk in build_chunks(result)]
         vector_records = self._vector_records_for_chunks(chunks)
         try:
             return self.external_stores.sync(
-                project_id=project_id,
+                project_id=context.project_id,
                 analysis_records=analysis_records,
                 vector_records=vector_records,
             )
@@ -925,31 +886,10 @@ class AnalyzerService:
         limit: int,
         offset: int,
     ) -> list[dict[str, Any]]:
-        if self.mysql_store and context.project_id:
-            return self.mysql_store.list_analysis_records(context.project_id, record_type, limit, offset)
-
-        path = self._analysis_records_file(context)
-        if not path.exists():
-            return []
-        data = json.loads(path.read_text(encoding="utf-8"))
-        records = list(data.get("records", []))
-        if record_type:
-            records = [record for record in records if record.get("type") == record_type]
-        return records[offset : offset + limit]
+        return self.mysql_store.list_analysis_records(context.project_id, record_type, limit, offset)
 
     def _analysis_record_counts(self, context: "AnalysisContext") -> dict[str, int]:
-        if self.mysql_store and context.project_id:
-            return self.mysql_store.count_analysis_records_by_type(context.project_id)
-
-        path = self._analysis_records_file(context)
-        if not path.exists():
-            return {}
-        data = json.loads(path.read_text(encoding="utf-8"))
-        counts: dict[str, int] = {}
-        for record in data.get("records", []):
-            record_type = str(record.get("type") or "unknown")
-            counts[record_type] = counts.get(record_type, 0) + 1
-        return dict(sorted(counts.items()))
+        return self.mysql_store.count_analysis_records_by_type(context.project_id)
 
     def _analysis_records_for_results(
         self,
@@ -1079,31 +1019,6 @@ class AnalyzerService:
                 return self._relative(path)
         return str(path).replace("\\", "/")
 
-    def _search_vector_records(
-        self,
-        records: list[VectorRecord],
-        query: str,
-        top_k: int,
-        metadata_filter: dict[str, Any] | None,
-    ) -> list[SearchResult]:
-        query_embedding = self.embedder.embed(query)
-        results = [
-            SearchResult(
-                id=record.id,
-                score=cosine_similarity(query_embedding, record.embedding),
-                text=record.text,
-                metadata=record.metadata,
-            )
-            for record in records
-            if self._matches_metadata_filter(record.metadata, metadata_filter)
-        ]
-        return sorted(results, key=lambda item: item.score, reverse=True)[:top_k]
-
-    def _matches_metadata_filter(self, metadata: dict[str, Any], metadata_filter: dict[str, Any] | None) -> bool:
-        if not metadata_filter:
-            return True
-        return all(metadata.get(key) == value for key, value in metadata_filter.items())
-
     def _analysis_output(
         self,
         context: "AnalysisContext",
@@ -1142,11 +1057,22 @@ class AnalyzerService:
             return ".txt", "summary"
         return ".md", "report"
 
-    def _save_latest_analysis_result(self, results_dir: Path, mode: str, extension: str, output: str) -> Path:
-        result_path = results_dir / f"web-{mode}{extension}"
-        result_path.parent.mkdir(parents=True, exist_ok=True)
-        result_path.write_text(output.rstrip("\n") + "\n", encoding="utf-8")
-        return result_path
+    def _save_analysis_output(
+        self,
+        context: "AnalysisContext",
+        mode: str,
+        extension: str,
+        output: str,
+    ) -> dict[str, Any]:
+        return self.mysql_store.save_analysis_output(
+            context.project_id,
+            mode=mode,
+            extension=extension,
+            output=output.rstrip("\n") + "\n",
+        )
+
+    def _load_analysis_output(self, context: "AnalysisContext", mode: str) -> dict[str, Any] | None:
+        return self.mysql_store.get_analysis_output(context.project_id, mode)
 
     def _build_source_chunks(
         self,
@@ -1163,8 +1089,36 @@ class AnalyzerService:
                 for chunk in build_chunks(result)
             )
         if source in {"kb", "mixed"}:
-            chunks.extend(build_kb_chunks(self._source_target(context, payload, "kb")))
+            chunks.extend(self._build_knowledge_document_chunks(context, payload))
             chunks.extend(self._build_knowledge_asset_chunks(context))
+        return chunks
+
+    def _build_knowledge_document_chunks(
+        self,
+        context: "AnalysisContext",
+        payload: dict[str, Any],
+    ) -> list[JavaVectorChunk]:
+        prefix = self._kb_prefix(payload)
+        documents = self.mysql_store.list_knowledge_documents(context.project_id, prefix=prefix)
+        chunks: list[JavaVectorChunk] = []
+        for document in documents:
+            loaded = self.mysql_store.get_knowledge_document(context.project_id, str(document.get("path") or ""))
+            if not loaded:
+                continue
+            document_path = str(loaded["path"])
+            chunks.append(
+                JavaVectorChunk(
+                    id=f"kb:{document_path}",
+                    text=str(loaded["content"]),
+                    metadata={
+                        "source_type": "kb",
+                        "kind": "knowledge_document",
+                        "file_path": document_path,
+                        "title": str(loaded["name"]),
+                        "start_line": 1,
+                    },
+                )
+            )
         return chunks
 
     def _build_knowledge_asset_chunks(self, context: "AnalysisContext") -> list[JavaVectorChunk]:
@@ -1221,56 +1175,11 @@ class AnalyzerService:
         key = "codePath" if source == "code" else "kbPath"
         return context.path(payload.get(key) or fallback)
 
-    def _kb_root(self, context: "AnalysisContext", payload: dict[str, Any]) -> Path:
-        return context.path(payload.get("kbPath") or "docs")
-
-    def _knowledge_assets_file(self, context: "AnalysisContext") -> Path:
-        return context.data_root / "knowledge_assets.json"
-
     def _load_knowledge_assets(self, context: "AnalysisContext") -> list["KnowledgeAsset"]:
-        if self.mysql_store and context.project_id:
-            return [KnowledgeAsset(**item) for item in self.mysql_store.list_knowledge_assets(context.project_id)]
-        path = self._knowledge_assets_file(context)
-        if not path.exists():
-            return []
-        data = json.loads(path.read_text(encoding="utf-8"))
-        assets: list[KnowledgeAsset] = []
-        for item in data.get("assets", []):
-            assets.append(
-                KnowledgeAsset(
-                    id=str(item.get("id") or ""),
-                    type=str(item.get("type") or "business_rule"),
-                    title=str(item.get("title") or ""),
-                    summary=str(item.get("summary") or ""),
-                    content=str(item.get("content") or ""),
-                    status=str(item.get("status") or "draft"),
-                    ownerUserId=str(item.get("ownerUserId") or ""),
-                    reviewerUserId=str(item.get("reviewerUserId") or ""),
-                    tags=[str(tag) for tag in item.get("tags", []) if str(tag).strip()],
-                    evidence=[
-                        {str(key): value for key, value in evidence.items()}
-                        for evidence in item.get("evidence", [])
-                        if isinstance(evidence, dict)
-                    ],
-                    sourcePath=str(item.get("sourcePath") or ""),
-                    confirmedAt=str(item.get("confirmedAt") or ""),
-                    reviewDueAt=str(item.get("reviewDueAt") or ""),
-                    createdAt=str(item.get("createdAt") or utc_now()),
-                    updatedAt=str(item.get("updatedAt") or utc_now()),
-                    createdBy=str(item.get("createdBy") or ""),
-                    updatedBy=str(item.get("updatedBy") or ""),
-                )
-            )
-        return assets
+        return [KnowledgeAsset(**item) for item in self.mysql_store.list_knowledge_assets(context.project_id)]
 
     def _save_knowledge_assets(self, context: "AnalysisContext", assets: list["KnowledgeAsset"]) -> None:
-        if self.mysql_store and context.project_id:
-            self.mysql_store.save_knowledge_assets(context.project_id, assets)
-            return
-        path = self._knowledge_assets_file(context)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"assets": [asdict(asset) for asset in assets]}
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.mysql_store.save_knowledge_assets(context.project_id, assets)
 
     def _knowledge_asset_from_payload(
         self,
@@ -1375,56 +1284,22 @@ class AnalyzerService:
             raise APIError(f"{field} must be an integer.", 400) from error
         return max(minimum, min(parsed, maximum))
 
-    def _kb_templates_file(self, context: "AnalysisContext") -> Path:
-        return context.data_root / "knowledge_templates.json"
-
     def _load_kb_templates(self, context: "AnalysisContext") -> list[dict[str, str]]:
-        if self.mysql_store and context.project_id:
-            templates = self.mysql_store.list_kb_templates(context.project_id)
-            if templates:
-                return templates
-            now = utc_now()
-            return [
-                {
-                    **template,
-                    "createdAt": now,
-                    "updatedAt": now,
-                }
-                for template in DEFAULT_KB_TEMPLATES
-            ]
-        path = self._kb_templates_file(context)
-        if not path.exists():
-            now = utc_now()
-            return [
-                {
-                    **template,
-                    "createdAt": now,
-                    "updatedAt": now,
-                }
-                for template in DEFAULT_KB_TEMPLATES
-            ]
-        data = json.loads(path.read_text(encoding="utf-8"))
-        templates: list[dict[str, str]] = []
-        for item in data.get("templates", []):
-            templates.append(
-                {
-                    "id": str(item.get("id") or ""),
-                    "name": str(item.get("name") or ""),
-                    "path": str(item.get("path") or ""),
-                    "content": str(item.get("content") or ""),
-                    "createdAt": str(item.get("createdAt") or utc_now()),
-                    "updatedAt": str(item.get("updatedAt") or utc_now()),
-                }
-            )
-        return templates
+        templates = self.mysql_store.list_kb_templates(context.project_id)
+        if templates:
+            return templates
+        now = utc_now()
+        return [
+            {
+                **template,
+                "createdAt": now,
+                "updatedAt": now,
+            }
+            for template in DEFAULT_KB_TEMPLATES
+        ]
 
     def _save_kb_templates(self, context: "AnalysisContext", templates: list[dict[str, str]]) -> None:
-        if self.mysql_store and context.project_id:
-            self.mysql_store.save_kb_templates(context.project_id, templates)
-            return
-        path = self._kb_templates_file(context)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"templates": templates}, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.mysql_store.save_kb_templates(context.project_id, templates)
 
     def _template_from_payload(
         self,
@@ -1470,16 +1345,26 @@ class AnalyzerService:
             index += 1
         return f"{base}-{index}"
 
-    def _kb_file_path(self, root: Path, value: object) -> Path:
+    def _kb_prefix(self, payload: dict[str, Any]) -> str:
+        raw = str(payload.get("kbPath") or "").strip().replace("\\", "/").strip("/")
+        if not raw:
+            return ""
+        if Path(raw).is_absolute() or ".." in Path(raw).parts:
+            raise APIError("knowledge root must be relative.", 400)
+        return ""
+
+    def _kb_document_path(self, value: object) -> str:
         raw = str(value or "").strip().replace("\\", "/")
         if not raw:
             raise APIError("path is required.", 400)
         if Path(raw).is_absolute():
             raise APIError("knowledge file path must be relative.", 400)
-        path = workspace_path(root, raw)
+        path = Path(raw)
+        if ".." in path.parts:
+            raise APIError("knowledge file path must stay within the project.", 400)
         if path.suffix.lower() not in KB_EXTENSIONS:
             raise APIError("knowledge file extension must be markdown, text, rst, or asciidoc.", 400)
-        return path
+        return raw.strip("/")
 
     def _relative_to_root(self, root: Path, path: Path) -> str:
         return str(path.resolve().relative_to(root.resolve())).replace("\\", "/")
@@ -1493,16 +1378,7 @@ class AnalyzerService:
     def _analysis_context(self, payload: dict[str, Any], user: "UserRecord") -> "AnalysisContext":
         project_id = str(payload.get("projectId") or "").strip()
         if not project_id:
-            if not user.isAdmin:
-                raise APIError("projectId is required.", 403)
-            return AnalysisContext(
-                workspace_root=self.workspace_root,
-                root=self.workspace_root,
-                data_root=self.workspace_root,
-                default_store=self._workspace_path(self.default_store),
-                results_dir=self.workspace_root / self.results_dir,
-                project_id="",
-            )
+            raise APIError("projectId is required.", 400)
 
         project = self._require_project(project_id, user)
         project_root = self._project_root(project)
@@ -1510,61 +1386,17 @@ class AnalyzerService:
             workspace_root=self.workspace_root,
             root=self._project_repo_path(project),
             data_root=project_root,
-            default_store=project_root / "vector_store" / "project.jsonl",
-            results_dir=project_root / "results",
             project_id=project.id,
         )
 
     def _ensure_default_admin(self) -> None:
-        if self.mysql_store:
-            self.mysql_store.ensure_admin(self.admin_username, self.admin_password, utc_now())
-            return
-        users = self._load_users()
-        if users:
-            return
-        now = utc_now()
-        admin = UserRecord(
-            id=slugify(self.admin_username),
-            username=self.admin_username,
-            displayName="系统管理员",
-            passwordHash=generate_password_hash(self.admin_password),
-            isAdmin=True,
-            projectIds=[],
-            createdAt=now,
-            updatedAt=now,
-        )
-        self._save_users([admin])
+        self.mysql_store.ensure_admin(self.admin_username, self.admin_password, utc_now())
 
     def _load_users(self) -> list["UserRecord"]:
-        if self.mysql_store:
-            return [UserRecord(**item) for item in self.mysql_store.list_users()]
-        if not self.users_file.exists():
-            return []
-        data = json.loads(self.users_file.read_text(encoding="utf-8"))
-        users: list[UserRecord] = []
-        for item in data.get("users", []):
-            users.append(
-                UserRecord(
-                    id=item["id"],
-                    username=item["username"],
-                    displayName=item.get("displayName") or item["username"],
-                    passwordHash=item["passwordHash"],
-                    isAdmin=bool(item.get("isAdmin", False)),
-                    lastProjectId=str(item.get("lastProjectId") or ""),
-                    projectIds=list(item.get("projectIds", [])),
-                    createdAt=item.get("createdAt", utc_now()),
-                    updatedAt=item.get("updatedAt", utc_now()),
-                )
-            )
-        return users
+        return [UserRecord(**item) for item in self.mysql_store.list_users()]
 
     def _save_users(self, users: list["UserRecord"]) -> None:
-        if self.mysql_store:
-            self.mysql_store.save_users(users)
-            return
-        self.projects_dir.mkdir(parents=True, exist_ok=True)
-        payload = {"users": [asdict(user) for user in users]}
-        self.users_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.mysql_store.save_users(users)
 
     def _require_user(self, user_id: str) -> "UserRecord":
         for user in self._load_users():
@@ -1602,17 +1434,7 @@ class AnalyzerService:
         return user.isAdmin or project_id in set(user.projectIds)
 
     def _grant_project_access(self, user_id: str, project_id: str) -> None:
-        if self.mysql_store:
-            self.mysql_store.grant_access(user_id, project_id, utc_now())
-            return
-        users = self._load_users()
-        for user in users:
-            if user.id == user_id:
-                if project_id not in user.projectIds:
-                    user.projectIds.append(project_id)
-                    user.updatedAt = utc_now()
-                    self._save_users(users)
-                return
+        self.mysql_store.grant_access(user_id, project_id, utc_now())
 
     def _unique_user_id(self, username: str, users: list["UserRecord"]) -> str:
         base = slugify(username)
@@ -1625,24 +1447,10 @@ class AnalyzerService:
         return f"{base}-{index}"
 
     def _load_projects(self) -> list["ProjectRecord"]:
-        if self.mysql_store:
-            return [ProjectRecord(**item) for item in self.mysql_store.list_projects()]
-        if not self.projects_file.exists():
-            return []
-        data = json.loads(self.projects_file.read_text(encoding="utf-8"))
-        projects: list[ProjectRecord] = []
-        for item in data.get("projects", []):
-            item.setdefault("projectKey", item["id"])
-            projects.append(ProjectRecord(**item))
-        return projects
+        return [ProjectRecord(**item) for item in self.mysql_store.list_projects()]
 
     def _save_projects(self, projects: list["ProjectRecord"]) -> None:
-        if self.mysql_store:
-            self.mysql_store.save_projects(projects)
-            return
-        self.projects_dir.mkdir(parents=True, exist_ok=True)
-        payload = {"projects": [asdict(project) for project in projects]}
-        self.projects_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.mysql_store.save_projects(projects)
 
     def _require_project(self, project_id: str, user: "UserRecord" | None = None) -> "ProjectRecord":
         for project in self._load_projects():
@@ -1738,17 +1546,10 @@ class AnalysisContext:
     workspace_root: Path
     root: Path
     data_root: Path
-    default_store: Path
-    results_dir: Path
     project_id: str
 
     def path(self, value: object) -> Path:
         return workspace_path(self.root, value)
-
-    def store_path(self, value: object) -> Path:
-        if not value:
-            return self.default_store
-        return workspace_path(self.data_root, value)
 
 
 def slugify(value: str) -> str:

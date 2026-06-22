@@ -18,11 +18,8 @@ def create_app(config: type[BackendConfig] | None = None) -> Flask:
 
     return app
 
-
-app = create_app()
-
-
 if __name__ == "__main__":
+    app = create_app()
     app.run(
         host=app.config["HOST"],
         port=app.config["PORT"],

@@ -12,9 +12,9 @@ python -m pip install -e ".[dev]"
 
 ## 命令行
 
-命令每次运行都会默认把结果保存到 `.java_results` 目录。
-可以用 `--results-dir path\to\dir` 指定其他输出目录，也可以用 `--no-save`
-只打印结果而不写入结果文件。
+命令行工具保留源码解析、切块预览、报告、图和 Obsidian 笔记生成能力。
+项目运行态的用户、项目、知识、分析记录和分析输出存储在 MySQL；语义向量写入 Qdrant；图关系写入 Neo4j。
+本地 JSONL 向量库入口已经停用，索引和检索请使用 Web/API 流程。
 
 分析单个文件：
 
@@ -58,41 +58,11 @@ java-analyze path\to\java-project --graph
 java-analyze . --source mixed --obsidian path\to\ObsidianVault\JavaAnalysis
 ```
 
-把切块写入本地 JSONL 向量库：
+构建索引和语义检索：
 
-```powershell
-java-analyze examples\Sample.java --index .vector_store\sample.jsonl
-```
-
-索引或查询时使用 SentenceTransformer 模型：
-
-```powershell
-java-analyze . --source mixed --index .vector_store\project.jsonl --embedder sentence-transformer --embedding-model BAAI/bge-small-zh-v1.5
-```
-
-把知识库文档索引到同一个向量库：
-
-```powershell
-java-analyze docs --source kb --index .vector_store\project.jsonl
-```
-
-从一个项目根目录同时索引代码和知识库文档：
-
-```powershell
-java-analyze . --source mixed --index .vector_store\project.jsonl
-```
-
-查询本地向量库：
-
-```powershell
-java-analyze --store .vector_store\sample.jsonl --query "emptyList method" --top-k 3
-```
-
-把查询结果限制为代码切块或知识库切块：
-
-```powershell
-java-analyze --store .vector_store\project.jsonl --query "phone number unique registration" --filter-source kb
-java-analyze --store .vector_store\project.jsonl --query "where is registration implemented" --filter-source code
+```text
+在 Web 控制台选择项目后执行索引，服务会将切块写入 Qdrant。
+在检索面板输入问题，服务会从 Qdrant 召回结果，并结合 MySQL 事实和 Neo4j 关系生成证据。
 ```
 
 ## Python API
@@ -101,13 +71,13 @@ java-analyze --store .vector_store\project.jsonl --query "where is registration 
 from pathlib import Path
 
 from java_analyzer import JavaAnalyzer, build_chunks
-from java_analyzer.vector_store import JsonlVectorStore
+from java_analyzer.vector_store import records_for_chunks, search_records
 
 analyzer = JavaAnalyzer()
 result = analyzer.analyze_file(Path("examples/Sample.java"))
 chunks = build_chunks(result)
-records = JsonlVectorStore(".vector_store/sample.jsonl").write_chunks(chunks)
-results = JsonlVectorStore(".vector_store/sample.jsonl").search("emptyList method")
+records = records_for_chunks(chunks)
+results = search_records(records, "emptyList method")
 
 print(result.package)
 print(records[0].metadata)
@@ -162,7 +132,7 @@ Python 包位于 `src/java_analyzer`：
 - `chunker.py`：把结构化的 `JavaFileAnalysis` 转换成适合向量搜索的小文本块。它会为类型、字段、方法、组件、endpoint 和 SQL 引用分别生成切块，并附带统一的 metadata。
 - `kb_loader.py`：加载 Markdown、TXT、RST、AsciiDoc 等知识库文件。它按标题和长度切分文档，跳过生成目录/缓存目录，并生成和代码切块兼容的知识库切块。
 - `embedding.py`：向量化后端和相似度工具。默认的 `HashingEmbedder` 是确定性的本地向量器；安装可选依赖后，`SentenceTransformerEmbedder` 可以使用真实的 sentence-transformers 模型。
-- `vector_store.py`：本地 JSONL 向量库。它负责写入或 upsert 带 embedding 的切块记录，读取已有记录，应用 metadata 过滤，并返回按余弦相似度排序的搜索结果。
+- `vector_store.py`：向量记录结构和内存排序工具。运行态向量存储由 Qdrant 承担。
 - `cli.py`：`java-analyze` 的命令行入口。它串联分析、切块、索引、查询、报告生成、Mermaid 图输出、Obsidian 笔记生成和结果自动保存。
 
 Web 子项目位于 `web`：
@@ -187,7 +157,7 @@ Web 子项目位于 `web`：
 - 用于向量化的类型、字段、方法和构造器文档切块
 - 用于向量化的组件、HTTP endpoint 和 SQL 引用切块
 - 来自 Markdown、TXT、RST 和 AsciiDoc 文件的知识库切块
-- 本地 JSONL 向量库，支持确定性哈希 embedding、余弦搜索、upsert 和来源过滤
+- Qdrant 语义索引，支持项目隔离、来源过滤和相似度召回
 - 可选的 SentenceTransformer embedding，用于索引和查询
 - 项目级 Markdown 报告，包含清单、组件、endpoint、SQL 引用和知识库输入
 - 解析器语法错误诊断

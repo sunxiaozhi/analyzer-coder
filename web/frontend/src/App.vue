@@ -43,6 +43,7 @@ const {
   indexRecordPageSize,
   searchResults,
   searchEvidence,
+  ragFlow,
   searchSavedPath,
   apiMapping,
   apiMappingSavedPath,
@@ -337,6 +338,7 @@ function openSection(section: ConsoleSection) {
         :busy="busy"
         :query-results="searchResults"
         :query-evidence="searchEvidence"
+        :rag-flow="ragFlow"
         :saved-path="searchSavedPath"
         @query-store="queryStore"
       />

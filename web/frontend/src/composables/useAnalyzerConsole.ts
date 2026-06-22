@@ -19,6 +19,7 @@ import type {
   ProjectRecord,
   QueryEvidence,
   QueryResult,
+  RagFlow,
   UserEditForm,
   UserForm
 } from '../types'
@@ -61,6 +62,7 @@ interface IndexRecordsResponse {
 interface QueryResponse {
   results: QueryResult[]
   evidence: QueryEvidence
+  rag: RagFlow
   savedPath: string
 }
 
@@ -243,7 +245,7 @@ export function useAnalyzerConsole() {
     kbPath: 'docs',
     source: 'code',
     mode: 'report',
-    store: '.vector_store/web-project.jsonl',
+    store: '',
     query: 'register user endpoint',
     filterSource: ''
   })
@@ -324,6 +326,7 @@ export function useAnalyzerConsole() {
   const indexRecordPageSize = shallowRef(20)
   const searchResults = ref<QueryResult[]>([])
   const searchEvidence = ref<QueryEvidence | null>(null)
+  const ragFlow = shallowRef<RagFlow | null>(null)
   const searchSavedPath = shallowRef('')
   const apiMapping = shallowRef<ApiMappingResult | null>(null)
   const apiMappingSavedPath = shallowRef('')
@@ -1122,7 +1125,8 @@ export function useAnalyzerConsole() {
     activeSection.value = 'search'
     searchSavedPath.value = ''
     searchEvidence.value = null
-    const data = await requestJson<QueryResponse>('/api/query', {
+    ragFlow.value = null
+    const data = await requestJson<QueryResponse>('/api/rag/search', {
       store: null,
       projectId: form.projectId,
       query: form.query,
@@ -1131,6 +1135,7 @@ export function useAnalyzerConsole() {
     })
     searchResults.value = data.results
     searchEvidence.value = data.evidence
+    ragFlow.value = data.rag
     searchSavedPath.value = data.savedPath
   }
 
@@ -1204,6 +1209,7 @@ export function useAnalyzerConsole() {
       indexRecordPage.value = 1
       searchResults.value = []
       searchEvidence.value = null
+      ragFlow.value = null
       searchSavedPath.value = ''
       apiMapping.value = null
       apiMappingSavedPath.value = ''
@@ -1228,7 +1234,7 @@ export function useAnalyzerConsole() {
         form.frontendPath = 'web/frontend/src'
         form.backendPath = 'src/main/java'
         form.kbPath = 'docs'
-        form.store = '.vector_store/web-project.jsonl'
+        form.store = ''
       }
       selectedKbPath.value = ''
       kbContent.value = ''
@@ -1300,6 +1306,7 @@ export function useAnalyzerConsole() {
     indexRecordPageSize,
     searchResults,
     searchEvidence,
+    ragFlow,
     searchSavedPath,
     apiMapping,
     apiMappingSavedPath,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Connection, Document, FolderChecked, Link, Search, Tickets } from '@element-plus/icons-vue'
+import { Collection, Connection, Document, FolderChecked, Link, Search, Tickets } from '@element-plus/icons-vue'
 import {
   ElButton,
   ElCard,
@@ -9,12 +9,13 @@ import {
   ElFormItem,
   ElIcon,
   ElInput,
+  ElMessage,
   ElOption,
   ElScrollbar,
   ElSelect,
   ElTag
 } from 'element-plus'
-import type { AnalyzerForm, QueryEvidence, QueryResult } from '../../types'
+import type { AnalyzerForm, QueryEvidence, QueryResult, RagCitation, RagFlow, RagRisk, RagStep } from '../../types'
 
 const form = defineModel<AnalyzerForm>('form', { required: true })
 
@@ -22,6 +23,7 @@ const props = defineProps<{
   busy: boolean
   queryEvidence: QueryEvidence | null
   queryResults: QueryResult[]
+  ragFlow: RagFlow | null
   savedPath: string
 }>()
 
@@ -51,6 +53,12 @@ const hasEvidence = computed(
   () => resultSummary.value.relatedCode > 0 || resultSummary.value.relatedKnowledge > 0 || resultSummary.value.relations > 0
 )
 
+const ragSummary = computed(() => ({
+  steps: props.ragFlow?.steps.length ?? 0,
+  citations: props.ragFlow?.citations.length ?? 0,
+  risks: props.ragFlow?.risks.length ?? 0
+}))
+
 const filterLabel = computed(() => {
   const option = sourceOptions.find((item) => item.value === form.value.filterSource)
   return option?.label ?? '全部来源'
@@ -79,6 +87,29 @@ function sourceTagType(item: QueryResult) {
   return 'primary'
 }
 
+function ragStepType(step: RagStep) {
+  return step.status === 'done' ? 'success' : 'warning'
+}
+
+function riskType(risk: RagRisk) {
+  if (risk.level === 'high') return 'danger'
+  if (risk.level === 'medium') return 'warning'
+  return 'info'
+}
+
+function citationType(item: RagCitation) {
+  if (item.sourceType === 'knowledge_asset') return item.status === 'confirmed' ? 'success' : 'warning'
+  if (item.sourceType === 'kb') return 'warning'
+  return 'primary'
+}
+
+function citationSourceLabel(item: RagCitation) {
+  if (item.sourceType === 'knowledge_asset') return '知识资产'
+  if (item.sourceType === 'kb') return '知识文档'
+  if (item.sourceType === 'code') return '代码'
+  return item.sourceType || '未知'
+}
+
 function itemTitle(item: QueryResult) {
   const metadata = item.metadata
   return String(metadata.title || metadata.symbol_name || metadata.doc_name || metadata.section || metadata.kind || '检索片段')
@@ -97,10 +128,15 @@ function scoreLabel(score: number) {
 function trustLabel(item: QueryResult) {
   if (item.metadata.source_type !== 'knowledge_asset') return ''
   if (item.metadata.status === 'confirmed') return '已确认'
-  if (item.metadata.status === 'stale') return '待复审'
-  if (item.metadata.status === 'pending_review') return '待确认'
+  if (item.metadata.status === 'pending_review' || item.metadata.status === 'stale') return '待复审'
   if (item.metadata.status === 'archived') return '已归档'
   return '草稿'
+}
+
+async function copyContextPackage() {
+  if (!props.ragFlow?.contextPackage) return
+  await navigator.clipboard.writeText(props.ragFlow.contextPackage)
+  ElMessage.success('上下文包已复制')
 }
 </script>
 
@@ -156,6 +192,83 @@ function trustLabel(item: QueryResult) {
         </ElButton>
         </ElFormItem>
       </ElForm>
+    </section>
+
+    <section class="rag-workbench">
+      <ElCard class="panel rag-panel" shadow="never">
+        <template #header>
+          <div class="panel-title split-title">
+            <span>
+              <ElIcon><Collection /></ElIcon>
+              <span>RAG 搜索流程</span>
+            </span>
+            <div class="rag-header-tags">
+              <ElTag type="info" effect="plain">步骤 {{ ragSummary.steps }}</ElTag>
+              <ElTag type="success" effect="plain">引用 {{ ragSummary.citations }}</ElTag>
+              <ElTag :type="ragSummary.risks ? 'warning' : 'success'" effect="plain">
+                风险 {{ ragSummary.risks }}
+              </ElTag>
+            </div>
+          </div>
+        </template>
+
+        <ElEmpty v-if="!ragFlow" description="执行检索后生成 RAG 流程。" />
+        <div v-else class="rag-grid">
+          <section class="rag-steps">
+            <article v-for="step in ragFlow.steps" :key="step.key" class="rag-step">
+              <div class="rag-step-head">
+                <strong>{{ step.title }}</strong>
+                <ElTag :type="ragStepType(step)" effect="plain">{{ step.status === 'done' ? '完成' : '需关注' }}</ElTag>
+              </div>
+              <p>{{ step.summary }}</p>
+            </article>
+          </section>
+
+          <section class="rag-answer">
+            <div class="rag-section-title">
+              <strong>答案草稿</strong>
+              <ElButton size="small" type="primary" :icon="Document" @click="copyContextPackage">
+                复制上下文包
+              </ElButton>
+            </div>
+            <pre>{{ ragFlow.answerDraft }}</pre>
+          </section>
+
+          <section class="rag-citations">
+            <div class="rag-section-title">
+              <strong>引用来源</strong>
+              <ElTag type="info" effect="plain">{{ ragFlow.citations.length }}</ElTag>
+            </div>
+            <div class="rag-citation-list">
+              <article v-for="item in ragFlow.citations" :key="item.id" class="rag-citation">
+                <div class="rag-citation-head">
+                  <strong>{{ item.title }}</strong>
+                  <ElTag :type="citationType(item)" effect="plain">
+                    {{ citationSourceLabel(item) }}
+                  </ElTag>
+                </div>
+                <span>{{ item.location || '未知位置' }}</span>
+                <p>{{ item.excerpt }}</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="rag-risks">
+            <div class="rag-section-title">
+              <strong>风险提示</strong>
+              <ElTag :type="ragFlow.risks.length ? 'warning' : 'success'" effect="plain">
+                {{ ragFlow.risks.length ? '需复核' : '无明显风险' }}
+              </ElTag>
+            </div>
+            <ElEmpty v-if="!ragFlow.risks.length" description="未发现明显召回风险。" />
+            <div v-else class="rag-risk-list">
+              <ElTag v-for="risk in ragFlow.risks" :key="risk.message" :type="riskType(risk)" effect="plain">
+                {{ risk.message }}
+              </ElTag>
+            </div>
+          </section>
+        </div>
+      </ElCard>
     </section>
 
     <section class="search-workbench">
@@ -265,13 +378,14 @@ function trustLabel(item: QueryResult) {
         </ElCard>
       </aside>
     </section>
+
   </div>
 </template>
 
 <style scoped>
 .search-page {
   gap: 0;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .search-command {
@@ -362,7 +476,131 @@ function trustLabel(item: QueryResult) {
   grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   min-height: 0;
   overflow: hidden;
-  padding: 18px 24px 24px;
+  padding: 0 24px 24px;
+}
+
+.rag-workbench {
+  padding: 16px 24px;
+}
+
+.rag-panel.el-card {
+  border-color: rgba(38, 56, 70, 0.14);
+  box-shadow: none;
+}
+
+.rag-panel :deep(.el-card__body) {
+  padding: 12px;
+}
+
+.rag-header-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rag-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(240px, 0.78fr) minmax(0, 1.22fr);
+}
+
+.rag-steps,
+.rag-answer,
+.rag-citations,
+.rag-risks {
+  background: #fbfdff;
+  border: 1px solid rgba(38, 56, 70, 0.1);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.rag-steps {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.rag-step {
+  background: #ffffff;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+}
+
+.rag-step-head,
+.rag-section-title,
+.rag-citation-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.rag-step p,
+.rag-citation p {
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.rag-answer,
+.rag-citations,
+.rag-risks {
+  padding: 12px;
+}
+
+.rag-answer pre {
+  color: #263846;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  margin: 10px 0 0;
+  min-height: 126px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rag-citation-list,
+.rag-risk-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.rag-citation {
+  background: #ffffff;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.rag-citation strong {
+  overflow-wrap: anywhere;
+}
+
+.rag-citation > span {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+
+.rag-risks {
+  grid-column: 1 / -1;
+}
+
+.rag-risk-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.rag-risk-list .el-tag {
+  height: auto;
+  justify-content: flex-start;
+  line-height: 1.4;
+  min-height: 32px;
+  padding: 6px 10px;
+  white-space: normal;
 }
 
 .search-results-panel.el-card,
@@ -529,7 +767,8 @@ function trustLabel(item: QueryResult) {
 
 @media (max-width: 1100px) {
   .search-command,
-  .search-workbench {
+  .search-workbench,
+  .rag-grid {
     grid-template-columns: 1fr;
   }
 
@@ -547,12 +786,14 @@ function trustLabel(item: QueryResult) {
 
 @media (max-width: 760px) {
   .search-command,
-  .search-workbench {
+  .search-workbench,
+  .rag-workbench {
     padding: 14px 16px;
   }
 
   .search-form,
-  .search-stat-grid {
+  .search-stat-grid,
+  .rag-grid {
     grid-template-columns: 1fr;
   }
 

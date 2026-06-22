@@ -49,18 +49,19 @@ def test_cli_graph_renders_endpoint_call_chains(tmp_path: Path) -> None:
     assert "XML Mapper" in result.stdout
 
 
-def test_cli_saves_each_command_result(tmp_path: Path) -> None:
+def test_cli_does_not_save_command_results(tmp_path: Path) -> None:
     java_file = tmp_path / "UserController.java"
     java_file.write_text(_spring_source(), encoding="utf-8")
-    results_dir = tmp_path / "results"
 
-    result = _run_cli(tmp_path, "--json", "--results-dir", results_dir)
+    result = _run_cli(tmp_path, "--json")
 
     assert result.returncode == 0
-    saved_files = list(results_dir.glob("*-json.json"))
-    assert len(saved_files) == 1
-    assert saved_files[0].read_text(encoding="utf-8").strip() == result.stdout.strip()
-    assert "saved result to" in result.stderr
+    assert not (tmp_path / ".java_results").exists()
+    assert "saved result to" not in result.stderr
+
+    removed_option = _run_cli(tmp_path, "--json", "--results-dir", tmp_path / "results")
+    assert removed_option.returncode != 0
+    assert "unrecognized arguments" in removed_option.stderr
 
 
 def test_cli_generates_obsidian_notes(tmp_path: Path) -> None:
@@ -88,59 +89,26 @@ def test_cli_generates_obsidian_notes(tmp_path: Path) -> None:
     assert "相关知识" in controller.read_text(encoding="utf-8")
 
 
-def test_cli_indexes_queries_and_prints_match_terms(tmp_path: Path) -> None:
+def test_cli_rejects_removed_local_vector_store_options(tmp_path: Path) -> None:
     java_file = tmp_path / "UserController.java"
     java_file.write_text(_spring_source(), encoding="utf-8")
-    docs_dir = tmp_path / "docs"
-    docs_dir.mkdir()
-    (docs_dir / "registration.md").write_text(
-        "# Registration\n\nPhone number must be unique during registration.",
-        encoding="utf-8",
-    )
-    store_path = tmp_path / "vectors.jsonl"
 
     index_result = _run_cli(
         tmp_path,
         "--source",
-        "mixed",
+        "code",
         "--index",
-        str(store_path),
-        "--embedding-dimensions",
-        "128",
+        str(tmp_path / "removed-store"),
     )
-    assert index_result.returncode == 0
-    assert "indexed" in index_result.stdout
+    assert index_result.returncode != 0
+    assert "本地 JSONL 向量索引已移除" in index_result.stderr
 
-    code_result = _run_cli(
-        "--store",
-        str(store_path),
+    query_result = _run_cli(
         "--query",
         "GET users endpoint",
-        "--filter-source",
-        "code",
-        "--top-k",
-        "1",
-        "--embedding-dimensions",
-        "128",
     )
-    assert code_result.returncode == 0
-    assert "endpoint getUser" in code_result.stdout
-    assert "matched:" in code_result.stdout
-
-    kb_result = _run_cli(
-        "--store",
-        str(store_path),
-        "--query",
-        "phone unique registration",
-        "--filter-source",
-        "kb",
-        "--top-k",
-        "1",
-        "--embedding-dimensions",
-        "128",
-    )
-    assert kb_result.returncode == 0
-    assert "Registration" in kb_result.stdout
+    assert query_result.returncode != 0
+    assert "本地 JSONL 向量检索已移除" in query_result.stderr
 
 
 def _run_cli(*args: object) -> subprocess.CompletedProcess[str]:

@@ -20,6 +20,7 @@ class ExternalStoreError(RuntimeError):
 class QdrantConfig:
     url: str
     collection: str
+    api_key: str = ""
     timeout: float = 5.0
 
 
@@ -83,6 +84,73 @@ class ExternalAnalysisStores:
             {"points": points},
         )
         return {"ok": True, "count": len(points), "collection": self.config.qdrant.collection}
+
+    def delete_qdrant_project_records(self, *, project_id: str, source_type: str = "") -> dict[str, Any]:
+        collection = quote(self.config.qdrant.collection, safe="")
+        must = [{"key": "projectId", "match": {"value": project_id}}]
+        if source_type:
+            must.append({"key": "source_type", "match": {"value": source_type}})
+        try:
+            self._qdrant_request(
+                "POST",
+                f"/collections/{collection}/points/delete?wait=true",
+                {"filter": {"must": must}},
+            )
+        except ExternalStoreError as exc:
+            if "HTTP 404" not in str(exc):
+                raise
+        return {"ok": True, "collection": self.config.qdrant.collection}
+
+    def search_qdrant(
+        self,
+        *,
+        project_id: str,
+        query_vector: list[float],
+        top_k: int,
+        source_type: str = "",
+    ) -> list[dict[str, Any]]:
+        collection = quote(self.config.qdrant.collection, safe="")
+        must = [{"key": "projectId", "match": {"value": project_id}}]
+        if source_type:
+            must.append({"key": "source_type", "match": {"value": source_type}})
+        data = self._qdrant_request(
+            "POST",
+            f"/collections/{collection}/points/search",
+            {
+                "vector": query_vector,
+                "limit": top_k,
+                "with_payload": True,
+                "with_vector": False,
+                "filter": {"must": must},
+            },
+        )
+        points = data.get("result", []) if isinstance(data, dict) else []
+        return [_record_from_qdrant_point(point) for point in points]
+
+    def list_qdrant_records(
+        self,
+        *,
+        project_id: str,
+        limit: int = 1000,
+        source_type: str = "",
+    ) -> list[dict[str, Any]]:
+        collection = quote(self.config.qdrant.collection, safe="")
+        must = [{"key": "projectId", "match": {"value": project_id}}]
+        if source_type:
+            must.append({"key": "source_type", "match": {"value": source_type}})
+        data = self._qdrant_request(
+            "POST",
+            f"/collections/{collection}/points/scroll",
+            {
+                "limit": limit,
+                "with_payload": True,
+                "with_vector": False,
+                "filter": {"must": must},
+            },
+        )
+        result = data.get("result", {}) if isinstance(data, dict) else {}
+        points = result.get("points", []) if isinstance(result, dict) else []
+        return [_record_from_qdrant_point(point) for point in points]
 
     def _ensure_qdrant_collection(self, collection: str, vector_size: int) -> None:
         try:
@@ -189,7 +257,8 @@ MERGE (method)-[:OWNS_BEHAVIOR]->(child)
 
     def _qdrant_request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
         url = urljoin(self.config.qdrant.url.rstrip("/") + "/", path.lstrip("/"))
-        return _json_request(method, url, payload, timeout=self.config.qdrant.timeout)
+        headers = {"api-key": self.config.qdrant.api_key} if self.config.qdrant.api_key else None
+        return _json_request(method, url, payload, headers=headers, timeout=self.config.qdrant.timeout)
 
     def _neo4j_request(self, statements: list[dict[str, Any]]) -> Any:
         database = quote(self.config.neo4j.database, safe="")
@@ -250,4 +319,17 @@ def _neo4j_record(record: dict[str, Any]) -> dict[str, Any]:
         "endLine": int(record.get("endLine") or 0),
         "endColumn": int(record.get("endColumn") or 0),
         "payloadJson": json.dumps(record.get("payload") or {}, ensure_ascii=False, sort_keys=True),
+    }
+
+
+def _record_from_qdrant_point(point: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(point.get("payload") or {})
+    record_id = str(payload.pop("recordId", point.get("id", "")))
+    text = str(payload.pop("text", ""))
+    payload.pop("projectId", None)
+    return {
+        "id": record_id,
+        "score": float(point.get("score") or 0),
+        "text": text,
+        "metadata": payload,
     }
