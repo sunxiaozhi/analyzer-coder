@@ -255,6 +255,77 @@ MERGE (method)-[:OWNS_BEHAVIOR]->(child)
         self._neo4j_request(statements)
         return {"ok": True, "recordCount": len(normalized), "fileCount": len(files)}
 
+    def sync_knowledge_links(
+        self,
+        *,
+        project_id: str,
+        assets: list[dict[str, Any]],
+        links: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        statements = [
+            {
+                "statement": """
+MERGE (p:AnalyzerProject {id: $projectId})
+SET p.updatedAt = datetime()
+""",
+                "parameters": {"projectId": project_id},
+            },
+            {
+                "statement": """
+MATCH (asset:KnowledgeAsset {projectId: $projectId})
+WHERE NOT asset.id IN $assetIds
+DETACH DELETE asset
+""",
+                "parameters": {
+                    "projectId": project_id,
+                    "assetIds": [str(asset.get("id") or "") for asset in assets],
+                },
+            },
+            {
+                "statement": """
+UNWIND $assets AS asset
+MATCH (p:AnalyzerProject {id: $projectId})
+MERGE (a:KnowledgeAsset {projectId: $projectId, id: asset.id})
+SET a.type = asset.type,
+    a.title = asset.title,
+    a.status = asset.status,
+    a.summary = asset.summary,
+    a.sourcePath = asset.sourcePath,
+    a.tags = asset.tags,
+    a.updatedAt = datetime()
+MERGE (p)-[:HAS_KNOWLEDGE_ASSET]->(a)
+""",
+                "parameters": {
+                    "projectId": project_id,
+                    "assets": [_neo4j_asset(asset) for asset in assets],
+                },
+            },
+            {
+                "statement": """
+MATCH (asset:KnowledgeAsset {projectId: $projectId})-[rel:EVIDENCED_BY]->()
+DELETE rel
+""",
+                "parameters": {"projectId": project_id},
+            },
+            {
+                "statement": """
+UNWIND $links AS link
+MATCH (asset:KnowledgeAsset {projectId: $projectId, id: link.assetId})
+MATCH (record:AnalysisRecord {projectId: $projectId, key: link.analysisRecordKey})
+MERGE (asset)-[rel:EVIDENCED_BY]->(record)
+SET rel.linkType = link.linkType,
+    rel.evidenceType = link.evidenceType,
+    rel.filePath = link.evidenceFilePath,
+    rel.symbolName = link.evidenceSymbolName,
+    rel.note = link.note,
+    rel.updatedAt = datetime()
+""",
+                "parameters": {"projectId": project_id, "links": links},
+            },
+        ]
+        self._neo4j_request(statements)
+        return {"ok": True, "assetCount": len(assets), "linkCount": len(links)}
+
     def _qdrant_request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
         url = urljoin(self.config.qdrant.url.rstrip("/") + "/", path.lstrip("/"))
         headers = {"api-key": self.config.qdrant.api_key} if self.config.qdrant.api_key else None
@@ -319,6 +390,18 @@ def _neo4j_record(record: dict[str, Any]) -> dict[str, Any]:
         "endLine": int(record.get("endLine") or 0),
         "endColumn": int(record.get("endColumn") or 0),
         "payloadJson": json.dumps(record.get("payload") or {}, ensure_ascii=False, sort_keys=True),
+    }
+
+
+def _neo4j_asset(asset: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(asset.get("id") or ""),
+        "type": str(asset.get("type") or ""),
+        "title": str(asset.get("title") or ""),
+        "status": str(asset.get("status") or ""),
+        "summary": str(asset.get("summary") or ""),
+        "sourcePath": str(asset.get("sourcePath") or ""),
+        "tags": [str(tag) for tag in asset.get("tags") or []],
     }
 
 

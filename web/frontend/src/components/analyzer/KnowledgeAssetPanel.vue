@@ -207,7 +207,6 @@ function submitAsset() {
   <div class="feature-page asset-page">
     <section class="asset-topbar">
       <div class="asset-title-block">
-        <span class="asset-kicker">Knowledge assets</span>
         <h2>知识资产</h2>
         <p>维护团队确认过的规则、决策、接口说明和故障经验。</p>
       </div>
@@ -441,14 +440,6 @@ function submitAsset() {
   display: grid;
   gap: 4px;
   min-width: 0;
-}
-
-.asset-kicker {
-  color: var(--asset-accent);
-  font-size: 0.72rem;
-  font-weight: 780;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .asset-title-block h2 {

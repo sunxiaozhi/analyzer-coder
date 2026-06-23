@@ -14,6 +14,7 @@ class InMemoryExternalStores:
     def __init__(self) -> None:
         self.config = SimpleNamespace(qdrant=SimpleNamespace(collection="test_chunks"))
         self.calls = []
+        self.knowledge_link_calls = []
         self.records_by_project = {}
 
     def sync(self, *, project_id, analysis_records, vector_records):
@@ -74,6 +75,16 @@ class InMemoryExternalStores:
             for result in results[:top_k]
         ]
 
+    def sync_knowledge_links(self, *, project_id, assets, links):
+        self.knowledge_link_calls.append(
+            {
+                "project_id": project_id,
+                "assets": assets,
+                "links": links,
+            }
+        )
+        return {"ok": True, "assetCount": len(assets), "linkCount": len(links)}
+
 
 class InMemoryMySqlStore:
     def __init__(self) -> None:
@@ -82,6 +93,7 @@ class InMemoryMySqlStore:
         self.analysis_records = {}
         self.analysis_outputs = {}
         self.knowledge_assets = {}
+        self.knowledge_asset_record_links = {}
         self.knowledge_templates = {}
         self.knowledge_documents = {}
 
@@ -144,6 +156,48 @@ class InMemoryMySqlStore:
 
     def save_knowledge_assets(self, project_id, assets):
         self.knowledge_assets[project_id] = [asdict(asset) for asset in assets]
+
+    def refresh_knowledge_asset_record_links(self, project_id):
+        links = []
+        seen = set()
+        records = self.analysis_records.get(project_id, [])
+        for asset in self.knowledge_assets.get(project_id, []):
+            for evidence in asset.get("evidence", []):
+                file_path = str(evidence.get("filePath") or "").replace("\\", "/").strip("/")
+                symbol_name = str(evidence.get("symbolName") or "").strip()
+                for record in records:
+                    record_path = str(record.get("filePath") or "").replace("\\", "/").strip("/")
+                    file_matches = not file_path or record_path == file_path or record_path.endswith(f"/{file_path}")
+                    symbol_matches = not symbol_name or symbol_name in {
+                        str(record.get("symbolName") or ""),
+                        str(record.get("enclosingType") or ""),
+                        str(record.get("enclosingMethod") or ""),
+                    }
+                    if not file_matches or not symbol_matches:
+                        continue
+                    if file_path and not symbol_name and record.get("type") != "file":
+                        continue
+                    key = (asset["id"], record["key"])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    links.append(
+                        {
+                            "assetId": asset["id"],
+                            "analysisRecordKey": record["key"],
+                            "analysisRecordType": record.get("type", ""),
+                            "linkType": "evidence",
+                            "evidenceType": evidence.get("type", "file"),
+                            "evidenceFilePath": evidence.get("filePath", ""),
+                            "evidenceSymbolName": evidence.get("symbolName", ""),
+                            "note": evidence.get("note", ""),
+                        }
+                    )
+        self.knowledge_asset_record_links[project_id] = links
+        return links
+
+    def list_knowledge_asset_record_links(self, project_id):
+        return [dict(item) for item in self.knowledge_asset_record_links.get(project_id, [])]
 
     def list_kb_templates(self, project_id):
         return [dict(item) for item in self.knowledge_templates.get(project_id, [])]
@@ -616,6 +670,80 @@ def test_web_backend_knowledge_file_crud(tmp_path) -> None:
     )
     assert delete_response.status_code == 200
     assert not (tmp_path / "docs" / "domain" / "user-registration.md").exists()
+
+
+def test_web_backend_knowledge_asset_accepts_string_tags(tmp_path) -> None:
+    class TestConfig(JsonTestConfig):
+        WORKSPACE_ROOT = tmp_path
+        PROJECTS_DIR = ".projects"
+        TESTING = True
+
+    app = create_app(TestConfig)
+    project_id = _seed_project(app, tmp_path)
+    client = app.test_client()
+    _login(client)
+
+    response = client.post(
+        "/api/knowledge/assets",
+        json={
+            "projectId": project_id,
+            "title": "注册唯一性规则",
+            "type": "business_rule",
+            "tags": "注册, 手机号  唯一",
+        },
+    )
+    payload = response.get_json()
+
+    assert response.status_code == 201
+    assert payload["asset"]["tags"] == ["注册", "手机号", "唯一"]
+
+
+def test_web_backend_links_knowledge_asset_evidence_to_analysis_records(tmp_path) -> None:
+    workspace = _java_workspace(tmp_path)
+
+    class TestConfig(JsonTestConfig):
+        WORKSPACE_ROOT = workspace
+        TESTING = True
+
+    app = create_app(TestConfig)
+    project_id = _seed_project(app, workspace)
+    client = app.test_client()
+    _login(client)
+
+    create_response = client.post(
+        "/api/knowledge/assets",
+        json={
+            "projectId": project_id,
+            "title": "用户列表接口规则",
+            "type": "business_rule",
+            "evidence": [
+                {
+                    "type": "method",
+                    "filePath": "src/UserController.java",
+                    "symbolName": "listUsers",
+                    "note": "接口处理方法",
+                }
+            ],
+        },
+    )
+    assert create_response.status_code == 201
+    created_payload = create_response.get_json()
+    asset_id = created_payload["asset"]["id"]
+    assert created_payload["knowledgeAssetLinks"]["count"] == 0
+
+    analyze_response = client.post(
+        "/api/analyze",
+        json={"projectId": project_id, "path": "src", "source": "code", "mode": "summary"},
+    )
+    payload = analyze_response.get_json()
+    links = app.extensions["analyzer_service"].mysql_store.list_knowledge_asset_record_links(project_id)
+    fake_stores = app.extensions["analyzer_service"].external_stores
+
+    assert analyze_response.status_code == 200
+    assert payload["knowledgeAssetLinks"]["count"] >= 1
+    assert any(link["assetId"] == asset_id for link in links)
+    assert any(link["analysisRecordType"] == "method" for link in links)
+    assert fake_stores.knowledge_link_calls[-1]["links"] == links
 
 
 def test_web_backend_project_clone_and_isolated_report(tmp_path) -> None:

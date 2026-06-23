@@ -146,7 +146,7 @@ async function copyContextPackage() {
       <div class="search-heading">
         <ElIcon><Search /></ElIcon>
         <div>
-          <h2>可信检索</h2>
+          <h2>知识问答</h2>
           <span>{{ filterLabel }} · 已确认知识优先，代码片段作为证据</span>
         </div>
       </div>
@@ -284,7 +284,7 @@ async function copyContextPackage() {
         </template>
 
         <ElScrollbar class="search-results-scroll">
-          <ElEmpty v-if="!queryResults.length" description="输入问题并执行可信检索后显示结果。" />
+          <ElEmpty v-if="!queryResults.length" description="输入问题并执行知识问答后显示结果。" />
           <div v-else class="search-result-list">
             <article v-for="item in orderedResults" :key="item.id" class="search-result-item">
               <div class="search-result-head">

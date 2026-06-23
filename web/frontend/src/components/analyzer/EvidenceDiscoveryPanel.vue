@@ -36,7 +36,7 @@ const pendingMappingCount = computed(() => (mappingSummary.value?.methodMismatch
       <div class="evidence-heading">
         <ElIcon><Search /></ElIcon>
         <div>
-          <h2>证据发现</h2>
+          <h2>依据提取</h2>
           <span>从代码、接口和索引记录中发现可挂载到知识资产的证据</span>
         </div>
       </div>
@@ -94,7 +94,7 @@ const pendingMappingCount = computed(() => (mappingSummary.value?.methodMismatch
       <EvidenceStepItem
         index="03"
         title="索引证据"
-        description="统一索引代码、知识文档和知识资产，为可信检索和 AI 上下文提供召回基础。"
+        description="统一索引代码、知识文档和知识资产，为知识问答和 AI 上下文提供召回基础。"
         :busy="busy"
         :icon="Files"
         :primary-icon="Refresh"

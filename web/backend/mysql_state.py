@@ -265,6 +265,31 @@ class MySqlStateStore:
                     ) comment='代码解析类型化记录表'
                     """
                 )
+                cursor.execute(
+                    """
+                    create table if not exists knowledge_asset_record_links (
+                      id bigint unsigned not null auto_increment comment '知识资产解析记录关联ID',
+                      project_id bigint unsigned not null comment '项目ID',
+                      asset_key varchar(128) not null comment '资产业务标识',
+                      analysis_record_hash char(64) not null comment '解析记录哈希',
+                      analysis_record_key varchar(1024) not null comment '解析记录业务标识',
+                      analysis_record_type varchar(64) not null comment '解析记录类型',
+                      link_type varchar(64) not null default 'evidence' comment '关联类型',
+                      evidence_type varchar(64) not null default 'file' comment '证据类型',
+                      evidence_file_path varchar(1024) not null default '' comment '证据文件路径',
+                      evidence_symbol_name varchar(255) not null default '' comment '证据符号名称',
+                      note text not null comment '说明',
+                      created_at datetime(6) not null comment '创建时间',
+                      updated_at datetime(6) not null comment '更新时间',
+                      primary key (id),
+                      unique key uk_knowledge_asset_record_links (
+                        project_id, asset_key, analysis_record_hash, link_type
+                      ),
+                      key idx_knowledge_asset_record_links_asset (project_id, asset_key),
+                      key idx_knowledge_asset_record_links_record (project_id, analysis_record_hash)
+                    ) comment='知识资产解析记录关联表'
+                    """
+                )
             connection.commit()
 
     def ensure_admin(self, username: str, password: str, now: str) -> None:
@@ -882,6 +907,71 @@ class MySqlStateStore:
                 rows = cursor.fetchall()
         return {str(row["record_type"]): int(row["count"]) for row in rows}
 
+    def refresh_knowledge_asset_record_links(self, project_id: str) -> list[dict[str, Any]]:
+        assets = self.list_knowledge_assets(project_id)
+        records = self.list_analysis_records(project_id, limit=1000000, offset=0)
+        links = _match_knowledge_asset_record_links(assets, records)
+        now = mysql_datetime(datetime.now(timezone.utc).isoformat())
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("delete from knowledge_asset_record_links where project_id = %s", (project_id,))
+                for link in links:
+                    record_key = str(link["analysisRecordKey"])
+                    cursor.execute(
+                        """
+                        insert into knowledge_asset_record_links
+                          (project_id, asset_key, analysis_record_hash, analysis_record_key,
+                           analysis_record_type, link_type, evidence_type, evidence_file_path,
+                           evidence_symbol_name, note, created_at, updated_at)
+                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            project_id,
+                            link["assetId"],
+                            hashlib.sha256(record_key.encode("utf-8")).hexdigest(),
+                            record_key,
+                            link["analysisRecordType"],
+                            link["linkType"],
+                            link["evidenceType"],
+                            link["evidenceFilePath"],
+                            link["evidenceSymbolName"],
+                            link["note"],
+                            now,
+                            now,
+                        ),
+                    )
+            connection.commit()
+        return links
+
+    def list_knowledge_asset_record_links(self, project_id: str) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select asset_key, analysis_record_key, analysis_record_type, link_type,
+                           evidence_type, evidence_file_path, evidence_symbol_name, note, updated_at
+                    from knowledge_asset_record_links
+                    where project_id = %s
+                    order by asset_key, analysis_record_type, analysis_record_key
+                    """,
+                    (project_id,),
+                )
+                rows = cursor.fetchall()
+        return [
+            {
+                "assetId": str(row["asset_key"]),
+                "analysisRecordKey": str(row["analysis_record_key"]),
+                "analysisRecordType": str(row["analysis_record_type"]),
+                "linkType": str(row["link_type"]),
+                "evidenceType": str(row["evidence_type"]),
+                "evidenceFilePath": str(row["evidence_file_path"]),
+                "evidenceSymbolName": str(row["evidence_symbol_name"]),
+                "note": str(row["note"]),
+                "updatedAt": iso_datetime(row["updated_at"]),
+            }
+            for row in rows
+        ]
+
     def save_analysis_records(self, project_id: str, records: list[dict[str, Any]]) -> None:
         now = mysql_datetime(datetime.now(timezone.utc).isoformat())
         with self.connect() as connection:
@@ -947,4 +1037,101 @@ class MySqlStateStore:
         )
         if int(cursor.fetchone()["count"]) == 0:
             cursor.execute(f"alter table `{table}` add column `{column}` {definition}")
+
+
+def _match_knowledge_asset_record_links(
+    assets: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    links: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for asset in assets:
+        asset_id = str(asset.get("id") or "")
+        for evidence in asset.get("evidence") or []:
+            if not isinstance(evidence, dict):
+                continue
+            matched = _records_for_evidence(evidence, records)
+            for record in matched:
+                key = (asset_id, str(record.get("key") or ""), "evidence")
+                if key in seen:
+                    continue
+                seen.add(key)
+                links.append(
+                    {
+                        "assetId": asset_id,
+                        "analysisRecordKey": str(record.get("key") or ""),
+                        "analysisRecordType": str(record.get("type") or "unknown"),
+                        "linkType": "evidence",
+                        "evidenceType": str(evidence.get("type") or "file"),
+                        "evidenceFilePath": str(evidence.get("filePath") or ""),
+                        "evidenceSymbolName": str(evidence.get("symbolName") or ""),
+                        "note": str(evidence.get("note") or ""),
+                    }
+                )
+    return links
+
+
+def _records_for_evidence(evidence: dict[str, Any], records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    file_path = _normalized_path(str(evidence.get("filePath") or ""))
+    symbol_name = str(evidence.get("symbolName") or "").strip().lower()
+    start_line = int(evidence.get("startLine") or 0)
+    end_line = int(evidence.get("endLine") or 0)
+    if not file_path and not symbol_name:
+        return []
+
+    matched: list[dict[str, Any]] = []
+    for record in records:
+        if file_path and not _path_matches(file_path, _normalized_path(str(record.get("filePath") or ""))):
+            continue
+        if symbol_name and not _symbol_matches(symbol_name, record):
+            continue
+        if start_line and not _line_matches(start_line, end_line, record):
+            continue
+        if file_path and not symbol_name and str(record.get("type") or "") != "file":
+            continue
+        matched.append(record)
+    return matched
+
+
+def _path_matches(evidence_path: str, record_path: str) -> bool:
+    if not evidence_path or not record_path:
+        return False
+    return (
+        evidence_path == record_path
+        or record_path.endswith(f"/{evidence_path}")
+        or evidence_path.endswith(f"/{record_path}")
+    )
+
+
+def _symbol_matches(symbol_name: str, record: dict[str, Any]) -> bool:
+    candidates = {
+        str(record.get("symbolName") or "").lower(),
+        str(record.get("enclosingType") or "").lower(),
+        str(record.get("enclosingMethod") or "").lower(),
+    }
+    payload = record.get("payload") or {}
+    if isinstance(payload, dict):
+        candidates.update(
+            {
+                str(payload.get("name") or "").lower(),
+                str(payload.get("method_name") or "").lower(),
+                str(payload.get("methodName") or "").lower(),
+                str(payload.get("enclosing_type") or "").lower(),
+                str(payload.get("enclosingType") or "").lower(),
+            }
+        )
+    return symbol_name in candidates
+
+
+def _line_matches(start_line: int, end_line: int, record: dict[str, Any]) -> bool:
+    record_start = int(record.get("startLine") or 0)
+    record_end = int(record.get("endLine") or record_start or 0)
+    if record_start <= 0:
+        return False
+    evidence_end = end_line or start_line
+    return record_start <= evidence_end and record_end >= start_line
+
+
+def _normalized_path(value: str) -> str:
+    return value.strip().replace("\\", "/").strip("/")
 

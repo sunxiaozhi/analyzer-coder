@@ -110,12 +110,12 @@ const sectionTitle = computed(() => {
     projects: '项目管理',
     accounts: '账号管理',
     assets: '知识资产',
-    evidence: '证据发现',
+    evidence: '依据提取',
     analysis: '代码分析',
     'api-map': '接口映射',
     knowledge: '知识维护',
     vectors: '索引运维',
-    search: '可信检索'
+    search: '知识问答'
   }
   return titles[activeSection.value]
 })

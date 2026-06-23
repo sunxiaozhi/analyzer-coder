@@ -66,11 +66,11 @@ function selectSection(value: string) {
         </ElMenuItem>
         <ElMenuItem index="evidence">
           <ElIcon><Share /></ElIcon>
-          <span>证据发现</span>
+          <span>依据提取</span>
         </ElMenuItem>
         <ElMenuItem index="search">
           <ElIcon><Search /></ElIcon>
-          <span>可信检索</span>
+          <span>知识问答</span>
         </ElMenuItem>
         <ElSubMenu index="settings">
           <template #title>
