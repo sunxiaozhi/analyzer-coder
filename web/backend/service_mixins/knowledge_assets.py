@@ -24,6 +24,16 @@ class KnowledgeAssetServiceMixin:
         query = str(payload.get("query") or "").strip().lower()
         page = self._query_int(payload.get("page"), default=1, minimum=1, maximum=100000, field="page")
         page_size = self._query_int(payload.get("pageSize"), default=20, minimum=1, maximum=100, field="pageSize")
+        paged_loader = getattr(self.mysql_store, "list_knowledge_assets_page", None)
+        if callable(paged_loader):
+            result = paged_loader(context.project_id, asset_type, status, query, page, page_size)
+            return {
+                **result,
+                "types": sorted(KNOWLEDGE_ASSET_TYPES),
+                "statuses": sorted(KNOWLEDGE_ASSET_STATUSES),
+                "projectId": context.project_id,
+            }
+
         assets = self._load_knowledge_assets(context)
         filtered = []
         for asset in assets:

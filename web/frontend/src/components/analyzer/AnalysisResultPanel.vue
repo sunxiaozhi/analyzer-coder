@@ -76,9 +76,9 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
 </script>
 
 <template>
-  <div class="feature-page analysis-page">
-    <section class="analysis-command">
-      <div class="analysis-heading">
+  <div class="feature-page analysis-page console-page">
+    <section class="analysis-command console-command">
+      <div class="analysis-heading console-heading">
         <ElIcon><Cpu /></ElIcon>
         <div>
           <h2>代码分析</h2>
@@ -86,15 +86,15 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
         </div>
       </div>
 
-      <div class="analysis-command-actions">
+      <div class="analysis-command-actions console-command-actions">
         <ElTag type="info" effect="plain">{{ modeBadge }}</ElTag>
         <ElTag :type="output ? 'success' : 'info'" effect="plain">{{ outputBadge }}</ElTag>
       </div>
     </section>
 
-    <section class="analysis-workbench">
+    <section class="analysis-workbench console-workbench console-workbench-detail">
       <aside class="analysis-config-stack">
-        <ElCard class="panel analysis-config-panel" shadow="never">
+        <ElCard class="panel analysis-config-panel console-card" shadow="never">
           <template #header>
             <div class="panel-title">
               <ElIcon><Operation /></ElIcon>
@@ -141,7 +141,7 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
         </ElCard>
       </aside>
 
-      <ElCard class="panel analysis-output-panel" shadow="never">
+      <ElCard class="panel analysis-output-panel console-card" shadow="never">
         <template #header>
           <div class="panel-title split-title">
             <span>
@@ -256,11 +256,11 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
 
 .analysis-workbench {
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  gap: 10px;
+  grid-template-columns: minmax(168px, 190px) minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
-  padding: 18px 24px 24px;
+  padding: 14px 18px 18px;
 }
 
 .analysis-config-stack {
@@ -278,14 +278,15 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
 
 .analysis-config-panel :deep(.el-card__body) {
   display: grid;
-  gap: 16px;
+  gap: 10px;
   grid-template-rows: auto auto;
   min-height: 0;
+  padding: 9px;
 }
 
 .analysis-mode-grid {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .analysis-mode-option {
@@ -296,10 +297,10 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
   color: var(--text);
   cursor: pointer;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  min-height: 50px;
-  padding: 9px 10px;
+  gap: 6px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-height: 34px;
+  padding: 6px 7px;
   text-align: left;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
   width: 100%;
@@ -322,25 +323,19 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
   border-radius: 8px;
   color: var(--accent);
   display: inline-flex;
-  height: 30px;
+  height: 22px;
   justify-content: center;
-  width: 30px;
+  width: 22px;
 }
 
 .analysis-mode-option span {
-  font-size: 0.88rem;
+  font-size: 0.76rem;
   font-weight: 760;
   min-width: 0;
 }
 
 .analysis-mode-option small {
-  background: var(--surface-muted);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--text-faint);
-  font-size: 0.66rem;
-  font-weight: 760;
-  padding: 2px 6px;
+  display: none;
 }
 
 .analysis-run-box {
@@ -349,13 +344,13 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  gap: 14px;
-  padding: 14px;
+  gap: 8px;
+  padding: 8px;
 }
 
 .analysis-run-box dl {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
 }
 
@@ -367,12 +362,12 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
 
 .analysis-run-box dt {
   color: var(--text-faint);
-  font-size: 0.74rem;
+  font-size: 0.68rem;
 }
 
 .analysis-run-box dd {
   color: var(--text);
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 760;
   margin: 0;
 }

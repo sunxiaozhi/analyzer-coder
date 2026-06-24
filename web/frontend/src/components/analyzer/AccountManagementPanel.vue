@@ -107,9 +107,9 @@ watch(
 </script>
 
 <template>
-  <ElMain class="page-surface accounts-page">
-    <section class="account-command">
-      <div class="account-heading">
+  <ElMain class="page-surface accounts-page console-page">
+    <section class="account-command console-command">
+      <div class="account-heading console-heading">
         <ElIcon><UserFilled /></ElIcon>
         <div>
           <h2>账号管理</h2>
@@ -117,7 +117,7 @@ watch(
         </div>
       </div>
 
-      <div class="account-command-actions">
+      <div class="account-command-actions console-command-actions">
         <ElTag type="warning" effect="plain">管理员 {{ adminCount }}</ElTag>
         <ElTag type="info" effect="plain">成员 {{ memberCount }}</ElTag>
         <ElButton type="primary" :icon="Plus" @click="createDialogOpen = true">
@@ -129,7 +129,7 @@ watch(
       </div>
     </section>
 
-    <section class="account-workbench">
+    <section class="account-workbench console-workbench">
       <ElScrollbar class="account-list-scroll">
         <div class="account-list">
           <div class="account-list-head">

@@ -585,6 +585,151 @@ class MySqlStateStore:
             for row in assets
         ]
 
+    def list_knowledge_assets_page(
+        self,
+        project_id: str,
+        asset_type: str = "",
+        status: str = "",
+        query: str = "",
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict[str, Any]:
+        where = ["a.project_id = %s"]
+        params: list[Any] = [project_id]
+        if asset_type:
+            where.append("a.asset_type = %s")
+            params.append(asset_type)
+        if status:
+            where.append("a.lifecycle_status = %s")
+            params.append(status)
+        if query:
+            like = f"%{query.lower()}%"
+            where.append(
+                """
+                (
+                  lower(coalesce(a.title, '')) like %s
+                  or lower(coalesce(a.summary, '')) like %s
+                  or lower(coalesce(a.content, '')) like %s
+                  or exists (
+                    select 1
+                    from knowledge_asset_tags t
+                    where t.project_id = a.project_id
+                      and t.asset_key = a.asset_key
+                      and lower(coalesce(t.tag, '')) like %s
+                  )
+                  or exists (
+                    select 1
+                    from knowledge_asset_evidence e
+                    where e.project_id = a.project_id
+                      and e.asset_key = a.asset_key
+                      and lower(
+                        concat_ws(
+                          ' ',
+                          e.evidence_type,
+                          e.file_path,
+                          e.symbol_name,
+                          e.start_line,
+                          e.end_line,
+                          e.note
+                        )
+                      ) like %s
+                  )
+                )
+                """
+            )
+            params.extend([like, like, like, like, like])
+
+        where_sql = " and ".join(where)
+        offset = (page - 1) * page_size
+        with self.connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"select count(*) as total from knowledge_assets a where {where_sql}", params)
+                count_row = cursor.fetchone() or {}
+                total = int(count_row.get("total") or 0)
+                cursor.execute(
+                    f"""
+                    select a.asset_key, a.asset_type, a.title, a.summary, a.content, a.lifecycle_status,
+                           a.owner_user_id, a.reviewer_user_id, a.source_path, a.confirmed_at, a.review_due_at,
+                           a.created_by, a.updated_by, a.created_at, a.updated_at
+                    from knowledge_assets a
+                    where {where_sql}
+                    order by a.updated_at desc, a.id desc
+                    limit %s offset %s
+                    """,
+                    [*params, page_size, offset],
+                )
+                assets = cursor.fetchall()
+                asset_keys = [str(row["asset_key"]) for row in assets]
+                tags: list[dict[str, Any]] = []
+                evidence: list[dict[str, Any]] = []
+                if asset_keys:
+                    placeholders = ", ".join(["%s"] * len(asset_keys))
+                    cursor.execute(
+                        f"""
+                        select asset_key, tag
+                        from knowledge_asset_tags
+                        where project_id = %s and asset_key in ({placeholders})
+                        order by asset_key, sort_order, id
+                        """,
+                        [project_id, *asset_keys],
+                    )
+                    tags = cursor.fetchall()
+                    cursor.execute(
+                        f"""
+                        select asset_key, evidence_type, file_path, symbol_name, start_line, end_line, note
+                        from knowledge_asset_evidence
+                        where project_id = %s and asset_key in ({placeholders})
+                        order by asset_key, sort_order, id
+                        """,
+                        [project_id, *asset_keys],
+                    )
+                    evidence = cursor.fetchall()
+
+        tags_by_asset: dict[str, list[str]] = {}
+        for row in tags:
+            tags_by_asset.setdefault(str(row["asset_key"]), []).append(str(row["tag"]))
+
+        evidence_by_asset: dict[str, list[dict[str, Any]]] = {}
+        for row in evidence:
+            evidence_by_asset.setdefault(str(row["asset_key"]), []).append(
+                {
+                    "type": row["evidence_type"],
+                    "filePath": row["file_path"],
+                    "symbolName": row["symbol_name"],
+                    "startLine": int(row["start_line"] or 0),
+                    "endLine": int(row["end_line"] or 0),
+                    "note": row["note"],
+                }
+            )
+
+        return {
+            "assets": [
+                {
+                    "id": str(row["asset_key"]),
+                    "type": row["asset_type"],
+                    "title": row["title"],
+                    "summary": row["summary"],
+                    "content": row["content"],
+                    "status": row["lifecycle_status"],
+                    "ownerUserId": str(row["owner_user_id"] or ""),
+                    "reviewerUserId": str(row["reviewer_user_id"] or ""),
+                    "tags": tags_by_asset.get(str(row["asset_key"]), []),
+                    "evidence": evidence_by_asset.get(str(row["asset_key"]), []),
+                    "sourcePath": row["source_path"],
+                    "confirmedAt": row["confirmed_at"],
+                    "reviewDueAt": row["review_due_at"],
+                    "createdAt": iso_datetime(row["created_at"]),
+                    "updatedAt": iso_datetime(row["updated_at"]),
+                    "createdBy": str(row["created_by"] or ""),
+                    "updatedBy": str(row["updated_by"] or ""),
+                }
+                for row in assets
+            ],
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+        }
+
     def save_knowledge_assets(self, project_id: str, assets: list[Any]) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self.connect() as connection:

@@ -31,23 +31,23 @@ const pendingMappingCount = computed(() => (mappingSummary.value?.methodMismatch
 </script>
 
 <template>
-  <ElMain class="page-surface evidence-page">
-    <section class="evidence-command">
-      <div class="evidence-heading">
+  <ElMain class="page-surface evidence-page console-page">
+    <section class="evidence-command console-command">
+      <div class="evidence-heading console-heading">
         <ElIcon><Search /></ElIcon>
         <div>
           <h2>依据提取</h2>
           <span>从代码、接口和索引记录中发现可挂载到知识资产的证据</span>
         </div>
       </div>
-      <div class="evidence-command-actions">
+      <div class="evidence-command-actions console-command-actions">
         <ElTag effect="plain">代码 {{ codeCount }}</ElTag>
         <ElTag type="success" effect="plain">知识资产 {{ knowledgeAssetCount }}</ElTag>
         <ElTag :type="indexTotal ? 'success' : 'warning'" effect="plain">索引 {{ indexTotal }}</ElTag>
       </div>
     </section>
 
-    <section class="evidence-workbench">
+    <section class="evidence-workbench console-card">
       <div class="evidence-ledger-head">
         <span>发现流水线</span>
         <strong>代码结构 -> 接口关系 -> 检索索引</strong>

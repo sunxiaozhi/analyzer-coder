@@ -249,16 +249,8 @@ function submitAsset() {
       </aside>
 
       <main class="asset-data-panel">
-        <div class="asset-data-toolbar">
-          <div class="asset-data-title">
-            <strong>资产列表</strong>
-            <span>{{ pagination.total }} 条</span>
-          </div>
-          <ElButton class="asset-quiet-button" size="small" :icon="Refresh" :loading="busy" @click="$emit('applyFilters')">应用筛选</ElButton>
-        </div>
-
-        <div class="asset-table-frame">
-          <ElEmpty v-if="!assets.length" description="暂无知识资产。" />
+        <div class="asset-table-frame" v-loading="busy" element-loading-text="正在加载资产">
+          <ElEmpty v-if="!assets.length && !busy" description="暂无知识资产。" />
           <ElTable v-else :data="assets" class="asset-table" height="100%" row-key="id">
             <ElTableColumn label="标题" min-width="220" show-overflow-tooltip>
               <template #default="{ row }">
@@ -305,7 +297,6 @@ function submitAsset() {
         </div>
 
         <footer class="asset-pagination">
-          <span class="asset-pagination-total">共 {{ pagination.total }} 条</span>
           <ElPagination
             background
             :hide-on-single-page="false"
@@ -314,6 +305,7 @@ function submitAsset() {
             :page-size="pagination.pageSize"
             :page-sizes="[10, 20, 50, 100]"
             :total="pagination.total"
+            :disabled="busy"
             @current-change="$emit('changePage', $event)"
             @size-change="$emit('changePageSize', $event)"
           />
@@ -420,20 +412,25 @@ function submitAsset() {
   --asset-soft: #eaf2ff;
   background: var(--asset-bg);
   flex: 1 1 auto;
-  gap: 16px;
+  gap: 8px;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  padding: 20px 24px 24px;
+  padding: 10px 12px 12px;
   width: 100%;
 }
 
 .asset-topbar {
   align-items: flex-end;
+  background: linear-gradient(135deg, #dbeafe 0%, #f8fbff 62%, #ffffff 100%);
+  border: 1px solid var(--asset-line);
+  border-radius: 8px;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.08);
   display: flex;
   gap: 18px;
   justify-content: space-between;
   min-width: 0;
+  padding: 16px 18px;
 }
 
 .asset-title-block {
@@ -483,7 +480,7 @@ function submitAsset() {
 
 .asset-workbench {
   display: grid;
-  gap: 16px;
+  gap: 8px;
   grid-template-columns: 228px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
@@ -571,37 +568,10 @@ function submitAsset() {
 
 .asset-data-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-}
-
-.asset-data-toolbar {
-  align-items: center;
-  border-bottom: 1px solid var(--asset-line);
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  min-width: 0;
-  padding: 13px 16px;
-}
-
-.asset-data-title {
-  align-items: baseline;
-  display: flex;
-  gap: 8px;
-  min-width: 0;
-}
-
-.asset-data-title strong {
-  color: var(--asset-ink);
-  font-size: 0.94rem;
-}
-
-.asset-data-title span {
-  color: var(--asset-muted);
-  font-size: 0.78rem;
 }
 
 .asset-table-frame {
@@ -743,12 +713,6 @@ function submitAsset() {
 .asset-pagination :deep(.el-pagination) {
   justify-content: flex-end;
   min-width: 0;
-}
-
-.asset-pagination-total {
-  flex: 0 0 auto;
-  margin-right: auto;
-  white-space: nowrap;
 }
 
 .asset-dialog :deep(.el-dialog__header) {
@@ -918,7 +882,7 @@ function submitAsset() {
 
 @media (max-width: 980px) {
   .asset-page {
-    padding: 16px;
+    padding: 8px;
   }
 
   .asset-workbench,
@@ -934,6 +898,7 @@ function submitAsset() {
   .asset-editor-actions {
     align-items: stretch;
     flex-direction: column;
+    padding: 14px 16px;
   }
 
   .asset-topbar-actions,

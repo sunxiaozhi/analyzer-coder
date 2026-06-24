@@ -133,8 +133,7 @@ const consoleSections: readonly ConsoleSection[] = [
 ]
 
 const collapsedSectionMap: Partial<Record<ConsoleSection, ConsoleSection>> = {
-  'api-map': 'evidence',
-  analysis: 'evidence'
+  evidence: 'analysis'
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
@@ -306,6 +305,7 @@ export function useAnalyzerConsole() {
   const busy = shallowRef(false)
   const projectBusy = shallowRef(false)
   const kbBusy = shallowRef(false)
+  const assetBusy = shallowRef(false)
   const authBusy = shallowRef(false)
   const authReady = shallowRef(false)
   const analysisResultsByMode = reactive({
@@ -348,6 +348,7 @@ export function useAnalyzerConsole() {
   const users = ref<AuthUser[]>([])
   const currentUser = ref<AuthUser | null>(readStoredCurrentUser())
   const authMessage = shallowRef('')
+  let assetLoadSequence = 0
   const activeSection = shallowRef<ConsoleSection>(readStoredActiveSection())
 
   const selectedProject = computed(() =>
@@ -641,7 +642,7 @@ export function useAnalyzerConsole() {
     try {
       const response = await fetch('/api/health', { credentials: 'same-origin' })
       const data = await readJsonResponse<{ ok: boolean; workspace: string }>(response)
-      status.value = data.ok ? `已连接：${data.workspace}` : '后端不可用'
+      status.value = data.ok ? '已连接' : '后端不可用'
     } catch {
       status.value = '后端未启动'
     }
@@ -774,12 +775,18 @@ export function useAnalyzerConsole() {
 
   async function loadKnowledgeAssets() {
     if (!currentUser.value || !form.projectId) {
+      assetLoadSequence += 1
       knowledgeAssets.value = []
       assetPagination.total = 0
+      assetBusy.value = false
       return
     }
+    const sequence = ++assetLoadSequence
+    assetBusy.value = true
     try {
-      const data = await kbRequest<KnowledgeAssetsResponse>(`/api/knowledge/assets?${assetParams()}`)
+      const response = await fetch(`/api/knowledge/assets?${assetParams()}`, { credentials: 'same-origin' })
+      const data = await readJsonResponse<KnowledgeAssetsResponse>(response)
+      if (sequence !== assetLoadSequence) return
       const pageCount = Math.max(1, Math.ceil(data.total / data.pageSize))
       if (data.assets.length === 0 && data.total > 0 && data.page > pageCount) {
         assetPagination.page = pageCount
@@ -795,9 +802,12 @@ export function useAnalyzerConsole() {
         resetAssetForm()
       }
     } catch (error) {
+      if (sequence !== assetLoadSequence) return
       knowledgeAssets.value = []
       assetPagination.total = 0
       assetMessage.value = error instanceof Error ? error.message : '知识资产加载失败'
+    } finally {
+      if (sequence === assetLoadSequence) assetBusy.value = false
     }
   }
 
@@ -1271,6 +1281,10 @@ export function useAnalyzerConsole() {
   )
 
   watch(activeSection, (section) => {
+    if (section === 'evidence') {
+      activeSection.value = 'analysis'
+      return
+    }
     writeStoredActiveSection(section)
     refreshSectionData(section)
   })
@@ -1289,6 +1303,7 @@ export function useAnalyzerConsole() {
     busy,
     projectBusy,
     kbBusy,
+    assetBusy,
     authBusy,
     authReady,
     analysisOutput,

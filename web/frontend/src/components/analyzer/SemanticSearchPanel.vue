@@ -141,9 +141,9 @@ async function copyContextPackage() {
 </script>
 
 <template>
-  <div class="feature-page search-page">
-    <section class="search-command">
-      <div class="search-heading">
+  <div class="feature-page search-page console-page">
+    <section class="search-command console-command">
+      <div class="search-heading console-heading">
         <ElIcon><Search /></ElIcon>
         <div>
           <h2>知识问答</h2>
@@ -151,7 +151,7 @@ async function copyContextPackage() {
         </div>
       </div>
 
-      <div class="search-command-actions">
+      <div class="search-command-actions console-command-actions">
         <ElTag type="info" effect="plain">命中 {{ resultSummary.direct }}</ElTag>
         <ElTag :type="hasEvidence ? 'success' : 'info'" effect="plain">
           {{ hasEvidence ? '有关联证据' : '无关联证据' }}
@@ -163,7 +163,7 @@ async function copyContextPackage() {
       </div>
     </section>
 
-    <section class="search-query-strip">
+    <section class="search-query-strip console-strip">
       <ElForm label-position="top" class="search-form">
         <ElFormItem label="查询文本">
           <ElInput
@@ -195,7 +195,7 @@ async function copyContextPackage() {
     </section>
 
     <section class="rag-workbench">
-      <ElCard class="panel rag-panel" shadow="never">
+      <ElCard class="panel rag-panel console-card" shadow="never">
         <template #header>
           <div class="panel-title split-title">
             <span>
@@ -271,8 +271,8 @@ async function copyContextPackage() {
       </ElCard>
     </section>
 
-    <section class="search-workbench">
-      <ElCard class="panel search-results-panel" shadow="never">
+    <section class="search-workbench console-workbench console-workbench-detail">
+      <ElCard class="panel search-results-panel console-card" shadow="never">
         <template #header>
           <div class="panel-title split-title">
             <span>
@@ -308,7 +308,7 @@ async function copyContextPackage() {
       </ElCard>
 
       <aside class="search-evidence-stack">
-        <ElCard class="panel search-stats-panel" shadow="never">
+        <ElCard class="panel search-stats-panel console-card" shadow="never">
           <template #header>
             <div class="panel-title">
               <ElIcon><Connection /></ElIcon>
@@ -332,7 +332,7 @@ async function copyContextPackage() {
           </div>
         </ElCard>
 
-        <ElCard class="panel search-evidence-panel" shadow="never">
+        <ElCard class="panel search-evidence-panel console-card" shadow="never">
           <template #header>
             <div class="panel-title split-title">
               <span>

@@ -72,9 +72,9 @@ function formatDate(value: string) {
 </script>
 
 <template>
-  <ElMain class="page-surface code-project-page">
-    <section class="code-project-command">
-      <div class="code-project-heading">
+  <ElMain class="page-surface code-project-page console-page">
+    <section class="code-project-command console-command">
+      <div class="code-project-heading console-heading">
         <ElIcon><FolderOpened /></ElIcon>
         <div>
           <h2>代码管理</h2>
@@ -82,7 +82,7 @@ function formatDate(value: string) {
         </div>
       </div>
 
-      <div class="code-project-actions">
+      <div class="code-project-actions console-command-actions">
         <ElTag type="info" effect="plain">{{ projects.length }} 个项目</ElTag>
         <ElButton type="primary" :icon="Upload" @click="pullDialogOpen = true">
           从 Git 拉取
@@ -90,8 +90,8 @@ function formatDate(value: string) {
       </div>
     </section>
 
-    <section class="code-project-workbench">
-      <ElCard class="panel code-project-list-panel" shadow="never">
+    <section class="code-project-workbench console-workbench console-workbench-detail">
+      <ElCard class="panel code-project-list-panel console-card" shadow="never">
         <template #header>
           <div class="panel-title split-title">
             <span>
@@ -117,7 +117,7 @@ function formatDate(value: string) {
       </ElCard>
 
       <aside class="code-project-detail-stack">
-        <ElCard class="panel code-project-current-panel" shadow="never">
+        <ElCard class="panel code-project-current-panel console-card" shadow="never">
           <template #header>
             <div class="panel-title split-title">
               <span>

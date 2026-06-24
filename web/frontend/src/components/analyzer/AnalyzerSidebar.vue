@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Collection, Connection, FolderOpened, Memo, Search, Setting, Share, UserFilled } from '@element-plus/icons-vue'
-import { ElButton, ElIcon, ElMenu, ElMenuItem, ElOption, ElScrollbar, ElSelect, ElSubMenu } from 'element-plus'
+import { Collection, Connection, Cpu, FolderOpened, Memo, Search, Setting, Tickets, UserFilled } from '@element-plus/icons-vue'
+import { ElIcon, ElMenu, ElMenuItem, ElOption, ElScrollbar, ElSelect, ElSubMenu } from 'element-plus'
 import type { AuthUser, ConsoleSection, ProjectRecord } from '../../types'
 import BrandLogo from './BrandLogo.vue'
 
@@ -14,16 +14,12 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  checkHealth: []
   refreshSection: [section: ConsoleSection]
 }>()
 
-const selectableSections: readonly ConsoleSection[] = ['assets', 'evidence', 'search', 'projects', 'accounts', 'knowledge']
+const selectableSections: readonly ConsoleSection[] = ['search', 'assets', 'analysis', 'api-map', 'vectors', 'projects', 'accounts', 'knowledge']
 
-const visibleActiveSection = computed(() => {
-  if (['analysis', 'api-map', 'vectors'].includes(activeSection.value)) return 'evidence'
-  return activeSection.value
-})
+const visibleActiveSection = computed(() => (activeSection.value === 'evidence' ? 'analysis' : activeSection.value))
 
 function selectSection(value: string) {
   if (!selectableSections.includes(value as ConsoleSection)) return
@@ -42,7 +38,7 @@ function selectSection(value: string) {
       <div class="brand-block">
         <BrandLogo />
         <div class="brand-copy">
-          <h1>知识资产</h1>
+          <h1>代码智库</h1>
         </div>
       </div>
 
@@ -60,17 +56,25 @@ function selectSection(value: string) {
       </div>
 
       <ElMenu :default-active="visibleActiveSection" :default-openeds="['settings']" class="main-menu" @select="selectSection">
+        <ElMenuItem index="search">
+          <ElIcon><Search /></ElIcon>
+          <span>知识问答</span>
+        </ElMenuItem>
         <ElMenuItem index="assets">
           <ElIcon><Memo /></ElIcon>
           <span>知识资产</span>
         </ElMenuItem>
-        <ElMenuItem index="evidence">
-          <ElIcon><Share /></ElIcon>
-          <span>依据提取</span>
+        <ElMenuItem index="analysis">
+          <ElIcon><Cpu /></ElIcon>
+          <span>代码依据</span>
         </ElMenuItem>
-        <ElMenuItem index="search">
-          <ElIcon><Search /></ElIcon>
-          <span>知识问答</span>
+        <ElMenuItem index="api-map">
+          <ElIcon><Connection /></ElIcon>
+          <span>接口依据</span>
+        </ElMenuItem>
+        <ElMenuItem index="vectors">
+          <ElIcon><Tickets /></ElIcon>
+          <span>索引依据</span>
         </ElMenuItem>
         <ElSubMenu index="settings">
           <template #title>
@@ -91,10 +95,6 @@ function selectSection(value: string) {
           </ElMenuItem>
         </ElSubMenu>
       </ElMenu>
-
-      <ElButton class="health-button" :icon="Connection" @click="$emit('checkHealth')">
-        检查后端
-      </ElButton>
     </aside>
   </ElScrollbar>
 </template>

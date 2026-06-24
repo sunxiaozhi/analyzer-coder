@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { SwitchButton } from '@element-plus/icons-vue'
-import { ElAside, ElBreadcrumb, ElBreadcrumbItem, ElButton, ElContainer, ElHeader, ElTag } from 'element-plus'
+import { ElAside, ElBreadcrumb, ElBreadcrumbItem, ElButton, ElConfigProvider, ElContainer, ElHeader, ElTag } from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import AccountManagementPanel from './components/analyzer/AccountManagementPanel.vue'
 import AnalyzerSidebar from './components/analyzer/AnalyzerSidebar.vue'
 import AnalysisResultPanel from './components/analyzer/AnalysisResultPanel.vue'
 import ApiMappingPanel from './components/analyzer/ApiMappingPanel.vue'
-import EvidenceDiscoveryPanel from './components/analyzer/EvidenceDiscoveryPanel.vue'
 import KnowledgeAssetPanel from './components/analyzer/KnowledgeAssetPanel.vue'
 import KnowledgeBasePanel from './components/analyzer/KnowledgeBasePanel.vue'
 import LoginPanel from './components/analyzer/LoginPanel.vue'
@@ -26,6 +26,7 @@ const {
   busy,
   projectBusy,
   kbBusy,
+  assetBusy,
   authBusy,
   authReady,
   analysisOutput,
@@ -66,7 +67,6 @@ const {
   users,
   currentUser,
   authMessage,
-  selectedProject,
   activeSection,
   login,
   logout,
@@ -77,7 +77,6 @@ const {
   queryStore,
   buildApiMapping,
   refreshSectionData,
-  checkHealth,
   createProject,
   pullProject,
   loadProjects,
@@ -105,78 +104,78 @@ const {
   rebuildKnowledgeIndex
 } = useAnalyzerConsole()
 
-const sectionTitle = computed(() => {
-  const titles: Record<ConsoleSection, string> = {
-    projects: '项目管理',
-    accounts: '账号管理',
-    assets: '知识资产',
-    evidence: '依据提取',
-    analysis: '代码分析',
-    'api-map': '接口映射',
-    knowledge: '知识维护',
-    vectors: '索引运维',
-    search: '知识问答'
-  }
-  return titles[activeSection.value]
-})
+interface BreadcrumbItem {
+  label: string
+  section?: ConsoleSection
+}
 
-const breadcrumbItems = computed(() => {
-  if (selectedProject.value && activeSection.value !== 'projects' && activeSection.value !== 'accounts') {
-    return [
-      { label: '可信知识', section: 'projects' as const },
-      { label: selectedProject.value.name, section: 'projects' as const },
-      { label: sectionTitle.value, section: activeSection.value }
-    ]
-  }
-  return [
-    { label: '可信知识', section: 'projects' as const },
-    { label: sectionTitle.value, section: activeSection.value }
+const menuBreadcrumbs: Record<ConsoleSection, BreadcrumbItem[]> = {
+  assets: [{ label: '知识资产', section: 'assets' }],
+  evidence: [{ label: '代码依据', section: 'analysis' }],
+  analysis: [{ label: '代码依据', section: 'analysis' }],
+  'api-map': [{ label: '接口依据', section: 'api-map' }],
+  vectors: [{ label: '索引依据', section: 'vectors' }],
+  search: [{ label: '知识问答', section: 'search' }],
+  projects: [
+    { label: '项目设置' },
+    { label: '项目管理', section: 'projects' }
+  ],
+  accounts: [
+    { label: '项目设置' },
+    { label: '账号权限', section: 'accounts' }
+  ],
+  knowledge: [
+    { label: '项目设置' },
+    { label: '文档库', section: 'knowledge' }
   ]
-})
+}
 
-const isWorking = computed(() => busy.value || kbBusy.value || projectBusy.value || authBusy.value)
+const breadcrumbItems = computed(() => menuBreadcrumbs[activeSection.value])
+
+const isWorking = computed(() => busy.value || kbBusy.value || assetBusy.value || projectBusy.value || authBusy.value)
 
 async function refreshIndexData() {
   await loadIndexStatus()
   await loadIndexRecords()
 }
 
-function openSection(section: ConsoleSection) {
-  activeSection.value = section
+function openBreadcrumbItem(item: BreadcrumbItem) {
+  if (item.section) activeSection.value = item.section
 }
 </script>
 
 <template>
-  <LoginPanel
-    v-if="authReady && !currentUser"
-    v-model:form="loginForm"
-    :busy="authBusy"
-    :message="authMessage"
-    @login="login"
-  />
+  <ElConfigProvider :locale="zhCn">
+    <LoginPanel
+      v-if="authReady && !currentUser"
+      v-model:form="loginForm"
+      :busy="authBusy"
+      :message="authMessage"
+      @login="login"
+    />
 
-  <ElContainer v-else-if="currentUser" class="shell">
-    <ElAside class="shell-aside">
-      <AnalyzerSidebar
-        v-model:active-section="activeSection"
-        v-model:project-id="form.projectId"
-        :current-user="currentUser"
-        :projects="projects"
-        @check-health="checkHealth"
-        @refresh-section="refreshSectionData"
-      />
-    </ElAside>
+    <ElContainer v-else-if="currentUser" class="shell">
+      <ElAside class="shell-aside">
+        <AnalyzerSidebar
+          v-model:active-section="activeSection"
+          v-model:project-id="form.projectId"
+          :current-user="currentUser"
+          :projects="projects"
+          @refresh-section="refreshSectionData"
+        />
+      </ElAside>
 
-    <ElContainer v-if="currentUser" class="workspace">
+      <ElContainer v-if="currentUser" class="workspace">
       <ElHeader class="topbar">
         <div class="topbar-title">
           <ElBreadcrumb class="app-breadcrumb" separator="/">
-            <ElBreadcrumbItem v-for="(item, index) in breadcrumbItems" :key="`${item.section}-${index}`">
+            <ElBreadcrumbItem v-for="(item, index) in breadcrumbItems" :key="`${item.label}-${index}`">
               <button
                 class="breadcrumb-link"
-                :class="{ current: index === breadcrumbItems.length - 1 }"
+                :class="{ current: index === breadcrumbItems.length - 1, static: !item.section }"
+                :disabled="!item.section"
                 type="button"
-                @click="activeSection = item.section"
+                @click="openBreadcrumbItem(item)"
               >
                 {{ item.label }}
               </button>
@@ -254,7 +253,7 @@ function openSection(section: ConsoleSection) {
         v-model:filters="assetFilters"
         v-model:pagination="assetPagination"
         :assets="knowledgeAssets"
-        :busy="kbBusy"
+        :busy="assetBusy || kbBusy"
         :current-user="currentUser"
         :message="assetMessage"
         :selected-asset-id="selectedAssetId"
@@ -270,22 +269,6 @@ function openSection(section: ConsoleSection) {
         @refresh-assets="loadKnowledgeAssets"
         @reset-asset="resetAssetForm"
         @update-asset="updateKnowledgeAsset"
-      />
-
-      <EvidenceDiscoveryPanel
-        v-else-if="activeSection === 'evidence'"
-        :analysis-saved-path="analysisSavedPath"
-        :api-mapping="apiMapping"
-        :api-mapping-message="apiMappingMessage"
-        :api-mapping-saved-path="apiMappingSavedPath"
-        :busy="busy"
-        :index-status="indexStatus"
-        @analyze="analyze"
-        @build-api-mapping="buildApiMapping"
-        @index-project="indexProject"
-        @open-analysis="openSection('analysis')"
-        @open-api-map="openSection('api-map')"
-        @open-vectors="openSection('vectors')"
       />
 
       <KnowledgeBasePanel
@@ -349,7 +332,7 @@ function openSection(section: ConsoleSection) {
         v-model:filters="assetFilters"
         v-model:pagination="assetPagination"
         :assets="knowledgeAssets"
-        :busy="kbBusy"
+        :busy="assetBusy || kbBusy"
         :current-user="currentUser"
         :message="assetMessage"
         :selected-asset-id="selectedAssetId"
@@ -366,6 +349,7 @@ function openSection(section: ConsoleSection) {
         @reset-asset="resetAssetForm"
         @update-asset="updateKnowledgeAsset"
       />
+      </ElContainer>
     </ElContainer>
-  </ElContainer>
+  </ElConfigProvider>
 </template>

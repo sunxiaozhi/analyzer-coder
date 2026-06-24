@@ -57,9 +57,9 @@ function backendLocation(item: ApiMapping) {
 </script>
 
 <template>
-  <div class="feature-page api-map-page">
-    <section class="api-map-command">
-      <div class="api-map-heading">
+  <div class="feature-page api-map-page console-page">
+    <section class="api-map-command console-command">
+      <div class="api-map-heading console-heading">
         <ElIcon><Link /></ElIcon>
         <div>
           <h2>接口映射</h2>
@@ -67,7 +67,7 @@ function backendLocation(item: ApiMapping) {
         </div>
       </div>
 
-      <div class="api-map-actions">
+      <div class="api-map-actions console-command-actions">
         <ElTag v-if="message" :type="result ? 'success' : 'danger'" effect="plain">{{ message }}</ElTag>
         <ElTag type="success" effect="plain">匹配 {{ matchedCount }}</ElTag>
         <ElTag :type="mismatchCount ? 'warning' : 'info'" effect="plain">方法不一致 {{ mismatchCount }}</ElTag>
@@ -78,7 +78,7 @@ function backendLocation(item: ApiMapping) {
       </div>
     </section>
 
-    <section class="api-map-config">
+    <section class="api-map-config console-strip">
       <ElForm label-position="top" class="api-map-form">
         <ElFormItem label="前端源码路径">
           <ElInput v-model="form.frontendPath" clearable />
@@ -89,8 +89,8 @@ function backendLocation(item: ApiMapping) {
       </ElForm>
     </section>
 
-    <section class="api-map-workbench">
-      <ElCard class="panel api-map-summary-panel" shadow="never">
+    <section class="api-map-workbench console-workbench console-workbench-detail">
+      <ElCard class="panel api-map-summary-panel console-card" shadow="never">
         <template #header>
           <div class="panel-title">
             <ElIcon><Connection /></ElIcon>
@@ -114,7 +114,7 @@ function backendLocation(item: ApiMapping) {
         </dl>
       </ElCard>
 
-      <ElCard class="panel api-map-list-panel" shadow="never">
+      <ElCard class="panel api-map-list-panel console-card" shadow="never">
         <template #header>
           <div class="panel-title split-title">
             <span>

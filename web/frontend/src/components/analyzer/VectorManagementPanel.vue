@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
+import { computed } from 'vue'
 import {
-  ArrowDown,
-  ArrowRight,
   Document,
   Files,
   FolderChecked,
@@ -12,8 +10,6 @@ import {
   ElButton,
   ElCard,
   ElEmpty,
-  ElForm,
-  ElFormItem,
   ElIcon,
   ElInput,
   ElOption,
@@ -28,7 +24,6 @@ const form = defineModel<AnalyzerForm>('form', { required: true })
 const recordFilters = defineModel<IndexRecordFilters>('recordFilters', { required: true })
 const recordPage = defineModel<number>('recordPage', { required: true })
 const recordPageSize = defineModel<number>('recordPageSize', { required: true })
-const advancedOpen = shallowRef(false)
 
 const props = defineProps<{
   busy: boolean
@@ -182,9 +177,9 @@ function changeRecordPage(nextPage: number) {
 </script>
 
 <template>
-  <div class="feature-page vector-page">
-    <section class="vector-command">
-      <div class="vector-heading">
+  <div class="feature-page vector-page console-page">
+    <section class="vector-command console-command">
+      <div class="vector-heading console-heading">
         <ElIcon><Files /></ElIcon>
         <div>
           <h2>索引运维</h2>
@@ -192,7 +187,7 @@ function changeRecordPage(nextPage: number) {
         </div>
       </div>
 
-      <div class="vector-command-actions">
+      <div class="vector-command-actions console-command-actions">
         <ElSelect v-model="form.source" class="rebuild-source-select" placeholder="重建范围">
           <ElOption
             v-for="option in sourceOptions"
@@ -203,13 +198,6 @@ function changeRecordPage(nextPage: number) {
         </ElSelect>
         <ElTag :type="statusTagType" effect="plain">{{ statusBadge }}</ElTag>
         <ElTag :type="outputTagType" effect="plain">{{ outputBadge }}</ElTag>
-        <ElButton @click="advancedOpen = !advancedOpen">
-          <ElIcon>
-            <ArrowDown v-if="advancedOpen" />
-            <ArrowRight v-else />
-          </ElIcon>
-          高级选项
-        </ElButton>
         <ElButton :icon="Refresh" @click="refreshAll">
           刷新状态
         </ElButton>
@@ -219,7 +207,7 @@ function changeRecordPage(nextPage: number) {
       </div>
     </section>
 
-    <section class="vector-status-strip">
+    <section class="vector-status-strip console-strip">
       <div class="vector-status-title">
         <ElIcon><FolderChecked /></ElIcon>
         <span>索引状态</span>
@@ -260,22 +248,8 @@ function changeRecordPage(nextPage: number) {
       </dl>
     </section>
 
-    <section v-if="advancedOpen" class="vector-advanced-panel">
-      <ElForm label-position="top" class="vector-advanced-grid">
-        <ElFormItem label="基础路径">
-          <ElInput v-model="form.path" clearable />
-        </ElFormItem>
-        <ElFormItem label="代码路径">
-          <ElInput v-model="form.codePath" clearable />
-        </ElFormItem>
-        <ElFormItem label="知识库路径">
-          <ElInput v-model="form.kbPath" clearable />
-        </ElFormItem>
-      </ElForm>
-    </section>
-
-    <section class="vector-workbench">
-      <ElCard class="panel index-detail-panel" shadow="never">
+    <section class="vector-workbench console-workbench console-workbench-detail">
+      <ElCard class="panel index-detail-panel console-card" shadow="never">
         <template #header>
           <div class="panel-title split-title">
             <span>
@@ -320,7 +294,7 @@ function changeRecordPage(nextPage: number) {
         </div>
       </ElCard>
 
-      <ElCard class="panel index-list-panel" shadow="never">
+      <ElCard class="panel index-list-panel console-card" shadow="never">
         <template #header>
           <div class="panel-title split-title">
             <span>
@@ -483,23 +457,6 @@ function changeRecordPage(nextPage: number) {
 
 .vector-status-title .el-icon {
   color: var(--accent);
-}
-
-.vector-advanced-panel {
-  background: var(--surface-muted);
-  border-bottom: 1px solid var(--line);
-  flex: 0 0 auto;
-  padding: 14px 24px 4px;
-}
-
-.vector-advanced-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.vector-advanced-grid .el-form-item {
-  margin-bottom: 10px;
 }
 
 .vector-workbench {
@@ -756,10 +713,6 @@ function changeRecordPage(nextPage: number) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .vector-advanced-grid {
-    grid-template-columns: 1fr;
-  }
-
   .index-record-tools {
     grid-template-columns: 1fr;
   }
@@ -788,10 +741,6 @@ function changeRecordPage(nextPage: number) {
 
   .vector-summary {
     grid-template-columns: 1fr;
-  }
-
-  .vector-advanced-panel {
-    padding: 12px 16px 2px;
   }
 
   .vector-workbench {

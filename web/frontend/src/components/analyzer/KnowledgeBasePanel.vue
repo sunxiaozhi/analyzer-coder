@@ -31,9 +31,9 @@ function forwardCreateFile(path: string, fileContent: string) {
 </script>
 
 <template>
-  <ElMain class="page-surface kb-page">
-    <section class="kb-command">
-      <div class="kb-heading">
+  <ElMain class="page-surface kb-page console-page">
+    <section class="kb-command console-command">
+      <div class="kb-heading console-heading">
         <ElIcon><Collection /></ElIcon>
         <div>
           <h2>知识维护</h2>
@@ -41,7 +41,7 @@ function forwardCreateFile(path: string, fileContent: string) {
         </div>
       </div>
 
-      <div class="kb-command-actions">
+      <div class="kb-command-actions console-command-actions">
         <ElTag v-if="root" type="info" effect="plain">{{ root }}</ElTag>
         <ElButton :icon="Refresh" :loading="busy" @click="$emit('refreshFiles')">
           刷新
@@ -52,7 +52,7 @@ function forwardCreateFile(path: string, fileContent: string) {
       </div>
     </section>
 
-    <div class="kb-workbench" aria-label="知识库文档维护">
+    <div class="kb-workbench console-workbench" aria-label="知识库文档维护">
       <KnowledgeFileList
         :busy="busy"
         :files="files"
