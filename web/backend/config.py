@@ -12,8 +12,8 @@ class BackendConfig:
     # MySQL 配置：保存用户、项目、知识、分析记录和分析输出。
     MYSQL_HOST = os.getenv("ANALYZER_MYSQL_HOST", "127.0.0.1")
     MYSQL_PORT = int(os.getenv("ANALYZER_MYSQL_PORT", "3806"))
-    MYSQL_USER = os.getenv("ANALYZER_MYSQL_USER", "root")
-    MYSQL_PASSWORD = os.getenv("ANALYZER_MYSQL_PASSWORD", "root")
+    MYSQL_USER = os.getenv("ANALYZER_MYSQL_USER", "analyzer_coder")
+    MYSQL_PASSWORD = os.getenv("ANALYZER_MYSQL_PASSWORD", "analyzer_coder")
     MYSQL_DATABASE = os.getenv("ANALYZER_MYSQL_DATABASE", "analyzer_coder")
 
     # Qdrant 配置：保存语义向量和可过滤检索 payload。

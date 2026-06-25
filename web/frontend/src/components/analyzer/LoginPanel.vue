@@ -17,34 +17,37 @@ defineEmits<{
 
 <template>
   <main class="login-screen">
-    <ElCard class="login-card" shadow="never">
-      <div class="login-brand">
-        <BrandLogo />
-        <div>
-          <h1>代码智库</h1>
+    <section class="login-shell" aria-label="登录代码智库">
+      <ElCard class="login-card" shadow="never">
+        <div class="login-card-heading">
+          <BrandLogo />
+          <div>
+            <span>安全登录</span>
+            <h2>进入代码智库</h2>
+          </div>
         </div>
-      </div>
 
-      <ElForm class="control-form login-form" label-position="top" @submit.prevent="$emit('login')">
-        <ElFormItem label="账号">
-          <ElInput v-model="form.username" placeholder="admin" :prefix-icon="User" />
-        </ElFormItem>
-        <ElFormItem label="密码">
-          <ElInput
-            v-model="form.password"
-            placeholder="admin123"
-            show-password
-            type="password"
-            :prefix-icon="Lock"
-            @keyup.enter="$emit('login')"
-          />
-        </ElFormItem>
-        <ElButton class="login-submit" type="primary" :loading="busy" :icon="Right" @click="$emit('login')">
-          登录
-        </ElButton>
-      </ElForm>
+        <ElForm class="control-form login-form" label-position="top" @submit.prevent="$emit('login')">
+          <ElFormItem label="账号">
+            <ElInput v-model="form.username" placeholder="admin" :prefix-icon="User" />
+          </ElFormItem>
+          <ElFormItem label="密码">
+            <ElInput
+              v-model="form.password"
+              placeholder="admin123"
+              show-password
+              type="password"
+              :prefix-icon="Lock"
+              @keyup.enter="$emit('login')"
+            />
+          </ElFormItem>
+          <ElButton class="login-submit" type="primary" :loading="busy" :icon="Right" @click="$emit('login')">
+            登录
+          </ElButton>
+        </ElForm>
 
-      <p v-if="message" class="login-message">{{ message }}</p>
-    </ElCard>
+        <p v-if="message" class="login-message">{{ message }}</p>
+      </ElCard>
+    </section>
   </main>
 </template>
