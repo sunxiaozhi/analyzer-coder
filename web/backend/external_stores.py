@@ -4,7 +4,7 @@ import base64
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urljoin
 from urllib.request import Request, urlopen
@@ -14,6 +14,10 @@ from java_analyzer.vector_store import VectorRecord
 
 class ExternalStoreError(RuntimeError):
     pass
+
+
+QDRANT_POINT_BATCH_SIZE = 128
+NEO4J_RECORD_BATCH_SIZE = 250
 
 
 @dataclass(frozen=True)
@@ -50,13 +54,20 @@ class ExternalAnalysisStores:
         analysis_records: list[dict[str, Any]],
         vector_records: list[VectorRecord],
     ) -> dict[str, Any]:
-        qdrant = self._sync_qdrant(project_id, vector_records)
-        neo4j = self._sync_neo4j(project_id, analysis_records)
+        qdrant = self._sync_one("qdrant", lambda: self._sync_qdrant(project_id, vector_records))
+        neo4j = self._sync_one("neo4j", lambda: self._sync_neo4j(project_id, analysis_records))
         return {
             "enabled": True,
+            "ok": bool(qdrant.get("ok")) and bool(neo4j.get("ok")),
             "qdrant": qdrant,
             "neo4j": neo4j,
         }
+
+    def _sync_one(self, store_name: str, operation: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+        try:
+            return operation()
+        except ExternalStoreError as exc:
+            return {"ok": False, "store": store_name, "error": str(exc)}
 
     def _sync_qdrant(self, project_id: str, records: list[VectorRecord]) -> dict[str, Any]:
         if not records:
@@ -78,12 +89,20 @@ class ExternalAnalysisStores:
             }
             for record in records
         ]
-        self._qdrant_request(
-            "PUT",
-            f"/collections/{collection}/points?wait=true",
-            {"points": points},
-        )
-        return {"ok": True, "count": len(points), "collection": self.config.qdrant.collection}
+        batch_count = 0
+        for batch in _batched(points, QDRANT_POINT_BATCH_SIZE):
+            batch_count += 1
+            self._qdrant_request(
+                "PUT",
+                f"/collections/{collection}/points?wait=true",
+                {"points": batch},
+            )
+        return {
+            "ok": True,
+            "count": len(points),
+            "batches": batch_count,
+            "collection": self.config.qdrant.collection,
+        }
 
     def delete_qdrant_project_records(self, *, project_id: str, source_type: str = "") -> dict[str, Any]:
         collection = quote(self.config.qdrant.collection, safe="")
@@ -173,16 +192,30 @@ class ExternalAnalysisStores:
             if record["filePath"]
         ]
         files = sorted({item["filePath"] for item in file_records})
-        statements = [
-            {
-                "statement": """
+        self._ensure_neo4j_schema()
+        self._neo4j_request(
+            [
+                {
+                    "statement": """
 MERGE (p:AnalyzerProject {id: $projectId})
 SET p.updatedAt = datetime()
 """,
-                "parameters": {"projectId": project_id},
-            },
-            {
-                "statement": """
+                    "parameters": {"projectId": project_id},
+                }
+            ]
+        )
+        batch_count = 0
+        for batch in _batched(normalized, NEO4J_RECORD_BATCH_SIZE):
+            batch_count += 1
+            batch_file_records = [
+                {"filePath": record["filePath"], "key": record["key"]}
+                for record in batch
+                if record["filePath"]
+            ]
+            batch_files = sorted({item["filePath"] for item in batch_file_records})
+            statements = [
+                {
+                    "statement": """
 UNWIND $records AS record
 MATCH (p:AnalyzerProject {id: $projectId})
 MERGE (r:AnalysisRecord {projectId: $projectId, key: record.key})
@@ -200,27 +233,27 @@ SET r.type = record.type,
     r.updatedAt = datetime()
 MERGE (p)-[:HAS_RECORD]->(r)
 """,
-                "parameters": {"projectId": project_id, "records": normalized},
-            },
-            {
-                "statement": """
+                    "parameters": {"projectId": project_id, "records": batch},
+                },
+                {
+                    "statement": """
 UNWIND $files AS filePath
 MERGE (f:JavaFile {projectId: $projectId, path: filePath})
 SET f.updatedAt = datetime()
 """,
-                "parameters": {"projectId": project_id, "files": files},
-            },
-            {
-                "statement": """
+                    "parameters": {"projectId": project_id, "files": batch_files},
+                },
+                {
+                    "statement": """
 UNWIND $items AS item
 MATCH (f:JavaFile {projectId: $projectId, path: item.filePath})
 MATCH (r:AnalysisRecord {projectId: $projectId, key: item.key})
 MERGE (f)-[:CONTAINS]->(r)
 """,
-                "parameters": {"projectId": project_id, "items": file_records},
-            },
-            {
-                "statement": """
+                    "parameters": {"projectId": project_id, "items": batch_file_records},
+                },
+                {
+                    "statement": """
 UNWIND $records AS record
 WITH record
 WHERE record.enclosingType <> ''
@@ -233,10 +266,10 @@ MATCH (parent:AnalysisRecord {
 MATCH (child:AnalysisRecord {projectId: $projectId, key: record.key})
 MERGE (parent)-[:ENCLOSES]->(child)
 """,
-                "parameters": {"projectId": project_id, "records": normalized},
-            },
-            {
-                "statement": """
+                    "parameters": {"projectId": project_id, "records": batch},
+                },
+                {
+                    "statement": """
 UNWIND $records AS record
 WITH record
 WHERE record.enclosingMethod <> ''
@@ -249,11 +282,49 @@ MATCH (method:AnalysisRecord {
 MATCH (child:AnalysisRecord {projectId: $projectId, key: record.key})
 MERGE (method)-[:OWNS_BEHAVIOR]->(child)
 """,
-                "parameters": {"projectId": project_id, "records": normalized},
+                    "parameters": {"projectId": project_id, "records": batch},
+                },
+            ]
+            self._neo4j_request(statements)
+        return {
+            "ok": True,
+            "recordCount": len(normalized),
+            "fileCount": len(files),
+            "batches": batch_count,
+        }
+
+    def _ensure_neo4j_schema(self) -> None:
+        statements = [
+            {
+                "statement": """
+CREATE CONSTRAINT analyzer_project_id IF NOT EXISTS
+FOR (p:AnalyzerProject)
+REQUIRE p.id IS UNIQUE
+"""
+            },
+            {
+                "statement": """
+CREATE CONSTRAINT analysis_record_project_key IF NOT EXISTS
+FOR (r:AnalysisRecord)
+REQUIRE (r.projectId, r.key) IS UNIQUE
+"""
+            },
+            {
+                "statement": """
+CREATE CONSTRAINT java_file_project_path IF NOT EXISTS
+FOR (f:JavaFile)
+REQUIRE (f.projectId, f.path) IS UNIQUE
+"""
+            },
+            {
+                "statement": """
+CREATE INDEX analysis_record_parent_lookup IF NOT EXISTS
+FOR (r:AnalysisRecord)
+ON (r.projectId, r.filePath, r.type, r.symbolName)
+"""
             },
         ]
         self._neo4j_request(statements)
-        return {"ok": True, "recordCount": len(normalized), "fileCount": len(files)}
 
     def sync_knowledge_links(
         self,
@@ -326,6 +397,430 @@ SET rel.linkType = link.linkType,
         self._neo4j_request(statements)
         return {"ok": True, "assetCount": len(assets), "linkCount": len(links)}
 
+    def graph_overview(self, *, project_id: str) -> dict[str, Any]:
+        data = self._neo4j_request(
+            [
+                {
+                    "statement": """
+MATCH (p:AnalyzerProject {id: $projectId})
+OPTIONAL MATCH (p)-[:HAS_RECORD]->(record:AnalysisRecord)
+WITH count(DISTINCT record) AS recordCount
+OPTIONAL MATCH (file:JavaFile {projectId: $projectId})
+WITH recordCount, count(DISTINCT file) AS fileCount
+OPTIONAL MATCH (:AnalysisRecord {projectId: $projectId})-[rel]->(:AnalysisRecord {projectId: $projectId})
+WITH recordCount, fileCount, count(rel) AS behaviorRelationCount
+OPTIONAL MATCH (:JavaFile {projectId: $projectId})-[contains:CONTAINS]->(:AnalysisRecord {projectId: $projectId})
+WITH recordCount, fileCount, behaviorRelationCount, count(contains) AS containsCount
+RETURN recordCount, fileCount, behaviorRelationCount + containsCount AS relationCount
+""",
+                    "parameters": {"projectId": project_id},
+                },
+                {
+                    "statement": """
+MATCH (record:AnalysisRecord {projectId: $projectId})
+RETURN record.type AS type, count(record) AS count
+ORDER BY count DESC, type
+""",
+                    "parameters": {"projectId": project_id},
+                },
+                {
+                    "statement": """
+MATCH (left)-[rel]->(right {projectId: $projectId})
+WHERE (left:AnalyzerProject OR left:JavaFile OR left:AnalysisRecord)
+  AND coalesce(left.projectId, left.id) = $projectId
+RETURN type(rel) AS type, count(rel) AS count
+ORDER BY count DESC, type
+""",
+                    "parameters": {"projectId": project_id},
+                },
+            ]
+        )
+        summary = _neo4j_first_row(data, 0)
+        return {
+            "summary": {
+                "analysisRecords": int(summary.get("recordCount") or 0),
+                "javaFiles": int(summary.get("fileCount") or 0),
+                "relations": int(summary.get("relationCount") or 0),
+            },
+            "recordTypes": _neo4j_rows(data, 1),
+            "relationTypes": _neo4j_rows(data, 2),
+        }
+
+    def graph_records(
+        self,
+        *,
+        project_id: str,
+        record_type: str = "",
+        query: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        where = ["record.projectId = $projectId"]
+        if record_type:
+            where.append("record.type = $recordType")
+        if query:
+            where.append(
+                """
+(
+  toLower(record.key) CONTAINS $query
+  OR toLower(record.filePath) CONTAINS $query
+  OR toLower(record.symbolName) CONTAINS $query
+  OR toLower(record.enclosingType) CONTAINS $query
+  OR toLower(record.enclosingMethod) CONTAINS $query
+)
+"""
+            )
+        where_clause = " AND ".join(where)
+        parameters = {
+            "projectId": project_id,
+            "recordType": record_type,
+            "query": query.lower(),
+            "limit": limit,
+            "offset": offset,
+        }
+        data = self._neo4j_request(
+            [
+                {
+                    "statement": f"""
+MATCH (record:AnalysisRecord)
+WHERE {where_clause}
+RETURN count(record) AS total
+""",
+                    "parameters": parameters,
+                },
+                {
+                    "statement": f"""
+MATCH (record:AnalysisRecord)
+WHERE {where_clause}
+RETURN record.key AS key,
+       record.type AS type,
+       record.filePath AS filePath,
+       record.package AS package,
+       record.symbolName AS symbolName,
+       record.enclosingType AS enclosingType,
+       record.enclosingMethod AS enclosingMethod,
+       record.startLine AS startLine,
+       record.endLine AS endLine
+ORDER BY record.type, record.filePath, record.startLine, record.key
+SKIP $offset
+LIMIT $limit
+""",
+                    "parameters": parameters,
+                },
+            ]
+        )
+        total_row = _neo4j_first_row(data, 0)
+        return {
+            "records": _neo4j_rows(data, 1),
+            "total": int(total_row.get("total") or 0),
+            "limit": limit,
+            "offset": offset,
+        }
+
+    def graph_relations(self, *, project_id: str, limit: int = 500) -> dict[str, Any]:
+        data = self._neo4j_request(
+            [
+                {
+                    "statement": """
+MATCH (source)-[rel]->(target)
+WHERE (source:AnalyzerProject OR source:JavaFile OR source:AnalysisRecord)
+  AND (target:JavaFile OR target:AnalysisRecord)
+  AND coalesce(source.projectId, source.id) = $projectId
+  AND target.projectId = $projectId
+RETURN
+  labels(source)[0] AS sourceLabel,
+  coalesce(source.key, source.path, source.id) AS sourceId,
+  coalesce(source.symbolName, source.path, source.id) AS sourceName,
+  type(rel) AS type,
+  labels(target)[0] AS targetLabel,
+  coalesce(target.key, target.path) AS targetId,
+  coalesce(target.symbolName, target.path) AS targetName
+ORDER BY type, sourceName, targetName
+LIMIT $limit
+""",
+                    "parameters": {"projectId": project_id, "limit": limit},
+                }
+            ]
+        )
+        return {"relations": _neo4j_rows(data, 0), "limit": limit}
+
+    def graph_chains(
+        self,
+        *,
+        project_id: str,
+        chain_type: str = "",
+        query: str = "",
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        chain_type = chain_type if chain_type in {"endpoint", "method", "file"} else ""
+        query_text = query.lower()
+        pool_limit = max(limit * 3, 100)
+        statements: list[dict[str, Any]] = []
+
+        if not chain_type or chain_type == "endpoint":
+            statements.append(
+                {
+                    "statement": """
+MATCH (endpoint:AnalysisRecord {projectId: $projectId, type: 'endpoint'})
+OPTIONAL MATCH (method:AnalysisRecord {
+  projectId: $projectId,
+  type: 'method',
+  filePath: endpoint.filePath,
+  symbolName: endpoint.symbolName
+})
+OPTIONAL MATCH (method)-[:OWNS_BEHAVIOR]->(child:AnalysisRecord {projectId: $projectId})
+RETURN 'endpoint' AS type,
+       'endpoint:' + endpoint.key AS id,
+       endpoint.key AS key,
+       endpoint.symbolName AS title,
+       endpoint.filePath AS subtitle,
+       endpoint.payloadJson AS payloadJson,
+       endpoint.startLine AS startLine,
+       1 + count(DISTINCT method) + count(DISTINCT child) AS nodeCount,
+       count(DISTINCT method) + count(DISTINCT child) AS relationCount
+ORDER BY endpoint.filePath, endpoint.startLine, endpoint.key
+LIMIT $poolLimit
+""",
+                    "parameters": {"projectId": project_id, "poolLimit": pool_limit},
+                }
+            )
+
+        if not chain_type or chain_type == "method":
+            statements.append(
+                {
+                    "statement": """
+MATCH (method:AnalysisRecord {projectId: $projectId, type: 'method'})
+OPTIONAL MATCH (method)-[:OWNS_BEHAVIOR]->(child:AnalysisRecord {projectId: $projectId})
+RETURN 'method' AS type,
+       'method:' + method.key AS id,
+       method.key AS key,
+       method.symbolName AS title,
+       method.filePath AS subtitle,
+       method.payloadJson AS payloadJson,
+       method.startLine AS startLine,
+       1 + count(DISTINCT child) AS nodeCount,
+       count(DISTINCT child) AS relationCount
+ORDER BY relationCount DESC, method.filePath, method.startLine, method.key
+LIMIT $poolLimit
+""",
+                    "parameters": {"projectId": project_id, "poolLimit": pool_limit},
+                }
+            )
+
+        if not chain_type or chain_type == "file":
+            statements.append(
+                {
+                    "statement": """
+MATCH (file:JavaFile {projectId: $projectId})
+OPTIONAL MATCH (file)-[:CONTAINS]->(record:AnalysisRecord {projectId: $projectId})
+RETURN 'file' AS type,
+       'file:' + file.path AS id,
+       file.path AS key,
+       file.path AS title,
+       '' AS subtitle,
+       '' AS payloadJson,
+       0 AS startLine,
+       1 + count(DISTINCT record) AS nodeCount,
+       count(DISTINCT record) AS relationCount
+ORDER BY relationCount DESC, file.path
+LIMIT $poolLimit
+""",
+                    "parameters": {"projectId": project_id, "poolLimit": pool_limit},
+                }
+            )
+
+        data = self._neo4j_request(statements) if statements else {"results": []}
+        chains: list[dict[str, Any]] = []
+        for index in range(len(statements)):
+            for row in _neo4j_rows(data, index):
+                chain = _graph_chain_summary(row)
+                if query_text and query_text not in _graph_chain_search_text(chain):
+                    continue
+                chains.append(chain)
+
+        chains.sort(key=lambda item: (-int(item.get("relationCount") or 0), str(item.get("title") or "")))
+        return {
+            "chains": chains[:limit],
+            "limit": limit,
+            "filters": {"type": chain_type, "query": query},
+        }
+
+    def graph_chain(self, *, project_id: str, chain_id: str) -> dict[str, Any]:
+        kind, _, raw_key = chain_id.partition(":")
+        if not raw_key or kind not in {"endpoint", "method", "file"}:
+            raise ExternalStoreError(f"Unsupported graph chain id: {chain_id}")
+
+        if kind == "endpoint":
+            return self._graph_endpoint_chain(project_id=project_id, chain_id=chain_id, key=raw_key)
+        if kind == "method":
+            return self._graph_method_chain(project_id=project_id, chain_id=chain_id, key=raw_key)
+        return self._graph_file_chain(project_id=project_id, chain_id=chain_id, path=raw_key)
+
+    def _graph_endpoint_chain(self, *, project_id: str, chain_id: str, key: str) -> dict[str, Any]:
+        data = self._neo4j_request(
+            [
+                {
+                    "statement": """
+MATCH (endpoint:AnalysisRecord {projectId: $projectId, key: $key})
+OPTIONAL MATCH (file:JavaFile {projectId: $projectId, path: endpoint.filePath})
+OPTIONAL MATCH (method:AnalysisRecord {
+  projectId: $projectId,
+  type: 'method',
+  filePath: endpoint.filePath,
+  symbolName: endpoint.symbolName
+})
+OPTIONAL MATCH (method)-[:OWNS_BEHAVIOR]->(child:AnalysisRecord {projectId: $projectId})
+RETURN file.path AS filePath,
+       endpoint.key AS endpointKey,
+       endpoint.type AS endpointType,
+       endpoint.filePath AS endpointFilePath,
+       endpoint.symbolName AS endpointSymbolName,
+       endpoint.enclosingType AS endpointEnclosingType,
+       endpoint.enclosingMethod AS endpointEnclosingMethod,
+       endpoint.startLine AS endpointStartLine,
+       endpoint.endLine AS endpointEndLine,
+       endpoint.payloadJson AS endpointPayloadJson,
+       method.key AS methodKey,
+       method.type AS methodType,
+       method.filePath AS methodFilePath,
+       method.symbolName AS methodSymbolName,
+       method.enclosingType AS methodEnclosingType,
+       method.enclosingMethod AS methodEnclosingMethod,
+       method.startLine AS methodStartLine,
+       method.endLine AS methodEndLine,
+       method.payloadJson AS methodPayloadJson,
+       child.key AS childKey,
+       child.type AS childType,
+       child.filePath AS childFilePath,
+       child.symbolName AS childSymbolName,
+       child.enclosingType AS childEnclosingType,
+       child.enclosingMethod AS childEnclosingMethod,
+       child.startLine AS childStartLine,
+       child.endLine AS childEndLine,
+       child.payloadJson AS childPayloadJson
+ORDER BY child.startLine, child.key
+LIMIT 120
+""",
+                    "parameters": {"projectId": project_id, "key": key},
+                }
+            ]
+        )
+        rows = _neo4j_rows(data, 0)
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: dict[str, dict[str, str]] = {}
+        first = rows[0] if rows else {}
+        if first.get("filePath"):
+            nodes[f"file:{first['filePath']}"] = _graph_file_node(str(first["filePath"]))
+        if first.get("endpointKey"):
+            endpoint_node = _graph_prefixed_record_node(first, "endpoint", "endpoint")
+            nodes[endpoint_node["id"]] = endpoint_node
+            if first.get("filePath"):
+                _add_graph_edge(edges, f"file:{first['filePath']}", endpoint_node["id"], "CONTAINS")
+        for row in rows:
+            if row.get("methodKey"):
+                method_node = _graph_prefixed_record_node(row, "method", "method")
+                nodes[method_node["id"]] = method_node
+                if first.get("endpointKey"):
+                    _add_graph_edge(edges, f"record:{first['endpointKey']}", method_node["id"], "HANDLES")
+            if row.get("childKey"):
+                child_node = _graph_prefixed_record_node(row, "child", "behavior")
+                nodes[child_node["id"]] = child_node
+                if row.get("methodKey"):
+                    _add_graph_edge(edges, f"record:{row['methodKey']}", child_node["id"], "OWNS_BEHAVIOR")
+
+        return _graph_chain_detail(chain_id, "endpoint", first, list(nodes.values()), list(edges.values()))
+
+    def _graph_method_chain(self, *, project_id: str, chain_id: str, key: str) -> dict[str, Any]:
+        data = self._neo4j_request(
+            [
+                {
+                    "statement": """
+MATCH (method:AnalysisRecord {projectId: $projectId, key: $key})
+OPTIONAL MATCH (file:JavaFile {projectId: $projectId, path: method.filePath})
+OPTIONAL MATCH (method)-[:OWNS_BEHAVIOR]->(child:AnalysisRecord {projectId: $projectId})
+RETURN file.path AS filePath,
+       method.key AS methodKey,
+       method.type AS methodType,
+       method.filePath AS methodFilePath,
+       method.symbolName AS methodSymbolName,
+       method.enclosingType AS methodEnclosingType,
+       method.enclosingMethod AS methodEnclosingMethod,
+       method.startLine AS methodStartLine,
+       method.endLine AS methodEndLine,
+       method.payloadJson AS methodPayloadJson,
+       child.key AS childKey,
+       child.type AS childType,
+       child.filePath AS childFilePath,
+       child.symbolName AS childSymbolName,
+       child.enclosingType AS childEnclosingType,
+       child.enclosingMethod AS childEnclosingMethod,
+       child.startLine AS childStartLine,
+       child.endLine AS childEndLine,
+       child.payloadJson AS childPayloadJson
+ORDER BY child.startLine, child.key
+LIMIT 120
+""",
+                    "parameters": {"projectId": project_id, "key": key},
+                }
+            ]
+        )
+        rows = _neo4j_rows(data, 0)
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: dict[str, dict[str, str]] = {}
+        first = rows[0] if rows else {}
+        if first.get("filePath"):
+            nodes[f"file:{first['filePath']}"] = _graph_file_node(str(first["filePath"]))
+        if first.get("methodKey"):
+            method_node = _graph_prefixed_record_node(first, "method", "method")
+            nodes[method_node["id"]] = method_node
+            if first.get("filePath"):
+                _add_graph_edge(edges, f"file:{first['filePath']}", method_node["id"], "CONTAINS")
+        for row in rows:
+            if row.get("childKey"):
+                child_node = _graph_prefixed_record_node(row, "child", "behavior")
+                nodes[child_node["id"]] = child_node
+                if row.get("methodKey"):
+                    _add_graph_edge(edges, f"record:{row['methodKey']}", child_node["id"], "OWNS_BEHAVIOR")
+
+        return _graph_chain_detail(chain_id, "method", first, list(nodes.values()), list(edges.values()))
+
+    def _graph_file_chain(self, *, project_id: str, chain_id: str, path: str) -> dict[str, Any]:
+        data = self._neo4j_request(
+            [
+                {
+                    "statement": """
+MATCH (file:JavaFile {projectId: $projectId, path: $path})
+OPTIONAL MATCH (file)-[:CONTAINS]->(record:AnalysisRecord {projectId: $projectId})
+RETURN file.path AS filePath,
+       record.key AS recordKey,
+       record.type AS recordType,
+       record.filePath AS recordFilePath,
+       record.symbolName AS recordSymbolName,
+       record.enclosingType AS recordEnclosingType,
+       record.enclosingMethod AS recordEnclosingMethod,
+       record.startLine AS recordStartLine,
+       record.endLine AS recordEndLine,
+       record.payloadJson AS recordPayloadJson
+ORDER BY record.startLine, record.type, record.key
+LIMIT 160
+""",
+                    "parameters": {"projectId": project_id, "path": path},
+                }
+            ]
+        )
+        rows = _neo4j_rows(data, 0)
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: dict[str, dict[str, str]] = {}
+        first = rows[0] if rows else {"filePath": path}
+        nodes[f"file:{path}"] = _graph_file_node(path)
+        for row in rows:
+            if row.get("recordKey"):
+                record_node = _graph_prefixed_record_node(row, "record", "record")
+                nodes[record_node["id"]] = record_node
+                _add_graph_edge(edges, f"file:{path}", record_node["id"], "CONTAINS")
+
+        return _graph_chain_detail(chain_id, "file", first, list(nodes.values()), list(edges.values()))
+
     def _qdrant_request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
         url = urljoin(self.config.qdrant.url.rstrip("/") + "/", path.lstrip("/"))
         headers = {"api-key": self.config.qdrant.api_key} if self.config.qdrant.api_key else None
@@ -374,6 +869,173 @@ def _json_request(
         raise ExternalStoreError(f"HTTP {exc.code} from {url}: {message}") from exc
     except (OSError, URLError, TimeoutError) as exc:
         raise ExternalStoreError(f"Cannot reach {url}: {exc}") from exc
+
+
+def _batched(items: Iterable[Any], size: int) -> Iterable[list[Any]]:
+    batch: list[Any] = []
+    for item in items:
+        batch.append(item)
+        if len(batch) >= size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+def _neo4j_rows(data: Any, result_index: int) -> list[dict[str, Any]]:
+    if not isinstance(data, dict):
+        return []
+    results = data.get("results")
+    if not isinstance(results, list) or result_index >= len(results):
+        return []
+    result = results[result_index]
+    if not isinstance(result, dict):
+        return []
+    columns = result.get("columns")
+    rows = result.get("data")
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return []
+    output: list[dict[str, Any]] = []
+    for item in rows:
+        if not isinstance(item, dict) or not isinstance(item.get("row"), list):
+            continue
+        output.append({str(column): item["row"][index] for index, column in enumerate(columns)})
+    return output
+
+
+def _neo4j_first_row(data: Any, result_index: int) -> dict[str, Any]:
+    rows = _neo4j_rows(data, result_index)
+    return rows[0] if rows else {}
+
+
+def _graph_chain_summary(row: dict[str, Any]) -> dict[str, Any]:
+    payload = _json_object(row.get("payloadJson"))
+    chain_type = str(row.get("type") or "")
+    title = str(row.get("title") or row.get("key") or "")
+    if chain_type == "endpoint":
+        method = payload.get("method") or payload.get("methods") or ""
+        path = payload.get("path") or payload.get("value") or ""
+        endpoint_text = " ".join(str(item) for item in [method, path] if item)
+        if endpoint_text:
+            title = endpoint_text
+    return {
+        "id": str(row.get("id") or ""),
+        "type": chain_type,
+        "title": title,
+        "subtitle": str(row.get("subtitle") or ""),
+        "nodeCount": int(row.get("nodeCount") or 0),
+        "relationCount": int(row.get("relationCount") or 0),
+        "startLine": int(row.get("startLine") or 0),
+    }
+
+
+def _graph_chain_search_text(chain: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            str(chain.get("id") or ""),
+            str(chain.get("type") or ""),
+            str(chain.get("title") or ""),
+            str(chain.get("subtitle") or ""),
+        ]
+    ).lower()
+
+
+def _graph_file_node(path: str) -> dict[str, Any]:
+    return {
+        "id": f"file:{path}",
+        "label": path.rsplit("/", 1)[-1] or path,
+        "type": "file",
+        "role": "file",
+        "subtitle": path,
+        "filePath": path,
+        "symbolName": "",
+        "startLine": 0,
+        "endLine": 0,
+    }
+
+
+def _graph_prefixed_record_node(row: dict[str, Any], prefix: str, role: str) -> dict[str, Any]:
+    key = str(row.get(f"{prefix}Key") or "")
+    record_type = str(row.get(f"{prefix}Type") or role)
+    file_path = str(row.get(f"{prefix}FilePath") or "")
+    symbol_name = str(row.get(f"{prefix}SymbolName") or "")
+    start_line = int(row.get(f"{prefix}StartLine") or 0)
+    end_line = int(row.get(f"{prefix}EndLine") or 0)
+    payload = _json_object(row.get(f"{prefix}PayloadJson"))
+    label = symbol_name or key
+    if record_type == "endpoint":
+        endpoint = " ".join(
+            str(item)
+            for item in [payload.get("method") or payload.get("methods"), payload.get("path") or payload.get("value")]
+            if item
+        )
+        if endpoint:
+            label = endpoint
+    subtitle_parts = [record_type]
+    if file_path:
+        subtitle_parts.append(file_path)
+    if start_line:
+        subtitle_parts.append(f"L{start_line}")
+    return {
+        "id": f"record:{key}",
+        "label": label,
+        "type": record_type,
+        "role": role,
+        "subtitle": " · ".join(subtitle_parts),
+        "filePath": file_path,
+        "symbolName": symbol_name,
+        "enclosingType": str(row.get(f"{prefix}EnclosingType") or ""),
+        "enclosingMethod": str(row.get(f"{prefix}EnclosingMethod") or ""),
+        "startLine": start_line,
+        "endLine": end_line,
+    }
+
+
+def _add_graph_edge(edges: dict[str, dict[str, str]], source: str, target: str, edge_type: str) -> None:
+    if not source or not target or source == target:
+        return
+    edge_id = f"{source}->{edge_type}->{target}"
+    edges[edge_id] = {
+        "id": edge_id,
+        "source": source,
+        "target": target,
+        "type": edge_type,
+    }
+
+
+def _graph_chain_detail(
+    chain_id: str,
+    chain_type: str,
+    row: dict[str, Any],
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, str]],
+) -> dict[str, Any]:
+    first_node = next((node for node in nodes if node.get("role") == chain_type), nodes[0] if nodes else {})
+    return {
+        "chain": {
+            "id": chain_id,
+            "type": chain_type,
+            "title": str(first_node.get("label") or row.get("filePath") or chain_id),
+            "subtitle": str(first_node.get("subtitle") or ""),
+            "nodeCount": len(nodes),
+            "relationCount": len(edges),
+            "startLine": int(row.get("startLine") or row.get("endpointStartLine") or row.get("methodStartLine") or 0),
+        },
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
+def _json_object(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str) or not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _neo4j_record(record: dict[str, Any]) -> dict[str, Any]:

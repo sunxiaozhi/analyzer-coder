@@ -13,6 +13,7 @@ export type ConsoleSection =
   | 'evidence'
   | 'knowledge'
   | 'analysis'
+  | 'graph'
   | 'api-map'
   | 'vectors'
   | 'search'
@@ -258,6 +259,96 @@ export interface IndexRecordFilters {
   source: '' | 'code' | 'kb' | 'knowledge_asset'
   kind: string
   query: string
+}
+
+export interface GraphSummary {
+  analysisRecords: number
+  javaFiles: number
+  relations: number
+}
+
+export interface GraphCount {
+  type: string
+  count: number
+}
+
+export interface GraphRecord {
+  key: string
+  type: string
+  filePath: string
+  package: string
+  symbolName: string
+  enclosingType: string
+  enclosingMethod: string
+  startLine: number
+  endLine: number
+}
+
+export interface GraphRelation {
+  sourceLabel: string
+  sourceId: string
+  sourceName: string
+  type: string
+  targetLabel: string
+  targetId: string
+  targetName: string
+}
+
+export interface GraphRecordFilters {
+  type: string
+  query: string
+}
+
+export type GraphChainType = '' | 'endpoint' | 'method' | 'file'
+
+export interface GraphChainFilters {
+  type: GraphChainType
+  query: string
+}
+
+export interface GraphChainSummary {
+  id: string
+  type: 'endpoint' | 'method' | 'file' | string
+  title: string
+  subtitle: string
+  nodeCount: number
+  relationCount: number
+  startLine: number
+}
+
+export interface GraphChainNode {
+  id: string
+  label: string
+  type: string
+  role: string
+  subtitle: string
+  filePath: string
+  symbolName: string
+  enclosingType?: string
+  enclosingMethod?: string
+  startLine: number
+  endLine: number
+}
+
+export interface GraphChainEdge {
+  id: string
+  source: string
+  target: string
+  type: string
+}
+
+export interface GraphChainDetail {
+  chain: GraphChainSummary
+  nodes: GraphChainNode[]
+  edges: GraphChainEdge[]
+  projectId: string
+}
+
+export interface GraphOverview {
+  summary: GraphSummary
+  recordTypes: GraphCount[]
+  relationTypes: GraphCount[]
+  projectId: string
 }
 
 export interface FrontendApiCall {

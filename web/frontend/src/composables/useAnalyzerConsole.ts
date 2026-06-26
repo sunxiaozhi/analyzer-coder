@@ -4,6 +4,13 @@ import type {
   ApiMappingResult,
   AuthUser,
   ConsoleSection,
+  GraphChainDetail,
+  GraphChainFilters,
+  GraphChainSummary,
+  GraphOverview,
+  GraphRecord,
+  GraphRecordFilters,
+  GraphRelation,
   IndexRecord,
   IndexRecordFilters,
   IndexStatus,
@@ -58,6 +65,30 @@ interface IndexRecordsResponse {
   offset: number
   store: string
 }
+
+interface GraphOverviewResponse extends GraphOverview {}
+
+interface GraphRecordsResponse {
+  records: GraphRecord[]
+  total: number
+  limit: number
+  offset: number
+  projectId: string
+}
+
+interface GraphRelationsResponse {
+  relations: GraphRelation[]
+  limit: number
+  projectId: string
+}
+
+interface GraphChainsResponse {
+  chains: GraphChainSummary[]
+  limit: number
+  projectId: string
+}
+
+interface GraphChainResponse extends GraphChainDetail {}
 
 interface QueryResponse {
   results: QueryResult[]
@@ -127,6 +158,7 @@ const consoleSections: readonly ConsoleSection[] = [
   'evidence',
   'knowledge',
   'analysis',
+  'graph',
   'api-map',
   'vectors',
   'search'
@@ -324,6 +356,23 @@ export function useAnalyzerConsole() {
   })
   const indexRecordPage = shallowRef(1)
   const indexRecordPageSize = shallowRef(20)
+  const graphOverview = shallowRef<GraphOverview | null>(null)
+  const graphRecords = ref<GraphRecord[]>([])
+  const graphRelations = ref<GraphRelation[]>([])
+  const graphRecordTotal = shallowRef(0)
+  const graphRecordFilters = reactive<GraphRecordFilters>({
+    type: '',
+    query: ''
+  })
+  const graphRecordPage = shallowRef(1)
+  const graphRecordPageSize = shallowRef(100)
+  const graphChains = ref<GraphChainSummary[]>([])
+  const selectedGraphChainId = shallowRef('')
+  const selectedGraphChain = shallowRef<GraphChainDetail | null>(null)
+  const graphChainFilters = reactive<GraphChainFilters>({
+    type: '',
+    query: ''
+  })
   const searchResults = ref<QueryResult[]>([])
   const searchEvidence = ref<QueryEvidence | null>(null)
   const ragFlow = shallowRef<RagFlow | null>(null)
@@ -1066,6 +1115,7 @@ export function useAnalyzerConsole() {
       outputType: resolveAnalysisOutputType(mode),
       updatedAt: new Date().toISOString()
     }
+    await loadGraphData()
   }
 
   async function loadAnalysisResult(mode: AnalyzerForm['mode'] = form.mode) {
@@ -1129,6 +1179,110 @@ export function useAnalyzerConsole() {
     const data = await getJson<IndexRecordsResponse>(`/api/index/records?${params}`)
     indexRecords.value = data.records
     indexRecordTotal.value = data.total
+  }
+
+  async function loadGraphOverview() {
+    if (!currentUser.value || !form.projectId) {
+      graphOverview.value = null
+      return
+    }
+    const params = new URLSearchParams({ projectId: form.projectId })
+    graphOverview.value = await getJson<GraphOverviewResponse>(`/api/graph/overview?${params}`)
+  }
+
+  async function loadGraphRecords() {
+    if (!currentUser.value || !form.projectId) {
+      graphRecords.value = []
+      graphRecordTotal.value = 0
+      return
+    }
+    const params = new URLSearchParams({
+      projectId: form.projectId,
+      limit: String(graphRecordPageSize.value),
+      offset: String((graphRecordPage.value - 1) * graphRecordPageSize.value)
+    })
+    if (graphRecordFilters.type) params.set('type', graphRecordFilters.type)
+    if (graphRecordFilters.query) params.set('query', graphRecordFilters.query)
+    const data = await getJson<GraphRecordsResponse>(`/api/graph/records?${params}`)
+    graphRecords.value = data.records
+    graphRecordTotal.value = data.total
+  }
+
+  async function loadGraphRelations() {
+    if (!currentUser.value || !form.projectId) {
+      graphRelations.value = []
+      selectedGraphChain.value = null
+      return
+    }
+    const params = new URLSearchParams({
+      projectId: form.projectId,
+      limit: '500'
+    })
+    const data = await getJson<GraphRelationsResponse>(`/api/graph/relations?${params}`)
+    graphRelations.value = data.relations
+  }
+
+  async function loadGraphChains() {
+    if (!currentUser.value || !form.projectId) {
+      graphChains.value = []
+      selectedGraphChainId.value = ''
+      selectedGraphChain.value = null
+      return
+    }
+    const params = new URLSearchParams({
+      projectId: form.projectId,
+      limit: '120'
+    })
+    if (graphChainFilters.type) params.set('type', graphChainFilters.type)
+    if (graphChainFilters.query) params.set('query', graphChainFilters.query)
+    try {
+      const data = await getJson<GraphChainsResponse>(`/api/graph/chains?${params}`)
+      graphChains.value = data.chains
+    } catch {
+      graphChains.value = []
+      selectedGraphChainId.value = ''
+      selectedGraphChain.value = null
+      return
+    }
+
+    const nextChainId = graphChains.value.some((chain) => chain.id === selectedGraphChainId.value)
+      ? selectedGraphChainId.value
+      : graphChains.value[0]?.id ?? ''
+    if (nextChainId) {
+      await loadGraphChain(nextChainId)
+    } else {
+      selectedGraphChainId.value = ''
+      selectedGraphChain.value = null
+    }
+  }
+
+  async function loadGraphChain(chainId: string = selectedGraphChainId.value) {
+    if (!currentUser.value || !form.projectId || !chainId) {
+      selectedGraphChainId.value = ''
+      selectedGraphChain.value = null
+      return
+    }
+    selectedGraphChainId.value = chainId
+    const params = new URLSearchParams({ projectId: form.projectId })
+    try {
+      selectedGraphChain.value = await getJson<GraphChainResponse>(
+        `/api/graph/chains/${encodeURIComponent(chainId)}?${params}`
+      )
+    } catch {
+      selectedGraphChainId.value = ''
+      selectedGraphChain.value = null
+    }
+  }
+
+  async function applyGraphChainFilters() {
+    selectedGraphChainId.value = ''
+    selectedGraphChain.value = null
+    await loadGraphChains()
+  }
+
+  async function loadGraphData() {
+    await loadGraphOverview()
+    await loadGraphChains()
   }
 
   async function queryStore() {
@@ -1201,6 +1355,10 @@ export function useAnalyzerConsole() {
       await loadIndexRecords()
       return
     }
+    if (section === 'graph') {
+      await loadGraphData()
+      return
+    }
     if (section === 'api-map') return
   }
 
@@ -1217,6 +1375,18 @@ export function useAnalyzerConsole() {
       indexRecords.value = []
       indexRecordTotal.value = 0
       indexRecordPage.value = 1
+      graphOverview.value = null
+      graphRecords.value = []
+      graphRelations.value = []
+      graphRecordTotal.value = 0
+      graphRecordPage.value = 1
+      graphRecordFilters.type = ''
+      graphRecordFilters.query = ''
+      graphChains.value = []
+      selectedGraphChainId.value = ''
+      selectedGraphChain.value = null
+      graphChainFilters.type = ''
+      graphChainFilters.query = ''
       searchResults.value = []
       searchEvidence.value = null
       ragFlow.value = null
@@ -1257,6 +1427,9 @@ export function useAnalyzerConsole() {
       loadAnalysisResult()
       loadIndexStatus()
       loadIndexRecords()
+      if (activeSection.value === 'graph') {
+        loadGraphData()
+      }
     }
   )
 
@@ -1319,6 +1492,17 @@ export function useAnalyzerConsole() {
     indexRecordFilters,
     indexRecordPage,
     indexRecordPageSize,
+    graphOverview,
+    graphRecords,
+    graphRelations,
+    graphRecordTotal,
+    graphRecordFilters,
+    graphRecordPage,
+    graphRecordPageSize,
+    graphChains,
+    selectedGraphChainId,
+    selectedGraphChain,
+    graphChainFilters,
     searchResults,
     searchEvidence,
     ragFlow,
@@ -1356,6 +1540,13 @@ export function useAnalyzerConsole() {
     indexProject,
     loadIndexStatus,
     loadIndexRecords,
+    loadGraphData,
+    loadGraphOverview,
+    loadGraphRecords,
+    loadGraphRelations,
+    loadGraphChains,
+    loadGraphChain,
+    applyGraphChainFilters,
     queryStore,
     buildApiMapping,
     refreshSectionData,

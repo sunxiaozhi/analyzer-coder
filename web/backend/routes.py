@@ -104,6 +104,31 @@ def analysis_records() -> Any:
     return jsonify(analyzer_service().analysis_records(request.args.to_dict(), current_user()))
 
 
+@api_bp.get("/graph/overview")
+def graph_overview() -> Any:
+    return jsonify(analyzer_service().graph_overview(request.args.to_dict(), current_user()))
+
+
+@api_bp.get("/graph/records")
+def graph_records() -> Any:
+    return jsonify(analyzer_service().graph_records(request.args.to_dict(), current_user()))
+
+
+@api_bp.get("/graph/relations")
+def graph_relations() -> Any:
+    return jsonify(analyzer_service().graph_relations(request.args.to_dict(), current_user()))
+
+
+@api_bp.get("/graph/chains")
+def graph_chains() -> Any:
+    return jsonify(analyzer_service().graph_chains(request.args.to_dict(), current_user()))
+
+
+@api_bp.get("/graph/chains/<path:chain_id>")
+def graph_chain(chain_id: str) -> Any:
+    return jsonify(analyzer_service().graph_chain(chain_id, request.args.to_dict(), current_user()))
+
+
 @api_bp.post("/index")
 def index_project() -> Any:
     return jsonify(analyzer_service().index_project(json_payload(request), current_user()))

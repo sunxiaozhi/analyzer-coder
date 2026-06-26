@@ -28,7 +28,7 @@ class BackendConfig:
     NEO4J_PASSWORD = os.getenv("ANALYZER_NEO4J_PASSWORD", "analyzer_coder")
 
     # 外部存储请求超时：统一控制 Qdrant 和 Neo4j HTTP 调用等待时间。
-    EXTERNAL_STORE_TIMEOUT = float(os.getenv("ANALYZER_EXTERNAL_STORE_TIMEOUT", "5"))
+    EXTERNAL_STORE_TIMEOUT = float(os.getenv("ANALYZER_EXTERNAL_STORE_TIMEOUT", "30"))
 
     # Flask 与默认管理员配置。
     SECRET_KEY = os.getenv("ANALYZER_SECRET_KEY", "local-dev-secret")

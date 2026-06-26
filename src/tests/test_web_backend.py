@@ -85,6 +85,173 @@ class InMemoryExternalStores:
         )
         return {"ok": True, "assetCount": len(assets), "linkCount": len(links)}
 
+    def graph_overview(self, *, project_id):
+        analysis_records = self.calls[-1]["analysis_records"] if self.calls else []
+        record_types = {}
+        for record in analysis_records:
+            record_type = record.get("type") or "unknown"
+            record_types[record_type] = record_types.get(record_type, 0) + 1
+        return {
+            "summary": {
+                "analysisRecords": len(analysis_records),
+                "javaFiles": sum(1 for record in analysis_records if record.get("type") == "file"),
+                "relations": len(analysis_records),
+            },
+            "recordTypes": [
+                {"type": key, "count": count}
+                for key, count in sorted(record_types.items())
+            ],
+            "relationTypes": [{"type": "HAS_RECORD", "count": len(analysis_records)}],
+        }
+
+    def graph_records(self, *, project_id, record_type="", query="", limit=100, offset=0):
+        analysis_records = self.calls[-1]["analysis_records"] if self.calls else []
+        records = [
+            record
+            for record in analysis_records
+            if (not record_type or record.get("type") == record_type)
+            and (
+                not query
+                or query.lower()
+                in "\n".join(
+                    [
+                        str(record.get("key") or ""),
+                        str(record.get("filePath") or ""),
+                        str(record.get("symbolName") or ""),
+                    ]
+                ).lower()
+            )
+        ]
+        return {
+            "records": records[offset : offset + limit],
+            "total": len(records),
+            "limit": limit,
+            "offset": offset,
+        }
+
+    def graph_relations(self, *, project_id, limit=500):
+        analysis_records = self.calls[-1]["analysis_records"] if self.calls else []
+        return {
+            "relations": [
+                {
+                    "sourceLabel": "AnalyzerProject",
+                    "sourceId": project_id,
+                    "sourceName": project_id,
+                    "type": "HAS_RECORD",
+                    "targetLabel": "AnalysisRecord",
+                    "targetId": record.get("key"),
+                    "targetName": record.get("symbolName") or record.get("filePath"),
+                }
+                for record in analysis_records[:limit]
+            ],
+            "limit": limit,
+        }
+
+    def graph_chains(self, *, project_id, chain_type="", query="", limit=100):
+        analysis_records = self.calls[-1]["analysis_records"] if self.calls else []
+        query_text = query.lower()
+        chains = []
+        for record in analysis_records:
+            record_type = record.get("type") or "unknown"
+            if chain_type and chain_type != record_type and not (chain_type == "file" and record_type == "file"):
+                continue
+            if record_type not in {"endpoint", "method", "file"}:
+                continue
+            title = record.get("symbolName") or record.get("filePath") or record.get("key")
+            if record_type == "endpoint":
+                payload = record.get("payload") or {}
+                title = " ".join(str(item) for item in [payload.get("method"), payload.get("path")] if item) or title
+            chain = {
+                "id": f"{record_type}:{record.get('key') if record_type != 'file' else record.get('filePath')}",
+                "type": record_type,
+                "title": title,
+                "subtitle": record.get("filePath") or "",
+                "nodeCount": 2,
+                "relationCount": 1,
+                "startLine": record.get("startLine") or 0,
+            }
+            if query_text and query_text not in "\n".join([chain["title"], chain["subtitle"]]).lower():
+                continue
+            chains.append(chain)
+        return {"chains": chains[:limit], "limit": limit, "filters": {"type": chain_type, "query": query}}
+
+    def graph_chain(self, *, project_id, chain_id):
+        analysis_records = self.calls[-1]["analysis_records"] if self.calls else []
+        kind, _, key = chain_id.partition(":")
+        if kind == "file":
+            matched = [record for record in analysis_records if record.get("filePath") == key]
+            nodes = [
+                {
+                    "id": f"file:{key}",
+                    "label": key.rsplit("/", 1)[-1],
+                    "type": "file",
+                    "role": "file",
+                    "subtitle": key,
+                    "filePath": key,
+                    "symbolName": "",
+                    "startLine": 0,
+                    "endLine": 0,
+                }
+            ]
+            edges = []
+            for record in matched[:20]:
+                node_id = f"record:{record.get('key')}"
+                nodes.append(
+                    {
+                        "id": node_id,
+                        "label": record.get("symbolName") or record.get("key"),
+                        "type": record.get("type"),
+                        "role": "record",
+                        "subtitle": record.get("filePath") or "",
+                        "filePath": record.get("filePath") or "",
+                        "symbolName": record.get("symbolName") or "",
+                        "startLine": record.get("startLine") or 0,
+                        "endLine": record.get("endLine") or 0,
+                    }
+                )
+                edges.append({"id": f"file:{key}->CONTAINS->{node_id}", "source": f"file:{key}", "target": node_id, "type": "CONTAINS"})
+        else:
+            record = next((item for item in analysis_records if item.get("key") == key), {})
+            file_path = record.get("filePath") or ""
+            nodes = [
+                {
+                    "id": f"file:{file_path}",
+                    "label": file_path.rsplit("/", 1)[-1],
+                    "type": "file",
+                    "role": "file",
+                    "subtitle": file_path,
+                    "filePath": file_path,
+                    "symbolName": "",
+                    "startLine": 0,
+                    "endLine": 0,
+                },
+                {
+                    "id": f"record:{key}",
+                    "label": record.get("symbolName") or key,
+                    "type": record.get("type") or kind,
+                    "role": kind,
+                    "subtitle": file_path,
+                    "filePath": file_path,
+                    "symbolName": record.get("symbolName") or "",
+                    "startLine": record.get("startLine") or 0,
+                    "endLine": record.get("endLine") or 0,
+                },
+            ]
+            edges = [{"id": f"file:{file_path}->CONTAINS->record:{key}", "source": f"file:{file_path}", "target": f"record:{key}", "type": "CONTAINS"}]
+        return {
+            "chain": {
+                "id": chain_id,
+                "type": kind,
+                "title": nodes[-1]["label"],
+                "subtitle": nodes[-1]["subtitle"],
+                "nodeCount": len(nodes),
+                "relationCount": len(edges),
+                "startLine": nodes[-1]["startLine"],
+            },
+            "nodes": nodes,
+            "edges": edges,
+        }
+
 
 class InMemoryMySqlStore:
     def __init__(self) -> None:
@@ -381,6 +548,48 @@ def test_web_backend_syncs_analysis_to_external_stores_when_requested(tmp_path) 
     assert payload["externalSync"]["neo4j"]["recordCount"] == payload["analysisRecordCount"]
     assert fake_stores.calls[0]["analysis_records"]
     assert fake_stores.calls[0]["vector_records"]
+
+
+def test_web_backend_exposes_neo4j_graph_data(tmp_path) -> None:
+    workspace = _java_workspace(tmp_path)
+
+    class TestConfig(JsonTestConfig):
+        WORKSPACE_ROOT = workspace
+        TESTING = True
+
+    app = create_app(TestConfig)
+    project_id = _seed_project(app, workspace)
+    client = app.test_client()
+    _login(client)
+
+    analyze_response = client.post(
+        "/api/analyze",
+        json={"projectId": project_id, "path": "src", "source": "code", "mode": "report"},
+    )
+    assert analyze_response.status_code == 200
+
+    overview_response = client.get("/api/graph/overview", query_string={"projectId": project_id})
+    records_response = client.get(
+        "/api/graph/records",
+        query_string={"projectId": project_id, "type": "endpoint", "limit": 20},
+    )
+    relations_response = client.get("/api/graph/relations", query_string={"projectId": project_id, "limit": 20})
+    chains_response = client.get("/api/graph/chains", query_string={"projectId": project_id, "type": "endpoint"})
+
+    assert overview_response.status_code == 200
+    assert overview_response.get_json()["summary"]["analysisRecords"] > 0
+    assert records_response.status_code == 200
+    assert records_response.get_json()["records"][0]["type"] == "endpoint"
+    assert relations_response.status_code == 200
+    assert relations_response.get_json()["relations"]
+    assert chains_response.status_code == 200
+    chain = chains_response.get_json()["chains"][0]
+    assert chain["type"] == "endpoint"
+
+    detail_response = client.get(f"/api/graph/chains/{chain['id']}", query_string={"projectId": project_id})
+    assert detail_response.status_code == 200
+    assert detail_response.get_json()["nodes"]
+    assert detail_response.get_json()["edges"]
 
 
 def test_web_backend_reads_latest_analysis_result(tmp_path) -> None:

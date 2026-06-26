@@ -18,6 +18,7 @@ from web.backend.mysql_state import MySqlStateStore
 from web.backend.paths import workspace_path
 from web.backend.service_mixins.analysis import AnalysisServiceMixin
 from web.backend.service_mixins.auth import AuthServiceMixin
+from web.backend.service_mixins.graph import GraphServiceMixin
 from web.backend.service_mixins.indexing import IndexServiceMixin
 from web.backend.service_mixins.knowledge import KnowledgeServiceMixin
 from web.backend.service_mixins.projects import ProjectServiceMixin
@@ -44,6 +45,7 @@ class AnalyzerService(
     AuthServiceMixin,
     ProjectServiceMixin,
     AnalysisServiceMixin,
+    GraphServiceMixin,
     IndexServiceMixin,
     KnowledgeServiceMixin,
     SharedServiceMixin,

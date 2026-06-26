@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Collection, Connection, Cpu, FolderOpened, Memo, Search, Setting, Tickets, UserFilled } from '@element-plus/icons-vue'
+import { Collection, Connection, Cpu, FolderOpened, Memo, Search, Setting, Share, Tickets, UserFilled } from '@element-plus/icons-vue'
 import { ElIcon, ElMenu, ElMenuItem, ElOption, ElScrollbar, ElSelect, ElSubMenu } from 'element-plus'
 import type { AuthUser, ConsoleSection, ProjectRecord } from '../../types'
 import BrandLogo from './BrandLogo.vue'
@@ -17,7 +17,7 @@ const emit = defineEmits<{
   refreshSection: [section: ConsoleSection]
 }>()
 
-const selectableSections: readonly ConsoleSection[] = ['search', 'assets', 'analysis', 'api-map', 'vectors', 'projects', 'accounts', 'knowledge']
+const selectableSections: readonly ConsoleSection[] = ['search', 'assets', 'analysis', 'graph', 'api-map', 'vectors', 'projects', 'accounts', 'knowledge']
 
 const visibleActiveSection = computed(() => (activeSection.value === 'evidence' ? 'analysis' : activeSection.value))
 
@@ -67,6 +67,10 @@ function selectSection(value: string) {
         <ElMenuItem index="analysis">
           <ElIcon><Cpu /></ElIcon>
           <span>代码依据</span>
+        </ElMenuItem>
+        <ElMenuItem index="graph">
+          <ElIcon><Share /></ElIcon>
+          <span>图谱关系</span>
         </ElMenuItem>
         <ElMenuItem index="api-map">
           <ElIcon><Connection /></ElIcon>

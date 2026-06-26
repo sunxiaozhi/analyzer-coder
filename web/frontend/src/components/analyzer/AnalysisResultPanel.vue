@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import MarkdownIt from 'markdown-it'
-import { computed, shallowRef } from 'vue'
-import { Cpu, Document, Files, Operation } from '@element-plus/icons-vue'
+import { computed } from 'vue'
+import { Cpu, Document } from '@element-plus/icons-vue'
 import {
   ElButton,
   ElCard,
@@ -11,10 +11,8 @@ import {
   ElTag
 } from 'element-plus'
 import type { AnalyzerForm, OutputType } from '../../types'
-import MermaidDiagram from './MermaidDiagram.vue'
 
-const form = defineModel<AnalyzerForm>('form', { required: true })
-const mermaidView = shallowRef<'preview' | 'source'>('preview')
+defineModel<AnalyzerForm>('form', { required: true })
 
 const props = defineProps<{
   busy: boolean
@@ -29,11 +27,6 @@ defineEmits<{
   analyze: []
 }>()
 
-const modeOptions = [
-  { label: '报告', value: 'report', badge: 'MD', icon: Document },
-  { label: 'Mermaid 图', value: 'graph', badge: 'MMD', icon: Files }
-] as const
-
 const markdown = new MarkdownIt({
   breaks: true,
   html: false,
@@ -42,20 +35,9 @@ const markdown = new MarkdownIt({
 
 const renderedMarkdown = computed(() => markdown.render(props.output || ''))
 
-const modeLabel = computed(() => {
-  const option = modeOptions.find((item) => item.value === form.value.mode)
-  return option?.label ?? '报告'
-})
-
-const modeBadge = computed(() => {
-  const option = modeOptions.find((item) => item.value === form.value.mode)
-  return option?.badge ?? 'MD'
-})
-
 const outputBadge = computed(() => {
   if (!props.output) return '等待运行'
   if (props.outputType === 'markdown') return '报告结果'
-  if (props.outputType === 'mermaid') return mermaidView.value === 'preview' ? '图谱预览' : '图谱源码'
   return '文本结果'
 })
 
@@ -72,7 +54,7 @@ const updatedAtLabel = computed(() => {
   }).format(date)
 })
 
-const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boolean(props.output))
+const modeLabel = '报告'
 </script>
 
 <template>
@@ -82,65 +64,34 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
         <ElIcon><Cpu /></ElIcon>
         <div>
           <h2>代码分析</h2>
-          <span>当前项目代码 · {{ modeLabel }}</span>
+          <span>当前项目代码 · 报告</span>
         </div>
       </div>
 
       <div class="analysis-command-actions console-command-actions">
-        <ElTag type="info" effect="plain">{{ modeBadge }}</ElTag>
+        <div class="analysis-run-meta" aria-label="分析状态">
+          <span>
+            <strong>范围</strong>
+            当前项目代码
+          </span>
+          <span>
+            <strong>模式</strong>
+            {{ modeLabel }}
+          </span>
+          <span>
+            <strong>最新结果</strong>
+            {{ updatedAtLabel || '暂无' }}
+          </span>
+        </div>
+        <ElTag type="info" effect="plain">MD</ElTag>
         <ElTag :type="output ? 'success' : 'info'" effect="plain">{{ outputBadge }}</ElTag>
+        <ElButton class="analysis-run-button" type="primary" :loading="busy" :icon="Cpu" @click="$emit('analyze')">
+          运行分析
+        </ElButton>
       </div>
     </section>
 
     <section class="analysis-workbench console-workbench console-workbench-detail">
-      <aside class="analysis-config-stack">
-        <ElCard class="panel analysis-config-panel console-card" shadow="never">
-          <template #header>
-            <div class="panel-title">
-              <ElIcon><Operation /></ElIcon>
-              <span>输出模式</span>
-            </div>
-          </template>
-
-          <div class="analysis-mode-grid">
-            <button
-              v-for="option in modeOptions"
-              :key="option.value"
-              class="analysis-mode-option"
-              :class="{ active: form.mode === option.value }"
-              type="button"
-              @click="form.mode = option.value"
-            >
-              <ElIcon>
-                <component :is="option.icon" />
-              </ElIcon>
-              <span>{{ option.label }}</span>
-              <small>{{ option.badge }}</small>
-            </button>
-          </div>
-
-          <div class="analysis-run-box">
-            <dl>
-              <div>
-                <dt>范围</dt>
-                <dd>当前项目代码</dd>
-              </div>
-              <div>
-                <dt>模式</dt>
-                <dd>{{ modeLabel }}</dd>
-              </div>
-              <div>
-                <dt>最新结果</dt>
-                <dd>{{ updatedAtLabel || '暂无' }}</dd>
-              </div>
-            </dl>
-            <ElButton class="analysis-run-button" type="primary" :loading="busy" :icon="Cpu" @click="$emit('analyze')">
-              运行分析
-            </ElButton>
-          </div>
-        </ElCard>
-      </aside>
-
       <ElCard class="panel analysis-output-panel console-card" shadow="never">
         <template #header>
           <div class="panel-title split-title">
@@ -149,22 +100,6 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
               <span>{{ outputTitle }}</span>
             </span>
             <span class="analysis-output-meta">
-              <span v-if="canPreviewMermaid" class="analysis-view-toggle">
-                <button
-                  type="button"
-                  :class="{ active: mermaidView === 'preview' }"
-                  @click="mermaidView = 'preview'"
-                >
-                  预览
-                </button>
-                <button
-                  type="button"
-                  :class="{ active: mermaidView === 'source' }"
-                  @click="mermaidView = 'source'"
-                >
-                  源码
-                </button>
-              </span>
               <ElTag type="info" effect="plain">{{ outputType }}</ElTag>
               <ElTag v-if="savedPath" type="success" effect="plain">已保存</ElTag>
               <ElTag v-if="updatedAtLabel" type="info" effect="plain">{{ updatedAtLabel }}</ElTag>
@@ -178,12 +113,8 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
           <article v-html="renderedMarkdown"></article>
         </ElScrollbar>
 
-        <ElScrollbar v-else-if="outputType === 'mermaid' && mermaidView === 'preview'" class="analysis-mermaid-preview">
-          <MermaidDiagram :code="output" />
-        </ElScrollbar>
-
         <ElScrollbar v-else class="analysis-output-scroll">
-          <pre class="analysis-output" :class="{ 'mermaid-output': outputType === 'mermaid' }">{{ output }}</pre>
+          <pre class="analysis-output">{{ output }}</pre>
         </ElScrollbar>
 
         <div v-if="savedPath" class="analysis-saved-path">
@@ -254,126 +185,39 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
   min-width: 112px;
 }
 
+.analysis-run-meta {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 7px 10px;
+}
+
+.analysis-run-meta span {
+  color: var(--text);
+  display: inline-flex;
+  font-size: 0.72rem;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.analysis-run-meta strong {
+  color: var(--text-faint);
+  font-weight: 760;
+}
+
 .analysis-workbench {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(168px, 190px) minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   padding: 14px 18px 18px;
 }
 
-.analysis-config-stack {
-  display: grid;
-  gap: 16px;
-  grid-template-rows: minmax(0, 1fr);
-  min-height: 0;
-}
-
-.analysis-config-panel.el-card {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
-}
-
-.analysis-config-panel :deep(.el-card__body) {
-  display: grid;
-  gap: 10px;
-  grid-template-rows: auto auto;
-  min-height: 0;
-  padding: 9px;
-}
-
-.analysis-mode-grid {
-  display: grid;
-  gap: 8px;
-}
-
-.analysis-mode-option {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  cursor: pointer;
-  display: grid;
-  gap: 6px;
-  grid-template-columns: 22px minmax(0, 1fr);
-  min-height: 34px;
-  padding: 6px 7px;
-  text-align: left;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-  width: 100%;
-}
-
-.analysis-mode-option:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.analysis-mode-option.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset, var(--shadow-sm);
-}
-
-.analysis-mode-option > .el-icon {
-  align-items: center;
-  background: var(--surface-muted);
-  border-radius: 8px;
-  color: var(--accent);
-  display: inline-flex;
-  height: 22px;
-  justify-content: center;
-  width: 22px;
-}
-
-.analysis-mode-option span {
-  font-size: 0.76rem;
-  font-weight: 760;
-  min-width: 0;
-}
-
-.analysis-mode-option small {
-  display: none;
-}
-
-.analysis-run-box {
-  align-self: end;
-  background: var(--surface-muted);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  display: grid;
-  gap: 8px;
-  padding: 8px;
-}
-
-.analysis-run-box dl {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-}
-
-.analysis-run-box dl > div {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-}
-
-.analysis-run-box dt {
-  color: var(--text-faint);
-  font-size: 0.68rem;
-}
-
-.analysis-run-box dd {
-  color: var(--text);
-  font-size: 0.72rem;
-  font-weight: 760;
-  margin: 0;
-}
-
 .analysis-run-button {
-  width: 100%;
+  flex: 0 0 auto;
 }
 
 .analysis-output-panel.el-card {
@@ -547,28 +391,14 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
 }
 
 @media (max-width: 1100px) {
-  .analysis-workbench {
-    grid-template-columns: 1fr;
+  .analysis-run-meta {
+    flex: 1 1 100%;
+    order: 1;
   }
 
-  .analysis-config-stack {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
-  }
-
-  .analysis-mode-grid {
-    grid-template-columns: repeat(3, minmax(92px, 1fr));
-  }
-
-  .analysis-mode-option {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    min-height: 88px;
-    text-align: center;
-  }
-
-  .analysis-run-box {
-    align-self: auto;
+  .analysis-command-actions .el-tag,
+  .analysis-command-actions .analysis-run-button {
+    order: 2;
   }
 }
 
@@ -584,6 +414,18 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
     display: grid;
   }
 
+  .analysis-run-meta {
+    align-items: stretch;
+    display: grid;
+    gap: 7px;
+    order: 0;
+  }
+
+  .analysis-run-meta span {
+    justify-content: space-between;
+    white-space: normal;
+  }
+
   .analysis-command-actions .el-button {
     width: 100%;
   }
@@ -591,18 +433,6 @@ const canPreviewMermaid = computed(() => props.outputType === 'mermaid' && Boole
   .analysis-workbench {
     grid-template-columns: 1fr;
     padding: 14px 16px;
-  }
-
-  .analysis-config-stack {
-    grid-template-columns: 1fr;
-  }
-
-  .analysis-mode-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .analysis-mode-option {
-    min-height: 82px;
   }
 
   .analysis-markdown,
