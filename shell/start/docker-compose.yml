@@ -46,7 +46,7 @@ services:
 
 
   qdrant:
-    image: qdrant/qdrant:v1.9.7
+    image: qdrant/qdrant:latest
     container_name: analyzer_coder_qdrant
     hostname: analyzer-coder-qdrant
     restart: unless-stopped
@@ -79,7 +79,7 @@ services:
 
 
   neo4j:
-    image: neo4j:5.20.0-community
+    image: neo4j:latest
     container_name: analyzer_coder_neo4j
     hostname: analyzer-coder-neo4j
     restart: unless-stopped
