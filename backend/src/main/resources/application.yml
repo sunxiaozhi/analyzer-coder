@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: codebase-knowledge-backend
+  datasource:
+    url: ${APP_DATASOURCE_URL:jdbc:postgresql://localhost:5432/codebase_kb}
+    username: ${APP_DATASOURCE_USERNAME:codebase_kb}
+    password: ${APP_DATASOURCE_PASSWORD:codebase_kb}
+  flyway:
+    enabled: ${APP_FLYWAY_ENABLED:false}
+
+server:
+  port: ${APP_SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  indexing:
+    poll-interval-ms: 5000
+    max-file-bytes: 524288
