@@ -1,45 +1,10 @@
 package com.analyzercoder.interfaces.rest;
-
-import java.time.Instant;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-@RestControllerAdvice
-public class ApiExceptionHandler {
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException exception) {
-        return ResponseEntity.badRequest()
-            .body(ApiErrorResponse.of("BAD_REQUEST", exception.getMessage()));
-    }
-
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException exception) {
-        String message = exception.getBindingResult().getFieldErrors().stream()
-            .findFirst()
-            .map(error -> error.getField() + " " + error.getDefaultMessage())
-            .orElse("Validation failed");
-        return ResponseEntity.badRequest()
-            .body(ApiErrorResponse.of("VALIDATION_FAILED", message));
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception exception) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(ApiErrorResponse.of("INTERNAL_ERROR", exception.getMessage()));
-    }
-
-    public record ApiErrorResponse(
-        String code,
-        String message,
-        Instant timestamp
-    ) {
-
-        public static ApiErrorResponse of(String code, String message) {
-            return new ApiErrorResponse(code, message, Instant.now());
-        }
-    }
+import com.analyzercoder.security.ApiSecurityException;import java.time.Instant;import org.slf4j.Logger;import org.slf4j.LoggerFactory;import org.springframework.dao.DataIntegrityViolationException;import org.springframework.http.HttpStatus;import org.springframework.http.ResponseEntity;import org.springframework.web.bind.MethodArgumentNotValidException;import org.springframework.web.bind.annotation.ExceptionHandler;import org.springframework.web.bind.annotation.RestControllerAdvice;
+@RestControllerAdvice public class ApiExceptionHandler{private static final Logger LOG=LoggerFactory.getLogger(ApiExceptionHandler.class);
+@ExceptionHandler(ApiSecurityException.class)public ResponseEntity<ApiErrorResponse>security(ApiSecurityException e){return ResponseEntity.status(e.status()).body(ApiErrorResponse.of(e.code(),e.getMessage()));}
+@ExceptionHandler(IllegalArgumentException.class)public ResponseEntity<ApiErrorResponse>argument(IllegalArgumentException e){return ResponseEntity.badRequest().body(ApiErrorResponse.of("BAD_REQUEST",e.getMessage()));}
+@ExceptionHandler(MethodArgumentNotValidException.class)public ResponseEntity<ApiErrorResponse>validation(MethodArgumentNotValidException e){String m=e.getBindingResult().getFieldErrors().stream().findFirst().map(x->x.getField()+" "+x.getDefaultMessage()).orElse("Validation failed");return ResponseEntity.badRequest().body(ApiErrorResponse.of("VALIDATION_FAILED",m));}
+@ExceptionHandler({IllegalStateException.class,DataIntegrityViolationException.class})public ResponseEntity<ApiErrorResponse>conflict(Exception e){LOG.warn("Request conflict",e);String m=e instanceof DataIntegrityViolationException?"数据约束校验失败":e.getMessage();return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiErrorResponse.of("CONFLICT",m));}
+@ExceptionHandler(Exception.class)public ResponseEntity<ApiErrorResponse>unexpected(Exception e){LOG.error("Unexpected request failure",e);return ResponseEntity.status(500).body(ApiErrorResponse.of("INTERNAL_ERROR","服务器内部错误"));}
+public record ApiErrorResponse(String code,String message,Instant timestamp){static ApiErrorResponse of(String c,String m){return new ApiErrorResponse(c,m,Instant.now());}}
 }

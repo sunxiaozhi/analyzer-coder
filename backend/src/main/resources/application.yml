@@ -6,7 +6,7 @@ spring:
     username: ${APP_DATASOURCE_USERNAME:codebase_kb}
     password: ${APP_DATASOURCE_PASSWORD:codebase_kb}
   flyway:
-    enabled: ${APP_FLYWAY_ENABLED:false}
+    enabled: ${APP_FLYWAY_ENABLED:true}
 
 server:
   port: ${APP_SERVER_PORT:8080}
@@ -18,6 +18,17 @@ management:
         include: health,info,metrics
 
 app:
+  security:
+    initial-admin-username: ${APP_INITIAL_ADMIN_USERNAME:}
+    initial-admin-password: ${APP_INITIAL_ADMIN_PASSWORD:}
+    session-idle-minutes: ${APP_SESSION_IDLE_MINUTES:30}
+    session-max-hours: ${APP_SESSION_MAX_HOURS:12}
+    lock-minutes: ${APP_LOGIN_LOCK_MINUTES:15}
+  repository:
+    allowed-roots: ${APP_REPOSITORY_ALLOWED_ROOTS:.}
+    snapshot-root: ${APP_REPOSITORY_SNAPSHOT_ROOT:${java.io.tmpdir}/analyzer-coder/snapshots}
+    snapshot-max-files: ${APP_REPOSITORY_SNAPSHOT_MAX_FILES:20000}
+    snapshot-max-total-bytes: ${APP_REPOSITORY_SNAPSHOT_MAX_TOTAL_BYTES:2147483648}
   indexing:
     poll-interval-ms: 5000
     max-file-bytes: 524288

@@ -7,67 +7,94 @@ import com.analyzercoder.domain.indexing.IndexJobId;
 import com.analyzercoder.domain.indexing.IndexJobStatus;
 import com.analyzercoder.domain.indexing.IndexJobType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
+import com.analyzercoder.security.AccessControlService;
+import com.analyzercoder.security.RepositoryPermission;
+import com.analyzercoder.security.SecurityContext;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class IndexController {
+    private final IndexJobUseCase useCase;
+    private final AccessControlService accessControl;
 
-    private final IndexJobUseCase indexJobUseCase;
-
-    public IndexController(IndexJobUseCase indexJobUseCase) {
-        this.indexJobUseCase = indexJobUseCase;
+    public IndexController(IndexJobUseCase useCase, AccessControlService accessControl) {
+        this.useCase = useCase;
+        this.accessControl = accessControl;
     }
 
     @PostMapping("/api/repositories/{repositoryId}/index")
-    public IndexJobResponse start(@PathVariable UUID repositoryId, @RequestBody(required = false) StartIndexRequest request) {
-        IndexJobType type = request == null || request.type() == null ? IndexJobType.FULL : request.type();
-        IndexJob indexJob = indexJobUseCase.start(new StartIndexCommand(CodeRepositoryId.of(repositoryId), type));
-        return IndexJobResponse.from(indexJob);
+    public IndexJobResponse start(
+        @PathVariable UUID repositoryId,
+        @RequestBody(required = false) StartIndexRequest body,
+        HttpServletRequest request
+    ) {
+        CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
+        accessControl.require(SecurityContext.account(request), id, RepositoryPermission.MAINTAIN);
+        IndexJobType type = body == null || body.type() == null ? IndexJobType.FULL : body.type();
+        return IndexJobResponse.from(useCase.start(new StartIndexCommand(id, type)));
     }
 
     @GetMapping("/api/repositories/{repositoryId}/index/status")
-    public IndexJobResponse getLatestStatus(@PathVariable UUID repositoryId) {
-        return IndexJobResponse.from(indexJobUseCase.getLatestStatus(CodeRepositoryId.of(repositoryId)));
+    public IndexJobResponse latest(@PathVariable UUID repositoryId, HttpServletRequest request) {
+        CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
+        accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
+        return IndexJobResponse.from(useCase.getLatestStatus(id));
     }
 
-    @GetMapping("/api/index-jobs/{indexJobId}")
-    public IndexJobResponse get(@PathVariable UUID indexJobId) {
-        return IndexJobResponse.from(indexJobUseCase.get(IndexJobId.of(indexJobId)));
+    @GetMapping("/api/index-jobs/{jobId}")
+    public IndexJobResponse get(@PathVariable UUID jobId, HttpServletRequest request) {
+        IndexJob job = useCase.get(IndexJobId.of(jobId));
+        accessControl.require(SecurityContext.account(request), job.repositoryId(), RepositoryPermission.READ);
+        return IndexJobResponse.from(job);
     }
 
-    public record StartIndexRequest(IndexJobType type) {
+    @GetMapping("/api/index-jobs")
+    public List<IndexJobResponse> list(HttpServletRequest request) {
+        Set<UUID> visible = accessControl.visibleRepositoryIds(SecurityContext.account(request)).stream().collect(Collectors.toSet());
+        return useCase.list(null).stream().filter(job -> visible.contains(job.repositoryId().value()))
+            .map(IndexJobResponse::from).toList();
     }
 
+    @GetMapping("/api/repositories/{repositoryId}/index-jobs")
+    public List<IndexJobResponse> listForRepository(@PathVariable UUID repositoryId, HttpServletRequest request) {
+        CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
+        accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
+        return useCase.list(id).stream().map(IndexJobResponse::from).toList();
+    }
+
+    @PostMapping("/api/index-jobs/{jobId}/cancel")
+    public IndexJobResponse cancel(@PathVariable UUID jobId, HttpServletRequest request) {
+        IndexJob job = useCase.get(IndexJobId.of(jobId));
+        accessControl.require(SecurityContext.account(request), job.repositoryId(), RepositoryPermission.MAINTAIN);
+        return IndexJobResponse.from(useCase.cancel(job.id()));
+    }
+
+    @PostMapping("/api/index-jobs/{jobId}/retries")
+    public IndexJobResponse retry(@PathVariable UUID jobId, HttpServletRequest request) {
+        IndexJob job = useCase.get(IndexJobId.of(jobId));
+        accessControl.require(SecurityContext.account(request), job.repositoryId(), RepositoryPermission.MAINTAIN);
+        return IndexJobResponse.from(useCase.retry(job.id()));
+    }
+
+    public record StartIndexRequest(IndexJobType type) {}
     public record IndexJobResponse(
-        UUID id,
-        UUID repositoryId,
-        IndexJobType type,
-        IndexJobStatus status,
-        String currentStep,
-        String errorMessage,
-        Instant startedAt,
-        Instant finishedAt,
-        Instant createdAt
+        UUID id, UUID repositoryId, IndexJobType type, IndexJobStatus status, String currentStep,
+        String errorMessage, Instant startedAt, Instant finishedAt, Instant createdAt
     ) {
-
-        public static IndexJobResponse from(IndexJob indexJob) {
+        public static IndexJobResponse from(IndexJob job) {
             return new IndexJobResponse(
-                indexJob.id().value(),
-                indexJob.repositoryId().value(),
-                indexJob.type(),
-                indexJob.status(),
-                indexJob.currentStep(),
-                indexJob.errorMessage(),
-                indexJob.startedAt(),
-                indexJob.finishedAt(),
-                indexJob.createdAt()
+                job.id().value(), job.repositoryId().value(), job.type(), job.status(), job.currentStep(),
+                job.errorMessage(), job.startedAt(), job.finishedAt(), job.createdAt()
             );
         }
     }

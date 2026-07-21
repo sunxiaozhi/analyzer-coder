@@ -12,6 +12,7 @@ public interface RegisterRepositoryUseCase {
 
     List<CodeRepository> list();
 
+    RepositoryScanResult rescan(CodeRepositoryId repositoryId);
+
     void delete(CodeRepositoryId repositoryId);
 }
-

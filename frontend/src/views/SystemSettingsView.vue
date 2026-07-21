@@ -1,27 +1,7 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
-const tab = ref('路径与安全');
-const tabs = ['路径与安全', '模型服务', '索引参数', '排除规则', '运行日志'];
-const form = reactive({ roots: 'C:\\workspace; D:\\repositories', links: '允许，但不得越过根目录', external: true, excludes: '.env*, *.pem, *.key, credentials.*, secrets/**' });
+import { onMounted, reactive, shallowRef } from 'vue';import { ElMessage,ElMessageBox } from 'element-plus';import { intelligenceApi,type Backup } from '@/api/intelligence';
+const tab=shallowRef('基础设置'),tabs=['基础设置','模型与检索','排除规则','备份恢复'];const form=reactive<Record<string,string>>({});const backups=shallowRef<Backup[]>([]),busy=shallowRef(false);
+async function load(){Object.assign(form,await intelligenceApi.settings());backups.value=await intelligenceApi.backups();}async function save(){busy.value=true;try{Object.assign(form,await intelligenceApi.saveSettings({...form}));ElMessage.success('配置已持久化');}catch(e){ElMessage.error(e instanceof Error?e.message:'保存失败');}finally{busy.value=false;}}
+async function backup(){busy.value=true;try{await intelligenceApi.backup();await load();ElMessage.success('一致性清单备份已生成');}finally{busy.value=false;}}async function restore(id:string){await ElMessageBox.confirm('恢复会使所有现有登录会话失效，是否继续？','确认恢复',{type:'warning'});await intelligenceApi.restore(id);ElMessage.success('备份校验通过，恢复点已应用，请重新登录');location.href='/login';}onMounted(()=>void load().catch(e=>ElMessage.error(e instanceof Error?e.message:'加载设置失败')));
 </script>
-
-<template>
-  <section class="settings-design surface">
-    <aside class="settings-nav"><button v-for="item in tabs" :key="item" :class="{active:tab===item}" @click="tab=item">{{item}}</button></aside>
-    <main class="settings-content">
-      <template v-if="tab==='路径与安全'">
-        <div class="settings-heading"><h2>路径与数据安全</h2><p>限制服务可访问的代码目录，并控制代码是否允许发送到外部模型。</p></div>
-        <el-form label-position="top">
-          <el-form-item label="允许导入的根目录"><el-input v-model="form.roots" /><small>仓库规范化路径必须位于其中一个目录下。</small></el-form-item>
-          <el-form-item label="符号链接策略"><el-select v-model="form.links" style="width:100%"><el-option label="允许，但不得越过根目录" value="允许，但不得越过根目录" /><el-option label="完全禁止" value="完全禁止" /></el-select></el-form-item>
-          <el-form-item label="允许发送代码到外部模型"><div class="switch-line"><el-switch v-model="form.external" /><span>已启用，仅发送检索命中的片段</span></div></el-form-item>
-          <el-alert title="外部调用记录 provider、模型、发送字符数和时间，不记录明文代码。" type="info" :closable="false" />
-          <el-form-item label="敏感文件默认排除"><el-input v-model="form.excludes" /><small>规则变更后，相关仓库需要重新索引。</small></el-form-item>
-          <el-button round @click="ElMessage.success('路径权限检查通过')">测试路径权限</el-button>
-        </el-form>
-      </template>
-      <div v-else class="settings-placeholder"><b>{{tab}}</b><p>此处使用本地 mock 配置，保存后仅在当前浏览器会话生效。</p></div>
-    </main>
-  </section>
-</template>
+<template><section class="settings-design surface"><aside class="settings-nav"><button v-for="item in tabs" :key="item" :class="{active:tab===item}" @click="tab=item">{{item}}</button></aside><main class="settings-content"><div class="settings-heading"><h2>{{tab}}</h2><p>配置保存在 PostgreSQL 中，修改模型或过滤规则后应重建相应索引。</p></div><el-form v-if="tab==='基础设置'" label-position="top"><el-form-item label="最大检索结果数"><el-input v-model="form.maxSearchResults"/></el-form-item><el-form-item label="备份保留天数"><el-input v-model="form.backupRetentionDays"/></el-form-item><el-button type="primary" :loading="busy" @click="save">保存设置</el-button></el-form><el-form v-else-if="tab==='模型与检索'" label-position="top"><el-form-item label="Embedding 模型"><el-input v-model="form.embeddingModel"/></el-form-item><el-form-item label="问答 Provider"><el-input v-model="form.llmProvider"/></el-form-item><el-form-item label="允许向外部模型发送命中片段"><el-switch v-model="form.externalModelEnabled" active-value="true" inactive-value="false"/></el-form-item><el-alert title="默认使用 local-hash-64 与 deterministic-local，不需要外部密钥；配置远程 Provider 前请先完成网络与密钥策略。" type="info" :closable="false"/><el-button type="primary" :loading="busy" style="margin-top:16px" @click="save">保存设置</el-button></el-form><el-form v-else-if="tab==='排除规则'" label-position="top"><el-form-item label="敏感文件排除"><el-input v-model="form.excludedPatterns" type="textarea" :rows="5"/></el-form-item><el-button type="primary" :loading="busy" @click="save">保存规则</el-button></el-form><div v-else><div class="toolbar"><el-button type="primary" :loading="busy" @click="backup">立即创建备份</el-button></div><el-table :data="backups"><el-table-column prop="status" label="状态" width="100"/><el-table-column label="校验和"><template #default="{row}"><span class="mono">{{row.checksum.slice(0,16)}}…</span></template></el-table-column><el-table-column label="创建时间" width="190"><template #default="{row}">{{new Date(row.createdAt).toLocaleString()}}</template></el-table-column><el-table-column label="恢复时间" width="190"><template #default="{row}">{{row.restoredAt?new Date(row.restoredAt).toLocaleString():'—'}}</template></el-table-column><el-table-column label="操作" width="100"><template #default="{row}"><el-button link type="danger" @click="restore(row.id)">校验并恢复</el-button></template></el-table-column></el-table></div></main></section></template>

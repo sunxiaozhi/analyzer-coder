@@ -14,5 +14,13 @@ public interface IndexJobStore {
 
     List<IndexJob> findByRepositoryId(CodeRepositoryId repositoryId);
 
+    List<IndexJob> findAll();
+
+    boolean hasActiveJob(CodeRepositoryId repositoryId);
+
     Optional<IndexJob> findNextQueued();
+
+    Optional<IndexJob> claimNextQueued();
+
+    void deleteByRepositoryId(CodeRepositoryId repositoryId);
 }

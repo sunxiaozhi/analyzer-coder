@@ -30,16 +30,72 @@ public record IndexJob(
         );
     }
 
+    public static IndexJob retry(IndexJob failedJob) {
+        if (failedJob.status != IndexJobStatus.FAILED) {
+            throw new IllegalStateException("Only failed jobs can be retried");
+        }
+        return create(failedJob.repositoryId, failedJob.type);
+    }
+
     public IndexJob start(String currentStep) {
-        return new IndexJob(id, repositoryId, type, IndexJobStatus.RUNNING, currentStep, null, Instant.now(), null, createdAt);
+        if (status != IndexJobStatus.QUEUED && status != IndexJobStatus.RUNNING) {
+            throw new IllegalStateException("Job cannot start from status " + status);
+        }
+        Instant effectiveStartedAt = startedAt == null ? Instant.now() : startedAt;
+        return new IndexJob(
+            id, repositoryId, type, IndexJobStatus.RUNNING, currentStep, null,
+            effectiveStartedAt, null, createdAt
+        );
+    }
+
+    public IndexJob requestCancel() {
+        if (status == IndexJobStatus.QUEUED) {
+            return new IndexJob(
+                id, repositoryId, type, IndexJobStatus.CANCELED, "canceled", null,
+                startedAt, Instant.now(), createdAt
+            );
+        }
+        if (status == IndexJobStatus.RUNNING) {
+            return new IndexJob(
+                id, repositoryId, type, IndexJobStatus.CANCEL_REQUESTED, "cancel_requested", null,
+                startedAt, null, createdAt
+            );
+        }
+        throw new IllegalStateException("Only queued or running jobs can be canceled");
+    }
+
+    public IndexJob cancel() {
+        if (status != IndexJobStatus.CANCEL_REQUESTED && status != IndexJobStatus.QUEUED) {
+            throw new IllegalStateException("Job is not cancelable from status " + status);
+        }
+        return new IndexJob(
+            id, repositoryId, type, IndexJobStatus.CANCELED, "canceled", null,
+            startedAt, Instant.now(), createdAt
+        );
     }
 
     public IndexJob succeed(String currentStep) {
-        return new IndexJob(id, repositoryId, type, IndexJobStatus.SUCCEEDED, currentStep, null, startedAt, Instant.now(), createdAt);
+        if (status != IndexJobStatus.RUNNING && status != IndexJobStatus.CANCEL_REQUESTED) {
+            throw new IllegalStateException("Job cannot succeed from status " + status);
+        }
+        return new IndexJob(
+            id, repositoryId, type, IndexJobStatus.SUCCEEDED, currentStep, null,
+            startedAt, Instant.now(), createdAt
+        );
     }
 
     public IndexJob fail(String currentStep, String errorMessage) {
-        return new IndexJob(id, repositoryId, type, IndexJobStatus.FAILED, currentStep, errorMessage, startedAt, Instant.now(), createdAt);
+        if (status != IndexJobStatus.RUNNING && status != IndexJobStatus.CANCEL_REQUESTED) {
+            throw new IllegalStateException("Job cannot fail from status " + status);
+        }
+        return new IndexJob(
+            id, repositoryId, type, IndexJobStatus.FAILED, currentStep, errorMessage,
+            startedAt, Instant.now(), createdAt
+        );
+    }
+
+    public boolean isCancellationRequested() {
+        return status == IndexJobStatus.CANCEL_REQUESTED;
     }
 
     public IndexJob {

@@ -1,23 +1,24 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
 import {
   deleteRepository,
   listRepositories,
   registerRepository,
+  rescanRepository as requestRepositoryRescan,
   startIndex,
 } from '@/api/repositories';
 import type { IndexJob, IndexJobType, RegisterRepositoryPayload, Repository } from '@/types/api';
 
 export const useRepositoryStore = defineStore('repository', () => {
   const repositories = ref<Repository[]>([]);
-  const selectedRepositoryId = ref<string | null>(null);
-  const loading = ref(false);
-  const error = ref<string | null>(null);
-  const lastStartedJob = ref<IndexJob | null>(null);
+  const selectedRepositoryId = shallowRef<string | null>(null);
+  const loading = shallowRef(false);
+  const error = shallowRef<string | null>(null);
+  const lastStartedJob = shallowRef<IndexJob | null>(null);
 
-  const selectedRepository = computed(() => {
-    return repositories.value.find((repository) => repository.id === selectedRepositoryId.value) ?? null;
-  });
+  const selectedRepository = computed(() =>
+    repositories.value.find((repository) => repository.id === selectedRepositoryId.value) ?? null,
+  );
 
   async function loadRepositories() {
     loading.value = true;
@@ -43,6 +44,15 @@ export const useRepositoryStore = defineStore('repository', () => {
     repositories.value = [...repositories.value, repository];
     selectedRepositoryId.value = repository.id;
     return repository;
+  }
+
+  async function rescanRepository(repositoryId: string) {
+    error.value = null;
+    const result = await requestRepositoryRescan(repositoryId);
+    repositories.value = repositories.value.map((item) =>
+      item.id === repositoryId ? result.repository : item,
+    );
+    return result;
   }
 
   async function removeRepository(repositoryId: string) {
@@ -73,6 +83,7 @@ export const useRepositoryStore = defineStore('repository', () => {
     lastStartedJob,
     loadRepositories,
     createRepository,
+    rescanRepository,
     removeRepository,
     createIndexJob,
     selectRepository,

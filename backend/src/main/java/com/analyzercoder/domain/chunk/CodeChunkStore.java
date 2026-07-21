@@ -17,4 +17,6 @@ public interface CodeChunkStore {
     long countByRepositoryId(CodeRepositoryId repositoryId);
 
     long countSearchByRepositoryId(CodeRepositoryId repositoryId, String query);
+
+    void deleteByRepositoryId(CodeRepositoryId repositoryId);
 }

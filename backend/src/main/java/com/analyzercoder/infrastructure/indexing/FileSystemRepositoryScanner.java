@@ -19,32 +19,14 @@ import org.springframework.stereotype.Component;
 public class FileSystemRepositoryScanner implements RepositoryScannerPort {
 
     private static final Set<String> EXCLUDED_DIRECTORIES = Set.of(
-        ".git",
-        ".codegraph",
-        ".idea",
-        ".vscode",
-        "node_modules",
-        "dist",
-        "build",
-        "target"
+        ".git", ".codegraph", ".idea", ".vscode", "node_modules", "dist", "build", "target"
     );
-
     private static final Map<String, String> LANGUAGE_BY_EXTENSION = Map.ofEntries(
-        Map.entry("java", "java"),
-        Map.entry("kt", "kotlin"),
-        Map.entry("ts", "typescript"),
-        Map.entry("tsx", "typescript"),
-        Map.entry("js", "javascript"),
-        Map.entry("jsx", "javascript"),
-        Map.entry("py", "python"),
-        Map.entry("go", "go"),
-        Map.entry("md", "markdown"),
-        Map.entry("yml", "yaml"),
-        Map.entry("yaml", "yaml"),
-        Map.entry("json", "json"),
-        Map.entry("xml", "xml"),
-        Map.entry("sql", "sql"),
-        Map.entry("properties", "properties")
+        Map.entry("java", "java"), Map.entry("kt", "kotlin"), Map.entry("ts", "typescript"),
+        Map.entry("tsx", "typescript"), Map.entry("js", "javascript"), Map.entry("jsx", "javascript"),
+        Map.entry("py", "python"), Map.entry("go", "go"), Map.entry("md", "markdown"),
+        Map.entry("yml", "yaml"), Map.entry("yaml", "yaml"), Map.entry("json", "json"),
+        Map.entry("xml", "xml"), Map.entry("sql", "sql"), Map.entry("properties", "properties")
     );
 
     private final long maxFileBytes;
@@ -55,62 +37,43 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
 
     @Override
     public List<ScannedRepositoryFile> scan(CodeRepository repository) {
-        try (Stream<Path> paths = Files.walk(repository.path())) {
-            return paths
-                .filter(Files::isRegularFile)
-                .filter(path -> !isInExcludedDirectory(repository.path(), path))
+        Path root = repository.currentSnapshotPath();
+        if (root == null || !Files.isDirectory(root)) {
+            throw new IllegalStateException("Repository has no readable published snapshot");
+        }
+        try (Stream<Path> paths = Files.walk(root)) {
+            return paths.filter(Files::isRegularFile)
+                .filter(path -> !isInExcludedDirectory(root, path))
                 .filter(this::isSupportedFile)
                 .filter(this::isWithinSizeLimit)
-                .map(path -> readFile(repository.path(), path))
-                .flatMap(List::stream)
-                .toList();
+                .map(path -> readFile(root, path)).flatMap(List::stream).toList();
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to scan repository: " + repository.path(), exception);
+            throw new IllegalStateException("Failed to scan published repository snapshot", exception);
         }
     }
 
     private boolean isInExcludedDirectory(Path root, Path path) {
-        Path relativePath = root.relativize(path);
-        for (Path part : relativePath) {
-            if (EXCLUDED_DIRECTORIES.contains(part.toString())) {
-                return true;
-            }
-        }
+        for (Path part : root.relativize(path)) if (EXCLUDED_DIRECTORIES.contains(part.toString())) return true;
         return false;
     }
 
-    private boolean isSupportedFile(Path path) {
-        return LANGUAGE_BY_EXTENSION.containsKey(extension(path));
-    }
-
+    private boolean isSupportedFile(Path path) { return LANGUAGE_BY_EXTENSION.containsKey(extension(path)); }
     private boolean isWithinSizeLimit(Path path) {
-        try {
-            return Files.size(path) <= maxFileBytes;
-        } catch (IOException exception) {
-            return false;
-        }
+        try { return Files.size(path) <= maxFileBytes; } catch (IOException exception) { return false; }
     }
-
     private List<ScannedRepositoryFile> readFile(Path root, Path path) {
         try {
             String content = Files.readString(path, StandardCharsets.UTF_8);
-            if (content.isBlank()) {
-                return List.of();
-            }
+            if (content.isBlank()) return List.of();
             String relativePath = root.relativize(path).toString().replace('\\', '/');
-            int lineCount = content.split("\\R", -1).length;
-            return List.of(new ScannedRepositoryFile(relativePath, LANGUAGE_BY_EXTENSION.get(extension(path)), content, lineCount));
-        } catch (IOException | RuntimeException exception) {
-            return List.of();
-        }
+            return List.of(new ScannedRepositoryFile(
+                relativePath, LANGUAGE_BY_EXTENSION.get(extension(path)), content, content.split("\\R", -1).length
+            ));
+        } catch (IOException | RuntimeException exception) { return List.of(); }
     }
-
     private String extension(Path path) {
         String fileName = path.getFileName().toString();
         int index = fileName.lastIndexOf('.');
-        if (index < 0 || index == fileName.length() - 1) {
-            return "";
-        }
-        return fileName.substring(index + 1).toLowerCase(Locale.ROOT);
+        return index < 0 || index == fileName.length() - 1 ? "" : fileName.substring(index + 1).toLowerCase(Locale.ROOT);
     }
 }

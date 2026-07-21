@@ -65,6 +65,11 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
             .count();
     }
 
+    @Override
+    public void deleteByRepositoryId(CodeRepositoryId repositoryId) {
+        chunksByRepository.remove(repositoryId.value());
+    }
+
     private boolean matches(CodeChunk chunk, String normalizedQuery) {
         return contains(chunk.filePath(), normalizedQuery)
             || contains(chunk.symbolName(), normalizedQuery)

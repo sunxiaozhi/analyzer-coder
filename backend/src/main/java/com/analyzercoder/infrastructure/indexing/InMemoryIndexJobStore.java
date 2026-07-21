@@ -11,9 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.stereotype.Repository;
 
-@Repository
 public class InMemoryIndexJobStore implements IndexJobStore {
 
     private final Map<UUID, IndexJob> indexJobs = new ConcurrentHashMap<>();
@@ -32,22 +30,50 @@ public class InMemoryIndexJobStore implements IndexJobStore {
     @Override
     public Optional<IndexJob> findLatestByRepositoryId(CodeRepositoryId repositoryId) {
         return indexJobs.values().stream()
-            .filter(indexJob -> indexJob.repositoryId().equals(repositoryId))
+            .filter(job -> job.repositoryId().equals(repositoryId))
             .max(Comparator.comparing(IndexJob::createdAt));
     }
 
     @Override
     public List<IndexJob> findByRepositoryId(CodeRepositoryId repositoryId) {
         return indexJobs.values().stream()
-            .filter(indexJob -> indexJob.repositoryId().equals(repositoryId))
+            .filter(job -> job.repositoryId().equals(repositoryId))
             .sorted(Comparator.comparing(IndexJob::createdAt).reversed())
             .toList();
     }
 
     @Override
+    public List<IndexJob> findAll() {
+        return indexJobs.values().stream()
+            .sorted(Comparator.comparing(IndexJob::createdAt).reversed())
+            .toList();
+    }
+
+    @Override
+    public boolean hasActiveJob(CodeRepositoryId repositoryId) {
+        return indexJobs.values().stream()
+            .anyMatch(job -> job.repositoryId().equals(repositoryId)
+                && (job.status() == IndexJobStatus.QUEUED
+                    || job.status() == IndexJobStatus.RUNNING
+                    || job.status() == IndexJobStatus.CANCEL_REQUESTED));
+    }
+
+    @Override
     public Optional<IndexJob> findNextQueued() {
         return indexJobs.values().stream()
-            .filter(indexJob -> indexJob.status() == IndexJobStatus.QUEUED)
+            .filter(job -> job.status() == IndexJobStatus.QUEUED)
             .min(Comparator.comparing(IndexJob::createdAt));
+    }
+
+    @Override
+    public synchronized Optional<IndexJob> claimNextQueued() {
+        Optional<IndexJob> queued = findNextQueued();
+        queued.ifPresent(job -> save(job.start("scan_repository")));
+        return queued.map(job -> findById(job.id()).orElseThrow());
+    }
+
+    @Override
+    public void deleteByRepositoryId(CodeRepositoryId repositoryId) {
+        indexJobs.entrySet().removeIf(entry -> entry.getValue().repositoryId().equals(repositoryId));
     }
 }

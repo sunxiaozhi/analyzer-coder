@@ -3,8 +3,10 @@ package com.analyzercoder.infrastructure.repository;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,9 +31,20 @@ public class InMemoryCodeRepositoryStore implements CodeRepositoryStore {
 
     @Override
     public List<CodeRepository> findAll() {
+        return repositories.values().stream().sorted(Comparator.comparing(CodeRepository::createdAt)).toList();
+    }
+
+    @Override
+    public boolean existsByNormalizedName(String name) {
+        String normalized = name.trim().toLowerCase(Locale.ROOT);
         return repositories.values().stream()
-            .sorted(Comparator.comparing(CodeRepository::createdAt))
-            .toList();
+            .anyMatch(repository -> repository.name().trim().toLowerCase(Locale.ROOT).equals(normalized));
+    }
+
+    @Override
+    public boolean existsByPath(Path path) {
+        Path normalized = path.toAbsolutePath().normalize();
+        return repositories.values().stream().anyMatch(repository -> repository.path().equals(normalized));
     }
 
     @Override
@@ -39,4 +52,3 @@ public class InMemoryCodeRepositoryStore implements CodeRepositoryStore {
         repositories.remove(repositoryId.value());
     }
 }
-
