@@ -56,7 +56,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
         GitRepositorySnapshot sourceVersion
     ) {
         RepositorySnapshotId snapshotId = RepositorySnapshotId.newId();
-        Path repositoryRoot = snapshotRoot.resolve(repositoryId.value().toString());
+        Path repositoryRoot = snapshotRoot.resolve(repositoryId.value().toString()).resolve("snapshots");
         Path temporary = repositoryRoot.resolve(".tmp-" + snapshotId.value());
         Path target = repositoryRoot.resolve(snapshotId.value().toString());
         Path content = temporary.resolve("content");

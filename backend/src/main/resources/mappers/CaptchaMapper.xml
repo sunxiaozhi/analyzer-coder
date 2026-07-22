@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.CaptchaMapper">
+  <select id="failureCount" resultType="int">SELECT COALESCE((SELECT failure_count FROM login_failure_counters WHERE username_normalized=#{username}),0)</select>
+  <insert id="recordFailure">INSERT INTO login_failure_counters(username_normalized,failure_count) VALUES(#{username},1) ON CONFLICT(username_normalized) DO UPDATE SET failure_count=login_failure_counters.failure_count+1,updated_at=CURRENT_TIMESTAMP</insert>
+  <delete id="clearFailures">DELETE FROM login_failure_counters WHERE username_normalized=#{username}</delete>
+  <insert id="insertChallenge">INSERT INTO login_captcha_challenges(id,username_normalized,answer_hash,expires_at) VALUES(#{id},#{username},#{answerHash},#{expiresAt})</insert>
+  <select id="findValidAnswerHash" resultType="string">SELECT answer_hash FROM login_captcha_challenges WHERE id=#{id} AND username_normalized=#{username} AND used_at IS NULL AND expires_at&gt;CURRENT_TIMESTAMP</select>
+  <update id="markUsed">UPDATE login_captcha_challenges SET used_at=CURRENT_TIMESTAMP WHERE id=#{id}</update>
+</mapper>

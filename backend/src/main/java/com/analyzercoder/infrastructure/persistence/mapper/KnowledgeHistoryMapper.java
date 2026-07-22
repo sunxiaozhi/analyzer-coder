@@ -1,0 +1,3 @@
+package com.analyzercoder.infrastructure.persistence.mapper;
+import com.analyzercoder.infrastructure.persistence.model.*;import java.util.*;import org.apache.ibatis.annotations.*;
+@Mapper public interface KnowledgeHistoryMapper{List<KnowledgeRevisionRow> findHistory(@Param("repositoryId")UUID repositoryId,@Param("cardId")UUID cardId);KnowledgeRevisionRow findRevision(@Param("repositoryId")UUID repositoryId,@Param("cardId")UUID cardId,@Param("revision")int revision);int restore(@Param("repositoryId")UUID repositoryId,@Param("cardId")UUID cardId,@Param("source")KnowledgeRevisionRow source,@Param("actorId")UUID actorId);KnowledgeCardRow findCard(@Param("repositoryId")UUID repositoryId,@Param("cardId")UUID cardId);}

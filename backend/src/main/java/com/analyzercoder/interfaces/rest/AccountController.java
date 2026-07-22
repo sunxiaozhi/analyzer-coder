@@ -54,12 +54,11 @@ public class AccountController {
     @PostMapping("/{accountId}/reset-password")
     public TemporaryPasswordResponse resetPassword(
         @PathVariable UUID accountId,
-        @RequestBody(required = false) ResetPasswordRequest body,
         HttpServletRequest request
     ) {
         var actor = SecurityContext.requireAdmin(request);
         String password = authService.resetPassword(
-            actor.id(), accountId, body == null ? null : body.temporaryPassword(), request.getRemoteAddr()
+            actor.id(), accountId, request.getRemoteAddr()
         );
         return new TemporaryPasswordResponse(password);
     }
@@ -108,7 +107,6 @@ public class AccountController {
         }
     }
     public record UpdateAccountRequest(String displayName, AccountRole role, Boolean enabled) {}
-    public record ResetPasswordRequest(String temporaryPassword) {}
     public record TemporaryPasswordResponse(String temporaryPassword) {}
     public record PermissionRequest(RepositoryPermission permission) {}
 }

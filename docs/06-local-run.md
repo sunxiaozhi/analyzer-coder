@@ -34,14 +34,14 @@ docker compose ps
 ~~~powershell
 $env:APP_INITIAL_ADMIN_USERNAME = "admin"
 $env:APP_INITIAL_ADMIN_PASSWORD = "请替换为至少 12 位且包含大小写字母、数字和符号的临时密码"
-$env:APP_REPOSITORY_ALLOWED_ROOTS = "C:\workspace,C:\tmp\analyzer-coder-imports"
-$env:APP_REPOSITORY_IMPORT_ROOT = "C:\tmp\analyzer-coder-imports"
-$env:APP_REPOSITORY_SNAPSHOT_ROOT = "C:\tmp\analyzer-coder-managed-snapshots"
-$env:APP_CODEGRAPH_ARTIFACT_ROOT = "C:\tmp\analyzer-coder-codegraph-artifacts"
+$env:APP_REPOSITORY_ALLOWED_ROOTS = "C:\workspace"
+$env:APP_MANAGED_DATA_ROOT = "C:\analyzer-coder-data"
 $env:APP_CODEGRAPH_EXECUTABLE = (Get-Command codegraph).Source
 ~~~
 
 初始管理员只会在账号表为空时创建。首次登录必须修改临时密码；以后重启无需继续保留初始密码环境变量。
+升级已有仓库数据时，首次运行 V15 还必须设置 `APP_REPOSITORY_MIGRATION_OWNER` 为一个已启用的超级管理员用户名；全新数据库不需要该变量。
+
 
 可选数据库配置：
 
@@ -91,9 +91,9 @@ npm run build
 ## 6. 数据目录与停止
 
 - PostgreSQL 数据：Docker 卷 `postgres-data`
-- 远程 Git/ZIP 导入副本：`APP_REPOSITORY_IMPORT_ROOT`
-- 冻结源码快照：`APP_REPOSITORY_SNAPSHOT_ROOT`
-- CodeGraph 分析副本与产物：`APP_CODEGRAPH_ARTIFACT_ROOT`
+- 统一受管数据：`APP_MANAGED_DATA_ROOT`
+- 仓库工作副本、冻结快照和 CodeGraph 产物：`APP_MANAGED_DATA_ROOT/repositories/{repositoryId}`
+- 远程 Git/ZIP 临时导入：`APP_MANAGED_DATA_ROOT/staging/imports`
 
 停止应用后可执行 `docker compose stop postgres`。只有明确不再需要数据库数据时才执行 `docker compose down -v`。
 

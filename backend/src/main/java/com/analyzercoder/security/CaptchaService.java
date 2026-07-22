@@ -1,5 +1,37 @@
 package com.analyzercoder.security;
-import java.nio.charset.StandardCharsets;import java.security.*;import java.sql.Timestamp;import java.time.Instant;import java.util.*;import java.util.concurrent.ThreadLocalRandom;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.*;
-@Service public class CaptchaService{private final JdbcTemplate jdbc;public CaptchaService(JdbcTemplate jdbc){this.jdbc=jdbc;}public boolean required(String u){Integer n=jdbc.queryForObject("SELECT COALESCE((SELECT failure_count FROM login_failure_counters WHERE username_normalized=?),0)",Integer.class,norm(u));return n!=null&&n>=3;}@Transactional(propagation=Propagation.REQUIRES_NEW)public int recordFailure(String u){jdbc.update("INSERT INTO login_failure_counters(username_normalized,failure_count) VALUES (?,1) ON CONFLICT(username_normalized) DO UPDATE SET failure_count=login_failure_counters.failure_count+1,updated_at=CURRENT_TIMESTAMP",norm(u));return jdbc.queryForObject("SELECT failure_count FROM login_failure_counters WHERE username_normalized=?",Integer.class,norm(u));}@Transactional(propagation=Propagation.REQUIRES_NEW)public void clear(String u){jdbc.update("DELETE FROM login_failure_counters WHERE username_normalized=?",norm(u));}
-@Transactional public Challenge create(String u){if(!required(u))throw new ApiSecurityException(400,"CAPTCHA_NOT_REQUIRED","当前账号不需要验证码");int a=ThreadLocalRandom.current().nextInt(1,10),b=ThreadLocalRandom.current().nextInt(1,10);UUID id=UUID.randomUUID();Instant expiry=Instant.now().plusSeconds(300);jdbc.update("INSERT INTO login_captcha_challenges(id,username_normalized,answer_hash,expires_at) VALUES (?,?,?,?)",id,norm(u),hash(id+":"+(a+b)),Timestamp.from(expiry));return new Challenge(id,a+" + "+b+" = ?",expiry);}@Transactional public void verifyIfRequired(String u,UUID id,String answer){if(!required(u))return;if(id==null||answer==null)throw new ApiSecurityException(429,"CAPTCHA_REQUIRED","连续登录失败，请完成验证码");String expected=jdbc.query("SELECT answer_hash FROM login_captcha_challenges WHERE id=? AND username_normalized=? AND used_at IS NULL AND expires_at>CURRENT_TIMESTAMP",rs->rs.next()?rs.getString(1):null,id,norm(u));if(expected==null||!MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8),hash(id+":"+answer.trim()).getBytes(StandardCharsets.UTF_8)))throw new ApiSecurityException(400,"CAPTCHA_INVALID","验证码错误或已过期");jdbc.update("UPDATE login_captcha_challenges SET used_at=CURRENT_TIMESTAMP WHERE id=?",id);}private static String norm(String s){return s==null?"":s.trim().toLowerCase(Locale.ROOT);}private static String hash(String s){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)));}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}}public record Challenge(UUID id,String prompt,Instant expiresAt){}
+
+import com.analyzercoder.infrastructure.persistence.mapper.CaptchaMapper;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.Locale;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class CaptchaService {
+    private final CaptchaMapper mapper;
+    public CaptchaService(CaptchaMapper mapper){this.mapper=mapper;}
+    public boolean required(String username){return mapper.failureCount(norm(username))>=3;}
+    @Transactional(propagation=Propagation.REQUIRES_NEW) public int recordFailure(String username){String value=norm(username);mapper.recordFailure(value);return mapper.failureCount(value);}
+    @Transactional(propagation=Propagation.REQUIRES_NEW) public void clear(String username){mapper.clearFailures(norm(username));}
+    @Transactional public Challenge create(String username){
+        if(!required(username))throw new ApiSecurityException(400,"CAPTCHA_NOT_REQUIRED","当前账号不需要验证码");
+        int a=ThreadLocalRandom.current().nextInt(1,10),b=ThreadLocalRandom.current().nextInt(1,10);UUID id=UUID.randomUUID();Instant expiry=Instant.now().plusSeconds(300);
+        mapper.insertChallenge(id,norm(username),hash(id+":"+(a+b)),expiry);return new Challenge(id,a+" + "+b+" = ?",expiry);
+    }
+    @Transactional public void verifyIfRequired(String username,UUID id,String answer){
+        if(!required(username))return;if(id==null||answer==null)throw new ApiSecurityException(429,"CAPTCHA_REQUIRED","连续登录失败，请完成验证码");
+        String expected=mapper.findValidAnswerHash(id,norm(username));
+        if(expected==null||!MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8),hash(id+":"+answer.trim()).getBytes(StandardCharsets.UTF_8)))throw new ApiSecurityException(400,"CAPTCHA_INVALID","验证码错误或已过期");
+        mapper.markUsed(id);
+    }
+    private static String norm(String value){return value==null?"":value.trim().toLowerCase(Locale.ROOT);}
+    private static String hash(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}catch(NoSuchAlgorithmException exception){throw new IllegalStateException(exception);}}
+    public record Challenge(UUID id,String prompt,Instant expiresAt){}
 }

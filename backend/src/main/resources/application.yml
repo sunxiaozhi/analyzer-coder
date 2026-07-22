@@ -7,6 +7,17 @@ spring:
     password: ${APP_DATASOURCE_PASSWORD:codebase_kb}
   flyway:
     enabled: ${APP_FLYWAY_ENABLED:true}
+    placeholders:
+      repositoryMigrationOwner: ${APP_REPOSITORY_MIGRATION_OWNER:}
+
+mybatis:
+  mapper-locations: classpath*:/mappers/**/*.xml
+  type-handlers-package: com.analyzercoder.infrastructure.persistence.type
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    local-cache-scope: statement
+    jdbc-type-for-null: 'NULL'
 
 server:
   port: ${APP_SERVER_PORT:8080}
@@ -26,9 +37,15 @@ app:
     lock-minutes: ${APP_LOGIN_LOCK_MINUTES:15}
   repository:
     allowed-roots: ${APP_REPOSITORY_ALLOWED_ROOTS:.}
-    snapshot-root: ${APP_REPOSITORY_SNAPSHOT_ROOT:${java.io.tmpdir}/analyzer-coder/snapshots}
+    managed-data-root: ${APP_MANAGED_DATA_ROOT:${java.io.tmpdir}/analyzer-coder}
+    snapshot-root: ${app.repository.managed-data-root}/repositories
+    import-root: ${app.repository.managed-data-root}/staging/imports
     snapshot-max-files: ${APP_REPOSITORY_SNAPSHOT_MAX_FILES:20000}
     snapshot-max-total-bytes: ${APP_REPOSITORY_SNAPSHOT_MAX_TOTAL_BYTES:2147483648}
   indexing:
     poll-interval-ms: 5000
     max-file-bytes: 524288
+  codegraph:
+    executable: ${APP_CODEGRAPH_EXECUTABLE:codegraph}
+    timeout-minutes: ${APP_CODEGRAPH_TIMEOUT_MINUTES:10}
+    artifact-root: ${app.repository.managed-data-root}/repositories

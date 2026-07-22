@@ -23,7 +23,7 @@
 
 1. Java / Spring Boot 适合构建长期维护的企业级服务，工程化、配置管理、可观测性、权限集成和部署生态成熟。
 2. 代码智库系统需要管理仓库、索引任务、结构化查询、问答会话和权限，整体更接近企业知识平台而不是单纯 AI 实验脚本。
-3. Spring Data JDBC / JPA、JDBC SQLite、PostgreSQL、Redis、任务调度和安全组件都比较成熟。
+3. MyBatis、JDBC SQLite、PostgreSQL、Redis、任务调度和安全组件都比较成熟。
 4. Spring AI 和 LangChain4j 已经提供 Java 侧 LLM、Embedding、Vector Store、RAG 和 Tool Calling 抽象，可减少从零对接模型服务的成本。
 
 备选：
@@ -92,20 +92,24 @@ MVP 如果以本地验证为主，可用 SQLite 快速启动；产品化服务�
 
 推荐：
 
-1. Spring Data JDBC：用于业务表的常规 CRUD，模型简单、行为可控。
-2. jOOQ：用于复杂 SQL、pgvector 相似度查询、统计查询和可维护的类型安全 SQL。
-3. Flyway：用于数据库 schema 版本管理。
-4. SQLite JDBC：用于只读访问 CodeGraph SQLite。
+1. MyBatis 3 + `mybatis-spring-boot-starter`：统一承载 PostgreSQL 业务 CRUD、权限范围查询、任务领取、统计、检索和 pgvector SQL。
+2. Mapper 接口 + XML：SQL 默认放在 XML，Java 注解只用于极简单且稳定的查询；复杂动态条件使用 `<if>`、`<choose>`、`<foreach>`。
+3. PostgreSQL TypeHandler：显式处理 JSONB、数组、枚举和 pgvector；向量维度和模型版本仍由业务约束校验。
+4. Flyway：只负责 schema、扩展、索引和数据迁移，不在 MyBatis 启动期间自动建表。
+5. SQLite JDBC：CodeGraph SQLite 继续通过独立只读 adapter 访问，不复用业务 MyBatis `SqlSessionFactory`。
 
-不优先推荐：
+约束：
 
-1. 将所有查询都放进 JPA/Hibernate。代码智库包含较多检索 SQL、图关系查询和向量相似度查询，过度 ORM 化会降低可控性。
-2. 业务层直接拼接 SQL 字符串。CodeGraph schema 适配可以使用明确封装的 SQL，但应集中在 adapter 内部。
+1. 不使用 JPA/Hibernate、Spring Data JDBC 或 jOOQ，避免同一业务库并存多套持久化语义。
+2. 不把 MyBatis-Plus、PageHelper 作为基础依赖；分页使用明确的游标 SQL，批量、锁和 `FOR UPDATE SKIP LOCKED` 均写成可审查 SQL。
+3. Mapper 仅位于 infrastructure 层并实现领域持久化端口；Controller 和 domain 不直接调用 Mapper。
+4. 参数值统一使用 `#{}` 绑定，禁止把用户输入放入 `${}`；确需动态表名、列名或排序字段时只能从服务端白名单枚举生成。
+5. 关键查询使用显式 `resultMap`；跨请求二级缓存默认关闭，权限、任务和当前版本查询不得依赖 MyBatis 缓存保证一致性。
+6. PostgreSQL SQL 由 Testcontainers 集成测试验证，Mapper XML 在启动测试中全量解析；Flyway 迁移必须先于 Mapper 可用性检查完成。
 
 结论：
 
-业务元数据优先用 Spring Data JDBC；复杂检索 SQL 用 jOOQ；数据库迁移用 Flyway；CodeGraph SQLite 通过独立 adapter 使用 SQLite JDBC 只读访问。
-
+业务数据库查询统一使用原生 MyBatis；简单 CRUD 和复杂 PostgreSQL/pgvector SQL 均由 Mapper 管理，事务使用 Spring `@Transactional`，迁移使用 Flyway；CodeGraph SQLite 保持独立 JDBC 只读适配器。
 ### 2.4 向量数据库
 
 推荐默认：PostgreSQL + pgvector

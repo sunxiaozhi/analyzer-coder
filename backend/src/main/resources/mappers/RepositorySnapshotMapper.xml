@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.RepositorySnapshotMapper">
+  <insert id="insert">INSERT INTO repository_snapshots(id,repo_id,source_commit,worktree_digest,storage_path,created_at) VALUES(#{id},#{repositoryId},#{sourceCommit},#{worktreeDigest},#{storagePath},#{createdAt}) ON CONFLICT(id) DO NOTHING</insert>
+  <delete id="deleteByRepositoryId">DELETE FROM repository_snapshots WHERE repo_id=#{repositoryId}</delete>
+</mapper>

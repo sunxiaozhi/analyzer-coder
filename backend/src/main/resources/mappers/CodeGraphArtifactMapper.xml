@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper">
+  <resultMap id="versionRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryVersionRow">
+    <constructor><idArg column="current_snapshot_id" javaType="java.util.UUID"/><arg column="current_snapshot_path" javaType="java.lang.String"/></constructor>
+  </resultMap>
+  <resultMap id="artifactRow" type="com.analyzercoder.infrastructure.persistence.model.CodeGraphArtifactRow">
+    <constructor><idArg column="id" javaType="java.util.UUID"/><arg column="repo_id" javaType="java.util.UUID"/><arg column="snapshot_id" javaType="java.util.UUID"/><arg column="cli_version" javaType="java.lang.String"/><arg column="status" javaType="java.lang.String"/><arg column="artifact_path" javaType="java.lang.String"/><arg column="node_count" javaType="_int"/><arg column="edge_count" javaType="_int"/></constructor>
+  </resultMap>
+  <select id="findRepositoryVersion" resultMap="versionRow">SELECT current_snapshot_id,current_snapshot_path FROM repositories WHERE id=#{repositoryId} AND deleted_at IS NULL</select>
+  <update id="retirePublished">UPDATE codegraph_artifacts SET status='RETIRED' WHERE repo_id=#{repositoryId} AND status='PUBLISHED'</update>
+  <insert id="insertPublished">INSERT INTO codegraph_artifacts(id,repo_id,snapshot_id,cli_version,status,artifact_path,node_count,edge_count,published_at) VALUES(#{id},#{repositoryId},#{snapshotId},#{cliVersion},'PUBLISHED',#{artifactPath},#{nodeCount},#{edgeCount},CURRENT_TIMESTAMP)</insert>
+  <select id="findLatest" resultMap="artifactRow">SELECT id,repo_id,snapshot_id,cli_version,status,artifact_path,node_count,edge_count FROM codegraph_artifacts WHERE repo_id=#{repositoryId}<if test="snapshotId != null"> AND snapshot_id=#{snapshotId}</if> ORDER BY created_at DESC LIMIT 1</select>
+  <select id="findPublished" resultMap="artifactRow">SELECT id,repo_id,snapshot_id,cli_version,status,artifact_path,node_count,edge_count FROM codegraph_artifacts WHERE repo_id=#{repositoryId} AND snapshot_id=#{snapshotId} AND status='PUBLISHED' ORDER BY published_at DESC LIMIT 1</select>
+</mapper>

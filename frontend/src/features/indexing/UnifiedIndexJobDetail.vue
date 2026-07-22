@@ -34,7 +34,7 @@ function repositoryName(repositoryId: string) {
         type="warning"
         :closable="false"
       />
-      <p v-else class="muted">终态任务不会被改写；失败重试会创建一个新的排队任务。</p>
+      <p v-else class="terminal-note">终态任务不会被改写；失败重试会创建一个新的排队任务。</p>
       <div class="task-actions">
         <el-button v-if="canCancel" :loading="actionPending" type="warning" @click="emit('cancel', job.id)">取消任务</el-button>
         <el-button v-if="canRetry" :loading="actionPending" type="primary" @click="emit('retry', job.id)">重试任务</el-button>
@@ -45,6 +45,13 @@ function repositoryName(repositoryId: string) {
 </template>
 
 <style scoped>
+.terminal-note {
+  margin: 12px 16px 0;
+  color: #8a8a91;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .task-actions {
   display: flex;
   justify-content: flex-end;

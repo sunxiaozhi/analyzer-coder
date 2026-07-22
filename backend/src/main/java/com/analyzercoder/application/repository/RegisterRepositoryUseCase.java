@@ -8,6 +8,8 @@ public interface RegisterRepositoryUseCase {
 
     CodeRepository register(RegisterRepositoryCommand command);
 
+    CodeRepository registerManaged(RegisterRepositoryCommand command);
+
     CodeRepository get(CodeRepositoryId repositoryId);
 
     List<CodeRepository> list();
