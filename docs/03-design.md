@@ -527,6 +527,24 @@ accepted -> retrieving -> evidence_ready -> generating*
 
 引用使用结构化记录：代码引用绑定仓库、快照、内容索引/CodeGraph、文件、行号、符号和证据类型；图引用绑定边/路径；卡片引用绑定修订和适用版本。所有仓库事实引用支持率必须为 100%。模型超时、限流或用户停止时保留已验证证据并把回答标记为未完成，可基于同一冻结证据重试；权限回收立即停止 SSE 和生成并禁止会话、答案与引用访问，重新授权后只恢复本人历史。
 
+### 11.1 QV1 问答实现收敛
+
+QV1 沿用 PostgreSQL 中现有 conversation/citation 记录，补充会话查询和消息关联，不先实现流式 token。`ask` 请求扩展为 `conversationId?`、`mode`、`selectedChunkIds` 和 `selectedSymbols`；所有客户端指定证据必须重新查询当前授权范围并校验会话 snapshot 与 contentHash，不能直接信任客户端正文。
+
+```http
+GET    /api/repositories/{repositoryId}/qa/conversations
+POST   /api/repositories/{repositoryId}/qa/conversations
+GET    /api/repositories/{repositoryId}/qa/conversations/{conversationId}
+PATCH  /api/repositories/{repositoryId}/qa/conversations/{conversationId}
+DELETE /api/repositories/{repositoryId}/qa/conversations/{conversationId}
+POST   /api/repositories/{repositoryId}/qa/conversations/{conversationId}/messages
+```
+
+现有 `POST /api/repositories/{repositoryId}/ask` 在 QV1 保留为无会话兼容入口，内部调用同一问答应用服务。新消息响应增加 `answerSections`、`retrievalTraceSummary`、`citationCoverage`、`followUpSuggestions` 和 `versionStatus`；兼容字段 `answer` 与 `citations` 继续返回。
+
+多轮只允许最近有限消息参与指代解析，默认 6 条且只传问题和短摘要；每轮重新执行检索和引用校验。结构化回答由确定性模板或允许的 provider 生成，最终均经过相同引用门禁。追问建议基于模式、引用符号和缺失段落生成，不单独调用模型。
+
+前端 `AskView` 继续作为路由组合面，拆分为 ConversationList、QuestionComposer、AnswerMessage、EvidenceRail 和 SaveKnowledgeDraftDialog。会话、消息和证据篮由问答 feature store 统一管理；切换仓库立即清空，跨页只接收 chunkId/symbolId 等稳定 ID。
 ## 12. 调用图与影响分析（M2）
 
 图查询固定单一 CodeGraph 产物，默认深度 ≤ 3、节点 ≤ 500。遍历使用 visited 集避免重复节点，同时保留环路边并记录最短深度。
