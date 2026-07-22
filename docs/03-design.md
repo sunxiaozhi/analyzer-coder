@@ -545,6 +545,37 @@ POST   /api/repositories/{repositoryId}/qa/conversations/{conversationId}/messag
 多轮只允许最近有限消息参与指代解析，默认 6 条且只传问题和短摘要；每轮重新执行检索和引用校验。结构化回答由确定性模板或允许的 provider 生成，最终均经过相同引用门禁。追问建议基于模式、引用符号和缺失段落生成，不单独调用模型。
 
 前端 `AskView` 继续作为路由组合面，拆分为 ConversationList、QuestionComposer、AnswerMessage、EvidenceRail 和 SaveKnowledgeDraftDialog。会话、消息和证据篮由问答 feature store 统一管理；切换仓库立即清空，跨页只接收 chunkId/symbolId 等稳定 ID。
+### 11.2 LLM Token 流式链路
+
+定义 `LlmProviderPort.stream(GenerationRequest)`，基础设施层首个实现为 OpenAI-compatible streaming adapter。Provider DTO、鉴权、超时和流帧解析不得泄漏到 domain/application。密钥从加密配置读取并只在请求内存中使用；base URL 通过 OutboundNetworkPolicy 校验。
+
+```text
+POST message
+  → permission/version/outbound preflight
+  → persist ACCEPTED message attempt
+  → retrieve + freeze evidence
+  → provider stream
+  → emit delta draft events
+  → assemble candidate
+  → citation validation
+  → persist COMPLETED answer + citations
+```
+
+接口：
+
+```http
+POST /api/repositories/{repositoryId}/qa/conversations/{conversationId}/messages:stream
+POST /api/repositories/{repositoryId}/qa/messages/{messageId}/stop
+GET  /api/repositories/{repositoryId}/qa/messages/{messageId}
+```
+
+流式 POST 校验 CSRF 后返回 `text/event-stream; charset=UTF-8`。事件统一包含 `event`、`sequence`、`conversationId`、`messageId`、`requestId`、`occurredAt`；`delta` 只携带新增文本，`evidence_ready` 携带脱敏证据元数据，`completed` 携带最终结构化回答和已验证引用。心跳只维持连接，不改变业务状态。
+
+消息尝试状态为 ACCEPTED、RETRIEVING、GENERATING、VALIDATING、COMPLETED、INSUFFICIENT_EVIDENCE、FAILED、STOPPED。草稿与最终答案分字段存储；只有 COMPLETED 进入正常历史展示和知识草稿入口。重试插入新 attemptId/retryOf，不改写原记录。
+
+取消令牌同时连接 HTTP 断开、用户 stop、会话/权限撤销、任务超时和应用关闭。Provider 读取使用有界缓冲和单调 sequence；客户端按 sequence 去重。断线后的状态查询返回最后终态、已验证证据和未完成标记，不提供无限事件重放。
+
+指标记录首 Token 延迟、总时长、输入证据字符、输出 Token、停止率、超时/限流/非法帧和引用失败，不记录正文。集成测试使用流式 stub，不依赖真实外部 Provider。
 ## 12. 调用图与影响分析（M2）
 
 图查询固定单一 CodeGraph 产物，默认深度 ≤ 3、节点 ≤ 500。遍历使用 visited 集避免重复节点，同时保留环路边并记录最短深度。
@@ -761,7 +792,7 @@ GET  /api/repositories/{repositoryId}/quick-start
 POST /api/repositories/{repositoryId}/quick-start/prepare
 ```
 
-其余操作复用现有 index、codegraph、search、ask、impact、task retry 和 knowledge API。QV1 不新增命令执行、学习进度、笔记或业务域持久化表。
+其余操作复用现有 index、codegraph、search、ask、impact、task retry 和 knowledge API。QV1 不新增命令执行、学习进度、笔记或业务域持久化表；LLM 流式消息复用并扩展现有问答会话、消息和引用表。
 ## 18. 一致性、备份与恢复
 
 跨数据库/文件发布不使用分布式事务，采用“不可变文件 + 数据库发布记录 + 可修复状态机”：临时构建并摘要 → 移到最终不可变路径 → 数据库事务插入产物并 CAS 切换指针 → 写发布事件。巡检器回收“有文件无记录”，并对“有指针无文件”告警和回退。
