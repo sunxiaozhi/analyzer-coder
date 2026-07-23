@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from 'vue';
 import { ElMessage } from 'element-plus';
+import AppPagination from '@/components/AppPagination.vue';
 import IndexJobTable from '@/features/indexing/IndexJobTable.vue';
 import UnifiedIndexJobDetail from '@/features/indexing/UnifiedIndexJobDetail.vue';
 import { useIndexJobs } from '@/features/indexing/useIndexJobs';
@@ -15,7 +16,12 @@ const {
   counts,
   loading,
   error,
+  pageNum,
+  pageSize,
+  total,
   refresh,
+  changePage,
+  changePageSize,
   selectJob,
   cancel,
   retry,
@@ -53,39 +59,109 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="page">
+  <section class="page index-jobs-design">
     <div class="summary-strip">
-      <div><b>{{ counts.RUNNING }}</b><span>运行中</span></div>
-      <div><b>{{ counts.QUEUED }}</b><span>排队中</span></div>
-      <div><b>{{ counts.CANCEL_REQUESTED }}</b><span>取消中</span></div>
-      <div><b>{{ counts.FAILED }}</b><span>失败</span></div>
+      <div><b>{{ counts.RUNNING }}</b><span>本页运行中</span></div>
+      <div><b>{{ counts.QUEUED }}</b><span>本页排队中</span></div>
+      <div><b>{{ counts.CANCEL_REQUESTED }}</b><span>本页取消中</span></div>
+      <div><b>{{ counts.FAILED }}</b><span>本页失败</span></div>
     </div>
 
-    <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
-
-    <div class="split detail-split">
-      <div class="surface">
-        <div class="toolbar">
-          <strong>索引任务</strong>
-          <span class="spacer" />
-          <span class="muted">成功 {{ counts.SUCCEEDED }} · 已取消 {{ counts.CANCELED }}</span>
-          <el-button :loading="loading" @click="refresh()">刷新</el-button>
+    <div class="index-jobs-content">
+      <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
+      <div class="split detail-split index-jobs-split">
+        <div class="surface index-jobs-list">
+          <div class="toolbar">
+            <strong>索引任务</strong>
+            <span class="spacer" />
+            <span class="muted">成功 {{ counts.SUCCEEDED }} · 已取消 {{ counts.CANCELED }}</span>
+            <el-button :loading="loading" @click="refresh()">刷新</el-button>
+          </div>
+          <div class="index-jobs-table-region">
+            <IndexJobTable
+              :jobs="jobs"
+              :repositories="repositoryStore.repositories"
+              :selected-job-id="selectedJobId"
+              :loading="loading"
+              @select="selectJob"
+            />
+          </div>
+          <AppPagination
+            :page-num="pageNum"
+            :page-size="pageSize"
+            :total="total"
+            :disabled="loading"
+            @page-change="changePage"
+            @size-change="changePageSize"
+          />
         </div>
-        <IndexJobTable
-          :jobs="jobs"
+        <UnifiedIndexJobDetail
+          class="index-jobs-detail"
+          :job="selectedJob"
           :repositories="repositoryStore.repositories"
-          :selected-job-id="selectedJobId"
-          :loading="loading"
-          @select="selectJob"
+          :action-pending="actionPending"
+          @cancel="cancelJob"
+          @retry="retryJob"
         />
       </div>
-      <UnifiedIndexJobDetail
-        :job="selectedJob"
-        :repositories="repositoryStore.repositories"
-        :action-pending="actionPending"
-        @cancel="cancelJob"
-        @retry="retryJob"
-      />
     </div>
   </section>
 </template>
+
+<style scoped>
+.index-jobs-design {
+  grid-template-rows: 80px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.index-jobs-content {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.index-jobs-split {
+  min-height: 0;
+  flex: 1;
+}
+
+.index-jobs-list {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.index-jobs-table-region,
+.index-jobs-detail {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 760px) {
+  .index-jobs-design {
+    grid-template-rows: auto auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  .index-jobs-content {
+    display: block;
+  }
+
+  .index-jobs-content > .el-alert {
+    margin-bottom: 12px;
+  }
+
+  .index-jobs-list {
+    display: block;
+  }
+
+  .index-jobs-table-region,
+  .index-jobs-detail {
+    overflow: visible;
+  }
+}
+</style>

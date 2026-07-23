@@ -8,6 +8,14 @@
   <select id="findLatest" resultMap="row">SELECT <include refid="columns"/> FROM index_jobs WHERE repo_id=#{repositoryId} ORDER BY created_at DESC,id DESC LIMIT 1</select>
   <select id="findByRepositoryId" resultMap="row">SELECT <include refid="columns"/> FROM index_jobs WHERE repo_id=#{repositoryId} ORDER BY created_at DESC,id DESC</select>
   <select id="findAll" resultMap="row">SELECT <include refid="columns"/> FROM index_jobs ORDER BY created_at DESC,id DESC</select>
+  <select id="findVisiblePage" resultMap="row">
+    SELECT DISTINCT j.id,j.repo_id,j.job_type,j.status,j.current_step,j.error_message,j.started_at,j.finished_at,j.created_at
+    FROM index_jobs j
+    JOIN repositories r ON r.id=j.repo_id AND r.deleted_at IS NULL
+    LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
+    WHERE #{admin}=TRUE OR r.owner_account_id=#{accountId} OR p.account_id IS NOT NULL
+    ORDER BY j.created_at DESC,j.id DESC
+  </select>
   <select id="countActive" resultType="int">SELECT COUNT(*) FROM index_jobs WHERE repo_id=#{repositoryId} AND status IN('QUEUED','RUNNING','CANCEL_REQUESTED')</select>
   <select id="findNextQueued" resultMap="row">SELECT <include refid="columns"/> FROM index_jobs WHERE status='QUEUED' AND job_type IN('FULL','INCREMENTAL') ORDER BY created_at,id LIMIT 1</select>
   <select id="claimNextQueued" resultMap="row">

@@ -44,7 +44,7 @@ onMounted(async () => {
   <section class="code-search-design">
     <aside class="search-results-pane">
       <div class="result-search">
-        <el-input v-model="query" :prefix-icon="Search" clearable placeholder="关键词、文件路径或代码内容" @keyup.enter="search" />
+        <el-input v-model="query" class="app-search-input" :prefix-icon="Search" clearable placeholder="关键词、文件路径或代码内容" @keyup.enter="search" />
         <el-button type="primary" :loading="loading" @click="search">检索</el-button>
         <small>共 {{ total }} 个 chunk；M0 仅提供关键词检索。</small>
       </div>

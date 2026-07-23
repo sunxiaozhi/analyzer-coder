@@ -1,9 +1,9 @@
 # 代码智库系统设计文档
 
-版本：v1.1
-日期：2026-07-22
-状态：与需求 v1.1 对齐版
-需求基线：`docs/01-requirements.md` v1.1
+版本：v1.3
+日期：2026-07-23
+状态：与需求 v1.3 对齐版
+需求基线：`docs/01-requirements.md` v1.3
 技术基线：`docs/02-tech-selection.md`
 
 ## 1. 目的、范围与里程碑
@@ -286,14 +286,15 @@ sequenceDiagram
 
 | 聚合/实体 | 标识 | 关键状态/语义 |
 | --- | --- | --- |
-| Account / Session | account_id / session_id | PASSWORD_CHANGE_REQUIRED、ENABLED、LOCKED、DISABLED；可撤销会话 |
-| Repository / Ownership / Grant | repository_id | 唯一 ownerAccountId + ownershipVersion；READ/MAINTAIN/MANAGE 授权 |
+| Account / Session | account_id / session_id | version；PASSWORD_CHANGE_REQUIRED、ENABLED、LOCKED、DISABLED；可撤销会话 |
+| Repository / Ownership / Grant | repository_id | repositoryVersion + 唯一 ownerAccountId + ownershipVersion；READ/MAINTAIN/MANAGE 授权 |
 | CodeSnapshot | snapshot_id | 已发布后不可变；sourceVersion、contentDigest、manifest；所有分析的代码事实边界 |
 | CodeGraphArtifact | artifact_id | BUILDING、PUBLISHED、STALE、FAILED、DELETING；ABSENT 为无记录视图 |
 | Content/Vector Index | index_id | BUILDING、PUBLISHED、STALE、FAILED、DELETING；内容与向量状态独立 |
 | Task | task_id | 统一六态；冻结输入、配置、凭据和策略 |
 | QA Session/Message | session_id / message_id | 私人会话；消息绑定证据版本 |
-| Knowledge Card/Revision | card_id / revision_id | DRAFT、PUBLISHED、NEEDS_REVIEW、ARCHIVED |
+| Knowledge Card/Revision | card_id / revision_id | Markdown 源文与不可变修订；DRAFT、PUBLISHED、NEEDS_REVIEW、ARCHIVED |
+| Knowledge Attachment/Object | attachment_id / object_id | UPLOADING、QUARANTINED、READY、REJECTED、DELETING；修订关联与不可变对象分离 |
 | ConfigVersion / BackupSet | version_id / backup_id | 不可变配置；可校验恢复点 |
 
 快照语义：
@@ -306,6 +307,8 @@ sequenceDiagram
 仓库所有权模型：
 
 - `repositories.owner_account_id NOT NULL` 是 OWNER 唯一事实来源，OWNER 不重复写入 grant。`normalized_name` 保存去除首尾空格并统一小写后的名称；对未删除记录建立 `(owner_account_id, normalized_name)` 部分唯一索引。仓库外键和 API 只使用不可变 repositoryId。
+- `accounts.version` 覆盖显示名称和平台角色编辑；账号名是不可变登录标识。角色变化在账号事务中递增版本、撤销会话并发布权限失效事件，显示名称变化只刷新会话摘要。
+- `repositories.repository_version` 覆盖名称、描述和来源配置编辑；`repository_sources.source_version` 单独标识已生效来源配置。名称/描述编辑只递增 repositoryVersion；默认分支编辑任务冻结两者并在候选快照发布时一并递增。
 - `repositories.ownership_version` 对授权、转移和账号停用批量接管提供乐观锁。
 - `repository_grants(repository_id, account_id)` 唯一，权限仅为 READ、MAINTAIN、MANAGE。
 - `repository_governance_locks` 或等价数据库锁使授权、所有权转移和删除互斥。
@@ -339,9 +342,9 @@ flowchart LR
 
 | 存储 | 数据 | 规则 |
 | --- | --- | --- |
-| PostgreSQL | 身份、授权、仓库、版本清单、任务、配置、审计、问答、卡片 | 当前指针权威来源；Flyway 默认开启并负责全部 schema 迁移 |
+| PostgreSQL | 身份、授权、仓库、版本清单、任务、配置、审计、问答、卡片、附件元数据 | 当前指针权威来源；Flyway 默认开启并负责全部 schema 迁移；不保存附件二进制 |
 | pgvector（M1） | chunk embedding | 按 `vector_index_id` 隔离 |
-| 受管文件存储 | 快照、CodeGraph SQLite、临时产物、备份 | 不可变、摘要校验 |
+| 受管文件存储 | 快照、CodeGraph SQLite、知识附件对象、临时产物、备份 | 不可变、摘要校验、路径仅由服务端 ID/摘要生成 |
 | CodeGraph SQLite | 单一产物版本的结构事实 | 只读，不写业务数据 |
 
 ```text
@@ -352,6 +355,7 @@ APP_MANAGED_DATA_ROOT/
     artifacts/
       codegraph/{snapshotId}/{artifactId}/project/.codegraph/
       indexes/{snapshotId}/{indexId}/     # 可选文件型索引产物
+    knowledge/objects/{digestPrefix}/{sha256}
   staging/{operationId}/                  # 构建和校验临时区
   backups/{backupId}/
 ```
@@ -366,7 +370,7 @@ APP_MANAGED_DATA_ROOT/
 - Mapper 接口放在 infrastructure 层，XML 与接口按模块一一对应；application/domain 只依赖持久化端口。Spring `@Transactional` 定义用例事务边界，Mapper 不自行开启或提交事务。
 - SQL 参数使用 `#{}`；`${}` 禁止接收用户输入，只允许服务端白名单生成的标识符。复杂动态查询使用 `<if>`、`<choose>` 和 `<foreach>`，不得在业务服务中拼接 SQL。
 - 账号、授权、OWNER、任务租约、当前版本和删除可见性查询使用显式 `resultMap` 与明确列清单；MyBatis 二级缓存关闭，不能用缓存代替数据库锁、ownershipVersion、fencing token 或权限复核。
-- 游标分页、批量写入、`ON CONFLICT`、部分唯一索引配套查询、`FOR UPDATE SKIP LOCKED`、JSONB、数组和 pgvector 距离查询使用 PostgreSQL 原生 SQL。JSONB、数组、枚举和 vector 通过受测 TypeHandler 映射。
+- 仓库管理、索引任务、账号管理等常规页码列表使用 PageHelper，统一返回 `PageResult<T>`；深翻页、SSE 续取和连续时间线使用显式游标分页。批量写入、`ON CONFLICT`、部分唯一索引配套查询、`FOR UPDATE SKIP LOCKED`、JSONB、数组和 pgvector 距离查询继续使用 PostgreSQL 原生 SQL。JSONB、数组、枚举和 vector 通过受测 TypeHandler 映射。
 - Mapper 集成测试使用与生产同版本的 PostgreSQL/pgvector Testcontainers，覆盖 XML 解析、Flyway 后 schema、行映射、锁竞争、分页和向量维度；CodeGraph SQLite 使用单独只读 JDBC adapter 和连接配置。
 
 ### 5.3 目标表分组
@@ -377,11 +381,11 @@ APP_MANAGED_DATA_ROOT/
 - 检索：`code_chunks`、`chunk_search_documents`、`chunk_embeddings`、`retrieval_traces`。
 - 任务：`tasks`、`task_dependencies`、`task_events`、`repository_locks`。
 - 配置：`config_versions`、`config_entries`、`secret_entries`。
-- 问答/知识：`qa_sessions`、`qa_messages`、`citations`、`knowledge_cards`、`knowledge_card_revisions`、`knowledge_index_versions`、`knowledge_chunks`、`knowledge_denylist`。
+- 问答/知识：`qa_sessions`、`qa_messages`、`citations`、`knowledge_cards`、`knowledge_card_revisions`、`knowledge_attachment_objects`、`knowledge_revision_attachments`、`knowledge_index_versions`、`knowledge_chunks`、`knowledge_denylist`。
 - 入门：`onboarding_paths`、`onboarding_steps`、`onboarding_progress`、`onboarding_bookmarks`、`onboarding_notes`、`project_glossary`、`onboarding_projections`。
 - 备份：`backup_sets`、`backup_items`、`restore_runs`。
 
-关键约束：规范化来源唯一；同一 OWNER 的未删除仓库 `normalized_name` 唯一；版本内容不可变；当前指针只能指向本仓库已发布产物；非终态任务具备幂等唯一约束；列表使用游标分页；UTC 存储；JSONB 不替代关键外键和状态。
+关键约束：规范化来源唯一；同一 OWNER 的未删除仓库 `normalized_name` 唯一；版本内容不可变；当前指针只能指向本仓库已发布产物；非终态任务具备幂等唯一约束；管理列表使用 PageHelper 页码分页，深翻页和连续读取使用游标分页；UTC 存储；JSONB 不替代关键外键和状态。
 
 生产 profile 禁止关闭 Flyway。启动时先执行迁移和后置完整性校验，再开放业务端口；迁移失败、pgvector 不可用、`APP_REPOSITORY_MIGRATION_OWNER` 无效或 OWNER/授权约束不成立时启动失败，不允许以内存存储降级运行。
 
@@ -596,9 +600,19 @@ stateDiagram-v2
     NEEDS_REVIEW --> ARCHIVED
 ```
 
-卡片与修订分离，已发布修订不可原地修改。新修订校验并完成知识索引后原子切换。撤回、归档、删除或待复核时，先同步写 `knowledge_denylist` 立即停止召回，再异步清理；清理失败不得恢复可见性。
+卡片与修订分离，已发布修订不可原地修改。`knowledge_card_revisions` 保存 `body_markdown`、`body_plain_text`、`rendered_html`、`renderer_version` 和 `content_digest`。`MarkdownRendererPort` 使用 commonmark-java 的 CommonMark 解析及表格、删除线、自动链接扩展，关闭原始 HTML并清理危险 URL；生成 HTML后再通过 OWASP Java HTML Sanitizer 的显式白名单二次消毒。客户端预览调用同一服务，不自行产生可持久化 HTML。
 
-快照变化后按文件删除/重命名、行摘要、符号签名和结构关系变化标记待复核。卡片与当前代码冲突时，代码事实优先并显示冲突。
+附件元数据与物理对象分离：
+
+- `knowledge_attachment_objects` 保存 repositoryId、sha256、objectKey、detectedMime、size、pixelMetadata、scanStatus、createdBy 和状态；同仓 `(repository_id, sha256)` 唯一。
+- `knowledge_revision_attachments` 保存 revisionId、objectId、purpose(INLINE_IMAGE/ATTACHMENT)、displayName、altText、caption、sortOrder；同一对象可被多个不可变修订引用。
+- Markdown 只保存 `knowledge-attachment://{attachmentId}`。读取时 AttachmentAccessService 重新校验仓库权限、卡片状态和修订关联，再生成受控内容响应；对象 key 和文件系统路径不进入 DTO。
+- 上传由 `KnowledgeAttachmentApplicationService` 流式写 staging、计算摘要、检测魔数/解码/配额并进入 QUARANTINED；`MalwareScannerPort` 成功后原子移动到 `repositories/{repositoryId}/knowledge/objects` 并标记 READY。生产扫描器不可用时失败关闭。
+- 图片由隔离的 ImageProcessorPort 校验像素/内存上限、移除 EXIF 并生成缩略图；SVG、HTML、压缩包、可执行和宏文件在适配器入口拒绝。
+
+新修订校验 Markdown 内部引用全部属于本修订且对象 READY，随后完成知识索引并原子切换。索引只消费 bodyPlainText 及附件名称、caption、altText、MIME、size；不读取附件二进制。撤回、归档、删除或待复核时，先同步写 `knowledge_denylist` 立即停止召回，再异步清理；清理失败不得恢复可见性。
+
+恢复历史修订时复制附件关联而非复制对象。解除当前草稿关联不影响历史；清理器仅删除超过宽限期且不存在任何 revision 引用的对象，并用数据库引用复核 + 文件摘要校验防止误删。快照变化后按文件删除/重命名、行摘要、符号签名和结构关系变化标记待复核。卡片与当前代码冲突时，代码事实优先并显示冲突。
 
 ## 14. 身份、权限与安全
 
@@ -612,7 +626,7 @@ stateDiagram-v2
 
 审计以仅追加事件记录登录、退出、改密、账号、授权、所有权、凭据、配置、备份和删除操作，并支持时间、操作者、目标、仓库、事件和结果筛选。超级管理员读取全局安全事件；OWNER 仅能读取本人仓库的授权、所有权和凭据治理事件，响应排除平台安全事件与敏感详情；普通账号只能读取自己的最近登录摘要。
 
-账号管理只允许超级管理员新增、编辑、启停、解锁和重置密码；不得停用或降级最后一个启用的超级管理员。M0 不物理删除账号，停用保留业务主体和历史审计；账号变更与必要会话撤销、审计事件在同一业务操作中完成，失败整体回滚。
+账号管理只允许超级管理员新增、编辑、启停、解锁和重置密码；不得停用或降级最后一个启用的超级管理员。`AccountEditApplicationService` 只接受 displayName、role 和 expectedVersion：先锁定账号并校验最后管理员约束，再更新版本；角色变化同时撤销目标会话、发布权限失效事件，编辑本人则响应后强制重新登录；显示名称变化只刷新会话摘要。username、状态、锁定和密码字段不进入该命令。M0 不物理删除账号，停用保留业务主体和历史审计；账号变更与必要会话撤销、审计事件在同一业务操作中完成，失败整体回滚。
 
 ### 14.2 授权
 
@@ -624,7 +638,9 @@ stateDiagram-v2
 - OWNER：MANAGE + 成员授权、专用凭据、所有权转移和删除。
 - SUPER_ADMIN：隐式管理所有仓库并可强制接管，但不自动获得他人私人问答正文。
 
-授权服务统一返回 `relationship` 与 capabilities，至少包括 canUpdate、canIndex、canBuildCodeGraph、canConfigure、canGrant、canManageCredential、canTransferOwnership、canDelete。授权目标必须是启用账号；设置相同 READ/MAINTAIN/MANAGE 幂等返回当前结果。写授权必须携带期望 ownershipVersion，冲突返回最新版本；OWNER 不能通过普通 grant 接口修改自身 OWNER 身份，MANAGE 不能转授权限。用例入口和查询条件两层授权；读取详情、任务日志、源码、分页续取和 SSE 发送时再次校验。权限回收清理服务端缓存并终止后续输出。未授权对象不得通过名称、数量、所有者、版本、错误或耗时泄露。
+授权服务统一返回 `relationship` 与 capabilities，至少包括 canUpdate、canEditRepository、canIndex、canBuildCodeGraph、canConfigure、canGrant、canManageCredential、canTransferOwnership、canDelete。授权目标必须是启用账号；设置相同 READ/MAINTAIN/MANAGE 幂等返回当前结果。写授权必须携带期望 ownershipVersion，冲突返回最新版本；OWNER 不能通过普通 grant 接口修改自身 OWNER 身份，MANAGE 不能转授权限。用例入口和查询条件两层授权；读取详情、任务日志、源码、分页续取和 SSE 发送时再次校验。权限回收清理服务端缓存并终止后续输出。未授权对象不得通过名称、数量、所有者、版本、错误或耗时泄露。
+
+`RepositoryEditApplicationService` 将编辑拆为两条一致性路径：仅名称/描述时在短事务中校验 `repositoryVersion`、OWNER 名称唯一约束和 `canEditRepository` 后更新；包含默认分支时创建 `REPOSITORY_EDIT_SOURCE` 任务，在 staging 验证分支并生成候选快照，发布事务再次校验 repository/source/ownership 版本和权限，然后原子更新名称、描述、默认分支、当前快照及过期标记。失败、取消、权限回收或版本冲突均丢弃候选内容，旧配置和快照保持当前。sourceType、路径、URL、GitLab 项目标识、OWNER 和 credentialId 不在 PATCH 白名单中。
 
 所有权转移只允许 READY 或 AUTH_ERROR 仓库，目标必须是启用且非当前 OWNER 的账号，并要求影响预览和二次确认。账号停用服务先查询 OWNER 仓库、受管数据量和运行任务并要求目标接管账号，使用 ownershipVersion 逐仓校验，并预检目标 OWNER 下的 `normalized_name`；冲突仓库必须携带新名称映射。在同一事务完成必要重命名、批量转移和停用，任一冲突整体回滚。单仓所有权转移同样原子处理名称冲突。所有权转移默认不给旧 OWNER 保留权限，也可显式降为 READ、MAINTAIN 或 MANAGE。治理锁禁止转移与删除并发。
 
@@ -656,12 +672,13 @@ allowExternal = providerEnabled
 
 ## 16. API 与错误设计
 
-API 前缀 `/api/v1`，JSON 使用 camelCase。写接口接受 `Idempotency-Key`，更新接受 `If-Match`/version，列表使用 cursor，时间为 ISO-8601 UTC。长任务首次创建返回 `202 Accepted`；相同幂等键或非终态唯一约束命中时返回已有 taskId，不产生第二个任务。统一使用 `X-Request-Id`。
+API 前缀 `/api/v1`，JSON 使用 camelCase。写接口接受 `Idempotency-Key`，更新接受 `If-Match`/version，常规管理列表使用 `pageNum`、`pageSize` 和统一 `PageResult<T>`，深翻页或连续读取接口使用 cursor；时间为 ISO-8601 UTC。长任务首次创建返回 `202 Accepted`；相同幂等键或非终态唯一约束命中时返回已有 taskId，不产生第二个任务。统一使用 `X-Request-Id`。
 
 ```http
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
-GET|POST|PATCH /api/v1/accounts[/{accountId}]
+GET|POST /api/v1/accounts
+GET|PATCH /api/v1/accounts/{accountId}
 POST /api/v1/accounts/{accountId}/disable-preflight
 POST /api/v1/accounts/{accountId}/disable
 
@@ -684,6 +701,18 @@ GET /api/v1/repositories/{repositoryId}/symbols
 GET /api/v1/repositories/{repositoryId}/chunks
 GET /api/v1/repositories/{repositoryId}/source
 
+PATCH /api/v1/accounts/{accountId}
+If-Match: "{accountVersion}"
+{ "displayName": "张三", "role": "NORMAL" }
+-> 200 { "account": { ... }, "sessionRevoked": true }
+
+PATCH /api/v1/repositories/{repositoryId}
+If-Match: "{repositoryVersion}"
+{ "name": "订单服务", "description": "订单域核心仓库", "defaultBranch": "main" }
+-> 200（仅名称/描述）或 202 { "taskId": "...", "status": "QUEUED" }（包含分支）
+
+两个 PATCH 均使用字段白名单，未知字段返回 400；版本冲突返回 409 和最新脱敏摘要。账号成功事件为 `ACCOUNT_UPDATED`；仓库成功事件为 `REPOSITORY_UPDATED`，异步分支编辑同时关联 taskId、旧/新 snapshotId。审计只记录变更字段名和版本，不记录完整来源地址、路径、凭据或源码。
+
 POST /api/v1/search
 POST /api/v1/qa/sessions
 POST /api/v1/qa/sessions/{sessionId}/messages
@@ -692,6 +721,12 @@ POST /api/v1/qa/messages/{messageId}/stop
 POST /api/v1/graph/queries
 POST /api/v1/impact-analyses
 GET|POST /api/v1/knowledge-cards
+GET|PATCH /api/v1/knowledge-cards/{cardId}
+POST /api/v1/knowledge-cards/{cardId}/revisions
+POST /api/v1/knowledge-cards/{cardId}/revisions/{revisionId}/attachments
+GET|PATCH|DELETE /api/v1/knowledge-cards/{cardId}/revisions/{revisionId}/attachments/{attachmentId}
+GET /api/v1/knowledge-cards/{cardId}/revisions/{revisionId}/attachments/{attachmentId}/content
+POST /api/v1/knowledge-cards/markdown-preview
 GET /api/v1/repositories/{repositoryId}/onboarding/overview
 GET|POST /api/v1/repositories/{repositoryId}/onboarding/paths
 GET|PUT /api/v1/repositories/{repositoryId}/onboarding/progress
@@ -734,7 +769,9 @@ OWNER 在仓库详情管理成员、专用凭据、所有权和仓库级治理�
 
 CodeGraph 构建采用双入口但不同时作为同等级主按钮：仓库操作列“更多”菜单按 ABSENT/STALE/FAILED/BUILDING/PUBLISHED 显示“构建 CodeGraph”“更新 CodeGraph”“重新构建”“查看构建进度”或次级“重新构建”；CodeGraph/调用图页面在无产物空状态显示主按钮“立即构建”，过期/失败显示原因与更新/重试，PUBLISHED 时标题区只保留次级重建。READ 不显示构建按钮；两个入口只读取 `canBuildCodeGraph` 和同一任务状态，任一入口创建任务后另一入口立即切换到进度。
 
-权限回收/会话失效时取消请求与 SSE，清除内存代码和问答。任务只展示真实状态、阶段、进度、阻塞原因、脱敏事件、取消和重试；失败任务与旧可用产物并列。危险操作提供影响预览和二次确认。Markdown、日志、源码和模型回答均安全渲染，前端不持久化明文敏感信息。关键操作支持键盘、可见焦点、语义标签和足够对比度；调用图提供表格/列表替代视图。桌面浏览器支持当前两个主要版本的 Chromium 和 Edge。未交付能力不生成菜单或假入口。
+知识页面由 `KnowledgeView` 组合 `KnowledgeCardList`、`KnowledgeCardEditorDialog`、`KnowledgeMarkdownEditor`、`KnowledgeAttachmentList` 和 `KnowledgeRevisionHistory`。编辑器提供编写/预览、格式工具栏、拖拽/粘贴/选择上传、进度/取消/重试、图片替代文本、附件说明及插入正文；预览调用服务端 markdown-preview。离页前存在未保存正文或非终态上传时阻止误关闭，权限回收立即取消上传、清除 Blob URL 和草稿缓存。移动端由分栏退化为编写/预览 Tab。
+
+权限回收/会话失效时取消请求、上传与 SSE，清除内存代码、问答、附件预览 URL 和未提交知识草稿。任务只展示真实状态、阶段、进度、阻塞原因、脱敏事件、取消和重试；失败任务与旧可用产物并列。危险操作提供影响预览和二次确认。Markdown、日志、源码和模型回答均安全渲染，前端不持久化明文敏感信息。关键操作支持键盘、可见焦点、语义标签和足够对比度；调用图提供表格/列表替代视图。桌面浏览器支持当前两个主要版本的 Chromium 和 Edge。未交付能力不生成菜单或假入口。
 
 ### 17.1 开发者入门工作台设计
 
@@ -797,7 +834,7 @@ POST /api/repositories/{repositoryId}/quick-start/prepare
 
 跨数据库/文件发布不使用分布式事务，采用“不可变文件 + 数据库发布记录 + 可修复状态机”：临时构建并摘要 → 移到最终不可变路径 → 数据库事务插入产物并 CAS 切换指针 → 写发布事件。巡检器回收“有文件无记录”，并对“有指针无文件”告警和回退。
 
-备份包含业务库、账号/授权、加密配置与凭据密文、任务/审计、产物元数据、删除墓碑和清单。大型快照/CodeGraph/索引可按策略不直接备份，但必须记录可重建来源、工具版本、预计时间与风险。默认每日备份，保留 7 个日备份和 4 个周备份；备份加密、生成不可变清单和完整性摘要，主密钥分离。只有完整性校验通过的任务结果进入 READY。
+备份包含业务库、账号/授权、加密配置与凭据密文、任务/审计、产物元数据、知识 Markdown、全部 READY 知识附件对象、删除墓碑和清单。大型快照/CodeGraph/索引可按策略不直接备份，但必须记录可重建来源、工具版本、预计时间与风险。默认每日备份，保留 7 个日备份和 4 个周备份；备份加密、生成不可变清单和完整性摘要，主密钥分离。只有完整性校验通过的任务结果进入 READY。
 
 恢复流程：预检格式、版本、摘要、schema、空间、密钥、覆盖范围、停机影响和运行中写任务 → 维护模式并拒绝新业务写入/任务 → 等待或取消写任务 → 恢复前安全备份 → 隔离恢复数据库与文件 → 原子切换 → 应用删除墓碑和保留期 → 校验每个未删除仓库恰有一个有效 OWNER、同一 OWNER 下 `normalized_name` 唯一、grant 不含 OWNER 且唯一 → 校验指针、摘要、文件、产物与凭据 → 缺失产物标记 STALE 并创建任务 → 旧会话失效 → 退出维护模式。备份中的 OWNER 无效时，预检必须由超级管理员提供恢复接管映射；映射造成同名时同时提供新名称映射，禁止随机选择。
 
@@ -835,7 +872,7 @@ HTTP、任务、检索、模型和发布事件携带 requestId、taskId、reposi
 
 ## 21. 测试、验收与追踪
 
-测试层次：领域状态/权限/版本/外发单元测试；四类来源、CodeGraph schema、Provider 和存储契约测试；PostgreSQL 租约/fencing/指针/Flyway 集成测试；Zip Slip/Bomb、符号链接、命令注入、SSRF/DNS/TLS/SSH、XSS/CSRF、越权安全测试；进程中断、发布中断、磁盘不足、provider 超时、取消与发布竞争故障注入；按正式验收编号执行 E2E。
+测试层次：领域状态/权限/版本/外发单元测试；四类来源、CodeGraph schema、Provider 和存储契约测试；PostgreSQL 租约/fencing/指针/Flyway 集成测试；Zip Slip/Bomb、符号链接、命令注入、SSRF/DNS/TLS/SSH、Markdown XSS、危险 URL、MIME 欺骗、图片解析炸弹、恶意附件、越权下载和 CSRF 安全测试；进程中断、发布中断、磁盘不足、provider 超时、取消与发布竞争故障注入；按正式验收编号执行 E2E。
 
 冻结 Java、TypeScript、Python 样例验证：定义定位 precision/recall ≥ 95%；直接关系 precision ≥ 95%、recall ≥ 90%；精确检索 Top-5 ≥ 95%；自然语言检索 Top-10 ≥ 90%；问答仓库事实引用支持率 100%；无效路径、越界行号和不存在符号为 0。
 
@@ -854,7 +891,7 @@ HTTP、任务、检索、模型和发布事件携带 requestId、taskId、reposi
 | 17 | 5.12 | UI |
 | 18 | 5.11、6.4 | BAK |
 
-当前验收范围以需求追踪表为准：AUTH-01..09、AM-01..07、AUD-01..02、RP-01..18、RM-01..29、TASK-01..15、CG-01..16、IDX-01..15、INCR-01..06、SRCH-01..17、MSRCH-01..07、QA-01..19、GRAPH-01..10、IMPACT-01..07、KC-01..19、UI-01..27、SET-01..15、BAK-01..11。
+当前验收范围以需求追踪表为准：AUTH-01..09、AM-01..10、AUD-01..02、RP-01..18、RM-01..33、TASK-01..15、CG-01..16、IDX-01..15、INCR-01..06、SRCH-01..17、MSRCH-01..07、QA-01..19、GRAPH-01..10、IMPACT-01..07、KC-01..31、UI-01..43、SET-01..15、BAK-01..12。
 
 ## 22. 实施分解与现有工程迁移
 

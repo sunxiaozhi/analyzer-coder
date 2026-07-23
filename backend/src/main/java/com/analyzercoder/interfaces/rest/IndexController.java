@@ -1,5 +1,7 @@
 package com.analyzercoder.interfaces.rest;
 
+import com.analyzercoder.application.common.PageResult;
+import com.analyzercoder.application.indexing.IndexJobPageService;
 import com.analyzercoder.application.indexing.IndexJobUseCase;
 import com.analyzercoder.application.indexing.StartIndexCommand;
 import com.analyzercoder.domain.indexing.IndexJob;
@@ -26,10 +28,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class IndexController {
     private final IndexJobUseCase useCase;
     private final AccessControlService accessControl;
+    private final IndexJobPageService pageService;
 
-    public IndexController(IndexJobUseCase useCase, AccessControlService accessControl) {
+    public IndexController(IndexJobUseCase useCase, AccessControlService accessControl, IndexJobPageService pageService) {
         this.useCase = useCase;
         this.accessControl = accessControl;
+        this.pageService = pageService;
     }
 
     @PostMapping("/api/repositories/{repositoryId}/index")
@@ -49,6 +53,16 @@ public class IndexController {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
         return IndexJobResponse.from(useCase.getLatestStatus(id));
+    }
+
+    @GetMapping("/api/index-jobs/page")
+    public PageResult<IndexJobResponse> page(
+        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "1") int pageNum,
+        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20") int pageSize,
+        HttpServletRequest request
+    ) {
+        var account = SecurityContext.account(request);
+        return pageService.page(account, pageNum, pageSize).map(IndexJobResponse::from);
     }
 
     @GetMapping("/api/index-jobs/{jobId}")

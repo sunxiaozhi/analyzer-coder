@@ -38,7 +38,7 @@ public class PostgresCodeRepositoryStore implements CodeRepositoryStore {
     @Override public boolean existsByPath(Path path) { return mapper.countByPath(path.toAbsolutePath().normalize().toString()) > 0; }
     @Override public void delete(CodeRepositoryId id) { mapper.delete(id.value()); }
 
-    private static CodeRepository toDomain(RepositoryRow row) {
+    public static CodeRepository toDomain(RepositoryRow row) {
         return new CodeRepository(
             CodeRepositoryId.of(row.id()), row.name(), Path.of(row.path()), RepositorySourceType.valueOf(row.sourceType()),
             row.defaultBranch(), row.currentCommit(), row.worktreeDigest(), row.worktreeDirty(),

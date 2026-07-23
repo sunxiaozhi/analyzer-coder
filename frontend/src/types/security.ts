@@ -1,4 +1,4 @@
 export type AccountRole='SUPER_ADMIN'|'NORMAL';export type AccountStatus='ENABLED'|'DISABLED'|'LOCKED'|'PASSWORD_CHANGE_REQUIRED';
 export interface SessionAccount{id:string;username:string;displayName:string;role:AccountRole;mustChangePassword:boolean;lastLoginAt:string|null;csrfToken:string}
-export interface AccountSummary{id:string;username:string;displayName:string;role:AccountRole;status:AccountStatus;repositoryPermissionCount:number;lastLoginAt:string|null;lastLoginIp:string|null;createdAt:string;updatedAt:string}
+export interface AccountSummary{id:string;username:string;displayName:string;role:AccountRole;status:AccountStatus;repositoryPermissionCount:number;lastLoginAt:string|null;lastLoginIp:string|null;createdAt:string;updatedAt:string;version:number}
 export interface CreatedAccount{account:AccountSummary;temporaryPassword:string}export interface AuditEvent{id:string;eventType:string;result:string;requestId:string|null;sourceIp:string|null;actorUsername:string|null;targetUsername:string|null;repositoryName:string|null;createdAt:string}

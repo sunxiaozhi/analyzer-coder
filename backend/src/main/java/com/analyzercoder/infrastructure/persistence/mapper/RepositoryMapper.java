@@ -12,8 +12,11 @@ public interface RepositoryMapper {
     int update(RepositoryRow row);
     RepositoryRow findById(@Param("id") UUID id);
     List<RepositoryRow> findAll();
+    List<RepositoryRow> findVisiblePage(@Param("accountId") UUID accountId,@Param("admin") boolean admin,@Param("query") String query);
     int countByOwnerAndNormalizedName(@Param("ownerId") UUID ownerId, @Param("normalizedName") String normalizedName);
     int countByPath(@Param("path") String path);
+    int countByOwnerAndNormalizedNameExcludingId(@Param("ownerId") UUID ownerId,@Param("normalizedName") String normalizedName,@Param("id") UUID id);
+    int updateEditableMetadata(@Param("id") UUID id,@Param("name") String name,@Param("normalizedName") String normalizedName,@Param("description") String description,@Param("defaultBranch") String defaultBranch,@Param("expectedVersion") long expectedVersion);
     int updateManagedSource(@Param("id") UUID id, @Param("path") String path, @Param("sourceType") String sourceType,
         @Param("hideGitVersion") boolean hideGitVersion);    int updateSourceMetadata(@Param("id") UUID id, @Param("sourceType") String sourceType,
         @Param("hideGitVersion") boolean hideGitVersion);

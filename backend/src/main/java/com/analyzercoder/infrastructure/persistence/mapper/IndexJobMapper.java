@@ -13,6 +13,7 @@ public interface IndexJobMapper {
     IndexJobRow findLatest(@Param("repositoryId") UUID repositoryId);
     List<IndexJobRow> findByRepositoryId(@Param("repositoryId") UUID repositoryId);
     List<IndexJobRow> findAll();
+    List<IndexJobRow> findVisiblePage(@Param("accountId") UUID accountId,@Param("admin") boolean admin);
     int countActive(@Param("repositoryId") UUID repositoryId);
     IndexJobRow findNextQueued();
     IndexJobRow claimNextQueued();

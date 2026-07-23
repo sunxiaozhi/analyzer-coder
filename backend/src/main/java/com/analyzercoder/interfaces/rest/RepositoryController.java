@@ -1,5 +1,6 @@
 package com.analyzercoder.interfaces.rest;
 
+import com.analyzercoder.application.common.PageResult;
 import com.analyzercoder.application.repository.*;
 import com.analyzercoder.domain.repository.*;
 import com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper;
@@ -23,10 +24,12 @@ public class RepositoryController {
     private final RegisterRepositoryUseCase useCase;
     private final AccessControlService accessControl;
     private final RepositoryGovernanceService governance;
+    private final RepositoryEditingService editing;
+    private final RepositoryPageService pageService;
     private final CodeGraphArtifactMapper codeGraphArtifacts;
     public RepositoryController(RegisterRepositoryUseCase useCase,AccessControlService accessControl,
-        RepositoryGovernanceService governance,CodeGraphArtifactMapper codeGraphArtifacts){
-        this.useCase=useCase;this.accessControl=accessControl;this.governance=governance;this.codeGraphArtifacts=codeGraphArtifacts;
+        RepositoryGovernanceService governance,RepositoryEditingService editing,RepositoryPageService pageService,CodeGraphArtifactMapper codeGraphArtifacts){
+        this.useCase=useCase;this.accessControl=accessControl;this.governance=governance;this.editing=editing;this.pageService=pageService;this.codeGraphArtifacts=codeGraphArtifacts;
     }
 
     @PostMapping
@@ -34,6 +37,16 @@ public class RepositoryController {
         var account=SecurityContext.account(request);
         CodeRepository repository=useCase.register(new RegisterRepositoryCommand(body.name(),body.path(),account.id()));
         return response(repository,account);
+    }
+    @GetMapping("/page")
+    public PageResult<RepositoryResponse> page(
+        @RequestParam(required=false) String query,
+        @RequestParam(defaultValue="1") int pageNum,
+        @RequestParam(defaultValue="20") int pageSize,
+        HttpServletRequest request
+    ){
+        var account=SecurityContext.account(request);
+        return pageService.page(account,query,pageNum,pageSize).map(repository->response(repository,account));
     }
     @GetMapping("/{repositoryId}")
     public RepositoryResponse get(@PathVariable UUID repositoryId,HttpServletRequest request){
@@ -51,6 +64,12 @@ public class RepositoryController {
         accessControl.require(account,id,RepositoryPermission.MAINTAIN);RepositoryScanResult result=useCase.rescan(id);
         return new RescanRepositoryResponse(result.changed(),response(result.repository(),account));
     }
+    @PatchMapping("/{repositoryId}")
+    public RepositoryResponse update(@PathVariable UUID repositoryId,@Valid @RequestBody UpdateRepositoryRequest body,HttpServletRequest request){
+        var account=SecurityContext.account(request);
+        editing.update(account,repositoryId,body.name(),body.description(),body.defaultBranch(),body.version(),request.getRemoteAddr());
+        return response(useCase.get(CodeRepositoryId.of(repositoryId)),account);
+    }
     @DeleteMapping("/{repositoryId}")
     public void delete(@PathVariable UUID repositoryId,HttpServletRequest request){
         var account=SecurityContext.account(request);governance.requestDeletion(account,repositoryId,request.getRemoteAddr());
@@ -58,20 +77,23 @@ public class RepositoryController {
     private RepositoryResponse response(CodeRepository repository,AuthenticatedAccount account){
         CodeGraphArtifactRow artifact=repository.currentSnapshotId()==null?null:
             codeGraphArtifacts.findPublished(repository.id().value(),repository.currentSnapshotId().value());
-        return RepositoryResponse.from(repository,accessControl.describe(account,repository.id()),artifact);
+        var metadata=editing.metadata(repository.id().value());
+        return RepositoryResponse.from(repository,accessControl.describe(account,repository.id()),artifact,metadata);
     }
 
     public record RegisterRepositoryRequest(@NotBlank @Size(max=100) String name,@NotBlank String path){}
+    public record UpdateRepositoryRequest(@NotBlank @Size(max=100) String name,@Size(max=500) String description,String defaultBranch,long version){}
+
     public record RescanRepositoryResponse(boolean changed,RepositoryResponse repository){}
     public record RepositoryResponse(
-        UUID id,String name,String path,RepositorySourceType sourceType,String branch,String commit,String worktreeDigest,
+        UUID id,String name,String description,long version,String path,RepositorySourceType sourceType,String branch,String commit,String worktreeDigest,
         boolean dirty,UUID snapshotId,Instant snapshotCreatedAt,String codeGraphPath,boolean codeGraphDetected,
         Instant lastScannedAt,UUID ownerAccountId,String ownerDisplayName,String relationship,long ownershipVersion,
         String repositoryStatus,RepositoryAccess.Capabilities capabilities
     ){
-        static RepositoryResponse from(CodeRepository repository,RepositoryAccess access){return from(repository,access,null);}
-        static RepositoryResponse from(CodeRepository repository,RepositoryAccess access,CodeGraphArtifactRow artifact){return new RepositoryResponse(
-            repository.id().value(),repository.name(),repository.path().toString(),repository.sourceType(),repository.defaultBranch(),
+        static RepositoryResponse from(CodeRepository repository,RepositoryAccess access){return from(repository,access,null,new RepositoryEditingService.Metadata("",1));}
+        static RepositoryResponse from(CodeRepository repository,RepositoryAccess access,CodeGraphArtifactRow artifact,RepositoryEditingService.Metadata metadata){return new RepositoryResponse(
+            repository.id().value(),repository.name(),metadata.description(),metadata.version(),repository.path().toString(),repository.sourceType(),repository.defaultBranch(),
             repository.currentCommit(),repository.worktreeDigest(),repository.worktreeDirty(),repository.currentSnapshotId()==null?null:repository.currentSnapshotId().value(),
             repository.snapshotCreatedAt(),artifact==null?repository.codeGraphPath().toString():artifact.artifactPath(),artifact!=null,repository.lastScannedAt(),
             access.ownerAccountId(),access.ownerDisplayName(),access.relationship(),access.ownershipVersion(),access.repositoryStatus(),access.capabilities());}

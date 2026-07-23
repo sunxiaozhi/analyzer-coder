@@ -220,11 +220,27 @@
   width: 300px;
 }
 
-.repository-design .toolbar .el-input__wrapper,
-.repository-design .toolbar .el-select__wrapper,
-.account-design .toolbar .el-input__wrapper,
-.account-design .toolbar .el-select__wrapper {
-  border-radius: 22px !important;
+.app-search-input .el-input__wrapper {
+  min-height: 36px;
+  padding-inline: 13px;
+  border-radius: 10px !important;
+  background: #fafbfc;
+  box-shadow: 0 0 0 1px #d8dce2 inset;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.app-search-input .el-input__wrapper:hover {
+  background: #fff;
+  box-shadow: 0 0 0 1px #aeb7c2 inset;
+}
+
+.app-search-input .el-input__wrapper.is-focus {
+  background: #fff;
+  box-shadow: 0 0 0 1px #0066cc inset, 0 0 0 3px rgb(0 102 204 / 10%);
+}
+
+.app-search-input .el-input__prefix {
+  color: #7b8490;
 }
 
 .repository-design .el-table td.el-table__cell,
@@ -318,6 +334,18 @@
 
 .route-view .knowledge-grid {
   padding: 16px 0 0;
+}
+
+.route-view .knowledge-card {
+  background: #fff;
+  border-color: #d6dbe2;
+  box-shadow: 0 2px 8px rgb(24 39 58 / 6%);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.route-view .knowledge-card:hover {
+  border-color: #b9c5d3;
+  box-shadow: 0 6px 16px rgb(24 39 58 / 10%);
 }
 
 .code-search-design {

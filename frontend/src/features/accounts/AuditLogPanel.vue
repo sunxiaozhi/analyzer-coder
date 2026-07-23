@@ -46,5 +46,14 @@ function clearFilters(){actor.value='';target.value='';eventType.value='';result
 </template>
 
 <style scoped>
-.audit-panel{display:grid;gap:16px}.audit-toolbar{display:flex;flex-wrap:wrap;gap:10px}.audit-toolbar .el-select{width:150px}.audit-time{display:grid;gap:2px}.audit-time small{color:var(--el-text-color-secondary)}.audit-pagination{display:flex;align-items:center;justify-content:space-between;color:var(--el-text-color-secondary);font-size:13px}
+.audit-panel{display:grid;gap:16px}
+.audit-toolbar{display:flex;flex-wrap:wrap;gap:10px;padding:10px 20px}
+.audit-toolbar .el-select{width:150px}
+.audit-time{display:grid;gap:2px}
+.audit-time small{color:var(--el-text-color-secondary)}
+.audit-pagination{display:flex;align-items:center;justify-content:space-between;color:var(--el-text-color-secondary);font-size:13px}
+
+@media (max-width: 760px) {
+  .audit-toolbar{padding-inline:12px}
+}
 </style>

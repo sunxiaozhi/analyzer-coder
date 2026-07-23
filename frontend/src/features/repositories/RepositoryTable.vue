@@ -11,6 +11,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
+  edit: [repository: Repository];
   index: [repositoryId: string];
   rescan: [repositoryId: string];
   remove: [repositoryId: string, name: string];
@@ -31,6 +32,12 @@ function repositoryStatusLabel(status: string) {
     DELETED: '仓库已删除',
     FAILED: '仓库异常',
   }[status] ?? `仓库状态：${status}`;
+}
+
+function canEditRepository(row: Repository) {
+  return row.capabilities.canEditRepository
+    ?? row.capabilities.canConfigure
+    ?? ['OWNER', 'SUPER_ADMIN', 'MANAGE'].includes(row.relationship);
 }
 
 function command(action: string, row: Repository) {
@@ -66,9 +73,10 @@ function command(action: string, row: Repository) {
         </div>
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="300" fixed="right">
+    <el-table-column label="操作" width="340" fixed="right">
       <template #default="{ row }">
         <div class="repository-actions">
+          <el-button v-if="canEditRepository(row)" class="action-button" link type="primary" @click="emit('edit', row)">编辑</el-button>
           <el-button
             v-if="row.capabilities.canUpdate"
             class="action-button"

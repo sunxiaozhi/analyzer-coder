@@ -1,8 +1,8 @@
 # 代码智库系统技术选型文档
 
-版本：v0.1  
-日期：2026-07-19  
-状态：初稿，待评审
+版本：v0.3
+日期：2026-07-23
+状态：补充 MyBatis PageHelper 分页组件决策
 
 ## 1. 选型原则
 
@@ -23,7 +23,7 @@
 
 1. Java / Spring Boot 适合构建长期维护的企业级服务，工程化、配置管理、可观测性、权限集成和部署生态成熟。
 2. 代码智库系统需要管理仓库、索引任务、结构化查询、问答会话和权限，整体更接近企业知识平台而不是单纯 AI 实验脚本。
-3. MyBatis、JDBC SQLite、PostgreSQL、Redis、任务调度和安全组件都比较成熟。
+3. MyBatis、PageHelper、JDBC SQLite、PostgreSQL、Redis、任务调度和安全组件都比较成熟。
 4. Spring AI 和 LangChain4j 已经提供 Java 侧 LLM、Embedding、Vector Store、RAG 和 Tool Calling 抽象，可减少从零对接模型服务的成本。
 
 备选：
@@ -93,23 +93,62 @@ MVP 如果以本地验证为主，可用 SQLite 快速启动；产品化服务�
 推荐：
 
 1. MyBatis 3 + `mybatis-spring-boot-starter`：统一承载 PostgreSQL 业务 CRUD、权限范围查询、任务领取、统计、检索和 pgvector SQL。
-2. Mapper 接口 + XML：SQL 默认放在 XML，Java 注解只用于极简单且稳定的查询；复杂动态条件使用 `<if>`、`<choose>`、`<foreach>`。
-3. PostgreSQL TypeHandler：显式处理 JSONB、数组、枚举和 pgvector；向量维度和模型版本仍由业务约束校验。
-4. Flyway：只负责 schema、扩展、索引和数据迁移，不在 MyBatis 启动期间自动建表。
-5. SQLite JDBC：CodeGraph SQLite 继续通过独立只读 adapter 访问，不复用业务 MyBatis `SqlSessionFactory`。
+2. PageHelper + `pagehelper-spring-boot-starter`：作为 MyBatis 常规页码分页组件，适用于账号、仓库、审计、任务、知识卡片等后台列表；使用与 Spring Boot 3、当前 MyBatis 和 JSqlParser 依赖组合验证通过的版本，不由业务模块分别声明版本。
+3. Mapper 接口 + XML：SQL 默认放在 XML，Java 注解只用于极简单且稳定的查询；复杂动态条件使用 `<if>`、`<choose>`、`<foreach>`。
+4. PostgreSQL TypeHandler：显式处理 JSONB、数组、枚举和 pgvector；向量维度和模型版本仍由业务约束校验。
+5. Flyway：只负责 schema、扩展、索引和数据迁移，不在 MyBatis 启动期间自动建表。
+6. SQLite JDBC：CodeGraph SQLite 继续通过独立只读 adapter 访问，不复用业务 MyBatis `SqlSessionFactory`，也不挂载 PageHelper。
 
 约束：
 
 1. 不使用 JPA/Hibernate、Spring Data JDBC 或 jOOQ，避免同一业务库并存多套持久化语义。
-2. 不把 MyBatis-Plus、PageHelper 作为基础依赖；分页使用明确的游标 SQL，批量、锁和 `FOR UPDATE SKIP LOCKED` 均写成可审查 SQL。
+2. 不引入 MyBatis-Plus；常规后台列表统一使用 PageHelper，深翻页、高频时间线、SSE 续取和需要稳定 continuation token 的接口继续使用显式游标 SQL。批量、锁和 `FOR UPDATE SKIP LOCKED` 均写成可审查 SQL，不交给分页插件改写。
 3. Mapper 仅位于 infrastructure 层并实现领域持久化端口；Controller 和 domain 不直接调用 Mapper。
 4. 参数值统一使用 `#{}` 绑定，禁止把用户输入放入 `${}`；确需动态表名、列名或排序字段时只能从服务端白名单枚举生成。
 5. 关键查询使用显式 `resultMap`；跨请求二级缓存默认关闭，权限、任务和当前版本查询不得依赖 MyBatis 缓存保证一致性。
 6. PostgreSQL SQL 由 Testcontainers 集成测试验证，Mapper XML 在启动测试中全量解析；Flyway 迁移必须先于 Mapper 可用性检查完成。
 
+分页规范：
+
+1. Controller 统一接收 `pageNum`、`pageSize`；`pageNum` 从 1 开始，`pageSize` 默认 20、最大 100。非法参数直接返回参数错误，不使用 `reasonable=true` 静默修正用户输入。
+2. Service 在目标 Mapper 查询前紧邻调用 `PageHelper.startPage(pageNum, pageSize)`；分页调用和查询必须位于同一线程、同一同步调用链，禁止跨异步任务、并行流或多个 Mapper 查询复用一次分页上下文。
+3. PageHelper 只拦截紧随其后的单条列表查询。Service 使用 PageHelper 推荐的安全调用方式，并确保异常路径清理分页 ThreadLocal，防止后续 SQL 被误分页。
+4. PostgreSQL 方言固定为 `postgresql`；关闭 `pageSizeZero`，默认执行 count。无需总数的下拉选择器、自动补全和“加载更多”接口显式关闭 count。
+5. 统一返回 `PageResult<T>`，字段为 `items`、`pageNum`、`pageSize`、`total`、`pages`。不得把 PageHelper 的 `Page`、`PageInfo` 或其他插件类型暴露到 Controller、domain 或前端契约。
+6. 排序字段由服务端枚举映射到固定 SQL 列，禁止把请求中的排序表达式直接传给 PageHelper `orderBy`，也禁止通过 MyBatis `${}` 拼接用户输入。
+7. 一对多 JOIN 可能导致重复行或 count 错误时，先分页主表 ID，再查询详情并按 ID 顺序组装；不得依赖 `DISTINCT` 掩盖错误的数据模型。
+8. pgvector Top-K、CodeGraph SQLite、任务领取、锁查询、SSE 续取和深翻页不使用 PageHelper，继续采用显式 `LIMIT`、稳定游标条件或 PostgreSQL 原生锁语义。
+9. 分页 Mapper 集成测试至少覆盖空页、首页、末页、越界、最大 `pageSize`、组合筛选、稳定排序、权限过滤和 count 正确性。
+
+配置基线：
+
+```yaml
+pagehelper:
+  helper-dialect: postgresql
+  reasonable: false
+  page-size-zero: false
+  support-methods-arguments: false
+```
+
 结论：
 
-业务数据库查询统一使用原生 MyBatis；简单 CRUD 和复杂 PostgreSQL/pgvector SQL 均由 Mapper 管理，事务使用 Spring `@Transactional`，迁移使用 Flyway；CodeGraph SQLite 保持独立 JDBC 只读适配器。
+业务数据库查询统一使用 MyBatis；常规页码列表由 PageHelper 生成 PostgreSQL 分页与 count SQL，深翻页和连续读取使用显式游标分页。复杂 PostgreSQL/pgvector SQL 仍由 Mapper 管理，事务使用 Spring `@Transactional`，迁移使用 Flyway；CodeGraph SQLite 保持独立 JDBC 只读适配器。
+
+### 2.3.2 知识 Markdown 与附件存储
+
+推荐：
+
+1. Markdown 解析使用 `commonmark-java`，仅启用需求明确的 CommonMark、表格、删除线和自动链接扩展；原始 HTML关闭，危险 URL 清理。
+2. HTML 二次消毒使用 `OWASP Java HTML Sanitizer`，通过项目内固定白名单允许段落、标题、列表、表格、引用、代码、链接和内部图片，不接受客户端提交的 HTML。
+3. PostgreSQL 只保存 Markdown 源文、纯文本、消毒 HTML、渲染器版本、附件元数据和修订关联；附件二进制不使用 BYTEA 或 PostgreSQL Large Object。
+4. 单机/内网部署使用 `APP_MANAGED_DATA_ROOT/repositories/{repositoryId}/knowledge/objects` 的内容寻址文件存储；通过 `KnowledgeObjectStoragePort` 隔离，未来可替换为 S3 兼容对象存储。
+5. 上传流式落 staging，使用 Apache Tika 或等价受限探测器识别真实 MIME，图片使用隔离安全解码器，恶意内容扫描通过 `MalwareScannerPort` 接入 ClamAV 或部署方扫描服务。
+6. 前端不引入能自行产出可信 HTML 的富文本存储模型；使用 Vue 3 的 `KnowledgeMarkdownEditor` 维护 Markdown 源文，预览调用服务端统一渲染接口。
+
+结论：
+
+知识正文以 Markdown 为唯一可编辑事实格式，渲染 HTML 是可重建投影；附件以不可变对象保存，数据库只存元数据和引用。首版不解析 PDF/Office 正文，不把附件二进制送入 embedding 或 LLM。
+
 ### 2.4 向量数据库
 
 推荐默认：PostgreSQL + pgvector
@@ -249,14 +288,15 @@ MVP：
 1. Backend：Java 17+ + Spring Boot 3.x
 2. Worker：Spring Scheduler / Spring Batch
 3. Business DB：PostgreSQL
-4. Vector DB：pgvector
-5. CodeGraph：本地 `.codegraph/` SQLite 只读
-6. AI SDK：Spring AI，必要时局部引入 LangChain4j
-7. Embedding：OpenAI 或本地 embedding provider
-8. LLM：OpenAI-compatible provider
-9. Frontend：Vue 3 + Vite + TypeScript + Element Plus
-10. Code Viewer：Monaco Editor
-11. Graph Viewer：Vue Flow 或 Cytoscape.js
+4. Data Access：MyBatis + PageHelper
+5. Vector DB：pgvector
+6. CodeGraph：本地 `.codegraph/` SQLite 只读
+7. AI SDK：Spring AI，必要时局部引入 LangChain4j
+8. Embedding：OpenAI 或本地 embedding provider
+9. LLM：OpenAI-compatible provider
+10. Frontend：Vue 3 + Vite + TypeScript + Element Plus
+11. Code Viewer：Monaco Editor
+12. Graph Viewer：Vue Flow 或 Cytoscape.js
 
 ### 3.2 本地单机组合
 
@@ -272,10 +312,11 @@ MVP：
 1. Backend：Java 17+ + Spring Boot
 2. Worker：Spring Batch + Redis / MQ
 3. Business DB：PostgreSQL
-4. Vector DB：Qdrant 或 pgvector
-5. Object Storage：S3-compatible
-6. Auth：OIDC / SSO
-7. Observability：OpenTelemetry + Prometheus + Loki
+4. Data Access：MyBatis + PageHelper
+5. Vector DB：Qdrant 或 pgvector
+6. Object Storage：S3-compatible
+7. Auth：OIDC / SSO
+8. Observability：OpenTelemetry + Prometheus + Loki
 
 ## 4. 关键技术决策
 
@@ -332,3 +373,5 @@ MVP：
 7. Qdrant Hybrid Search 文档：https://qdrant.tech/documentation/search/text-search/hybrid-search/
 8. LanceDB 官方文档：https://docs.lancedb.com/
 9. OpenAI embedding 模型文档：https://developers.openai.com/api/docs/models/text-embedding-3-large
+10. PageHelper 官方仓库：https://github.com/pagehelper/Mybatis-PageHelper
+11. PageHelper 使用文档：https://pagehelper.github.io/docs/howtouse/

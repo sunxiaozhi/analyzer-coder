@@ -34,6 +34,6 @@ public class AccessControlService {
         String relationship=admin?"SUPER_ADMIN":owner?"OWNER":permission.name();
         boolean maintain=permission.includes(RepositoryPermission.MAINTAIN),manage=permission.includes(RepositoryPermission.MANAGE);
         return new RepositoryAccess(row.ownerAccountId(),row.ownerDisplayName(),relationship,row.ownershipVersion(),row.repositoryStatus(),
-            new RepositoryAccess.Capabilities(true,maintain,maintain,maintain,manage,owner||admin,owner||admin,owner||admin,owner||admin));
+            new RepositoryAccess.Capabilities(true,manage,maintain,maintain,maintain,manage,owner||admin,owner||admin,owner||admin,owner||admin));
     }
 }

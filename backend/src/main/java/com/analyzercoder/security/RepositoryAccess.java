@@ -12,6 +12,7 @@ public record RepositoryAccess(
 ) {
     public record Capabilities(
         boolean canRead,
+        boolean canEditRepository,
         boolean canUpdate,
         boolean canIndex,
         boolean canBuildCodeGraph,

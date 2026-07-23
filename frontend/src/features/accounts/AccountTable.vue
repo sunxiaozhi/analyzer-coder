@@ -7,6 +7,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
+  edit: [account: AccountSummary];
   toggle: [account: AccountSummary];
   reset: [account: AccountSummary];
   unlock: [account: AccountSummary];
@@ -49,9 +50,10 @@ const labels: Record<string, string> = {
         {{ row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleString() : '—' }}
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="310" fixed="right">
+    <el-table-column label="操作" width="350" fixed="right">
       <template #default="{ row }">
         <div class="account-actions">
+          <el-button class="action-button" link type="primary" @click="emit('edit', row)">编辑</el-button>
           <el-button class="action-button" link type="primary" @click="emit('audit', row)">查看审计</el-button>
           <el-button
             v-if="row.status === 'LOCKED'"

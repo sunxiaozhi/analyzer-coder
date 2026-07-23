@@ -1,4 +1,5 @@
 import { request } from '@/api/http';
+import type { PageResult } from '@/types/pagination';
 import type {
   CodeChunkListResponse,
   IndexJob,
@@ -12,8 +13,24 @@ export function listRepositories(): Promise<Repository[]> {
   return request<Repository[]>('/api/repositories');
 }
 
+
+export function listRepositoryPage(params: { query?: string; pageNum: number; pageSize: number }): Promise<PageResult<Repository>> {
+  const search = new URLSearchParams({ pageNum: String(params.pageNum), pageSize: String(params.pageSize) });
+  if (params.query?.trim()) search.set('query', params.query.trim());
+  return request<PageResult<Repository>>(`/api/repositories/page?${search}`);
+}
+
 export function registerRepository(payload: RegisterRepositoryPayload): Promise<Repository> {
   return request<Repository>('/api/repositories', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+
+export function updateRepository(repositoryId: string, payload: {
+  name: string; description: string; defaultBranch: string; version: number;
+}): Promise<Repository> {
+  return request<Repository>(`/api/repositories/${repositoryId}`, {
+    method: 'PATCH', body: JSON.stringify(payload),
+  });
 }
 
 export function rescanRepository(repositoryId: string): Promise<RescanRepositoryResponse> {
