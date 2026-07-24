@@ -9,8 +9,16 @@ public record AuthenticatedAccount(
     String displayName,
     AccountRole role,
     boolean mustChangePassword,
-    Instant lastLoginAt
+    Instant lastLoginAt,
+    UUID lastRepositoryId
 ) {
+    public AuthenticatedAccount(
+        UUID id, String username, String displayName, AccountRole role,
+        boolean mustChangePassword, Instant lastLoginAt
+    ) {
+        this(id, username, displayName, role, mustChangePassword, lastLoginAt, null);
+    }
+
     public boolean isSuperAdmin() {
         return role == AccountRole.SUPER_ADMIN;
     }

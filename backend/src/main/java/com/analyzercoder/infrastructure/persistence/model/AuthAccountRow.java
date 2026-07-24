@@ -7,7 +7,7 @@ public record AuthAccountRow(
     UUID id, String username, String displayName, String passwordHash, String accountRole,
     boolean enabled, boolean mustChangePassword, int failedAttempts, Instant lockedUntil,
     Instant temporaryPasswordExpiresAt, Instant lastLoginAt, String lastLoginIp,
-    Instant createdAt, Instant updatedAt, long accountVersion
+    UUID lastRepositoryId, Instant createdAt, Instant updatedAt, long accountVersion
 ) {
     public AuthAccountRow(
         UUID id, String username, String displayName, String passwordHash, String accountRole,
@@ -17,6 +17,6 @@ public record AuthAccountRow(
     ) {
         this(id, username, displayName, passwordHash, accountRole, enabled, mustChangePassword,
             failedAttempts, lockedUntil, temporaryPasswordExpiresAt, lastLoginAt, lastLoginIp,
-            createdAt, updatedAt, 1);
+            null, createdAt, updatedAt, 1);
     }
 }

@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia';
 import { computed, ref, shallowRef } from 'vue';
 import {
+  getCurrentRepositoryPreference,
+  updateCurrentRepositoryPreference,
+} from '@/api/accountPreferences';
+import {
   deleteRepository,
   listRepositories,
   registerRepository,
@@ -24,12 +28,24 @@ export const useRepositoryStore = defineStore('repository', () => {
     loading.value = true;
     error.value = null;
     try {
-      repositories.value = await listRepositories();
-      if (!selectedRepositoryId.value && repositories.value.length > 0) {
-        selectedRepositoryId.value = repositories.value[0].id;
-      }
-      if (selectedRepositoryId.value && !repositories.value.some((item) => item.id === selectedRepositoryId.value)) {
-        selectedRepositoryId.value = repositories.value[0]?.id ?? null;
+      const [repositoryResult, preferenceResult] = await Promise.allSettled([
+        listRepositories(),
+        getCurrentRepositoryPreference(),
+      ]);
+      if (repositoryResult.status === 'rejected') throw repositoryResult.reason;
+      repositories.value = repositoryResult.value;
+      const preferredRepositoryId = preferenceResult.status === 'fulfilled'
+        ? preferenceResult.value.repositoryId
+        : null;
+      selectedRepositoryId.value = preferredRepositoryId
+        && repositories.value.some((item) => item.id === preferredRepositoryId)
+        ? preferredRepositoryId
+        : repositories.value[0]?.id ?? null;
+      if (
+        preferenceResult.status === 'fulfilled'
+        && selectedRepositoryId.value !== preferredRepositoryId
+      ) {
+        await updateCurrentRepositoryPreference(selectedRepositoryId.value);
       }
     } catch (exception) {
       error.value = exception instanceof Error ? exception.message : '加载仓库失败';
@@ -43,6 +59,7 @@ export const useRepositoryStore = defineStore('repository', () => {
     const repository = await registerRepository(payload);
     repositories.value = [...repositories.value, repository];
     selectedRepositoryId.value = repository.id;
+    await updateCurrentRepositoryPreference(repository.id);
     return repository;
   }
 
@@ -61,6 +78,7 @@ export const useRepositoryStore = defineStore('repository', () => {
     repositories.value = repositories.value.filter((repository) => repository.id !== repositoryId);
     if (selectedRepositoryId.value === repositoryId) {
       selectedRepositoryId.value = repositories.value[0]?.id ?? null;
+      await updateCurrentRepositoryPreference(selectedRepositoryId.value);
     }
   }
 
@@ -70,8 +88,12 @@ export const useRepositoryStore = defineStore('repository', () => {
     return lastStartedJob.value;
   }
 
-  function selectRepository(repositoryId: string | null) {
+  async function selectRepository(repositoryId: string | null) {
+    if (repositoryId && !repositories.value.some((repository) => repository.id === repositoryId)) {
+      throw new Error('当前账号无权访问该仓库');
+    }
     selectedRepositoryId.value = repositoryId;
+    await updateCurrentRepositoryPreference(repositoryId);
   }
 
   return {

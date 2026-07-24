@@ -3,8 +3,9 @@ import { Plus, Search } from '@element-plus/icons-vue';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { intelligenceApi, type CardInput, type CardRevision, type KnowledgeCard } from '@/api/intelligence';
-import KnowledgeAttachmentList from '@/features/knowledge/KnowledgeAttachmentList.vue';
+import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
+import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
 import { renderMarkdown } from '@/features/knowledge/markdown';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
@@ -12,14 +13,16 @@ const repositories = useRepositoryStore();
 const cards = shallowRef<KnowledgeCard[]>([]);
 const query = shallowRef('');
 const dialog = shallowRef(false);
+const detailDialog = shallowRef(false);
 const historyDialog = shallowRef(false);
 const busy = shallowRef(false);
 const editing = shallowRef<KnowledgeCard | null>(null);
+const viewing = shallowRef<KnowledgeCard | null>(null);
 const historyCard = shallowRef<KnowledgeCard | null>(null);
 const revisions = shallowRef<CardRevision[]>([]);
 const rows = computed(() => cards.value.filter(card => {
   const value = query.value.trim().toLowerCase();
-  return !value || `${card.title} ${card.content} ${card.tags.join(' ')}`.toLowerCase().includes(value);
+  return !value || card.title.toLowerCase().includes(value);
 }));
 
 async function load() {
@@ -28,6 +31,7 @@ async function load() {
 }
 function openCreate() { editing.value = null; dialog.value = true; }
 function openEdit(card: KnowledgeCard) { editing.value = card; dialog.value = true; }
+function openDetail(card: KnowledgeCard) { viewing.value = card; detailDialog.value = true; }
 async function save(input: CardInput) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
@@ -73,23 +77,23 @@ onMounted(() => void load());
     </div>
     <div class="surface">
       <div class="toolbar">
-        <el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索标题、正文或标签" clearable />
+        <el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索标题" clearable />
         <span class="spacer" />
         <el-button type="primary" :icon="Plus" :disabled="!repositories.selectedRepositoryId" @click="openCreate">新建卡片</el-button>
       </div>
       <el-empty v-if="!rows.length" description="当前仓库暂无知识卡片" />
       <div class="knowledge-grid">
-        <article v-for="card in rows" :key="card.id" class="knowledge-card">
-          <header><el-tag effect="plain">{{ card.cardType }}</el-tag><el-tag :type="card.status==='PUBLISHED'?'success':card.status==='NEEDS_REVIEW'?'warning':'info'">{{ card.status }}</el-tag></header>
-          <h3>{{ card.title }}</h3>
-          <div class="card-markdown" v-html="card.renderedContent" />
-          <div class="tags"><span v-for="tag in card.tags" :key="tag"># {{ tag }}</span></div>
-          <KnowledgeAttachmentList :items="card.attachments" :repository-id="card.repositoryId" />
-          <footer><span>修订 v{{ card.revision }}</span><time>{{ new Date(card.updatedAt).toLocaleString() }}</time></footer>
-          <div class="toolbar"><el-button link @click="openEdit(card)">编辑为新修订</el-button><el-button link @click="showHistory(card)">历史</el-button></div>
-        </article>
+        <KnowledgeCardListItem
+          v-for="card in rows"
+          :key="card.id"
+          :card="card"
+          @view="openDetail"
+          @edit="openEdit"
+          @history="showHistory"
+        />
       </div>
     </div>
+    <KnowledgeCardDetailDialog v-model="detailDialog" :card="viewing" />
     <KnowledgeCardEditorDialog v-if="repositories.selectedRepositoryId" v-model="dialog"
       :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy" @submit="save" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
@@ -103,5 +107,5 @@ onMounted(() => void load());
 </template>
 
 <style scoped>
-.card-markdown{max-height:190px;overflow:hidden;line-height:1.65;color:var(--el-text-color-regular)}.card-markdown :deep(p){margin:6px 0}.card-markdown :deep(img){max-width:100%;max-height:150px;border-radius:8px}.card-markdown :deep(pre),.history-markdown :deep(pre){overflow:auto;padding:10px;border-radius:8px;background:#18212f;color:#e6edf3}.history-markdown{line-height:1.7}
+.history-markdown :deep(pre){overflow:auto;padding:10px;border-radius:8px;background:#18212f;color:#e6edf3}.history-markdown{line-height:1.7}
 </style>
