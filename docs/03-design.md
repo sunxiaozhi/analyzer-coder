@@ -1,9 +1,9 @@
 # 代码智库系统设计文档
 
-版本：v1.3
-日期：2026-07-23
-状态：与需求 v1.3 对齐版
-需求基线：`docs/01-requirements.md` v1.3
+版本：v2.1
+日期：2026-07-24
+状态：与需求 v2.1 对齐版
+需求基线：`docs/01-requirements.md` v2.1
 技术基线：`docs/02-tech-selection.md`
 
 ## 1. 目的、范围与里程碑
@@ -15,7 +15,7 @@
 | 里程碑 | 必须形成的闭环 | 明确不包含 |
 | --- | --- | --- |
 | M0 | 账号/会话/仓库授权；四类来源；不可变快照；CodeGraph 分析与结构查询；内容索引、关键词查询；统一任务；安全记录；配置；备份恢复 | embedding、向量检索、LLM 问答、多层调用图、知识卡片 |
-| QV1 | 快速开始首页、一键准备、项目画像、快捷问题、跨页面联动；复用现有产物和任务 | 自定义路径、业务域地图、命令执行、自动改代码 |
+| QV1 | 快速开始首页、一键准备、项目画像、快捷问题、跨页面联动；LLM 配置/连通性检测、受控 Provider、Token 流式问答与降级 | 自定义路径、业务域地图、命令执行、自动改代码 |
 | M1 | 向量索引；关键词/符号/向量/结构四路检索；单仓问答；引用校验；外发控制；入门总览、路径、进度、环境预检和基础场景链路 | 多仓问答、多层影响图、增量索引、知识卡片 |
 | M2 | 增量索引；最多 5 仓联合代码检索；多层调用图与影响分析；知识卡片及独立索引；业务域地图、API/数据目录、变化摘要、术语和团队入门沉淀 | 跨仓调用图、多仓问答、运行时链路、自动改代码 |
 
@@ -88,7 +88,7 @@ flowchart TB
 | Graph & Impact | 遍历、路径、聚合、风险因素、测试候选 | 静态图冒充运行时事实 |
 | Knowledge Card | 修订、发布、复核、索引、冲突提示 | 未经人工确认自动发布 |
 | Developer Onboarding | 系统总览、学习路径、场景链路、运行手册、个人进度 | 复制代码事实或自动修改仓库 |
-| Settings & Backup | 配置版本、密钥、影响预览、备份恢复 | 回滚历史明文密钥 |
+| Settings & Backup | 配置版本、LLM Provider、连通性检测、密钥、影响预览、备份恢复 | 回滚历史明文密钥；检测成功后自动启用或放宽外发 |
 
 依赖方向：
 
@@ -116,6 +116,7 @@ infrastructure ------------> domain ports
 | 向量索引 | Embedding Worker | pgvector + 元数据表 | 不可变版本 | vectorIndexId、contentIndexId、model |
 | 检索轨迹 | Hybrid Search | PostgreSQL | 追加记录 | requestId、VersionBundle、strategyVersion |
 | 问答消息与引用 | Question Answering | PostgreSQL | 消息追加、引用不可变 | messageId、VersionBundle、citationId |
+| LLM 配置与检测结果 | Settings & Backup | PostgreSQL + 加密 Secret Store | 配置版本不可变、运行状态可变、检测结果仅追加 | configId、configVersion、fingerprint、checkId |
 | 知识卡片修订 | Knowledge Card | PostgreSQL + 知识索引 | 修订不可变 | cardId、revisionId、snapshotId |
 | 安全/外发事件 | 安全策略与 Provider Adapter | PostgreSQL/审计日志 | 仅追加 | actor、repositoryId、requestId/taskId |
 | 备份集与墓碑 | Backup / Delete Worker | 备份存储 + PostgreSQL | 不可变清单 | backupId、restorePoint、tombstoneId |
@@ -551,7 +552,7 @@ POST   /api/repositories/{repositoryId}/qa/conversations/{conversationId}/messag
 前端 `AskView` 继续作为路由组合面，拆分为 ConversationList、QuestionComposer、AnswerMessage、EvidenceRail 和 SaveKnowledgeDraftDialog。会话、消息和证据篮由问答 feature store 统一管理；切换仓库立即清空，跨页只接收 chunkId/symbolId 等稳定 ID。
 ### 11.2 LLM Token 流式链路
 
-定义 `LlmProviderPort.stream(GenerationRequest)`，基础设施层首个实现为 OpenAI-compatible streaming adapter。Provider DTO、鉴权、超时和流帧解析不得泄漏到 domain/application。密钥从加密配置读取并只在请求内存中使用；base URL 通过 OutboundNetworkPolicy 校验。
+定义 `LlmProviderPort.stream(GenerationRequest)`，基础设施层首个实现为 OpenAI-compatible streaming adapter。Provider DTO、鉴权、超时和流帧解析不得泄漏到 domain/application。`LlmProviderSelector` 只选择已启用、最近检测仍与当前配置指纹一致、状态为 AVAILABLE 且熔断器未打开的配置；随后仍需执行仓库外发策略。密钥从加密配置读取并只在请求内存中使用；base URL 通过 OutboundNetworkPolicy 校验。任何门禁失败都返回结构化降级原因并转入 `deterministic-local`，不得尝试 UNTESTED/DEGRADED/UNAVAILABLE 配置或静默替换模型。
 
 ```text
 POST message
@@ -670,6 +671,116 @@ allowExternal = providerEnabled
 
 配置覆盖存储路径、Git/网络、任务资源、安全会话、索引切分、embedding、LLM、检索、CodeGraph、保留和备份。路径保存前验证绝对路径、允许根、权限、容量与嵌套；Git、GitLab、embedding 和 LLM 连接测试各自独立且失败不替换有效配置。自定义端点复用 OutboundNetworkPolicy。仓库外发策略为 INHERIT、LOCAL_ONLY、ALLOW_EXTERNAL，普通账号只能在仓库范围收紧，不能放宽系统策略；影响索引或模型语义的变更标记相关产物 STALE。
 
+### 15.1 LLM 配置领域模型
+
+`LlmProviderConfig` 是不可变配置版本，字段为 `id`、`version`、`name`、`providerType`、`baseUrl`、`model`、`connectTimeoutMs`、`requestTimeoutMs`、`maxOutputTokens`、`temperature`、`streamingEnabled`、`secretVersionId`、`fingerprint`、`createdBy` 和 `createdAt`。首版 `providerType` 只允许 `OPENAI_COMPATIBLE`；`deterministic-local` 是内置本地策略，不伪装成外部配置，也不持有密钥。
+
+配置字段规则：
+
+- Base URL 规范化为 scheme、ASCII host、显式/默认 port 和无查询参数的基路径；禁止 user-info、fragment 和不可见字符。生产只允许 HTTPS；开发环境放开 HTTP/回环必须由部署级开关控制，不能由数据库配置自行放宽。
+- connect timeout 为 1–10 秒，request timeout 为 3–120 秒，连接检测另有不可覆盖的 15 秒总预算；max output tokens、temperature 使用服务端上下限。
+- API Key 通过 `SecretStorePort` 信封加密，配置只保存 `secretVersionId`。读取 DTO 只返回 `secretConfigured` 和不可逆掩码摘要；更新命令使用 `KEEP`、`REPLACE`、`CLEAR` 三态，避免把空字符串误解为删除。
+- `fingerprint = SHA-256(canonical non-secret fields + secretDigest + outboundPolicyVersion)`。`secretDigest` 由 Secret Store 使用独立密钥计算 HMAC-SHA256，候选检测和持久化配置使用同一算法；指纹不含可还原密钥，但密钥替换、端点、模型、流式能力或安全策略变化都会使旧检测失效。
+- `LlmProviderRuntimeState` 独立保存 `UNCONFIGURED/UNTESTED/AVAILABLE/DEGRADED/UNAVAILABLE`、最近检查 ID、最近成功/失败时间、连续失败数、breaker 状态和更新时间；运行状态变化不修改不可变配置版本。
+- `LlmProviderActivation` 是单行当前指针，只能指向通过启用门禁的配置版本。外部调用还必须同时满足全局外发开关、仓库策略、数据类别和敏感扫描，激活指针本身不放宽任何策略。
+
+核心端口与应用服务：
+
+```text
+LlmConfigurationApplicationService
+  → LlmProviderConfigRepository
+  → SecretStorePort
+  → LlmConfigurationValidator
+  → LlmProviderActivationRepository
+
+LlmConnectivityApplicationService
+  → LlmConnectivityCheckRepository
+  → ConnectivityCheckRegistry
+  → OutboundNetworkPolicy
+  → LlmProviderProbePort
+
+QuestionAnsweringApplicationService
+  → LlmProviderSelector
+  → LlmCircuitBreaker
+  → LlmProviderPort
+  → deterministic-local fallback
+```
+
+### 15.2 保存、检测与启用协议
+
+三个动作使用独立用例，不由前端按钮顺序替代服务端约束：
+
+```mermaid
+sequenceDiagram
+    participant A as Admin UI
+    participant C as Configuration Service
+    participant T as Connectivity Service
+    participant P as Provider Adapter
+    participant D as PostgreSQL / Secret Store
+
+    A->>C: 保存候选配置 + expectedVersion
+    C->>C: 规范化、字段/网络策略静态校验
+    C->>D: 加密密钥并写不可变配置版本
+    C-->>A: configId/version/fingerprint/UNTESTED
+    A->>T: 创建连接检测(configId 或未保存候选)
+    T->>P: 分阶段固定探针
+    P-->>T: 阶段结果/耗时/错误
+    T->>D: 保存脱敏检测摘要和运行状态
+    T-->>A: AVAILABLE/DEGRADED/UNAVAILABLE
+    A->>C: 启用 configId + fingerprint + expectedActivationVersion
+    C->>D: 校验十分钟内成功检测及指纹一致
+    C->>D: CAS 原子切换 activeConfigId
+    C-->>A: active config summary
+```
+
+未保存候选可直接检测。候选 API Key 只保存在 `ConnectivityCheckRegistry` 的受限内存对象中，检测结束、取消、超时或进程退出立即清零；数据库仅保存候选指纹、端点 host/port、模型和脱敏结果。已保存配置从 Secret Store 按 `secretVersionId` 临时解密。连接检测不得写问答会话、检索轨迹或仓库外发审计。
+
+保存成功只产生 `UNTESTED` 配置，不切换激活指针。启用事务校验：调用者仍是超级管理员、目标版本未删除、状态为 `AVAILABLE`、最近成功检测不超过 10 分钟、检测 fingerprint 等于目标 fingerprint、乐观锁版本未变化。任何条件失败返回 409/稳定错误码并保留旧指针。`DEGRADED` 配置需关闭失败的可选能力或修正配置并重新检测后才能启用；停用只清空外部激活指针，`deterministic-local` 始终可用。
+
+### 15.3 连通性检测执行器
+
+`ConnectivityCheckRegistry` 对 `actorId + fingerprint` 实施 single-flight。首次创建返回 `checkId`；短时间重复请求返回同一进行中检查。检查由有界专用执行器运行，不占用索引/仓库任务线程；单实例 M0 通过本机 registry 保证，拆分服务时替换为数据库租约。检查状态为 `QUEUED/RUNNING/SUCCEEDED/FAILED/CANCELED`，总预算从受理时开始计算为 15 秒，阶段共享同一 deadline，取消令牌传递到 DNS、HTTP 和流读取。应用启动时将遗留 QUEUED/RUNNING 检查收敛为 FAILED/`DEPENDENCY_INTERRUPTED`，不自动重放带候选密钥的检测。
+
+阶段状态机：
+
+```text
+VALIDATE_CONFIG
+  → RESOLVE_AND_AUTHORIZE_TARGET
+  → CONNECT_TLS
+  → AUTHENTICATE
+  → GENERATE_MINIMAL
+  → STREAM_FIRST_TOKEN（仅 streamingEnabled）
+  → CLASSIFY_AND_PERSIST
+```
+
+- `VALIDATE_CONFIG`：字段、范围、URL 规范化和密钥存在性，不发网络请求。
+- `RESOLVE_AND_AUTHORIZE_TARGET`：解析 DNS，并由 `OutboundNetworkPolicy` 对 scheme/host/port/全部解析 IP 判定；实际连接前再次解析和校验，防止 DNS 重绑定。
+- `CONNECT_TLS`：使用与真实调用相同的 HTTP client、代理、证书链、主机名校验和重定向策略。连接池按配置指纹隔离，配置失效后关闭。
+- `AUTHENTICATE`：通过 Provider 的最小协议请求确认凭据；若兼容服务没有独立鉴权接口，则与下一阶段合并，但错误分类保持独立。
+- `GENERATE_MINIMAL`：发送版本化固定探针，例如只要求返回固定短字符串；请求不包含仓库、知识、用户问题、历史或系统业务提示。
+- `STREAM_FIRST_TOKEN`：验证 `text/event-stream`、帧格式、终止帧和首 Token，收到第一个合法增量后立即停止，不消费完整回答。
+- `CLASSIFY_AND_PERSIST`：保存每阶段结果、总/建连/首 Token 耗时、响应模型标识、配置指纹、错误码、requestId 和时间；截断 Provider 文案，不保存响应正文、headers、密钥或异常堆栈。
+
+状态映射由领域策略完成：必需阶段全部成功为 `AVAILABLE`；基础生成成功但可选流式阶段失败为 `DEGRADED`；其余失败为 `UNAVAILABLE`。错误适配器统一映射为 `LLM_CONFIG_INVALID`、`LLM_NETWORK_BLOCKED`、`LLM_DNS_FAILED`、`LLM_TLS_FAILED`、`LLM_AUTH_FAILED`、`LLM_MODEL_NOT_FOUND`、`LLM_RATE_LIMITED`、`LLM_TIMEOUT`、`LLM_PROTOCOL_INVALID` 或 `LLM_STREAM_UNSUPPORTED`，未知响应归为 `DEPENDENCY_UNEXPECTED`，前端不解析 Provider 原始文案。
+
+### 15.4 运行期健康、熔断与降级
+
+真实调用成功清零连续失败；认证、目标模型、协议错误立即把对应配置标记为 `UNAVAILABLE`，超时、限流和 5xx 按可配置阈值累计，默认连续 3 次打开 breaker。breaker 打开后不再向外部 Provider 发送业务请求，问答保留已冻结证据并返回 `providerUnavailableReason`，通过统一路径降级为 `deterministic-local`。
+
+后台固定探针默认关闭；开启后使用带随机抖动的低频调度，不在限流窗口内重试，不携带业务数据。手工连接检测或后台探针成功且 fingerprint 未变化时才关闭 breaker；普通业务请求的偶然成功不绕过已经打开的恢复门禁。状态和激活配置使用短 TTL 缓存，配置事件主动失效，选择 Provider 前再次读取版本/状态，避免切换后继续使用旧密钥。
+
+### 15.5 数据模型
+
+| 表 | 关键字段与约束 |
+| --- | --- |
+| `llm_provider_configs` | `id, version, name, provider_type, base_url, model, connect_timeout_ms, request_timeout_ms, max_output_tokens, temperature, streaming_enabled, secret_version_id, fingerprint, created_by, created_at`；`id + version` 唯一，配置版本不可原地修改 |
+| `llm_provider_runtime_states` | `config_id, config_version, availability, latest_check_id, last_success_at, last_failure_at, consecutive_failures, breaker_state, breaker_opened_at, updated_at`；每个配置版本一行 |
+| `llm_provider_activation` | 固定主键、`active_config_id, active_config_version, activation_version, activated_by, activated_at`；CAS 更新保证全局最多一个外部 Provider 生效 |
+| `llm_connectivity_checks` | `id, actor_id, config_id/version nullable, fingerprint, endpoint_host, model, status, stage_results JSONB, error_code, timing JSONB, request_id, started_at, finished_at`；不含密钥、请求/响应正文 |
+| `encrypted_secret_versions` | 通用 Secret Store 元数据、密文、HMAC `secret_digest`、算法/主密钥版本、创建时间；业务表只保存引用，API 不返回 digest |
+
+`stage_results` 和 `timing` 使用受控 schema 与大小上限，不接受 Provider 任意 JSON。检查记录按审计保留策略清理；清理不影响当前 availability 摘要。备份包含配置版本、激活指针、运行状态、检测摘要和密文，但密钥主密钥继续独立保管。
+
 ## 16. API 与错误设计
 
 API 前缀 `/api/v1`，JSON 使用 camelCase。写接口接受 `Idempotency-Key`，更新接受 `If-Match`/version，常规管理列表使用 `pageNum`、`pageSize` 和统一 `PageResult<T>`，深翻页或连续读取接口使用 cursor；时间为 ISO-8601 UTC。长任务首次创建返回 `202 Accepted`；相同幂等键或非终态唯一约束命中时返回已有 taskId，不产生第二个任务。统一使用 `X-Request-Id`。
@@ -740,6 +851,14 @@ GET /api/v1/tasks/{taskId}
 POST /api/v1/tasks/{taskId}/cancel
 POST /api/v1/tasks/{taskId}/retries
 GET|PUT /api/v1/settings
+GET|POST /api/v1/settings/llm/providers
+GET /api/v1/settings/llm/providers/{configId}/versions
+PUT /api/v1/settings/llm/providers/{configId}
+POST /api/v1/settings/llm/providers/{configId}/activate
+POST /api/v1/settings/llm/providers/deactivate
+POST /api/v1/settings/llm/connectivity-checks
+GET /api/v1/settings/llm/connectivity-checks/{checkId}
+POST /api/v1/settings/llm/connectivity-checks/{checkId}/cancel
 GET /api/v1/security-events
 GET /api/v1/accounts/me/recent-logins
 GET|POST /api/v1/backups
@@ -747,9 +866,30 @@ POST /api/v1/restores/preflight
 POST /api/v1/restores
 ```
 
+LLM 配置写入 DTO 显式使用密钥动作，响应永不包含 `apiKey`：
+
+```json
+{
+  "name": "团队模型服务",
+  "providerType": "OPENAI_COMPATIBLE",
+  "baseUrl": "https://llm.example.com/v1",
+  "model": "example-model",
+  "connectTimeoutMs": 5000,
+  "requestTimeoutMs": 60000,
+  "maxOutputTokens": 2048,
+  "temperature": 0.2,
+  "streamingEnabled": true,
+  "secretAction": "REPLACE",
+  "apiKey": "<write-only>",
+  "expectedVersion": 3
+}
+```
+
+创建连接检测接受 `configId + configVersion`，或接受同结构的未保存候选；返回 `202 { checkId, status, fingerprint }`。GET 只返回阶段状态、耗时和脱敏错误。activate 请求携带 `configId`、`configVersion`、`fingerprint`、`latestCheckId` 和 `expectedActivationVersion`；检测过期、指纹不一致或状态不允许时返回 409。cancel 幂等，终态检查返回当前结果。
+
 接口 DTO 显式区分 Git 与 ZIP 版本；ZIP 不伪造 branch/commit。源码读取必须带 snapshotId 或从冻结证据解析。
 
-统一错误字段：`errorCode`、`category`、`summary`、`retryable`、`suggestedAction`、`requestId/taskId`、`occurredAt`。稳定类别为 AUTH、PERMISSION、VALIDATION、CONFLICT、NOT_FOUND、CREDENTIAL、DEPENDENCY、RESOURCE、TIMEOUT、INCOMPATIBLE、INTEGRITY、CANCELED、INTERNAL。前端不得解析文案决定行为。
+统一错误字段：`errorCode`、`category`、`summary`、`retryable`、`suggestedAction`、`requestId/taskId/checkId`、`occurredAt`。稳定类别为 AUTH、PERMISSION、VALIDATION、CONFLICT、NOT_FOUND、CREDENTIAL、DEPENDENCY、RESOURCE、TIMEOUT、INCOMPATIBLE、INTEGRITY、CANCELED、INTERNAL。前端不得解析文案决定行为。
 
 ## 17. 前端设计
 
@@ -773,7 +913,15 @@ CodeGraph 构建采用双入口但不同时作为同等级主按钮：仓库操�
 
 权限回收/会话失效时取消请求、上传与 SSE，清除内存代码、问答、附件预览 URL 和未提交知识草稿。任务只展示真实状态、阶段、进度、阻塞原因、脱敏事件、取消和重试；失败任务与旧可用产物并列。危险操作提供影响预览和二次确认。Markdown、日志、源码和模型回答均安全渲染，前端不持久化明文敏感信息。关键操作支持键盘、可见焦点、语义标签和足够对比度；调用图提供表格/列表替代视图。桌面浏览器支持当前两个主要版本的 Chromium 和 Edge。未交付能力不生成菜单或假入口。
 
-### 17.1 开发者入门工作台设计
+### 17.1 LLM 配置与检测界面
+
+系统设置的“模型与检索”页使用 `LlmProviderEditor`、`ConnectivityCheckPanel` 和 `ProviderActivationCard` 三个独立组件，分别对应保存、检测、启用用例。表单 store 只在当前页面内存保存待提交 API Key，路由离开、保存、检测结束或取消后立即清除；Pinia、localStorage、URL、错误上报和开发日志不得保存密钥。
+
+配置卡展示名称、脱敏 Base URL、模型、流式开关、密钥是否配置、版本和当前激活状态。检测面板按 VALIDATE_CONFIG、RESOLVE_AND_AUTHORIZE_TARGET、CONNECT_TLS、AUTHENTICATE、GENERATE_MINIMAL、STREAM_FIRST_TOKEN 展示真实状态与耗时，轮询 check API 并提供取消；只显示稳定错误摘要、requestId 和建议动作，不显示原始响应。AVAILABLE、DEGRADED、UNAVAILABLE 使用文字、图标和颜色共同表达。
+
+保存成功后界面明确显示“已保存，未检测”，不自动开始检测；检测成功后显示“可启用”，不自动启用；启用时再次提交 fingerprint/latestCheckId，服务端冲突后刷新最新配置。编辑任一影响指纹的字段立即把本地“可启用”标记作废。外发总开关和仓库策略单独展示，测试成功不会切换它们。运行期熔断时设置页显示最近失败时间和错误码，问答页显示降级提示但不暴露全局端点或密钥摘要。
+
+### 17.2 开发者入门工作台设计
 
 入门工作台是聚合编排层，不建立第二套代码事实。`OnboardingApplicationService` 只读取当前授权范围内已发布的 snapshot、CodeGraph、内容索引、知识修订、任务和健康检查，再组装仓库总览、学习路径、场景链路和变化摘要。
 
@@ -804,7 +952,7 @@ Onboarding UI
 
 权限：READ 使用已发布内容；MAINTAIN 编辑草稿；MANAGE/OWNER 发布仓库内容；超级管理员维护系统模板和受信任检查器。私人笔记不提供管理员读取接口。导出服务重新执行权限和引用检查，只输出元数据、短摘要与链接，不导出源码正文、密钥、完整日志或模型上下文。
 
-### 17.2 QV1 快速开始设计
+### 17.3 QV1 快速开始设计
 
 QV1 新增轻量 `QuickStartApplicationService`，只聚合现有 Repository、Artifact、Task、Chunk/Search、CodeGraph、QA 和 Knowledge 端口，不新增状态镜像表。四项就绪状态在请求时按当前 snapshot 和已发布产物计算；短时缓存键必须包含 accountId、repositoryId、snapshotId 和授权版本，权限变化主动失效。
 
@@ -844,7 +992,7 @@ POST /api/repositories/{repositoryId}/quick-start/prepare
 
 HTTP、任务、检索、模型和发布事件携带 requestId、taskId、repositoryId、snapshotId 与产物 ID。日志不记录密码、Token、会话、完整代码、完整问题/回答或模型上下文。
 
-指标覆盖 HTTP；任务队列、阶段、心跳和终态；文件/符号/chunk/向量规模；检索通道耗时、命中、降级；模型 token/错误/限流；存储与待清理量。告警覆盖任务失联、队列积压、磁盘不足、provider 失败、产物指针不一致、引用越界和异常登录。
+指标覆盖 HTTP；任务队列、阶段、心跳和终态；文件/符号/chunk/向量规模；检索通道耗时、命中、降级；模型 token/错误/限流；LLM 检测各阶段耗时、状态分布、连续失败、breaker 打开次数和降级次数；存储与待清理量。指标标签只使用 providerType、脱敏 configId/version、模型分类和错误码，不使用 Base URL、API Key、问题或响应正文。告警覆盖任务失联、队列积压、磁盘不足、激活 Provider 不可用/熔断、产物指针不一致、引用越界和异常登录。
 
 普通账号默认所有者配额为 20 个非删除仓库、2 个并发仓库准备任务、20 GiB 受管数据。配额计量按 ownerAccountId 聚合 working copy、快照和派生产物；staging 失败数据在清理宽限期后不计费但必须告警。超级管理员跳过个人配额，不跳过系统磁盘和全局并发硬上限。
 
@@ -856,6 +1004,7 @@ HTTP、任务、检索、模型和发布事件携带 requestId、taskId、reposi
 | CodeGraph 直接关系查询 | P95 < 2s |
 | 三层影响图 | P95 < 5s，达到节点/边/路径或耗时上限时明确截断 |
 | 问答首个可见状态 | < 2s |
+| LLM 连接检测 | 正常网络下 15s 内进入确定终态，取消后 1s 内停止继续读流 |
 | M0 内容索引（10 万行基线） | < 15min |
 | CodeGraph 全量分析 | < 30min，以锁定 CLI 基线为准 |
 
@@ -864,7 +1013,7 @@ HTTP、任务、检索、模型和发布事件携带 requestId、taskId、reposi
 ## 20. 降级规则
 
 - 自动/综合检索单路不可用时返回其他通道并明确降级；手选模式不可静默切换。
-- 模型不可用时保留检索证据，问答不伪装成功。
+- 模型未配置、未检测、检测过期、熔断或不可用时保留检索证据，返回稳定降级原因并使用 `deterministic-local`；不得临时改用其他外部模型。
 - CodeGraph 不可用时普通检索可降级，调用关系/图查询不可执行。
 - 新任务失败时旧产物继续可用。
 - 源码归档时保留最小引用元数据，不跳转当前源码冒充原证据。
@@ -872,7 +1021,7 @@ HTTP、任务、检索、模型和发布事件携带 requestId、taskId、reposi
 
 ## 21. 测试、验收与追踪
 
-测试层次：领域状态/权限/版本/外发单元测试；四类来源、CodeGraph schema、Provider 和存储契约测试；PostgreSQL 租约/fencing/指针/Flyway 集成测试；Zip Slip/Bomb、符号链接、命令注入、SSRF/DNS/TLS/SSH、Markdown XSS、危险 URL、MIME 欺骗、图片解析炸弹、恶意附件、越权下载和 CSRF 安全测试；进程中断、发布中断、磁盘不足、provider 超时、取消与发布竞争故障注入；按正式验收编号执行 E2E。
+测试层次：领域状态/权限/版本/外发单元测试；四类来源、CodeGraph schema、Provider 和存储契约测试；PostgreSQL 租约/fencing/指针/Flyway 集成测试；Zip Slip/Bomb、符号链接、命令注入、SSRF/DNS/TLS/SSH、Markdown XSS、危险 URL、MIME 欺骗、图片解析炸弹、恶意附件、越权下载和 CSRF 安全测试；进程中断、发布中断、磁盘不足、provider 超时、取消与发布竞争故障注入；按正式验收编号执行 E2E。LLM 专项使用可编程 stub 分别模拟鉴权失败、模型不存在、TLS/DNS/SSRF 拒绝、429、5xx、超时、非法 JSON、非法 SSE、无终止帧和首 Token 延迟，断言阶段短路、错误映射、single-flight、候选密钥清零、配置指纹门禁、旧激活指针保留和熔断降级；自动化测试不得依赖真实付费 Provider。
 
 冻结 Java、TypeScript、Python 样例验证：定义定位 precision/recall ≥ 95%；直接关系 precision ≥ 95%、recall ≥ 90%；精确检索 Top-5 ≥ 95%；自然语言检索 Top-10 ≥ 90%；问答仓库事实引用支持率 100%；无效路径、越界行号和不存在符号为 0。
 
@@ -887,11 +1036,11 @@ HTTP、任务、检索、模型和发布事件携带 requestId、taskId、reposi
 | 12 | 5.8 | GRAPH、IMPACT |
 | 13 | 5.9 | KC |
 | 14 | 3.1、5.1、6.2、7.3 | AUTH、AM、RP、AUD |
-| 15 | 5.10 | SET |
-| 17 | 5.12 | UI |
+| 15 | 5.12 | SET |
+| 17 | 6 | UI |
 | 18 | 5.11、6.4 | BAK |
 
-当前验收范围以需求追踪表为准：AUTH-01..09、AM-01..10、AUD-01..02、RP-01..18、RM-01..33、TASK-01..15、CG-01..16、IDX-01..15、INCR-01..06、SRCH-01..17、MSRCH-01..07、QA-01..19、GRAPH-01..10、IMPACT-01..07、KC-01..31、UI-01..43、SET-01..15、BAK-01..12。
+当前验收范围以需求追踪表为准：AUTH-01..09、AM-01..10、AUD-01..02、RP-01..18、RM-01..33、TASK-01..15、CG-01..16、IDX-01..15、INCR-01..06、SRCH-01..17、MSRCH-01..07、QA-QV-01..12、QA-STREAM-01..10、QA-01..19、GRAPH-01..10、IMPACT-01..07、KC-01..31、QV-01..12、ONB-01..18、UI-01..44、SET-01..23、BAK-01..12。
 
 ## 22. 实施分解与现有工程迁移
 
@@ -906,7 +1055,7 @@ M0 建议顺序：
 7. 完成内容索引、关键词查询、引用定位与原子发布。
 8. 完成配置、删除/清理、备份/恢复和 M0 页面闭环。
 
-M1 增加 Embedding/Vector/LLM 端口、检索轨迹、SSE 问答和引用校验，不改变 M0 证据模型。M2 在既有版本协议上增加增量构建、多仓融合、图遍历与知识索引，不改变六态任务语义。需要扩容时优先拆 Worker，通过数据库领取、租约与 fencing token 扩展。
+QV1 在配置中心增加 LLM 配置版本、Secret Store、连接检测执行器、激活指针和前端分阶段状态，再接入 OpenAI-compatible 流式适配器与 deterministic-local 降级；检测能力先于真实外发开放。M1 增加 Embedding/Vector 端口、完整检索轨迹、完整单仓问答和引用校验，不改变 M0/QV1 证据模型。M2 在既有版本协议上增加增量构建、多仓融合、图遍历与知识索引，不改变六态任务语义。需要扩容时优先拆 Worker，通过数据库领取、租约与 fencing token 扩展。
 
 | 当前骨架 | 处置 |
 | --- | --- |

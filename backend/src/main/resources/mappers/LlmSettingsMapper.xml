@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.LlmSettingsMapper">
+  <sql id="configView">
+    c.id,c.config_version,c.name,c.provider_type,c.base_url,c.model,c.connect_timeout_ms,c.request_timeout_ms,
+    c.max_output_tokens,c.temperature,c.streaming_enabled,c.secret_version_id,c.fingerprint,c.created_at,
+    s.availability,s.latest_check_id,s.last_success_at,s.last_failure_at,s.consecutive_failures,
+    s.breaker_state,s.last_error_code,
+    a.active_config_id,a.activation_version,a.activated_at
+  </sql>
+
+  <select id="latestConfig" resultType="map">
+    SELECT <include refid="configView"/>
+    FROM llm_provider_configs c
+    JOIN llm_provider_runtime_states s ON s.config_id=c.id
+    CROSS JOIN llm_provider_activation a
+    ORDER BY c.config_version DESC LIMIT 1
+  </select>
+  <select id="config" resultType="map">
+    SELECT <include refid="configView"/>
+    FROM llm_provider_configs c
+    JOIN llm_provider_runtime_states s ON s.config_id=c.id
+    CROSS JOIN llm_provider_activation a
+    WHERE c.id=#{id}
+  </select>
+  <select id="configVersions" resultType="map">
+    SELECT <include refid="configView"/>
+    FROM llm_provider_configs c
+    JOIN llm_provider_runtime_states s ON s.config_id=c.id
+    CROSS JOIN llm_provider_activation a
+    ORDER BY c.config_version DESC
+  </select>
+  <select id="nextConfigVersion" resultType="long">
+    SELECT nextval('llm_provider_config_version_seq')
+  </select>
+
+  <insert id="insertSecret">
+    INSERT INTO encrypted_secret_versions(id,cipher_text,iv,secret_digest,algorithm,created_by)
+    VALUES(#{id},#{cipherText},#{iv},#{secretDigest},#{algorithm},#{actorId})
+  </insert>
+  <select id="secret" resultType="map">
+    SELECT id,cipher_text,iv,secret_digest,algorithm FROM encrypted_secret_versions WHERE id=#{id}
+  </select>
+
+  <insert id="insertConfig">
+    INSERT INTO llm_provider_configs(
+      id,config_version,name,provider_type,base_url,model,connect_timeout_ms,request_timeout_ms,
+      max_output_tokens,temperature,streaming_enabled,secret_version_id,fingerprint,created_by
+    ) VALUES(
+      #{id},#{configVersion},#{name},#{providerType},#{baseUrl},#{model},#{connectTimeoutMs},#{requestTimeoutMs},
+      #{maxOutputTokens},#{temperature},#{streamingEnabled},#{secretVersionId},#{fingerprint},#{actorId}
+    )
+  </insert>
+  <insert id="insertRuntimeState">
+    INSERT INTO llm_provider_runtime_states(config_id) VALUES(#{configId})
+  </insert>
+
+  <select id="activation" resultType="map">
+    SELECT active_config_id,activation_version,activated_at FROM llm_provider_activation WHERE singleton_id=1
+  </select>
+  <update id="activate">
+    UPDATE llm_provider_activation
+    SET active_config_id=#{configId},activation_version=activation_version+1,activated_by=#{actorId},activated_at=CURRENT_TIMESTAMP
+    WHERE singleton_id=1 AND activation_version=#{expectedVersion}
+  </update>
+  <update id="deactivate">
+    UPDATE llm_provider_activation
+    SET active_config_id=NULL,activation_version=activation_version+1,activated_by=#{actorId},activated_at=CURRENT_TIMESTAMP
+    WHERE singleton_id=1 AND activation_version=#{expectedVersion}
+  </update>
+  <select id="activeConfig" resultType="map">
+    SELECT <include refid="configView"/>
+    FROM llm_provider_activation a
+    JOIN llm_provider_configs c ON c.id=a.active_config_id
+    JOIN llm_provider_runtime_states s ON s.config_id=c.id
+    WHERE a.singleton_id=1
+  </select>
+
+  <insert id="insertCheck">
+    INSERT INTO llm_connectivity_checks(
+      id,actor_id,config_id,fingerprint,endpoint_host,model,status,current_stage,request_id
+    ) VALUES(
+      #{id},#{actorId},#{configId},#{fingerprint},#{endpointHost},#{model},'QUEUED','VALIDATE_CONFIG',#{requestId}
+    )
+  </insert>
+  <update id="markCheckRunning">
+    UPDATE llm_connectivity_checks
+    SET status='RUNNING',current_stage=#{stage},stage_results=CAST(#{stageResults} AS jsonb),started_at=CURRENT_TIMESTAMP
+    WHERE id=#{id} AND status='QUEUED'
+  </update>
+  <update id="updateCheckProgress">
+    UPDATE llm_connectivity_checks
+    SET current_stage=#{stage},stage_results=CAST(#{stageResults} AS jsonb)
+    WHERE id=#{id} AND status='RUNNING'
+  </update>
+  <update id="completeCheck">
+    UPDATE llm_connectivity_checks
+    SET status=#{status},availability=#{availability},current_stage=#{stage},
+        stage_results=CAST(#{stageResults} AS jsonb),error_code=#{errorCode},error_summary=#{errorSummary},
+        total_duration_ms=#{totalDurationMs},connect_duration_ms=#{connectDurationMs},
+        first_token_duration_ms=#{firstTokenDurationMs},finished_at=CURRENT_TIMESTAMP
+    WHERE id=#{id} AND status IN ('QUEUED','RUNNING')
+  </update>
+  <update id="cancelCheck">
+    UPDATE llm_connectivity_checks
+    SET status='CANCELED',availability='UNTESTED',current_stage='CANCELED',
+        stage_results=CAST(#{stageResults} AS jsonb),error_code='LLM_CHECK_CANCELED',
+        error_summary='连接检测已取消',finished_at=CURRENT_TIMESTAMP
+    WHERE id=#{id} AND status IN ('QUEUED','RUNNING')
+  </update>
+  <update id="failInterruptedChecks">
+    UPDATE llm_connectivity_checks
+    SET status='FAILED',availability='UNAVAILABLE',current_stage='INTERRUPTED',
+        error_code='DEPENDENCY_INTERRUPTED',error_summary='服务重启导致连接检测中断',
+        finished_at=CURRENT_TIMESTAMP
+    WHERE status IN ('QUEUED','RUNNING')
+  </update>
+  <select id="check" resultType="map">
+    SELECT id,actor_id,config_id,fingerprint,endpoint_host,model,status,availability,current_stage,
+           stage_results::text stage_results,error_code,error_summary,total_duration_ms,
+           connect_duration_ms,first_token_duration_ms,request_id,started_at,finished_at,created_at
+    FROM llm_connectivity_checks WHERE id=#{id}
+  </select>
+  <select id="recentAvailableCheck" resultType="int">
+    SELECT COUNT(*) FROM llm_connectivity_checks
+    WHERE id=#{checkId} AND config_id=#{configId} AND fingerprint=#{fingerprint}
+      AND status='SUCCEEDED' AND availability='AVAILABLE' AND finished_at&gt;=#{notBefore}
+  </select>
+
+  <update id="applyCheckToRuntime">
+    UPDATE llm_provider_runtime_states
+    SET availability=#{availability},latest_check_id=#{checkId},
+        last_success_at=CASE WHEN #{availability}='AVAILABLE' THEN CURRENT_TIMESTAMP ELSE last_success_at END,
+        last_failure_at=CASE WHEN #{availability} IN ('DEGRADED','UNAVAILABLE') THEN CURRENT_TIMESTAMP ELSE last_failure_at END,
+        consecutive_failures=CASE WHEN #{availability}='AVAILABLE' THEN 0 ELSE consecutive_failures+1 END,
+        breaker_state=CASE WHEN #{availability}='AVAILABLE' THEN 'CLOSED' ELSE breaker_state END,
+        breaker_opened_at=CASE WHEN #{availability}='AVAILABLE' THEN NULL ELSE breaker_opened_at END,
+        last_error_code=#{errorCode},updated_at=CURRENT_TIMESTAMP
+    WHERE config_id=#{configId}
+  </update>
+  <update id="recordRuntimeSuccess">
+    UPDATE llm_provider_runtime_states
+    SET consecutive_failures=0,last_success_at=CURRENT_TIMESTAMP,last_error_code=NULL,updated_at=CURRENT_TIMESTAMP
+    WHERE config_id=#{configId} AND breaker_state='CLOSED'
+  </update>
+  <update id="recordRuntimeFailure">
+    UPDATE llm_provider_runtime_states
+    SET consecutive_failures=consecutive_failures+1,last_failure_at=CURRENT_TIMESTAMP,last_error_code=#{errorCode},
+        availability=CASE WHEN consecutive_failures+1&gt;=#{threshold} THEN 'UNAVAILABLE' ELSE availability END,
+        breaker_state=CASE WHEN consecutive_failures+1&gt;=#{threshold} THEN 'OPEN' ELSE breaker_state END,
+        breaker_opened_at=CASE WHEN consecutive_failures+1&gt;=#{threshold} THEN CURRENT_TIMESTAMP ELSE breaker_opened_at END,
+        updated_at=CURRENT_TIMESTAMP
+    WHERE config_id=#{configId}
+  </update>
+  <select id="externalModelEnabled" resultType="boolean">
+    SELECT COALESCE((SELECT LOWER(setting_value)='true' FROM system_settings WHERE setting_key='externalModelEnabled'),FALSE)
+  </select>
+</mapper>

@@ -6,6 +6,8 @@ import type {
   IndexJobType,
   RegisterRepositoryPayload,
   Repository,
+  RepositoryFileContent,
+  RepositorySnapshotFiles,
   RescanRepositoryResponse,
 } from '@/types/api';
 
@@ -70,4 +72,14 @@ export function listChunks(
   if (params.offset) search.set('offset', String(params.offset));
   const suffix = search.toString() ? `?${search}` : '';
   return request<CodeChunkListResponse>(`/api/repositories/${repositoryId}/chunks${suffix}`);
+}
+
+export function listRepositoryFiles(repositoryId: string): Promise<RepositorySnapshotFiles> {
+  return request<RepositorySnapshotFiles>(`/api/repositories/${repositoryId}/files`);
+}
+
+export function getRepositoryFile(repositoryId: string, path: string): Promise<RepositoryFileContent> {
+  return request<RepositoryFileContent>(
+    `/api/repositories/${repositoryId}/files/content?path=${encodeURIComponent(path)}`,
+  );
 }

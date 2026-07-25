@@ -16,7 +16,7 @@ const accounts = shallowRef<AccountSummary[]>([]);
 const audit = shallowRef<AuditEvent[]>([]);
 const query = shallowRef('');
 const pageNum = shallowRef(1);
-const pageSize = shallowRef(20);
+const pageSize = shallowRef(15);
 const total = shallowRef(0);
 const loading = shallowRef(false);
 const activeTab = shallowRef('accounts');
@@ -135,7 +135,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 .account-tabs :deep(.account-audit-pane) {
   min-height: 0;
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .account-toolbar {

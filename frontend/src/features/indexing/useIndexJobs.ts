@@ -8,7 +8,7 @@ export function useIndexJobs() {
   const loading = shallowRef(false);
   const error = shallowRef<string | null>(null);
   const pageNum = shallowRef(1);
-  const pageSize = shallowRef(20);
+  const pageSize = shallowRef(15);
   const total = shallowRef(0);
   let refreshTimer: number | undefined;
 

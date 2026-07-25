@@ -2,6 +2,7 @@ package com.analyzercoder.infrastructure.persistence;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.analyzercoder.CodebaseKnowledgeApplication;
+import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.application.repository.RepositorySourceImportService;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.RepositorySnapshotPort;
@@ -27,6 +28,8 @@ class PostgresMyBatisContextIT {
     @Autowired IndexJobMapper tasks;
     @Autowired CaptchaMapper captcha;
     @Autowired IntelligenceMapper intelligence;
+    @Autowired LlmSettingsMapper llmSettings;
+    @Autowired LlmSettingsService llmService;
     @Autowired CodeChunkMapper chunks;
     @Autowired KnowledgeHistoryMapper history;
     @Autowired RepositorySourceImportService imports;
@@ -36,6 +39,7 @@ class PostgresMyBatisContextIT {
         assertDoesNotThrow(()->{
             auth.accountCount();auth.listAccounts();repositories.findAll();governance.findEnabledAccounts();
             tasks.findAll();captcha.failureCount("__mapper_smoke__");intelligence.settings();intelligence.backups();
+            llmSettings.latestConfig();llmSettings.activation();llmSettings.externalModelEnabled();
             var visible=repositories.findAll();if(!visible.isEmpty()){UUID id=visible.get(0).id();chunks.count(id,null);intelligence.cards(id,true);history.findHistory(id,UUID.randomUUID());}
         });
     }
@@ -54,6 +58,20 @@ class PostgresMyBatisContextIT {
         } finally {
             if(created!=null)managedFiles.deleteRepository(created.id());
         }
+    }
+
+    @Test @Transactional
+    void savesVersionedLlmConfigurationWithoutPlaintextSecret() {
+        var accounts=auth.listAccounts();assertFalse(accounts.isEmpty(),"integration database needs an admin");
+        var saved=llmService.save(accounts.get(0).id(),new LlmSettingsService.ProviderInput(
+            "integration-provider","OPENAI_COMPATIBLE","https://llm.example.com/v1","test-model",
+            5000,60000,1024,0.2,true,"CLEAR",null
+        ));
+        assertNotNull(saved.id());
+        assertEquals("UNTESTED",saved.availability());
+        assertFalse(saved.secretConfigured());
+        assertFalse(saved.active());
+        assertEquals(64,saved.fingerprint().length());
     }
 
     private static byte[] sampleZip() throws Exception {

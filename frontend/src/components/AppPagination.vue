@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import zhCn from 'element-plus/es/locale/lang/zh-cn';
 
 const props = defineProps<{
   pageNum: number;
@@ -28,18 +29,20 @@ const rangeEnd = computed(() => Math.min(currentPage.value * props.pageSize, pro
       <span>第 {{ currentPage }} / {{ pageCount }} 页</span>
     </div>
     <div class="pagination-controls" role="region" aria-label="分页操作">
-    <el-pagination
-      :current-page="pageNum"
-      :page-size="pageSize"
-      :page-sizes="[10, 20, 50, 100]"
-      :total="total"
-      :disabled="disabled || total === 0"
-      :pager-count="5"
-      layout="sizes, prev, pager, next, jumper"
-      background
-      @update:current-page="emit('pageChange', $event)"
-      @update:page-size="emit('sizeChange', $event)"
-    />
+      <el-config-provider :locale="zhCn">
+        <el-pagination
+          :current-page="pageNum"
+          :page-size="pageSize"
+          :page-sizes="[15, 30, 50]"
+          :total="total"
+          :disabled="disabled || total === 0"
+          :pager-count="5"
+          layout="sizes, prev, pager, next, jumper"
+          background
+          @update:current-page="emit('pageChange', $event)"
+          @update:page-size="emit('sizeChange', $event)"
+        />
+      </el-config-provider>
     </div>
   </div>
 </template>

@@ -48,6 +48,7 @@ app:
     import-root: ${app.repository.managed-data-root}/staging/imports
     snapshot-max-files: ${APP_REPOSITORY_SNAPSHOT_MAX_FILES:20000}
     snapshot-max-total-bytes: ${APP_REPOSITORY_SNAPSHOT_MAX_TOTAL_BYTES:2147483648}
+    browser-max-file-bytes: ${APP_REPOSITORY_BROWSER_MAX_FILE_BYTES:2097152}
   indexing:
     poll-interval-ms: 5000
     max-file-bytes: 524288
@@ -55,3 +56,8 @@ app:
     executable: ${APP_CODEGRAPH_EXECUTABLE:codegraph}
     timeout-minutes: ${APP_CODEGRAPH_TIMEOUT_MINUTES:10}
     artifact-root: ${app.repository.managed-data-root}/repositories
+  llm:
+    master-key: ${APP_LLM_MASTER_KEY:analyzer-coder-local-development-key}
+    allow-insecure-local: ${APP_LLM_ALLOW_INSECURE_LOCAL:false}
+    connectivity-timeout-seconds: ${APP_LLM_CONNECTIVITY_TIMEOUT_SECONDS:15}
+    breaker-failure-threshold: ${APP_LLM_BREAKER_FAILURE_THRESHOLD:3}

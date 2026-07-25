@@ -10,3 +10,6 @@ export interface RescanRepositoryResponse{changed:boolean;repository:Repository}
 export interface IndexJob{id:string;repositoryId:string;type:IndexJobType;status:IndexJobStatus;currentStep:string|null;errorMessage:string|null;startedAt:string|null;finishedAt:string|null;createdAt:string}
 export interface CodeChunk{id:string;repositoryId:string;snapshotId:string;commitSha:string;filePath:string;symbolId:string|null;symbolName:string|null;symbolKind:string|null;language:string|null;chunkType:ChunkType;startLine:number|null;endLine:number|null;content:string;contentHash:string;createdAt:string}
 export interface CodeChunkListResponse{total:number;limit:number;offset:number;chunks:CodeChunk[]}
+export interface RepositoryFileEntry{path:string;name:string;language:string;sizeBytes:number}
+export interface RepositorySnapshotFiles{snapshotId:string;branch:string|null;commit:string|null;files:RepositoryFileEntry[]}
+export interface RepositoryFileContent{snapshotId:string;path:string;name:string;language:string;sizeBytes:number;lineCount:number;content:string}
