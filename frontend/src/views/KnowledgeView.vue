@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Plus, Search } from '@element-plus/icons-vue';
+import { useRoute, useRouter } from 'vue-router';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { intelligenceApi, type CardInput, type CardRevision, type KnowledgeCard } from '@/api/intelligence';
+import { intelligenceApi, type CardInput, type CardRevision, type CodeReference, type KnowledgeCard } from '@/api/intelligence';
 import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
@@ -10,6 +11,8 @@ import { renderMarkdown } from '@/features/knowledge/markdown';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
 const repositories = useRepositoryStore();
+const router = useRouter();
+const route = useRoute();
 const cards = shallowRef<KnowledgeCard[]>([]);
 const query = shallowRef('');
 const dialog = shallowRef(false);
@@ -28,10 +31,46 @@ const rows = computed(() => cards.value.filter(card => {
 async function load() {
   cards.value = repositories.selectedRepositoryId
     ? await intelligenceApi.cards(repositories.selectedRepositoryId) : [];
+  syncRequestedCard();
+}
+
+function syncRequestedCard() {
+  const cardId = typeof route.query.cardId === 'string' ? route.query.cardId : null;
+  if (!cardId) return;
+  const card = cards.value.find(item => item.id === cardId);
+  if (!card) return;
+  viewing.value = card;
+  detailDialog.value = true;
 }
 function openCreate() { editing.value = null; dialog.value = true; }
 function openEdit(card: KnowledgeCard) { editing.value = card; dialog.value = true; }
 function openDetail(card: KnowledgeCard) { viewing.value = card; detailDialog.value = true; }
+function openCode(reference: CodeReference) {
+  detailDialog.value = false;
+  dialog.value = false;
+  void router.push({
+    name: 'search',
+    query: {
+      path: reference.filePath,
+      startLine: String(reference.startLine ?? 1),
+      endLine: String(reference.endLine ?? reference.startLine ?? 1),
+    },
+  });
+}
+
+async function openGraph(reference: CodeReference) {
+  const repositoryId = repositories.selectedRepositoryId;
+  if (!repositoryId) return;
+  try {
+    const target = reference.chunkId
+      ? await intelligenceApi.graphTarget(repositoryId, reference.chunkId)
+      : { symbol: reference.symbolName || reference.filePath, filePath: reference.filePath, startLine: reference.startLine };
+    detailDialog.value = false;
+    await router.push({ name: 'graph', query: { symbol: target.symbol, depth: '3', analyze: '1' } });
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '无法解析图谱目标');
+  }
+}
 async function save(input: CardInput) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
@@ -64,6 +103,7 @@ async function restore(revision: number) {
   ElMessage.success('历史内容及附件已恢复为新草稿');
 }
 watch(() => repositories.selectedRepositoryId, () => void load());
+watch(() => route.query.cardId, syncRequestedCard);
 onMounted(() => void load());
 </script>
 
@@ -93,9 +133,11 @@ onMounted(() => void load());
         />
       </div>
     </div>
-    <KnowledgeCardDetailDialog v-model="detailDialog" :card="viewing" />
+    <KnowledgeCardDetailDialog v-model="detailDialog" :card="viewing"
+      @open-code="openCode" @open-graph="openGraph" />
     <KnowledgeCardEditorDialog v-if="repositories.selectedRepositoryId" v-model="dialog"
-      :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy" @submit="save" />
+      :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy"
+      @submit="save" @open-code="openCode" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">
         <el-card shadow="never"><template #header><div class="toolbar"><b>v{{ item.revision }} · {{ item.status }}</b><span class="spacer" /><el-button link type="primary" @click="restore(item.revision)">恢复为新草稿</el-button></div></template>

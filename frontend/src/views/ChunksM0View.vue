@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { Close, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import RepositoryFilePreview from '@/components/RepositoryFilePreview.vue';
@@ -19,6 +20,7 @@ import type {
 type MobilePane = 'tree' | 'code' | 'results';
 
 const repositories = useRepositoryStore();
+const route = useRoute();
 const snapshot = shallowRef<RepositorySnapshotFiles | null>(null);
 const selectedPath = shallowRef<string | null>(null);
 const selectedFile = shallowRef<RepositoryFileContent | null>(null);
@@ -66,10 +68,13 @@ async function loadSnapshot(repositoryId: string | null) {
     const result = await listRepositoryFiles(repositoryId);
     if (requestId !== snapshotRequest) return;
     snapshot.value = result;
-    const preferred = result.files.find(file =>
+    const routePath = typeof route.query.path === 'string' ? route.query.path : null;
+    const preferred = result.files.find(file => file.path === routePath) ?? result.files.find(file =>
       /\.(vue|tsx?|jsx?|java|kt|py|go|rs|md)$/i.test(file.path),
     ) ?? result.files[0];
-    if (preferred) await openFile(preferred.path, null, null, false);
+    const startLine = routePath ? routeNumber(route.query.startLine) : null;
+    const endLine = routePath ? routeNumber(route.query.endLine) : null;
+    if (preferred) await openFile(preferred.path, startLine, endLine, Boolean(routePath));
   } catch (error) {
     if (requestId === snapshotRequest) {
       ElMessage.error(error instanceof Error ? error.message : '代码快照加载失败');
@@ -166,9 +171,21 @@ function excerpt(content: string) {
 }
 
 watch(() => repositories.selectedRepositoryId, loadSnapshot, { immediate: true });
+function routeNumber(value: unknown) {
+  const parsed = typeof value === 'string' ? Number.parseInt(value, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 onMounted(async () => {
   if (!repositories.repositories.length) await repositories.loadRepositories();
 });
+watch(
+  () => [route.query.path, route.query.startLine, route.query.endLine] as const,
+  ([path, startLine, endLine]) => {
+    if (typeof path !== 'string' || !snapshot.value?.files.some(file => file.path === path)) return;
+    void openFile(path, routeNumber(startLine), routeNumber(endLine));
+  },
+);
 </script>
 
 <template>
