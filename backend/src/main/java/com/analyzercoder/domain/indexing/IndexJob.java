@@ -32,14 +32,14 @@ public record IndexJob(
 
     public static IndexJob retry(IndexJob failedJob) {
         if (failedJob.status != IndexJobStatus.FAILED) {
-            throw new IllegalStateException("Only failed jobs can be retried");
+            throw new IllegalStateException("只有失败的任务可以重试");
         }
         return create(failedJob.repositoryId, failedJob.type);
     }
 
     public IndexJob start(String currentStep) {
         if (status != IndexJobStatus.QUEUED && status != IndexJobStatus.RUNNING) {
-            throw new IllegalStateException("Job cannot start from status " + status);
+            throw new IllegalStateException("任务当前状态为“" + status + "”，不能开始执行");
         }
         Instant effectiveStartedAt = startedAt == null ? Instant.now() : startedAt;
         return new IndexJob(
@@ -61,12 +61,12 @@ public record IndexJob(
                 startedAt, null, createdAt
             );
         }
-        throw new IllegalStateException("Only queued or running jobs can be canceled");
+        throw new IllegalStateException("只有排队中或运行中的任务可以取消");
     }
 
     public IndexJob cancel() {
         if (status != IndexJobStatus.CANCEL_REQUESTED && status != IndexJobStatus.QUEUED) {
-            throw new IllegalStateException("Job is not cancelable from status " + status);
+            throw new IllegalStateException("任务当前状态为“" + status + "”，不能取消");
         }
         return new IndexJob(
             id, repositoryId, type, IndexJobStatus.CANCELED, "canceled", null,
@@ -76,7 +76,7 @@ public record IndexJob(
 
     public IndexJob succeed(String currentStep) {
         if (status != IndexJobStatus.RUNNING && status != IndexJobStatus.CANCEL_REQUESTED) {
-            throw new IllegalStateException("Job cannot succeed from status " + status);
+            throw new IllegalStateException("任务当前状态为“" + status + "”，不能标记为成功");
         }
         return new IndexJob(
             id, repositoryId, type, IndexJobStatus.SUCCEEDED, currentStep, null,
@@ -86,7 +86,7 @@ public record IndexJob(
 
     public IndexJob fail(String currentStep, String errorMessage) {
         if (status != IndexJobStatus.RUNNING && status != IndexJobStatus.CANCEL_REQUESTED) {
-            throw new IllegalStateException("Job cannot fail from status " + status);
+            throw new IllegalStateException("任务当前状态为“" + status + "”，不能标记为失败");
         }
         return new IndexJob(
             id, repositoryId, type, IndexJobStatus.FAILED, currentStep, errorMessage,

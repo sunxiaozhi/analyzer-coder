@@ -21,13 +21,13 @@ public class RepositoryPathPolicy {
     ) {
         this.allowedRoots = Arrays.stream(configuredRoots.split("[,;]"))
             .map(String::trim).filter(value -> !value.isEmpty()).map(RepositoryPathPolicy::realPath).toList();
-        if (allowedRoots.isEmpty()) throw new IllegalArgumentException("At least one repository allowed root must be configured");
+        if (allowedRoots.isEmpty()) throw new IllegalArgumentException("必须至少配置一个允许接入的仓库根目录");
         try {
             Path root = Path.of(configuredManagedRoot).toAbsolutePath().normalize();
             Files.createDirectories(root);
             this.managedRoot = root.toRealPath();
         } catch (IOException exception) {
-            throw new IllegalArgumentException("Managed data root cannot be created or resolved", exception);
+            throw new IllegalArgumentException("无法创建或解析平台受管数据目录", exception);
         }
     }
 
@@ -45,7 +45,7 @@ public class RepositoryPathPolicy {
     private static Path validateUnder(String rawPath, List<Path> roots, String outsideMessage) {
         Path candidate = realPath(Path.of(rawPath));
         if (!Files.isDirectory(candidate) || !Files.isReadable(candidate))
-            throw new IllegalArgumentException("Repository path must be a readable directory");
+            throw new IllegalArgumentException("仓库路径必须是可读取的目录");
         if (roots.stream().noneMatch(candidate::startsWith)) throw new IllegalArgumentException(outsideMessage);
         return candidate;
     }
@@ -53,6 +53,6 @@ public class RepositoryPathPolicy {
     private static Path realPath(String value) { return realPath(Path.of(value)); }
     private static Path realPath(Path path) {
         try { return path.toAbsolutePath().normalize().toRealPath(); }
-        catch (IOException exception) { throw new IllegalArgumentException("Configured path does not exist or cannot be resolved", exception); }
+        catch (IOException exception) { throw new IllegalArgumentException("配置的路径不存在或无法解析", exception); }
     }
 }

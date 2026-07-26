@@ -1,127 +1,136 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.RepositoryGovernanceMapper">
-  <resultMap id="governanceRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryGovernanceRow">
-    <constructor>
-      <idArg column="repository_id" javaType="java.util.UUID"/>
-      <arg column="repository_name" javaType="java.lang.String"/>
-      <arg column="normalized_name" javaType="java.lang.String"/>
-      <arg column="owner_account_id" javaType="java.util.UUID"/>
-      <arg column="ownership_version" javaType="_long"/>
-      <arg column="repository_status" javaType="java.lang.String"/>
-    </constructor>
-  </resultMap>
-  <resultMap id="memberRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryMemberRow">
-    <constructor>
-      <idArg column="account_id" javaType="java.util.UUID"/>
-      <arg column="username" javaType="java.lang.String"/>
-      <arg column="display_name" javaType="java.lang.String"/>
-      <arg column="account_role" javaType="java.lang.String"/>
-      <arg column="enabled" javaType="_boolean"/>
-      <arg column="relationship" javaType="java.lang.String"/>
-      <arg column="permission_level" javaType="java.lang.String"/>
-    </constructor>
-  </resultMap>
-  <resultMap id="accountRow" type="com.analyzercoder.infrastructure.persistence.model.GovernanceAccountRow">
-    <constructor>
-      <idArg column="id" javaType="java.util.UUID"/>
-      <arg column="username" javaType="java.lang.String"/>
-      <arg column="display_name" javaType="java.lang.String"/>
-      <arg column="enabled" javaType="_boolean"/>
-    </constructor>
-  </resultMap>
+    <resultMap id="governanceRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryGovernanceRow">
+        <constructor>
+            <idArg column="repository_id" javaType="java.util.UUID"/>
+            <arg column="repository_name" javaType="java.lang.String"/>
+            <arg column="normalized_name" javaType="java.lang.String"/>
+            <arg column="owner_account_id" javaType="java.util.UUID"/>
+            <arg column="ownership_version" javaType="_long"/>
+            <arg column="repository_status" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="memberRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryMemberRow">
+        <constructor>
+            <idArg column="account_id" javaType="java.util.UUID"/>
+            <arg column="username" javaType="java.lang.String"/>
+            <arg column="display_name" javaType="java.lang.String"/>
+            <arg column="account_role" javaType="java.lang.String"/>
+            <arg column="enabled" javaType="_boolean"/>
+            <arg column="relationship" javaType="java.lang.String"/>
+            <arg column="permission_level" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="accountRow" type="com.analyzercoder.infrastructure.persistence.model.GovernanceAccountRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="username" javaType="java.lang.String"/>
+            <arg column="display_name" javaType="java.lang.String"/>
+            <arg column="enabled" javaType="_boolean"/>
+        </constructor>
+    </resultMap>
 
-  <select id="findForUpdate" resultMap="governanceRow">
-    SELECT id repository_id,name repository_name,normalized_name,owner_account_id,ownership_version,repository_status
-    FROM repositories WHERE id=#{repositoryId} AND deleted_at IS NULL FOR UPDATE
-  </select>
-  <select id="findMembers" resultMap="memberRow">
-    SELECT a.id account_id,a.username,a.display_name,a.account_role,a.enabled,
-      CASE WHEN a.id=r.owner_account_id THEN 'OWNER' ELSE p.permission_level END relationship,
-      p.permission_level
-    FROM repositories r
-    JOIN accounts a ON a.id=r.owner_account_id
-    LEFT JOIN repository_permissions p ON FALSE
-    WHERE r.id=#{repositoryId} AND r.deleted_at IS NULL
-    UNION ALL
-    SELECT a.id,a.username,a.display_name,a.account_role,a.enabled,p.permission_level,p.permission_level
-    FROM repository_permissions p JOIN accounts a ON a.id=p.account_id
-    JOIN repositories r ON r.id=p.repo_id AND r.deleted_at IS NULL
-    WHERE p.repo_id=#{repositoryId}
-    ORDER BY relationship,username
-  </select>
-  <select id="findEnabledAccounts" resultMap="accountRow">
-    SELECT id,username,display_name,enabled FROM accounts WHERE enabled=TRUE ORDER BY display_name,username,id
-  </select>
-  <select id="findAccount" resultMap="accountRow">
-    SELECT id,username,display_name,enabled FROM accounts WHERE id=#{accountId}
-  </select>
-  <select id="countNameConflict" resultType="int">
-    SELECT COUNT(*) FROM repositories
-    WHERE owner_account_id=#{ownerAccountId} AND normalized_name=#{normalizedName}
-      AND id&lt;&gt;#{excludeRepositoryId} AND deleted_at IS NULL
-  </select>
-  <insert id="upsertGrant">
-    INSERT INTO repository_permissions(account_id,repo_id,permission_level,created_at,updated_at)
-    VALUES(#{accountId},#{repositoryId},#{permission},CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-    ON CONFLICT(account_id,repo_id) DO UPDATE SET permission_level=EXCLUDED.permission_level,updated_at=CURRENT_TIMESTAMP
-  </insert>
-  <delete id="deleteGrant">DELETE FROM repository_permissions WHERE repo_id=#{repositoryId} AND account_id=#{accountId}</delete>
-  <update id="incrementVersion">
-    UPDATE repositories SET ownership_version=ownership_version+1,updated_at=CURRENT_TIMESTAMP
-    WHERE id=#{repositoryId} AND ownership_version=#{expectedVersion} AND deleted_at IS NULL
-  </update>
-  <update id="transferOwnership">
-    UPDATE repositories SET owner_account_id=#{newOwnerId},name=#{newName},normalized_name=#{normalizedName},
-      ownership_version=ownership_version+1,updated_at=CURRENT_TIMESTAMP
-    WHERE id=#{repositoryId} AND ownership_version=#{expectedVersion}
-      AND repository_status IN ('READY','AUTH_ERROR') AND deleted_at IS NULL
-  </update>
-  <update id="markDeleting">
-    UPDATE repositories SET repository_status='DELETING',deleted_at=CURRENT_TIMESTAMP,
-      ownership_version=ownership_version+1,updated_at=CURRENT_TIMESTAMP
-    WHERE id=#{repositoryId} AND ownership_version=#{expectedVersion} AND deleted_at IS NULL
-  </update>
-  <insert id="insertDeletionTombstone">
-    INSERT INTO repository_deletion_tombstones(repository_id,deleted_by,deleted_at)
-    VALUES(#{repositoryId},#{deletedBy},#{deletedAt})
-    ON CONFLICT(repository_id) DO NOTHING
-  </insert>
-  <insert id="insertAudit">
-    INSERT INTO audit_events(id,actor_account_id,target_account_id,target_repo_id,event_type,result,request_id,source_ip,created_at)
-    VALUES(#{id},#{actorId},#{targetAccountId},#{repositoryId},#{eventType},'SUCCESS',#{requestId},#{sourceIp},#{createdAt})
-  </insert>
-  <select id="claimNextCleanup" resultType="java.util.UUID" affectData="true" flushCache="true">
-    UPDATE repository_deletion_tombstones SET cleanup_status='RUNNING',cleanup_updated_at=CURRENT_TIMESTAMP
-    WHERE repository_id=(
-      SELECT repository_id FROM repository_deletion_tombstones
-      WHERE cleanup_status IN ('PENDING','FAILED')
-         OR (cleanup_status='RUNNING' AND cleanup_updated_at&lt;CURRENT_TIMESTAMP-INTERVAL '10 minutes')
-      ORDER BY cleanup_updated_at,deleted_at FOR UPDATE SKIP LOCKED LIMIT 1
-    ) RETURNING repository_id
-  </select>
-  <delete id="deleteQaConversations">DELETE FROM qa_conversations WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteQaMessages">DELETE FROM qa_messages WHERE session_id IN (SELECT id FROM qa_sessions WHERE repo_id=#{repositoryId})</delete>
-  <delete id="deleteQaSessions">DELETE FROM qa_sessions WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteKnowledgeCards">DELETE FROM knowledge_cards WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteCodeGraphEdges">DELETE FROM code_graph_edges WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteCodeGraphArtifacts">DELETE FROM codegraph_artifacts WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteChunkEmbeddings">DELETE FROM chunk_embeddings WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteCodeChunks">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteRepositorySnapshots">DELETE FROM repository_snapshots WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteIndexJobs">DELETE FROM index_jobs WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteRepositoryGrants">DELETE FROM repository_permissions WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteRepositoryCredentials">DELETE FROM repository_credentials WHERE repo_id=#{repositoryId}</delete>
-  <delete id="deleteGovernanceLock">DELETE FROM repository_governance_locks WHERE repo_id=#{repositoryId}</delete>
-  <update id="finalizeDeletion">
-    UPDATE repositories SET repository_status='DELETED',path=CONCAT('[deleted]/',id),current_snapshot_id=NULL,
-      current_snapshot_path=NULL,codegraph_path=NULL,worktree_digest=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=#{repositoryId}
-  </update>
-  <update id="completeCleanup">
-    UPDATE repository_deletion_tombstones SET cleanup_status='COMPLETE',last_error_code=NULL,cleanup_updated_at=CURRENT_TIMESTAMP
-    WHERE repository_id=#{repositoryId}
-  </update>
-  <update id="failCleanup">
-    UPDATE repository_deletion_tombstones SET cleanup_status='FAILED',retry_count=retry_count+1,
-      last_error_code=#{errorCode},cleanup_updated_at=CURRENT_TIMESTAMP WHERE repository_id=#{repositoryId}
-  </update></mapper>
+    <select id="findForUpdate" resultMap="governanceRow">
+        SELECT id repository_id,name
+        repository_name,normalized_name,owner_account_id,ownership_version,repository_status
+        FROM repositories WHERE id=#{repositoryId} AND deleted_at IS NULL FOR UPDATE
+    </select>
+    <select id="findMembers" resultMap="memberRow">
+        SELECT a.id account_id,a.username,a.display_name,a.account_role,a.enabled,
+        CASE WHEN a.id=r.owner_account_id THEN 'OWNER' ELSE p.permission_level END relationship,
+        p.permission_level
+        FROM repositories r
+        JOIN accounts a ON a.id=r.owner_account_id
+        LEFT JOIN repository_permissions p ON FALSE
+        WHERE r.id=#{repositoryId} AND r.deleted_at IS NULL
+        UNION ALL
+        SELECT a.id,a.username,a.display_name,a.account_role,a.enabled,p.permission_level,p.permission_level
+        FROM repository_permissions p JOIN accounts a ON a.id=p.account_id
+        JOIN repositories r ON r.id=p.repo_id AND r.deleted_at IS NULL
+        WHERE p.repo_id=#{repositoryId}
+        ORDER BY relationship,username
+    </select>
+    <select id="findEnabledAccounts" resultMap="accountRow">
+        SELECT id,username,display_name,enabled FROM accounts WHERE enabled=TRUE ORDER BY display_name,username,id
+    </select>
+    <select id="findAccount" resultMap="accountRow">
+        SELECT id,username,display_name,enabled FROM accounts WHERE id=#{accountId}
+    </select>
+    <select id="countNameConflict" resultType="int">
+        SELECT COUNT(*) FROM repositories
+        WHERE owner_account_id=#{ownerAccountId} AND normalized_name=#{normalizedName}
+        AND id&lt;&gt;#{excludeRepositoryId} AND deleted_at IS NULL
+    </select>
+    <insert id="upsertGrant">
+        INSERT INTO repository_permissions(account_id,repo_id,permission_level,created_at,updated_at)
+        VALUES(#{accountId},#{repositoryId},#{permission},CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT(account_id,repo_id) DO UPDATE SET
+        permission_level=EXCLUDED.permission_level,updated_at=CURRENT_TIMESTAMP
+    </insert>
+    <delete id="deleteGrant">DELETE FROM repository_permissions WHERE repo_id=#{repositoryId} AND
+        account_id=#{accountId}
+    </delete>
+    <update id="incrementVersion">
+        UPDATE repositories SET ownership_version=ownership_version+1,updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{repositoryId} AND ownership_version=#{expectedVersion} AND deleted_at IS NULL
+    </update>
+    <update id="transferOwnership">
+        UPDATE repositories SET owner_account_id=#{newOwnerId},name=#{newName},normalized_name=#{normalizedName},
+        ownership_version=ownership_version+1,updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{repositoryId} AND ownership_version=#{expectedVersion}
+        AND repository_status IN ('READY','AUTH_ERROR') AND deleted_at IS NULL
+    </update>
+    <update id="markDeleting">
+        UPDATE repositories SET repository_status='DELETING',deleted_at=CURRENT_TIMESTAMP,
+        ownership_version=ownership_version+1,updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{repositoryId} AND ownership_version=#{expectedVersion} AND deleted_at IS NULL
+    </update>
+    <insert id="insertDeletionTombstone">
+        INSERT INTO repository_deletion_tombstones(repository_id,deleted_by,deleted_at)
+        VALUES(#{repositoryId},#{deletedBy},#{deletedAt})
+        ON CONFLICT(repository_id) DO NOTHING
+    </insert>
+    <insert id="insertAudit">
+        INSERT INTO
+        audit_events(id,actor_account_id,target_account_id,target_repo_id,event_type,result,request_id,source_ip,created_at)
+        VALUES(#{id},#{actorId},#{targetAccountId},#{repositoryId},#{eventType},'SUCCESS',#{requestId},#{sourceIp},#{createdAt})
+    </insert>
+    <select id="claimNextCleanup" resultType="java.util.UUID" affectData="true" flushCache="true">
+        UPDATE repository_deletion_tombstones SET cleanup_status='RUNNING',cleanup_updated_at=CURRENT_TIMESTAMP
+        WHERE repository_id=(
+        SELECT repository_id FROM repository_deletion_tombstones
+        WHERE cleanup_status IN ('PENDING','FAILED')
+        OR (cleanup_status='RUNNING' AND cleanup_updated_at&lt;CURRENT_TIMESTAMP-INTERVAL '10 minutes')
+        ORDER BY cleanup_updated_at,deleted_at FOR UPDATE SKIP LOCKED LIMIT 1
+        ) RETURNING repository_id
+    </select>
+    <delete id="deleteQaConversations">DELETE FROM qa_conversations WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteQaMessages">DELETE FROM qa_messages WHERE session_id IN (SELECT id FROM qa_sessions WHERE
+        repo_id=#{repositoryId})
+    </delete>
+    <delete id="deleteQaSessions">DELETE FROM qa_sessions WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteKnowledgeCards">DELETE FROM knowledge_cards WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteCodeGraphEdges">DELETE FROM code_graph_edges WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteCodeGraphArtifacts">DELETE FROM codegraph_artifacts WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteChunkEmbeddings">DELETE FROM chunk_embeddings WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteCodeChunks">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteIndexJobs">DELETE FROM index_jobs WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteRepositoryGrants">DELETE FROM repository_permissions WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteRepositoryCredentials">DELETE FROM repository_credentials WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteGovernanceLock">DELETE FROM repository_governance_locks WHERE repo_id=#{repositoryId}</delete>
+    <update id="finalizeDeletion">
+        UPDATE repositories SET repository_status='DELETED',path=CONCAT('[deleted]/',id),current_snapshot_id=NULL,
+        current_snapshot_path=NULL,codegraph_path=NULL,worktree_digest=NULL,updated_at=CURRENT_TIMESTAMP WHERE
+        id=#{repositoryId}
+    </update>
+    <update id="completeCleanup">
+        UPDATE repository_deletion_tombstones SET
+        cleanup_status='COMPLETE',last_error_code=NULL,cleanup_updated_at=CURRENT_TIMESTAMP
+        WHERE repository_id=#{repositoryId}
+    </update>
+    <update id="failCleanup">
+        UPDATE repository_deletion_tombstones SET cleanup_status='FAILED',retry_count=retry_count+1,
+        last_error_code=#{errorCode},cleanup_updated_at=CURRENT_TIMESTAMP WHERE repository_id=#{repositoryId}
+    </update>
+</mapper>

@@ -363,7 +363,7 @@ public class LlmSettingsService {
         String action = input.secretAction() == null ? "KEEP" : input.secretAction().trim().toUpperCase(Locale.ROOT);
         if ("KEEP".equals(action)) {
             if (latest == null || uuid(latest, "secret_version_id") == null) {
-                throw new ApiSecurityException(400, "LLM_CONFIG_INVALID", "首次保存需要提供 API Key 或明确清除密钥");
+            throw new ApiSecurityException(400, "LLM_CONFIG_INVALID", "首次保存需要提供接口密钥，或明确选择清除密钥");
             }
             UUID id = uuid(latest, "secret_version_id");
             Map<String, Object> secret = mapper.secret(id);
@@ -375,7 +375,7 @@ public class LlmSettingsService {
         }
         String apiKey = input.apiKey() == null ? "" : input.apiKey().trim();
         if (apiKey.isEmpty() || apiKey.length() > 5000) {
-            throw new ApiSecurityException(400, "LLM_CONFIG_INVALID", "API Key 不能为空且不得超过 5000 字符");
+            throw new ApiSecurityException(400, "LLM_CONFIG_INVALID", "接口密钥不能为空且不得超过 5000 个字符");
         }
         LlmSecretCipher.EncryptedSecret encrypted = secretCipher.encrypt(apiKey);
         UUID secretId = UUID.randomUUID();
@@ -397,7 +397,7 @@ public class LlmSettingsService {
             ? "OPENAI_COMPATIBLE"
             : input.providerType().trim().toUpperCase(Locale.ROOT);
         if (!"OPENAI_COMPATIBLE".equals(providerType)) {
-            throw new ApiSecurityException(400, "LLM_CONFIG_INVALID", "当前仅支持 OpenAI-compatible Provider");
+            throw new ApiSecurityException(400, "LLM_CONFIG_INVALID", "当前仅支持兼容 OpenAI 协议的模型服务");
         }
         String model = clean(input.model(), 1, 200, "模型标识");
         String baseUrl;
@@ -411,7 +411,7 @@ public class LlmSettingsService {
         int maxTokens = value(input.maxOutputTokens(), 2048, 1, 32768, "最大输出 Token");
         double temperature = input.temperature() == null ? 0.2 : input.temperature();
         if (!Double.isFinite(temperature) || temperature < 0 || temperature > 2) {
-            throw new ApiSecurityException(400, "LLM_CONFIG_INVALID", "Temperature 必须在 0 到 2 之间");
+            throw new ApiSecurityException(400, "LLM_CONFIG_INVALID", "生成温度必须在 0 到 2 之间");
         }
         return new ValidatedInput(
             name,

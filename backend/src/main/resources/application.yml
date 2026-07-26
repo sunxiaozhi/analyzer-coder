@@ -7,6 +7,11 @@ spring:
     password: ${APP_DATASOURCE_PASSWORD:codebase_kb}
   flyway:
     enabled: ${APP_FLYWAY_ENABLED:true}
+    baseline-on-migrate: true
+    baseline-version: 0
+    default-schema: public
+    schemas: public
+    create-schemas: true
     placeholders:
       repositoryMigrationOwner: ${APP_REPOSITORY_MIGRATION_OWNER:}
 
@@ -36,8 +41,8 @@ management:
 
 app:
   security:
-    initial-admin-username: ${APP_INITIAL_ADMIN_USERNAME:}
-    initial-admin-password: ${APP_INITIAL_ADMIN_PASSWORD:}
+    initial-admin-username: ${APP_INITIAL_ADMIN_USERNAME:admin}
+    initial-admin-password: ${APP_INITIAL_ADMIN_PASSWORD:1qaz@WSX}
     session-idle-minutes: ${APP_SESSION_IDLE_MINUTES:30}
     session-max-hours: ${APP_SESSION_MAX_HOURS:12}
     lock-minutes: ${APP_LOGIN_LOCK_MINUTES:15}

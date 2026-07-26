@@ -106,7 +106,7 @@ watch(treeData, () => revealSelected(props.selectedPath));
       <el-input v-model="filter" :prefix-icon="Search" clearable placeholder="筛选文件路径" />
     </header>
     <div v-loading="loading" class="repository-tree-scroll">
-      <el-empty v-if="!loading && !files.length" :image-size="54" description="当前快照没有文件" />
+      <el-empty v-if="!loading && !files.length" :image-size="54" description="当前代码版本没有文件" />
       <el-tree
         v-else
         ref="tree"

@@ -1,26 +1,62 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.IndexJobMapper">
-  <resultMap id="row" type="com.analyzercoder.infrastructure.persistence.model.IndexJobRow"><constructor><idArg column="id" javaType="java.util.UUID"/><arg column="repo_id" javaType="java.util.UUID"/><arg column="job_type" javaType="java.lang.String"/><arg column="status" javaType="java.lang.String"/><arg column="current_step" javaType="java.lang.String"/><arg column="error_message" javaType="java.lang.String"/><arg column="started_at" javaType="java.time.Instant"/><arg column="finished_at" javaType="java.time.Instant"/><arg column="created_at" javaType="java.time.Instant"/></constructor></resultMap>
-  <sql id="columns">id,repo_id,job_type,status,current_step,error_message,started_at,finished_at,created_at</sql>
-  <insert id="upsert">INSERT INTO index_jobs(<include refid="columns"/>) VALUES(#{id},#{repositoryId},#{jobType},#{status},#{currentStep},#{errorMessage},#{startedAt},#{finishedAt},#{createdAt}) ON CONFLICT(id) DO UPDATE SET status=EXCLUDED.status,current_step=EXCLUDED.current_step,error_message=EXCLUDED.error_message,started_at=EXCLUDED.started_at,finished_at=EXCLUDED.finished_at</insert>
-  <select id="findById" resultMap="row">SELECT <include refid="columns"/> FROM index_jobs WHERE id=#{id}</select>
-  <select id="findLatest" resultMap="row">SELECT <include refid="columns"/> FROM index_jobs WHERE repo_id=#{repositoryId} ORDER BY created_at DESC,id DESC LIMIT 1</select>
-  <select id="findByRepositoryId" resultMap="row">SELECT <include refid="columns"/> FROM index_jobs WHERE repo_id=#{repositoryId} ORDER BY created_at DESC,id DESC</select>
-  <select id="findAll" resultMap="row">SELECT <include refid="columns"/> FROM index_jobs ORDER BY created_at DESC,id DESC</select>
-  <select id="findVisiblePage" resultMap="row">
-    SELECT DISTINCT j.id,j.repo_id,j.job_type,j.status,j.current_step,j.error_message,j.started_at,j.finished_at,j.created_at
-    FROM index_jobs j
-    JOIN repositories r ON r.id=j.repo_id AND r.deleted_at IS NULL
-    LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
-    WHERE #{admin}=TRUE OR r.owner_account_id=#{accountId} OR p.account_id IS NOT NULL
-    ORDER BY j.created_at DESC,j.id DESC
-  </select>
-  <select id="countActive" resultType="int">SELECT COUNT(*) FROM index_jobs WHERE repo_id=#{repositoryId} AND status IN('QUEUED','RUNNING','CANCEL_REQUESTED')</select>
-  <select id="findNextQueued" resultMap="row">SELECT <include refid="columns"/> FROM index_jobs WHERE status='QUEUED' AND job_type IN('FULL','INCREMENTAL') ORDER BY created_at,id LIMIT 1</select>
-  <select id="claimNextQueued" resultMap="row">
-    WITH candidate AS(SELECT id FROM index_jobs WHERE status='QUEUED' AND job_type IN('FULL','INCREMENTAL') ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
-    UPDATE index_jobs job SET status='RUNNING',current_step='scan_repository',started_at=CURRENT_TIMESTAMP FROM candidate WHERE job.id=candidate.id RETURNING job.*
-  </select>
-  <delete id="deleteByRepositoryId">DELETE FROM index_jobs WHERE repo_id=#{repositoryId}</delete>
+    <resultMap id="row" type="com.analyzercoder.infrastructure.persistence.model.IndexJobRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="repo_id" javaType="java.util.UUID"/>
+            <arg column="job_type" javaType="java.lang.String"/>
+            <arg column="status" javaType="java.lang.String"/>
+            <arg column="current_step" javaType="java.lang.String"/>
+            <arg column="error_message" javaType="java.lang.String"/>
+            <arg column="started_at" javaType="java.time.Instant"/>
+            <arg column="finished_at" javaType="java.time.Instant"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+    <sql id="columns">id,repo_id,job_type,status,current_step,error_message,started_at,finished_at,created_at</sql>
+    <insert id="upsert">INSERT INTO index_jobs(<include refid="columns"/>)
+        VALUES(#{id},#{repositoryId},#{jobType},#{status},#{currentStep},#{errorMessage},#{startedAt},#{finishedAt},#{createdAt})
+        ON CONFLICT(id) DO UPDATE SET
+        status=EXCLUDED.status,current_step=EXCLUDED.current_step,error_message=EXCLUDED.error_message,started_at=EXCLUDED.started_at,finished_at=EXCLUDED.finished_at
+    </insert>
+    <select id="findById" resultMap="row">SELECT
+        <include refid="columns"/>
+        FROM index_jobs WHERE id=#{id}
+    </select>
+    <select id="findLatest" resultMap="row">SELECT
+        <include refid="columns"/>
+        FROM index_jobs WHERE repo_id=#{repositoryId} ORDER BY created_at DESC,id DESC LIMIT 1
+    </select>
+    <select id="findByRepositoryId" resultMap="row">SELECT
+        <include refid="columns"/>
+        FROM index_jobs WHERE repo_id=#{repositoryId} ORDER BY created_at DESC,id DESC
+    </select>
+    <select id="findAll" resultMap="row">SELECT
+        <include refid="columns"/>
+        FROM index_jobs ORDER BY created_at DESC,id DESC
+    </select>
+    <select id="findVisiblePage" resultMap="row">
+        SELECT DISTINCT
+        j.id,j.repo_id,j.job_type,j.status,j.current_step,j.error_message,j.started_at,j.finished_at,j.created_at
+        FROM index_jobs j
+        JOIN repositories r ON r.id=j.repo_id AND r.deleted_at IS NULL
+        LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
+        WHERE #{admin}=TRUE OR r.owner_account_id=#{accountId} OR p.account_id IS NOT NULL
+        ORDER BY j.created_at DESC,j.id DESC
+    </select>
+    <select id="countActive" resultType="int">SELECT COUNT(*) FROM index_jobs WHERE repo_id=#{repositoryId} AND status
+        IN('QUEUED','RUNNING','CANCEL_REQUESTED')
+    </select>
+    <select id="findNextQueued" resultMap="row">SELECT
+        <include refid="columns"/>
+        FROM index_jobs WHERE status='QUEUED' AND job_type IN('FULL','INCREMENTAL') ORDER BY created_at,id LIMIT 1
+    </select>
+    <select id="claimNextQueued" resultMap="row">
+        WITH candidate AS(SELECT id FROM index_jobs WHERE status='QUEUED' AND job_type IN('FULL','INCREMENTAL') ORDER BY
+        created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
+        UPDATE index_jobs job SET status='RUNNING',current_step='scan_repository',started_at=CURRENT_TIMESTAMP FROM
+        candidate WHERE job.id=candidate.id RETURNING job.*
+    </select>
+    <delete id="deleteByRepositoryId">DELETE FROM index_jobs WHERE repo_id=#{repositoryId}</delete>
 </mapper>

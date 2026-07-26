@@ -1,54 +1,64 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.RepositoryAccessMapper">
-  <resultMap id="accessRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryAccessRow">
-    <constructor>
-      <idArg column="repository_id" javaType="java.util.UUID"/>
-      <arg column="owner_account_id" javaType="java.util.UUID"/>
-      <arg column="owner_display_name" javaType="java.lang.String"/>
-      <arg column="permission_level" javaType="java.lang.String"/>
-      <arg column="ownership_version" javaType="_long"/>
-      <arg column="repository_status" javaType="java.lang.String"/>
-    </constructor>
-  </resultMap>
+    <resultMap id="accessRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryAccessRow">
+        <constructor>
+            <idArg column="repository_id" javaType="java.util.UUID"/>
+            <arg column="owner_account_id" javaType="java.util.UUID"/>
+            <arg column="owner_display_name" javaType="java.lang.String"/>
+            <arg column="permission_level" javaType="java.lang.String"/>
+            <arg column="ownership_version" javaType="_long"/>
+            <arg column="repository_status" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
 
-  <select id="findAccess" resultMap="accessRow">
-    SELECT r.id repository_id,r.owner_account_id,o.display_name owner_display_name,p.permission_level,r.ownership_version,r.repository_status
-    FROM repositories r JOIN accounts o ON o.id=r.owner_account_id
-    LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
-    WHERE r.id=#{repositoryId} AND r.deleted_at IS NULL
-      AND (r.owner_account_id=#{accountId} OR p.account_id IS NOT NULL)
-  </select>
-  <select id="findMetadata" resultMap="accessRow">
-    SELECT r.id repository_id,r.owner_account_id,o.display_name owner_display_name,NULL::text permission_level,r.ownership_version,r.repository_status
-    FROM repositories r JOIN accounts o ON o.id=r.owner_account_id
-    WHERE r.id=#{repositoryId} AND r.deleted_at IS NULL
-  </select>
-  <select id="findVisibleRepositoryIds" resultType="java.util.UUID">
-    SELECT r.id FROM repositories r
-    LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
-    WHERE r.deleted_at IS NULL AND (r.owner_account_id=#{accountId} OR p.account_id IS NOT NULL)
-    ORDER BY r.created_at,r.id
-  </select>
-  <select id="findVisibleRepositoryIdsForAdmin" resultType="java.util.UUID">
-    SELECT id FROM repositories WHERE deleted_at IS NULL ORDER BY created_at,id
-  </select>
-  <select id="findGrants" resultMap="accessRow">
-    SELECT r.id repository_id,r.owner_account_id,o.display_name owner_display_name,p.permission_level,r.ownership_version,r.repository_status
-    FROM repositories r JOIN accounts o ON o.id=r.owner_account_id
-    LEFT JOIN repository_permissions p ON p.repo_id=r.id
-    WHERE r.id=#{repositoryId} AND r.deleted_at IS NULL
-    ORDER BY p.created_at,p.account_id
-  </select>
-  <insert id="upsertGrant">
-    INSERT INTO repository_permissions(account_id,repo_id,permission_level,created_at,updated_at)
-    VALUES(#{accountId},#{repositoryId},#{permission},CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-    ON CONFLICT(account_id,repo_id) DO UPDATE SET permission_level=EXCLUDED.permission_level,updated_at=CURRENT_TIMESTAMP
-  </insert>
-  <delete id="deleteGrant">DELETE FROM repository_permissions WHERE repo_id=#{repositoryId} AND account_id=#{accountId}</delete>
-  <update id="transferOwnership">
-    UPDATE repositories SET owner_account_id=#{newOwnerId},name=#{newName},normalized_name=#{normalizedName},ownership_version=ownership_version+1,updated_at=CURRENT_TIMESTAMP
-    WHERE id=#{repositoryId} AND ownership_version=#{expectedVersion} AND repository_status IN ('READY','AUTH_ERROR') AND deleted_at IS NULL
-  </update>
-  <select id="countOwnedRepositories" resultType="int">SELECT COUNT(*) FROM repositories WHERE owner_account_id=#{accountId} AND deleted_at IS NULL</select>
+    <select id="findAccess" resultMap="accessRow">
+        SELECT r.id repository_id,r.owner_account_id,o.display_name
+        owner_display_name,p.permission_level,r.ownership_version,r.repository_status
+        FROM repositories r JOIN accounts o ON o.id=r.owner_account_id
+        LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
+        WHERE r.id=#{repositoryId} AND r.deleted_at IS NULL
+        AND (r.owner_account_id=#{accountId} OR p.account_id IS NOT NULL)
+    </select>
+    <select id="findMetadata" resultMap="accessRow">
+        SELECT r.id repository_id,r.owner_account_id,o.display_name owner_display_name,NULL::text
+        permission_level,r.ownership_version,r.repository_status
+        FROM repositories r JOIN accounts o ON o.id=r.owner_account_id
+        WHERE r.id=#{repositoryId} AND r.deleted_at IS NULL
+    </select>
+    <select id="findVisibleRepositoryIds" resultType="java.util.UUID">
+        SELECT r.id FROM repositories r
+        LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
+        WHERE r.deleted_at IS NULL AND (r.owner_account_id=#{accountId} OR p.account_id IS NOT NULL)
+        ORDER BY r.created_at,r.id
+    </select>
+    <select id="findVisibleRepositoryIdsForAdmin" resultType="java.util.UUID">
+        SELECT id FROM repositories WHERE deleted_at IS NULL ORDER BY created_at,id
+    </select>
+    <select id="findGrants" resultMap="accessRow">
+        SELECT r.id repository_id,r.owner_account_id,o.display_name
+        owner_display_name,p.permission_level,r.ownership_version,r.repository_status
+        FROM repositories r JOIN accounts o ON o.id=r.owner_account_id
+        LEFT JOIN repository_permissions p ON p.repo_id=r.id
+        WHERE r.id=#{repositoryId} AND r.deleted_at IS NULL
+        ORDER BY p.created_at,p.account_id
+    </select>
+    <insert id="upsertGrant">
+        INSERT INTO repository_permissions(account_id,repo_id,permission_level,created_at,updated_at)
+        VALUES(#{accountId},#{repositoryId},#{permission},CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT(account_id,repo_id) DO UPDATE SET
+        permission_level=EXCLUDED.permission_level,updated_at=CURRENT_TIMESTAMP
+    </insert>
+    <delete id="deleteGrant">DELETE FROM repository_permissions WHERE repo_id=#{repositoryId} AND
+        account_id=#{accountId}
+    </delete>
+    <update id="transferOwnership">
+        UPDATE repositories SET
+        owner_account_id=#{newOwnerId},name=#{newName},normalized_name=#{normalizedName},ownership_version=ownership_version+1,updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{repositoryId} AND ownership_version=#{expectedVersion} AND repository_status IN
+        ('READY','AUTH_ERROR') AND deleted_at IS NULL
+    </update>
+    <select id="countOwnedRepositories" resultType="int">SELECT COUNT(*) FROM repositories WHERE
+        owner_account_id=#{accountId} AND deleted_at IS NULL
+    </select>
 </mapper>

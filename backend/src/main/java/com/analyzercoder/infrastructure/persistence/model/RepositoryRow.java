@@ -1,6 +1,6 @@
 package com.analyzercoder.infrastructure.persistence.model;
 import com.analyzercoder.domain.repository.CodeRepository;import java.time.Instant;import java.util.Locale;import java.util.UUID;
 public record RepositoryRow(UUID id,String name,String normalizedName,String path,String sourceType,String defaultBranch,String currentCommit,String worktreeDigest,boolean worktreeDirty,UUID currentSnapshotId,String currentSnapshotPath,String codegraphPath,Instant snapshotCreatedAt,Instant lastScannedAt,UUID ownerAccountId,long ownershipVersion,String repositoryStatus,Instant createdAt,Instant updatedAt,String description,long repositoryVersion){
-public static RepositoryRow forInsert(CodeRepository r,UUID owner){if(owner==null)throw new IllegalArgumentException("ownerAccountId is required");return from(r,owner);}
+public static RepositoryRow forInsert(CodeRepository r,UUID owner){if(owner==null)throw new IllegalArgumentException("仓库所有者账号不能为空");return from(r,owner);}
 public static RepositoryRow forUpdate(CodeRepository r){return from(r,null);}
 private static RepositoryRow from(CodeRepository r,UUID owner){return new RepositoryRow(r.id().value(),r.name(),r.name().trim().toLowerCase(Locale.ROOT),r.path().toString(),r.sourceType().name(),r.defaultBranch(),r.currentCommit(),r.worktreeDigest(),r.worktreeDirty(),r.currentSnapshotId()==null?null:r.currentSnapshotId().value(),r.currentSnapshotPath()==null?null:r.currentSnapshotPath().toString(),r.codeGraphPath().toString(),r.snapshotCreatedAt(),r.lastScannedAt(),owner,0,"READY",r.createdAt(),r.updatedAt(),"",1);}}

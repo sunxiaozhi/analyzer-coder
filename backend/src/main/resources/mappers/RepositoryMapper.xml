@@ -1,83 +1,107 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.RepositoryMapper">
-  <resultMap id="repositoryRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryRow">
-    <constructor>
-      <idArg column="id" javaType="java.util.UUID"/>
-      <arg column="name" javaType="java.lang.String"/>
-      <arg column="normalized_name" javaType="java.lang.String"/>
-      <arg column="path" javaType="java.lang.String"/>
-      <arg column="source_type" javaType="java.lang.String"/>
-      <arg column="default_branch" javaType="java.lang.String"/>
-      <arg column="current_commit" javaType="java.lang.String"/>
-      <arg column="worktree_digest" javaType="java.lang.String"/>
-      <arg column="worktree_dirty" javaType="_boolean"/>
-      <arg column="current_snapshot_id" javaType="java.util.UUID"/>
-      <arg column="current_snapshot_path" javaType="java.lang.String"/>
-      <arg column="codegraph_path" javaType="java.lang.String"/>
-      <arg column="snapshot_created_at" javaType="java.time.Instant"/>
-      <arg column="last_scanned_at" javaType="java.time.Instant"/>
-      <arg column="owner_account_id" javaType="java.util.UUID"/>
-      <arg column="ownership_version" javaType="_long"/>
-      <arg column="repository_status" javaType="java.lang.String"/>
-      <arg column="created_at" javaType="java.time.Instant"/>
-      <arg column="updated_at" javaType="java.time.Instant"/><arg column="description" javaType="java.lang.String"/><arg column="repository_version" javaType="_long"/>
-    </constructor>
-  </resultMap>
+    <resultMap id="repositoryRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="name" javaType="java.lang.String"/>
+            <arg column="normalized_name" javaType="java.lang.String"/>
+            <arg column="path" javaType="java.lang.String"/>
+            <arg column="source_type" javaType="java.lang.String"/>
+            <arg column="default_branch" javaType="java.lang.String"/>
+            <arg column="current_commit" javaType="java.lang.String"/>
+            <arg column="worktree_digest" javaType="java.lang.String"/>
+            <arg column="worktree_dirty" javaType="_boolean"/>
+            <arg column="current_snapshot_id" javaType="java.util.UUID"/>
+            <arg column="current_snapshot_path" javaType="java.lang.String"/>
+            <arg column="codegraph_path" javaType="java.lang.String"/>
+            <arg column="snapshot_created_at" javaType="java.time.Instant"/>
+            <arg column="last_scanned_at" javaType="java.time.Instant"/>
+            <arg column="owner_account_id" javaType="java.util.UUID"/>
+            <arg column="ownership_version" javaType="_long"/>
+            <arg column="repository_status" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+            <arg column="updated_at" javaType="java.time.Instant"/>
+            <arg column="description" javaType="java.lang.String"/>
+            <arg column="repository_version" javaType="_long"/>
+        </constructor>
+    </resultMap>
 
-  <sql id="columns">id,name,normalized_name,path,source_type,default_branch,current_commit,worktree_digest,worktree_dirty,current_snapshot_id,current_snapshot_path,codegraph_path,snapshot_created_at,last_scanned_at,owner_account_id,ownership_version,repository_status,created_at,updated_at,description,repository_version</sql>
+    <sql id="columns">
+        id,name,normalized_name,path,source_type,default_branch,current_commit,worktree_digest,worktree_dirty,current_snapshot_id,current_snapshot_path,codegraph_path,snapshot_created_at,last_scanned_at,owner_account_id,ownership_version,repository_status,created_at,updated_at,description,repository_version
+    </sql>
 
-  <insert id="insertOwned">
-    INSERT INTO repositories (<include refid="columns"/>)
-    VALUES (#{id},#{name},#{normalizedName},#{path},#{sourceType},#{defaultBranch},#{currentCommit},#{worktreeDigest},#{worktreeDirty},#{currentSnapshotId},#{currentSnapshotPath},#{codegraphPath},#{snapshotCreatedAt},#{lastScannedAt},#{ownerAccountId},#{ownershipVersion},#{repositoryStatus},#{createdAt},#{updatedAt},#{description},#{repositoryVersion})
-  </insert>
+    <insert id="insertOwned">
+        INSERT INTO repositories (<include refid="columns"/>)
+        VALUES
+        (#{id},#{name},#{normalizedName},#{path},#{sourceType},#{defaultBranch},#{currentCommit},#{worktreeDigest},#{worktreeDirty},#{currentSnapshotId},#{currentSnapshotPath},#{codegraphPath},#{snapshotCreatedAt},#{lastScannedAt},#{ownerAccountId},#{ownershipVersion},#{repositoryStatus},#{createdAt},#{updatedAt},#{description},#{repositoryVersion})
+    </insert>
 
-  <update id="update">
-    UPDATE repositories SET name=#{name}, normalized_name=#{normalizedName}, path=#{path}, source_type=#{sourceType},
-      default_branch=COALESCE(default_branch,#{defaultBranch}), current_commit=#{currentCommit}, worktree_digest=#{worktreeDigest},
-      worktree_dirty=#{worktreeDirty}, current_snapshot_id=#{currentSnapshotId}, current_snapshot_path=#{currentSnapshotPath},
-      codegraph_path=#{codegraphPath}, snapshot_created_at=#{snapshotCreatedAt}, last_scanned_at=#{lastScannedAt},
-      updated_at=#{updatedAt}
-    WHERE id=#{id} AND deleted_at IS NULL
-  </update>
+    <update id="update">
+        UPDATE repositories SET name=#{name}, normalized_name=#{normalizedName}, path=#{path},
+        source_type=#{sourceType},
+        default_branch=COALESCE(default_branch,#{defaultBranch}), current_commit=#{currentCommit},
+        worktree_digest=#{worktreeDigest},
+        worktree_dirty=#{worktreeDirty}, current_snapshot_id=#{currentSnapshotId},
+        current_snapshot_path=#{currentSnapshotPath},
+        codegraph_path=#{codegraphPath}, snapshot_created_at=#{snapshotCreatedAt}, last_scanned_at=#{lastScannedAt},
+        updated_at=#{updatedAt}
+        WHERE id=#{id} AND deleted_at IS NULL
+    </update>
 
-  <select id="findById" resultMap="repositoryRow">SELECT <include refid="columns"/> FROM repositories WHERE id=#{id} AND deleted_at IS NULL</select>
-  <select id="findAll" resultMap="repositoryRow">SELECT <include refid="columns"/> FROM repositories WHERE deleted_at IS NULL ORDER BY created_at,id</select>
-  <select id="findVisiblePage" resultMap="repositoryRow">
-    SELECT DISTINCT r.id,r.name,r.normalized_name,r.path,r.source_type,r.default_branch,r.current_commit,
-      r.worktree_digest,r.worktree_dirty,r.current_snapshot_id,r.current_snapshot_path,r.codegraph_path,
-      r.snapshot_created_at,r.last_scanned_at,r.owner_account_id,r.ownership_version,r.repository_status,
-      r.created_at,r.updated_at,r.description,r.repository_version
-    FROM repositories r
-    LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
-    LEFT JOIN accounts owner_account ON owner_account.id=r.owner_account_id
-    WHERE r.deleted_at IS NULL
-      AND (#{admin}=TRUE OR r.owner_account_id=#{accountId} OR p.account_id IS NOT NULL)
-      <if test="query != null">
-        AND (LOWER(r.name) LIKE CONCAT('%',LOWER(#{query}),'%')
-          OR LOWER(COALESCE(r.description,'')) LIKE CONCAT('%',LOWER(#{query}),'%')
-          OR LOWER(r.path) LIKE CONCAT('%',LOWER(#{query}),'%')
-          OR LOWER(r.source_type) LIKE CONCAT('%',LOWER(#{query}),'%')
-          OR LOWER(COALESCE(r.default_branch,'')) LIKE CONCAT('%',LOWER(#{query}),'%')
-          OR LOWER(COALESCE(owner_account.display_name,'')) LIKE CONCAT('%',LOWER(#{query}),'%'))
-      </if>
-    ORDER BY r.created_at DESC,r.id DESC
-  </select>
-  <select id="countByOwnerAndNormalizedName" resultType="int">SELECT COUNT(*) FROM repositories WHERE owner_account_id=#{ownerId} AND normalized_name=#{normalizedName} AND deleted_at IS NULL</select>
-  <select id="countByPath" resultType="int">SELECT COUNT(*) FROM repositories WHERE path=#{path} AND deleted_at IS NULL</select>
-  <select id="countByOwnerAndNormalizedNameExcludingId" resultType="int">SELECT COUNT(*) FROM repositories WHERE owner_account_id=#{ownerId} AND normalized_name=#{normalizedName} AND id&lt;&gt;#{id} AND deleted_at IS NULL</select>
-  <update id="updateEditableMetadata">UPDATE repositories SET name=#{name},normalized_name=#{normalizedName},description=#{description},default_branch=#{defaultBranch},repository_version=repository_version+1,updated_at=CURRENT_TIMESTAMP WHERE id=#{id} AND repository_version=#{expectedVersion} AND deleted_at IS NULL</update>
-  <update id="updateManagedSource">
-    UPDATE repositories SET path=#{path},source_type=#{sourceType},
-      default_branch=CASE WHEN #{hideGitVersion} THEN NULL ELSE default_branch END,
-      current_commit=CASE WHEN #{hideGitVersion} THEN NULL ELSE current_commit END,
-      updated_at=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted_at IS NULL
-  </update>  <update id="updateSourceMetadata">
-    UPDATE repositories SET source_type=#{sourceType},
-      default_branch=CASE WHEN #{hideGitVersion} THEN NULL ELSE default_branch END,
-      current_commit=CASE WHEN #{hideGitVersion} THEN NULL ELSE current_commit END,
-      updated_at=CURRENT_TIMESTAMP
-    WHERE id=#{id} AND deleted_at IS NULL
-  </update>
-  <delete id="delete">DELETE FROM repositories WHERE id=#{id}</delete>
+    <select id="findById" resultMap="repositoryRow">SELECT
+        <include refid="columns"/>
+        FROM repositories WHERE id=#{id} AND deleted_at IS NULL
+    </select>
+    <select id="findAll" resultMap="repositoryRow">SELECT
+        <include refid="columns"/>
+        FROM repositories WHERE deleted_at IS NULL ORDER BY created_at,id
+    </select>
+    <select id="findVisiblePage" resultMap="repositoryRow">
+        SELECT DISTINCT r.id,r.name,r.normalized_name,r.path,r.source_type,r.default_branch,r.current_commit,
+        r.worktree_digest,r.worktree_dirty,r.current_snapshot_id,r.current_snapshot_path,r.codegraph_path,
+        r.snapshot_created_at,r.last_scanned_at,r.owner_account_id,r.ownership_version,r.repository_status,
+        r.created_at,r.updated_at,r.description,r.repository_version
+        FROM repositories r
+        LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
+        LEFT JOIN accounts owner_account ON owner_account.id=r.owner_account_id
+        WHERE r.deleted_at IS NULL
+        AND (#{admin}=TRUE OR r.owner_account_id=#{accountId} OR p.account_id IS NOT NULL)
+        <if test="query != null">
+            AND (LOWER(r.name) LIKE CONCAT('%',LOWER(#{query}),'%')
+            OR LOWER(COALESCE(r.description,'')) LIKE CONCAT('%',LOWER(#{query}),'%')
+            OR LOWER(r.path) LIKE CONCAT('%',LOWER(#{query}),'%')
+            OR LOWER(r.source_type) LIKE CONCAT('%',LOWER(#{query}),'%')
+            OR LOWER(COALESCE(r.default_branch,'')) LIKE CONCAT('%',LOWER(#{query}),'%')
+            OR LOWER(COALESCE(owner_account.display_name,'')) LIKE CONCAT('%',LOWER(#{query}),'%'))
+        </if>
+        ORDER BY r.created_at DESC,r.id DESC
+    </select>
+    <select id="countByOwnerAndNormalizedName" resultType="int">SELECT COUNT(*) FROM repositories WHERE
+        owner_account_id=#{ownerId} AND normalized_name=#{normalizedName} AND deleted_at IS NULL
+    </select>
+    <select id="countByPath" resultType="int">SELECT COUNT(*) FROM repositories WHERE path=#{path} AND deleted_at IS
+        NULL
+    </select>
+    <select id="countByOwnerAndNormalizedNameExcludingId" resultType="int">SELECT COUNT(*) FROM repositories WHERE
+        owner_account_id=#{ownerId} AND normalized_name=#{normalizedName} AND id&lt;&gt;#{id} AND deleted_at IS NULL
+    </select>
+    <update id="updateEditableMetadata">UPDATE repositories SET
+        name=#{name},normalized_name=#{normalizedName},description=#{description},default_branch=#{defaultBranch},repository_version=repository_version+1,updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND repository_version=#{expectedVersion} AND deleted_at IS NULL
+    </update>
+    <update id="updateManagedSource">
+        UPDATE repositories SET path=#{path},source_type=#{sourceType},
+        default_branch=CASE WHEN #{hideGitVersion} THEN NULL ELSE default_branch END,
+        current_commit=CASE WHEN #{hideGitVersion} THEN NULL ELSE current_commit END,
+        updated_at=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted_at IS NULL
+    </update>
+    <update id="updateSourceMetadata">
+        UPDATE repositories SET source_type=#{sourceType},
+        default_branch=CASE WHEN #{hideGitVersion} THEN NULL ELSE default_branch END,
+        current_commit=CASE WHEN #{hideGitVersion} THEN NULL ELSE current_commit END,
+        updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND deleted_at IS NULL
+    </update>
+    <delete id="delete">DELETE FROM repositories WHERE id=#{id}</delete>
 </mapper>

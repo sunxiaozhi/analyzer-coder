@@ -39,7 +39,7 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
     public List<ScannedRepositoryFile> scan(CodeRepository repository) {
         Path root = repository.currentSnapshotPath();
         if (root == null || !Files.isDirectory(root)) {
-            throw new IllegalStateException("Repository has no readable published snapshot");
+            throw new IllegalStateException("仓库尚未发布可读取的代码版本");
         }
         try (Stream<Path> paths = Files.walk(root)) {
             return paths.filter(Files::isRegularFile)
@@ -48,7 +48,7 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
                 .filter(this::isWithinSizeLimit)
                 .map(path -> readFile(root, path)).flatMap(List::stream).toList();
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to scan published repository snapshot", exception);
+            throw new IllegalStateException("扫描当前代码版本失败", exception);
         }
     }
 

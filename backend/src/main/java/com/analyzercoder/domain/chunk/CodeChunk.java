@@ -60,7 +60,7 @@ public record CodeChunk(
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 digest is not available", exception);
+            throw new IllegalStateException("SHA-256 摘要功能不可用", exception);
         }
     }
 }

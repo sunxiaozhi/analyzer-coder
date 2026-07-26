@@ -1,9 +1,10 @@
 package com.analyzercoder.worker;
 
 import com.analyzercoder.application.repository.RepositoryDeletionService;
-import java.util.UUID;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.util.UUID;
 
 @Component
 public class RepositoryDeletionWorker {

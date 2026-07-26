@@ -29,7 +29,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
         Path root = repositoryRoot.toAbsolutePath().normalize();
         String topLevel = text(run(root, false, "rev-parse", "--show-toplevel")).trim();
         if (!samePath(root, Path.of(topLevel))) {
-            throw new IllegalArgumentException("Repository path must point to the Git worktree root");
+            throw new IllegalArgumentException("仓库路径必须指向 Git 工作区根目录");
         }
 
         String commit = text(run(root, false, "rev-parse", "--verify", "HEAD")).trim();
@@ -49,7 +49,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
                 Path relative = Path.of(relativeName).normalize();
                 Path file = root.resolve(relative).normalize();
                 if (relative.isAbsolute() || !file.startsWith(root)) {
-                    throw new IllegalArgumentException("Git returned a path outside the repository");
+                    throw new IllegalArgumentException("Git 返回了仓库范围之外的文件路径");
                 }
                 byte[] name = relative.toString().replace('\\', '/').getBytes(StandardCharsets.UTF_8);
                 digest.update(ByteBuffer.allocate(Integer.BYTES).putInt(name.length).array());
@@ -69,7 +69,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
             }
             return HexFormat.of().formatHex(digest.digest());
         } catch (IOException | NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("Unable to calculate Git worktree digest", exception);
+            throw new IllegalStateException("无法计算 Git 工作区内容摘要", exception);
         }
     }
 
@@ -105,18 +105,18 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
             CompletableFuture<byte[]> stderr = CompletableFuture.supplyAsync(() -> read(process.getErrorStream()));
             if (!process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
-                throw new IllegalStateException("Git metadata command timed out");
+                throw new IllegalStateException("读取 Git 元数据超时");
             }
             CommandResult result = new CommandResult(process.exitValue(), stdout.join(), stderr.join());
             if (result.exitCode() != 0 && !(allowExitOne && result.exitCode() == 1)) {
-                throw new IllegalArgumentException("Path is not a readable Git repository");
+                throw new IllegalArgumentException("该路径不是可读取的 Git 仓库");
             }
             return result;
         } catch (IOException exception) {
-            throw new IllegalStateException("Git CLI is unavailable", exception);
+            throw new IllegalStateException("Git 命令行工具不可用，请确认已安装 Git 并配置环境变量", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Git metadata command was interrupted", exception);
+            throw new IllegalStateException("读取 Git 元数据的操作被中断", exception);
         }
     }
 
@@ -124,7 +124,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
         try (input) {
             return input.readAllBytes();
         } catch (IOException exception) {
-            throw new IllegalStateException("Unable to read Git command output", exception);
+            throw new IllegalStateException("无法读取 Git 命令输出", exception);
         }
     }
 

@@ -39,7 +39,6 @@ public class RepositoryDeletionService {
         mapper.deleteCodeGraphArtifacts(repositoryId);
         mapper.deleteChunkEmbeddings(repositoryId);
         mapper.deleteCodeChunks(repositoryId);
-        mapper.deleteRepositorySnapshots(repositoryId);
         mapper.deleteIndexJobs(repositoryId);
         mapper.deleteRepositoryGrants(repositoryId);
         mapper.deleteRepositoryCredentials(repositoryId);

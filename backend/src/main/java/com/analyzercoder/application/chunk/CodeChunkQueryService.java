@@ -53,7 +53,7 @@ public class CodeChunkQueryService {
             return DEFAULT_LIMIT;
         }
         if (limit < 1 || limit > MAX_LIMIT) {
-            throw new IllegalArgumentException("limit must be between 1 and " + MAX_LIMIT);
+            throw new IllegalArgumentException("每页数量必须在 1 到 " + MAX_LIMIT + " 之间");
         }
         return limit;
     }
@@ -63,7 +63,7 @@ public class CodeChunkQueryService {
             return 0;
         }
         if (offset < 0) {
-            throw new IllegalArgumentException("offset must not be negative");
+            throw new IllegalArgumentException("分页偏移量不能为负数");
         }
         return offset;
     }

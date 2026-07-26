@@ -15,12 +15,15 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class RepositorySourceImportService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(RepositorySourceImportService.class);
     private final RegisterRepositoryUseCase repositories;
     private final RepositoryMapper mapper;
     private final Path importRoot;
@@ -102,9 +105,45 @@ public class RepositorySourceImportService {
             ProcessBuilder builder=new ProcessBuilder(command).redirectErrorStream(true);if(cwd!=null)builder.directory(cwd.toFile());builder.environment().put("GIT_TERMINAL_PROMPT","0");
             Process process=builder.start();String output=new String(process.getInputStream().readNBytes(8192));
             if(!process.waitFor(seconds,TimeUnit.SECONDS)){process.destroyForcibly();throw new IllegalStateException("Git 操作超时");}
-            if(process.exitValue()!=0)throw new IllegalStateException("Git 操作失败: "+output.replaceAll("https?://[^\\s]+","[remote]"));
+            if(process.exitValue()!=0) {
+                String sanitized=output.replaceAll("https?://[^\\s]+","[远程地址]");
+                LOGGER.warn("Git 命令执行失败：{}",sanitized.strip());
+                throw new IllegalStateException(gitFailureMessage(args,sanitized));
+            }
         } catch(IOException exception) { throw new IllegalStateException("无法执行 Git",exception); }
           catch(InterruptedException exception) { Thread.currentThread().interrupt();throw new IllegalStateException("Git 操作被中断",exception); }
+    }
+
+    static String gitFailureMessage(List<String> args,String output) {
+        String text=output==null?"":output.toLowerCase(java.util.Locale.ROOT);
+        if(text.contains("remote branch")&&text.contains("not found")) {
+            int branchIndex=args.indexOf("--branch");
+            String branch=branchIndex>=0&&branchIndex+1<args.size()?args.get(branchIndex+1):"指定";
+            return "远程仓库中不存在分支“"+branch+"”，请确认分支名称后重试";
+        }
+        if(text.contains("repository not found"))return "远程仓库不存在，或当前运行账号没有访问权限";
+        if(text.contains("authentication failed")||text.contains("could not read username")
+            ||text.contains("permission denied")||text.contains("access denied")) {
+            return "远程仓库身份验证失败，请检查运行账号的 Git 凭据和仓库访问权限";
+        }
+        if(text.contains("could not resolve host")||text.contains("name or service not known")) {
+            return "无法解析远程仓库域名，请检查仓库地址和 DNS 配置";
+        }
+        if(text.contains("connection timed out")||text.contains("operation timed out")) {
+            return "连接远程仓库超时，请检查网络连接后重试";
+        }
+        if(text.contains("connection refused")||text.contains("failed to connect")) {
+            return "无法连接远程仓库服务，请检查地址、端口和网络策略";
+        }
+        if(text.contains("ssl certificate problem")||text.contains("certificate verify failed")) {
+            return "远程仓库的安全证书校验失败，请检查证书链和系统信任配置";
+        }
+        if(text.contains("not a git repository"))return "目标地址不是有效的 Git 仓库";
+        if(text.contains("early eof")||text.contains("connection was reset")
+            ||text.contains("remote end hung up unexpectedly")) {
+            return "下载仓库时网络连接意外中断，请稍后重试";
+        }
+        return "Git 操作失败，请检查仓库地址、分支、访问权限和网络配置";
     }
 
     private static void deleteTree(Path target) {

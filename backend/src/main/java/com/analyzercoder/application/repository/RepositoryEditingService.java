@@ -53,7 +53,7 @@ public class RepositoryEditingService {
 
     private RepositoryRow requireRow(UUID id) {
         RepositoryRow row = mapper.findById(id);
-        if (row == null) throw new IllegalArgumentException("Repository not found");
+        if (row == null) throw new IllegalArgumentException("仓库不存在");
         return row;
     }
 
