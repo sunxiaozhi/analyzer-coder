@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TagProps } from 'element-plus';
 import type { KnowledgeCard } from '@/api/intelligence';
+import { statusLabel } from '@/utils/displayLabels';
 
 defineProps<{
   card: KnowledgeCard;
@@ -11,16 +12,6 @@ const emit = defineEmits<{
   edit: [card: KnowledgeCard];
   history: [card: KnowledgeCard];
 }>();
-
-const statusLabels: Record<string, string> = {
-  DRAFT: 'DRAFT（草稿）',
-  PUBLISHED: 'PUBLISHED（已发布）',
-  NEEDS_REVIEW: 'NEEDS_REVIEW（需要复核）',
-};
-
-function statusLabel(status: string) {
-  return statusLabels[status] ?? status;
-}
 
 function statusType(status: string): TagProps['type'] {
   if (status === 'PUBLISHED') return 'success';

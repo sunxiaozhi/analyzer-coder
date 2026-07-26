@@ -40,6 +40,16 @@ public class IntelligenceController {
         return service.ask(repoId, account.id(), body.question());
     }
 
+    @GetMapping("/repositories/{repoId}/chunks/{chunkId}/graph-target")
+    public IntelligenceService.GraphTarget graphTarget(
+        @PathVariable UUID repoId,
+        @PathVariable UUID chunkId,
+        HttpServletRequest request
+    ) {
+        require(request, repoId, RepositoryPermission.READ);
+        return service.graphTarget(repoId, chunkId);
+    }
+
     @GetMapping("/repositories/{repoId}/graph")
     public IntelligenceService.GraphResult graph(@PathVariable UUID repoId, @RequestParam String symbol,
         @RequestParam(defaultValue = "3") int depth, @RequestParam(defaultValue = "BOTH") String direction,

@@ -33,7 +33,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
         <el-select v-model="target" placeholder="目标账号" clearable filterable><el-option v-for="item in targets" :key="item" :label="item" :value="item"/></el-select>
         <el-select v-model="eventType" placeholder="事件类型" clearable filterable><el-option v-for="item in eventTypes" :key="item" :label="eventLabels[item]??item" :value="item"/></el-select>
         <el-select v-model="result" placeholder="结果" clearable><el-option v-for="item in results" :key="item" :label="item==='SUCCESS'?'成功':'拒绝/失败'" :value="item"/></el-select>
-        <el-date-picker v-model="range" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期"/>
+        <el-date-picker v-model="range" class="audit-date-range" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期"/>
         <el-button @click="clearFilters">清空</el-button><el-button :icon="Refresh" :loading="loading" @click="emit('refresh')">刷新</el-button>
       </div>
       <el-alert v-if="focusUsername" :title="`已从账号列表定位：${focusUsername}`" type="info" show-icon closable @close="target=''"/>
@@ -64,6 +64,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
 .audit-filters{display:grid;gap:12px;padding-bottom:12px}
 .audit-toolbar{display:flex;flex-wrap:wrap;gap:10px;padding:10px 20px}
 .audit-toolbar .el-select{width:150px}
+.audit-toolbar .audit-date-range{width:260px}
 .audit-table-region{min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
 .audit-time{display:grid;gap:2px}
 .audit-time small{color:var(--el-text-color-secondary)}
@@ -71,6 +72,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
 @media (max-width: 760px) {
   .audit-panel{display:block;height:auto}
   .audit-toolbar{padding-inline:12px}
+  .audit-toolbar .audit-date-range{width:100%}
   .audit-table-region{overflow:visible}
 }
 </style>

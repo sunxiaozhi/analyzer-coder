@@ -486,7 +486,10 @@ COMMENT ON COLUMN qa_conversations.created_at IS '创建时间';
 CREATE TABLE qa_citations (
     id UUID PRIMARY KEY,
     conversation_id UUID NOT NULL REFERENCES qa_conversations(id) ON DELETE CASCADE,
+    source_type VARCHAR(20) NOT NULL DEFAULT 'CODE',
     chunk_id UUID REFERENCES code_chunks(id) ON DELETE SET NULL,
+    knowledge_card_id UUID,
+    title TEXT,
     file_path TEXT NOT NULL,
     symbol_name TEXT,
     start_line INTEGER,
@@ -498,7 +501,10 @@ CREATE TABLE qa_citations (
 COMMENT ON TABLE qa_citations IS '问答引用的代码片段及位置';
 COMMENT ON COLUMN qa_citations.id IS '引用唯一标识';
 COMMENT ON COLUMN qa_citations.conversation_id IS '所属问答';
+COMMENT ON COLUMN qa_citations.source_type IS '证据来源类型：代码或知识';
 COMMENT ON COLUMN qa_citations.chunk_id IS '对应代码片段';
+COMMENT ON COLUMN qa_citations.knowledge_card_id IS '对应知识卡片；代码证据时为空';
+COMMENT ON COLUMN qa_citations.title IS '证据显示标题';
 COMMENT ON COLUMN qa_citations.file_path IS '引用文件路径';
 COMMENT ON COLUMN qa_citations.symbol_name IS '引用符号名称';
 COMMENT ON COLUMN qa_citations.start_line IS '引用起始行';
@@ -576,6 +582,65 @@ COMMENT ON COLUMN knowledge_card_revisions.changed_at IS '修改时间';
 
 CREATE INDEX idx_knowledge_card_revisions_repo_card
     ON knowledge_card_revisions(repo_id, card_id, revision DESC);
+
+ALTER TABLE qa_citations
+    ADD CONSTRAINT fk_qa_citations_knowledge_card
+    FOREIGN KEY (knowledge_card_id) REFERENCES knowledge_cards(id) ON DELETE SET NULL;
+
+CREATE TABLE knowledge_card_embeddings (
+    card_id UUID PRIMARY KEY REFERENCES knowledge_cards(id) ON DELETE CASCADE,
+    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL,
+    embedding vector(64) NOT NULL,
+    content_hash VARCHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE knowledge_card_embeddings IS '知识卡片当前修订的检索向量';
+COMMENT ON COLUMN knowledge_card_embeddings.card_id IS '知识卡片标识';
+COMMENT ON COLUMN knowledge_card_embeddings.repo_id IS '所属仓库';
+COMMENT ON COLUMN knowledge_card_embeddings.revision IS '向量对应的知识修订号';
+COMMENT ON COLUMN knowledge_card_embeddings.embedding IS '本地语义检索向量';
+COMMENT ON COLUMN knowledge_card_embeddings.content_hash IS '参与向量计算的内容摘要';
+COMMENT ON COLUMN knowledge_card_embeddings.created_at IS '向量生成时间';
+
+CREATE INDEX idx_knowledge_card_embeddings_repo
+    ON knowledge_card_embeddings(repo_id);
+
+CREATE TABLE knowledge_code_refs (
+    card_id UUID NOT NULL,
+    revision INTEGER NOT NULL,
+    position INTEGER NOT NULL,
+    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    snapshot_id UUID,
+    chunk_id UUID REFERENCES code_chunks(id) ON DELETE SET NULL,
+    file_path TEXT NOT NULL,
+    symbol_name TEXT,
+    start_line INTEGER,
+    end_line INTEGER,
+    content_hash VARCHAR(64) NOT NULL,
+    PRIMARY KEY (card_id, revision, position),
+    FOREIGN KEY (card_id, revision)
+        REFERENCES knowledge_card_revisions(card_id, revision) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE knowledge_code_refs IS '知识修订与代码证据的结构化关联';
+COMMENT ON COLUMN knowledge_code_refs.card_id IS '知识卡片标识';
+COMMENT ON COLUMN knowledge_code_refs.revision IS '知识修订号';
+COMMENT ON COLUMN knowledge_code_refs.position IS '关联代码的显示顺序';
+COMMENT ON COLUMN knowledge_code_refs.repo_id IS '所属仓库';
+COMMENT ON COLUMN knowledge_code_refs.snapshot_id IS '关联代码的内容版本令牌';
+COMMENT ON COLUMN knowledge_code_refs.chunk_id IS '关联代码片段；片段删除后可为空';
+COMMENT ON COLUMN knowledge_code_refs.file_path IS '关联文件路径';
+COMMENT ON COLUMN knowledge_code_refs.symbol_name IS '关联符号名称';
+COMMENT ON COLUMN knowledge_code_refs.start_line IS '关联代码起始行';
+COMMENT ON COLUMN knowledge_code_refs.end_line IS '关联代码结束行';
+COMMENT ON COLUMN knowledge_code_refs.content_hash IS '关联时的代码内容摘要';
+
+CREATE INDEX idx_knowledge_code_refs_card
+    ON knowledge_code_refs(card_id, revision);
+CREATE INDEX idx_knowledge_code_refs_repo_file
+    ON knowledge_code_refs(repo_id, file_path);
 
 CREATE TABLE knowledge_attachments (
     id UUID PRIMARY KEY,

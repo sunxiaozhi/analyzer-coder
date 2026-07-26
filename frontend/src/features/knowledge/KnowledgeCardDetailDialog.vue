@@ -1,22 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { KnowledgeCard } from '@/api/intelligence';
+import type { CodeReference, KnowledgeCard } from '@/api/intelligence';
+import { statusLabel as localizeStatus } from '@/utils/displayLabels';
 import KnowledgeAttachmentList from './KnowledgeAttachmentList.vue';
 
 const props = defineProps<{
   card: KnowledgeCard | null;
 }>();
+const emit = defineEmits<{
+  openCode: [reference: CodeReference];
+  openGraph: [reference: CodeReference];
+}>();
 
 const visible = defineModel<boolean>({ required: true });
 
-const statusLabel = computed(() => {
-  const labels: Record<string, string> = {
-    DRAFT: 'DRAFT（草稿）',
-    PUBLISHED: 'PUBLISHED（已发布）',
-    NEEDS_REVIEW: 'NEEDS_REVIEW（需要复核）',
-  };
-  return props.card ? (labels[props.card.status] ?? props.card.status) : '';
-});
+const statusLabel = computed(() => props.card ? localizeStatus(props.card.status) : '');
 </script>
 
 <template>
@@ -36,6 +34,18 @@ const statusLabel = computed(() => {
       </div>
       <KnowledgeAttachmentList :items="card.attachments" :repository-id="card.repositoryId" />
     </template>
+      <section v-if="card?.codeReferences.length" class="detail-code-links">
+        <h3>关联代码</h3>
+        <article v-for="reference in card?.codeReferences ?? []" :key="reference.chunkId ?? reference.filePath">
+          <div>
+            <b>{{ reference.symbolName || reference.filePath.split('/').pop() }}</b>
+            <span class="mono">{{ reference.filePath }} · L{{ reference.startLine ?? '?' }}–{{ reference.endLine ?? '?' }}</span>
+          </div>
+          <el-tag v-if="reference.stale" type="warning" size="small">代码已变化</el-tag>
+          <el-button link type="primary" @click="emit('openCode', reference)">查看源码</el-button>
+          <el-button link @click="emit('openGraph', reference)">调用图谱</el-button>
+        </article>
+      </section>
   </el-dialog>
 </template>
 
@@ -75,5 +85,34 @@ const statusLabel = computed(() => {
   margin: 20px 0 12px;
   color: var(--el-color-primary);
   font-size: 13px;
+}
+.detail-code-links {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0 12px;
+  padding-top: 14px;
+  border-top: 1px solid #eceef1;
+}
+
+.detail-code-links h3 { margin: 0 0 2px; font-size: 13px; }
+
+.detail-code-links article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid #d9e5f1;
+  border-radius: 6px;
+  background: #f6faff;
+}
+
+.detail-code-links article > div { display: grid; min-width: 0; }
+.detail-code-links b,
+.detail-code-links span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-code-links span { color: #71717a; font-size: 10px; }
+
+@media (max-width: 760px) {
+  .detail-code-links article { grid-template-columns: minmax(0, 1fr) auto; }
 }
 </style>

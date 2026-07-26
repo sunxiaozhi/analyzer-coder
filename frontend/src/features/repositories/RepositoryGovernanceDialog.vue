@@ -3,6 +3,7 @@ import { computed, reactive, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { repositoryGovernanceApi, type GovernanceCandidate, type RepositoryMember, type RepositoryPermission } from '@/api/repositoryGovernance';
 import type { Repository } from '@/types/api';
+import { relationshipLabel } from '@/utils/displayLabels';
 
 const props = defineProps<{ modelValue: boolean; repository: Repository | null }>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; changed: [] }>();
@@ -81,7 +82,7 @@ watch(() => [props.modelValue, props.repository?.id], () => { if (props.modelVal
         </div>
         <el-table :data="members" style="margin-top: 16px">
           <el-table-column label="账号" min-width="220"><template #default="{ row }"><div class="primary-cell"><b>{{ row.displayName }}</b><span class="mono">{{ row.username }}</span></div></template></el-table-column>
-          <el-table-column label="关系" width="120"><template #default="{ row }"><el-tag effect="plain">{{ row.relationship }}</el-tag></template></el-table-column>
+          <el-table-column label="关系" width="120"><template #default="{ row }"><el-tag effect="plain">{{ relationshipLabel(row.relationship) }}</el-tag></template></el-table-column>
           <el-table-column label="权限" width="210"><template #default="{ row }"><span v-if="row.relationship === 'OWNER'">完整治理权限</span><el-select v-else :model-value="row.permissionLevel" @change="changePermission(row, $event)"><el-option label="只读" value="READ" /><el-option label="维护" value="MAINTAIN" /><el-option label="管理" value="MANAGE" /></el-select></template></el-table-column>
           <el-table-column label="操作" width="100"><template #default="{ row }"><el-button v-if="row.relationship !== 'OWNER'" link type="danger" @click="revoke(row)">撤销</el-button></template></el-table-column>
         </el-table>
