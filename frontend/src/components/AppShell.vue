@@ -16,6 +16,7 @@ import {
 import { computed, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
+import ProductLogo from '@/components/ProductLogo.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -61,7 +62,7 @@ function headerAction(label: string) {
   <div class="app-shell">
     <aside class="sidebar">
       <RouterLink class="brand" to="/repositories">
-        <span class="brand-mark"><Boxes :size="16" /></span>
+        <span class="brand-mark"><ProductLogo /></span>
         <span>代码知识平台</span>
       </RouterLink>
       <nav class="nav-list" aria-label="主导航">

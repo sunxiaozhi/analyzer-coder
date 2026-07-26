@@ -154,6 +154,10 @@ watch(
   background: #fff;
   box-shadow: 0 1px 3px #24384c0a;
 }
+.impact-panel .pane-head {
+  min-height: 44px;
+  height: 44px;
+}
 .impact-relations {
   display: grid;
   gap: 8px;

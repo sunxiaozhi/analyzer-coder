@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useWorkspaceTabsStore, type WorkspaceTab } from '@/stores/workspaceTabs';
 import WorkspaceTabs from '@/components/WorkspaceTabs.vue';
+import ProductLogo from '@/components/ProductLogo.vue';
 
 const route = useRoute(); const router = useRouter(); const auth = useAuthStore(); const repositoryStore = useRepositoryStore();
 const workspaceTabs = useWorkspaceTabsStore();
@@ -72,7 +73,7 @@ onMounted(() => {
 </script>
 
 <template><div class="app-shell">
-  <aside class="sidebar"><RouterLink class="brand" to="/repositories"><span class="brand-mark"><Boxes :size="16" /></span><span>代码知识平台</span></RouterLink>
+  <aside class="sidebar"><RouterLink class="brand" to="/repositories"><span class="brand-mark"><ProductLogo /></span><span>代码知识平台</span></RouterLink>
     <nav class="nav-list" aria-label="主导航"><RouterLink v-for="item in navItems" :key="item.to" class="nav-link" :to="item.to"><component :is="item.icon" :size="16" /><span>{{ item.label }}</span></RouterLink></nav>
   </aside>
   <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" clearable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
