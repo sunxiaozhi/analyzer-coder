@@ -11,3 +11,4 @@ frontend/*.log
 .DS_Store
 Thumbs.db
 /shell
+runtime-logs
