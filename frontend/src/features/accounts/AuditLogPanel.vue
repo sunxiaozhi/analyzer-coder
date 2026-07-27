@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { computed,shallowRef,watch } from 'vue';
-import { Refresh } from '@element-plus/icons-vue';
 import AppPagination from '@/components/AppPagination.vue';
 import type { AuditEvent } from '@/types/security';
 import { formatRelativeTime,formatShanghaiDateTime,shanghaiDateTimeTitle } from '@/utils/dateTime';
 
 const props=defineProps<{rows:AuditEvent[];loading:boolean;focusUsername:string;focusVersion:number}>();
-const emit=defineEmits<{refresh:[]}>();
 const actor=shallowRef(''),target=shallowRef(''),eventType=shallowRef(''),result=shallowRef(''),range=shallowRef<[Date,Date]|null>(null),page=shallowRef(1),pageSize=shallowRef(15);
 const actors=computed(()=>unique(props.rows.map(row=>row.actorUsername)));
 const targets=computed(()=>unique(props.rows.map(row=>row.targetUsername)));
@@ -34,7 +32,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
         <el-select v-model="eventType" placeholder="事件类型" clearable filterable><el-option v-for="item in eventTypes" :key="item" :label="eventLabels[item]??item" :value="item"/></el-select>
         <el-select v-model="result" placeholder="结果" clearable><el-option v-for="item in results" :key="item" :label="item==='SUCCESS'?'成功':'拒绝/失败'" :value="item"/></el-select>
         <el-date-picker v-model="range" class="audit-date-range" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期"/>
-        <el-button @click="clearFilters">清空</el-button><el-button :icon="Refresh" :loading="loading" @click="emit('refresh')">刷新</el-button>
+        <el-button @click="clearFilters">清空</el-button>
       </div>
       <el-alert v-if="focusUsername" :title="`已从账号列表定位：${focusUsername}`" type="info" show-icon closable @close="target=''"/>
     </div>
@@ -61,7 +59,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
 
 <style scoped>
 .audit-panel{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-height:0;height:100%}
-.audit-filters{display:grid;gap:12px;padding-bottom:12px}
+.audit-filters{display:grid;gap:12px;padding-bottom:12px;border-bottom:1px solid #ececef}
 .audit-toolbar{display:flex;flex-wrap:wrap;gap:10px;padding:10px 20px}
 .audit-toolbar .el-select{width:150px}
 .audit-toolbar .audit-date-range{width:260px}

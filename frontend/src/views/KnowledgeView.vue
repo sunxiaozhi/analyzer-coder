@@ -110,12 +110,6 @@ onMounted(() => void load());
 
 <template>
   <section class="page knowledge-page">
-    <div class="summary-strip">
-      <div><b>{{ cards.length }}</b><span>知识卡片</span></div>
-      <div><b>{{ cards.filter(x=>x.status==='PUBLISHED').length }}</b><span>已发布</span></div>
-      <div><b>{{ cards.filter(x=>x.status==='DRAFT').length }}</b><span>草稿</span></div>
-      <div><b>{{ cards.reduce((n,x)=>n+x.attachments.length,0) }}</b><span>附件</span></div>
-    </div>
     <div class="surface knowledge-surface">
       <div class="toolbar">
         <el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索标题" clearable />

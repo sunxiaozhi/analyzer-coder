@@ -60,13 +60,6 @@ onMounted(async () => {
 
 <template>
   <section class="page index-jobs-design">
-    <div class="summary-strip">
-      <div><b>{{ counts.RUNNING }}</b><span>本页运行中</span></div>
-      <div><b>{{ counts.QUEUED }}</b><span>本页排队中</span></div>
-      <div><b>{{ counts.CANCEL_REQUESTED }}</b><span>本页取消中</span></div>
-      <div><b>{{ counts.FAILED }}</b><span>本页失败</span></div>
-    </div>
-
     <div class="index-jobs-content">
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
       <div class="split detail-split index-jobs-split">
@@ -110,7 +103,7 @@ onMounted(async () => {
 
 <style scoped>
 .index-jobs-design {
-  grid-template-rows: 80px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -142,7 +135,7 @@ onMounted(async () => {
 
 @media (max-width: 760px) {
   .index-jobs-design {
-    grid-template-rows: auto auto;
+    grid-template-rows: auto;
     height: auto;
     overflow: visible;
   }

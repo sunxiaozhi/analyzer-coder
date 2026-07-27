@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Plus, Search } from '@element-plus/icons-vue';
-import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
+import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import AppPagination from '@/components/AppPagination.vue';
 import RepositoryFormDialog from '@/features/repositories/RepositoryFormDialog.vue';
@@ -32,12 +32,6 @@ const editing = shallowRef<Repository | null>(null);
 const editBusy = shallowRef(false);
 let searchTimer: number | undefined;
 
-const summary = computed(() => ({
-  total: store.repositories.length,
-  owned: store.repositories.filter(item => item.relationship === 'OWNER').length,
-  graphReady: store.repositories.filter(item => item.codeGraphDetected).length,
-  graphPending: store.repositories.filter(item => !item.codeGraphDetected).length,
-}));
 type Input = { sourceType: 'LOCAL_GIT' | 'REMOTE_GIT' | 'GITLAB' | 'ZIP'; name: string; path: string; url: string; branch: string; file: File | null };
 
 async function loadPage() {
@@ -97,12 +91,6 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
 <template>
   <section class="page repository-design">
-    <div class="summary-strip">
-      <div><span>授权仓库</span><b>{{ summary.total }}</b></div>
-      <div><span>本人所有</span><b>{{ summary.owned }}</b></div>
-      <div><span>CodeGraph 已发布</span><b>{{ summary.graphReady }}</b></div>
-      <div><span>待构建</span><b>{{ summary.graphPending }}</b></div>
-    </div>
     <div class="surface repository-list-surface">
       <div class="repository-list-header">
         <div class="toolbar"><el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索名称、所有者、来源、路径或版本" clearable /><span class="spacer" /><el-button type="primary" :icon="Plus" :loading="importing" @click="dialogOpen=true">接入仓库</el-button></div>
@@ -120,7 +108,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </template>
 <style scoped>
 .repository-design {
-  grid-template-rows: 80px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -139,7 +127,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
 @media (max-width: 760px) {
   .repository-design {
-    grid-template-rows: auto auto;
+    grid-template-rows: auto;
     height: auto;
     overflow: visible;
   }

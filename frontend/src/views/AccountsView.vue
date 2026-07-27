@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
+import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
 import { accountsApi, type AccountInput } from '@/api/accounts';
@@ -30,13 +30,6 @@ const editDialog = shallowRef(false);
 const editing = shallowRef<AccountSummary | null>(null);
 const editBusy = shallowRef(false);
 let searchTimer: number | undefined;
-
-const summary = computed(() => ({
-  total: total.value,
-  admins: accounts.value.filter(account => account.role === 'SUPER_ADMIN').length,
-  enabled: accounts.value.filter(account => account.status === 'ENABLED').length,
-  restricted: accounts.value.filter(account => account.status !== 'ENABLED').length,
-}));
 
 async function loadAccounts() {
   loading.value = true;
@@ -72,22 +65,16 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
 <template>
   <section class="page account-design">
-    <div class="summary-strip">
-      <div><span>账号总数</span><b>{{ summary.total }}</b></div>
-      <div><span>本页管理员</span><b>{{ summary.admins }}</b></div>
-      <div><span>本页正常</span><b>{{ summary.enabled }}</b></div>
-      <div><span>本页受限</span><b>{{ summary.restricted }}</b></div>
-    </div>
     <div class="surface account-surface">
       <el-tabs v-model="activeTab" class="account-tabs">
         <el-tab-pane class="account-list-pane" label="账号管理" name="accounts">
-          <div class="toolbar account-toolbar"><el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索姓名、账号" clearable /><el-button type="primary" @click="dialog=true">新增账号</el-button></div>
+          <div class="toolbar account-toolbar"><el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索姓名、账号" clearable /><span class="spacer" /><el-button type="primary" @click="dialog=true">新增账号</el-button></div>
           <div class="account-table-region">
             <AccountTable v-loading="loading" :rows="accounts" :current-account-id="auth.account?.id" @edit="openEdit" @toggle="toggle" @reset="reset" @unlock="unlock" @audit="showAudit" />
           </div>
           <AppPagination :page-num="pageNum" :page-size="pageSize" :total="total" :disabled="loading" @page-change="changePage" @size-change="changePageSize" />
         </el-tab-pane>
-        <el-tab-pane class="account-audit-pane" label="审计日志" name="audit" lazy><AuditLogPanel :rows="audit" :loading="auditLoading" :focus-username="auditFocus" :focus-version="auditFocusVersion" @refresh="loadAudit" /></el-tab-pane>
+        <el-tab-pane class="account-audit-pane" label="审计日志" name="audit" lazy><AuditLogPanel :rows="audit" :loading="auditLoading" :focus-username="auditFocus" :focus-version="auditFocusVersion" /></el-tab-pane>
       </el-tabs>
     </div>
     <AccountDialog v-model="dialog" :busy="busy" @submit="create" />
@@ -97,7 +84,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
 <style scoped>
 .account-design {
-  grid-template-rows: 80px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -155,7 +142,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
 @media (max-width: 760px) {
   .account-design {
-    grid-template-rows: auto auto;
+    grid-template-rows: auto;
     height: auto;
     overflow: visible;
   }
