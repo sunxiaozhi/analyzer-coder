@@ -33,7 +33,24 @@ export interface GraphResult { nodes: { symbol: string; depth: number; focus: bo
 export interface GraphTarget { symbol: string; filePath: string; startLine: number | null }
 export interface CodeGraphArtifact { id: string; repositoryId: string; snapshotId: string; cliVersion: string; status: string; artifactPath: string; nodeCount: number; edgeCount: number }
 export interface KnowledgeAttachment { id: string; originalName: string; mediaType: string; sizeBytes: number; sha256: string; scanStatus: string; createdAt: string }
-export interface KnowledgeCard { id: string; repositoryId: string; title: string; cardType: string; content: string; renderedContent: string; tags: string[]; status: string; revision: number; createdAt: string; updatedAt: string; attachments: KnowledgeAttachment[]; codeReferences: CodeReference[] }
+export interface KnowledgeCard {
+  id: string;
+  repositoryId: string;
+  title: string;
+  cardType: string;
+  content: string;
+  renderedContent: string;
+  tags: string[];
+  status: string;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  verifiedCommit: string | null;
+  codeReviewStatus: 'UNVERIFIED' | 'CURRENT' | 'REVIEW_REQUIRED';
+  codeReviewedAt: string | null;
+  attachments: KnowledgeAttachment[];
+  codeReferences: CodeReference[];
+}
 export interface CardInput { title: string; cardType: string; content: string; tags: string[]; status: string; attachmentIds: string[]; codeReferences: { chunkId: string }[] }
 export interface CardRevision { cardId: string; revision: number; repositoryId: string; title: string; cardType: string; content: string; renderedContent: string; tags: string[]; status: string; changedBy: string | null; changedAt: string }
 export interface Backup { id: string; status: string; checksum: string; createdAt: string; restoredAt: string | null }
@@ -49,7 +66,8 @@ export const intelligenceApi = {
   buildGraph: (repositoryId: string) => request<IndexJob>(`/api/repositories/${repositoryId}/codegraph/build`, { method: 'POST' }),
   latestGraph: (repositoryId: string) => request<CodeGraphArtifact | null>(`/api/repositories/${repositoryId}/codegraph/latest`),
   uploadAttachment: (repositoryId: string, file: File) => {
-    const body = new FormData(); body.append('file', file);
+    const body = new FormData();
+    body.append('file', file);
     return request<KnowledgeAttachment>(`/api/repositories/${repositoryId}/knowledge/attachments`, { method: 'POST', body });
   },
   cards: (repositoryId: string) => request<KnowledgeCard[]>(`/api/repositories/${repositoryId}/knowledge`),

@@ -21,7 +21,7 @@ public record PageResult<T>(
     }
 
     public static void validate(int pageNum, int pageSize) {
-        if (pageNum < 1) throw new IllegalArgumentException("pageNum must be at least 1");
-        if (pageSize < 1 || pageSize > 100) throw new IllegalArgumentException("pageSize must be between 1 and 100");
+        if (pageNum < 1) throw new IllegalArgumentException("页码不能小于 1");
+        if (pageSize < 1 || pageSize > 100) throw new IllegalArgumentException("每页数量必须在 1 到 100 之间");
     }
 }

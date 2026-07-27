@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { CodeReference, KnowledgeCard } from '@/api/intelligence';
+import { statusLabel as localizeStatus } from '@/utils/displayLabels';
 import KnowledgeAttachmentList from './KnowledgeAttachmentList.vue';
 
 const props = defineProps<{
@@ -13,14 +14,7 @@ const emit = defineEmits<{
 
 const visible = defineModel<boolean>({ required: true });
 
-const statusLabel = computed(() => {
-  const labels: Record<string, string> = {
-    DRAFT: 'DRAFT（草稿）',
-    PUBLISHED: 'PUBLISHED（已发布）',
-    NEEDS_REVIEW: 'NEEDS_REVIEW（需要复核）',
-  };
-  return props.card ? (labels[props.card.status] ?? props.card.status) : '';
-});
+const statusLabel = computed(() => props.card ? localizeStatus(props.card.status) : '');
 </script>
 
 <template>

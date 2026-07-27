@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { Connection, Document, Reading, View } from '@element-plus/icons-vue';
+import { nextTick, shallowRef, watch } from 'vue';
 import type { Citation, CodeReference } from '@/api/intelligence';
 
-defineProps<{ citations: Citation[] }>();
+const props = defineProps<{ citations: Citation[]; activeCitationId?: string | null }>();
 const emit = defineEmits<{
   openKnowledge: [cardId: string];
   openCode: [reference: CodeReference];
   openGraph: [reference: CodeReference];
 }>();
+const panelElement = shallowRef<HTMLElement | null>(null);
+
+watch(() => props.activeCitationId, async citationId => {
+  if (!citationId) return;
+  await nextTick();
+  const card = panelElement.value?.querySelector<HTMLElement>(`[data-citation-id="${citationId}"]`);
+  card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
 
 function citationReference(citation: Citation): CodeReference | null {
   if (citation.sourceType !== 'CODE' || !citation.chunkId) return null;
@@ -25,14 +34,19 @@ function citationReference(citation: Citation): CodeReference | null {
 </script>
 
 <template>
-  <aside class="answer-evidence">
+  <aside ref="panelElement" class="answer-evidence">
     <header>
       <b>回答证据</b>
       <span>{{ citations.length }} 条 · 知识与代码联合检索</span>
     </header>
 
     <el-empty v-if="!citations.length" description="本次回答没有可引用证据" />
-    <article v-for="citation in citations" :key="citation.id" class="evidence-card">
+    <article
+      v-for="citation in citations"
+      :key="citation.id"
+      :data-citation-id="citation.id"
+      :class="['evidence-card', { active: citation.id === activeCitationId }]"
+    >
       <div class="evidence-heading">
         <span :class="['source-badge', citation.sourceType.toLowerCase()]">
           <el-icon><Reading v-if="citation.sourceType === 'KNOWLEDGE'" /><Document v-else /></el-icon>
@@ -40,10 +54,14 @@ function citationReference(citation: Citation): CodeReference | null {
         </span>
         <small>S{{ citation.rank }}</small>
       </div>
-      <b>{{ citation.title }}</b>
-      <p v-if="citation.sourceType === 'CODE'" class="mono">
-        {{ citation.filePath }} · L{{ citation.startLine ?? '?' }}–{{ citation.endLine ?? '?' }}
-      </p>
+      <div class="evidence-title">
+        <b>{{ citation.title }}</b>
+        <span v-if="citation.sourceType === 'KNOWLEDGE'">知识库内容</span>
+      </div>
+      <div v-if="citation.sourceType === 'CODE'" class="code-location">
+        <span class="mono">{{ citation.filePath }}</span>
+        <small>L{{ citation.startLine ?? '?' }}–{{ citation.endLine ?? '?' }}</small>
+      </div>
       <p class="evidence-excerpt">{{ citation.content.slice(0, 360) }}</p>
 
       <div class="evidence-actions">
@@ -60,13 +78,23 @@ function citationReference(citation: Citation): CodeReference | null {
       </div>
 
       <div v-if="citation.codeReferences.length" class="knowledge-code-links">
-        <span>关联代码</span>
+        <div class="linked-code-heading">
+          <span>关联代码</span>
+          <small>{{ citation.codeReferences.length }} 处</small>
+        </div>
         <button v-for="reference in citation.codeReferences"
           :key="reference.chunkId ?? reference.filePath"
           type="button"
           @click="emit('openCode', reference)">
-          {{ reference.symbolName || reference.filePath.split('/').pop() }}
-          <small>L{{ reference.startLine ?? '?' }}</small>
+          <span class="code-reference-main">
+            <b>{{ reference.symbolName || reference.filePath.split('/').pop() }}</b>
+            <small class="mono">{{ reference.filePath }}</small>
+          </span>
+          <span class="code-reference-meta">
+            <em v-if="reference.stale">待复核</em>
+            <small>L{{ reference.startLine ?? '?' }}–{{ reference.endLine ?? '?' }}</small>
+            <el-icon><View /></el-icon>
+          </span>
         </button>
       </div>
     </article>
@@ -96,14 +124,19 @@ function citationReference(citation: Citation): CodeReference | null {
 
 .evidence-card {
   display: grid;
-  gap: 7px;
-  padding: 14px;
+  gap: 10px;
+  padding: 16px;
   border-bottom: 1px solid #ededf0;
+  box-shadow: inset 3px 0 transparent;
+  transition: background-color .18s ease, box-shadow .18s ease;
+}
+.evidence-card.active {
+  background: #f6faff;
+  box-shadow: inset 3px 0 #0066cc;
 }
 
 .evidence-heading,
-.evidence-actions,
-.knowledge-code-links {
+.evidence-actions {
   display: flex;
   align-items: center;
 }
@@ -123,30 +156,122 @@ function citationReference(citation: Citation): CodeReference | null {
 
 .source-badge.code { color: #005eb8; background: #eaf3fd; }
 .source-badge.knowledge { color: #6d4a00; background: #fff3ce; }
-.evidence-card > b { overflow-wrap: anywhere; font-size: 12px; }
 .evidence-card > p { margin: 0; color: #666; font-size: 10px; line-height: 1.55; }
-.evidence-excerpt { max-height: 64px; overflow: hidden; white-space: pre-wrap; }
+.evidence-title {
+  display: grid;
+  gap: 4px;
+}
+.evidence-title b {
+  overflow-wrap: anywhere;
+  color: #242426;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.evidence-title span {
+  color: #8a6a24;
+  font-size: 9px;
+  letter-spacing: .04em;
+}
+.code-location {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border-left: 2px solid #8cb9e4;
+  background: #f6f9fc;
+}
+.code-location span {
+  overflow-wrap: anywhere;
+  color: #4f5e6c;
+  font-size: 9px;
+  line-height: 1.55;
+}
+.code-location small {
+  color: #005eb8;
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.evidence-excerpt {
+  max-height: 84px;
+  padding-left: 10px;
+  overflow: hidden;
+  border-left: 1px solid #e4e5e8;
+  white-space: pre-wrap;
+}
 .evidence-actions { gap: 6px; }
 
 .knowledge-code-links {
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-top: 7px;
+  display: grid;
+  gap: 7px;
+  padding-top: 10px;
   border-top: 1px dashed #dde3e9;
 }
 
-.knowledge-code-links > span { color: #777; font-size: 9px; }
-.knowledge-code-links button {
-  display: inline-flex;
-  gap: 5px;
-  padding: 4px 7px;
-  color: #005eb8;
-  border: 1px solid #cfe1f3;
-  border-radius: 4px;
-  background: #f5f9fd;
-  font-size: 9px;
+.linked-code-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
-.knowledge-code-links small { color: #718090; }
+.linked-code-heading > span {
+  color: #3f4852;
+  font-size: 10px;
+  font-weight: 650;
+}
+.linked-code-heading > small { color: #8a8a91; font-size: 9px; }
+.knowledge-code-links button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 9px 10px;
+  color: #344554;
+  text-align: left;
+  border: 1px solid #dce7f1;
+  border-radius: 6px;
+  background: #f8fbfe;
+  transition: border-color .16s ease, background-color .16s ease;
+}
+.knowledge-code-links button:hover,
+.knowledge-code-links button:focus-visible {
+  border-color: #8cb9e4;
+  background: #eef6fd;
+  outline: none;
+}
+.code-reference-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.code-reference-main b {
+  overflow-wrap: anywhere;
+  color: #005eb8;
+  font-size: 10px;
+}
+.code-reference-main small {
+  overflow-wrap: anywhere;
+  color: #718090;
+  font-size: 8px;
+  line-height: 1.45;
+}
+.code-reference-meta {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  color: #718090;
+  white-space: nowrap;
+}
+.code-reference-meta small { font-size: 9px; }
+.code-reference-meta em {
+  padding: 2px 5px;
+  color: #a44b20;
+  border-radius: 3px;
+  background: #fff0e8;
+  font-size: 8px;
+  font-style: normal;
+}
 
 @media (max-width: 760px) {
   .answer-evidence { border-left: 1px solid #dedee3; }

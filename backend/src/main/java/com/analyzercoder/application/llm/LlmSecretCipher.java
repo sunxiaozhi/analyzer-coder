@@ -24,7 +24,7 @@ public class LlmSecretCipher {
 
     public LlmSecretCipher(@Value("${app.llm.master-key:}") String masterKey) {
         if (masterKey == null || masterKey.length() < 24) {
-            throw new IllegalStateException("APP_LLM_MASTER_KEY must contain at least 24 characters");
+            throw new IllegalStateException("APP_LLM_MASTER_KEY 必须至少包含 24 个字符");
         }
         if (DEVELOPMENT_KEY.equals(masterKey)) {
             LOG.warn("LLM secrets use the local development key; set APP_LLM_MASTER_KEY before production use");
@@ -47,7 +47,7 @@ public class LlmSecretCipher {
                 "AES-256-GCM"
             );
         } catch (Exception exception) {
-            throw new IllegalStateException("LLM secret encryption is unavailable", exception);
+            throw new IllegalStateException("模型密钥加密功能不可用", exception);
         }
     }
 
@@ -64,7 +64,7 @@ public class LlmSecretCipher {
                 StandardCharsets.UTF_8
             );
         } catch (Exception exception) {
-            throw new IllegalStateException("LLM secret cannot be decrypted", exception);
+            throw new IllegalStateException("无法解密模型密钥", exception);
         }
     }
 
@@ -74,7 +74,7 @@ public class LlmSecretCipher {
             mac.init(digestKey);
             return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception exception) {
-            throw new IllegalStateException("LLM secret digest is unavailable", exception);
+            throw new IllegalStateException("模型密钥摘要功能不可用", exception);
         }
     }
 

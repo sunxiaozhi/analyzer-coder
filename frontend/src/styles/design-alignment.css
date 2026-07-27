@@ -1,8 +1,104 @@
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #b9c2cc transparent;
+}
+
+.captcha-row {
+  grid-template-columns: minmax(0, 1fr) 128px;
+}
+
+.captcha-image {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.product-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.brand-mark,
+.login-logo {
+  background: transparent;
+}
+
+.brand-mark {
+  padding: 0;
+  border-radius: 0;
+}
+
+.login-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 0;
+}
+
+.login-card {
+  gap: 18px;
+  margin-top: 40px;
+  padding: 34px 36px;
+}
+
+.login-card h1 {
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+
+.login-field,
+.login-submit {
+  height: 44px;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-width: 36px;
+  min-height: 36px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #b9c2cc;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #8f9ba7;
+}
+
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button:single-button,
+*::-webkit-scrollbar-button:start,
+*::-webkit-scrollbar-button:end {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+@media (min-width: 761px) {
+  .workspace {
+    grid-template-rows: 58px minmax(0, 1fr);
+  }
+
+  .workspace .topbar {
+    min-height: 58px;
+  }
+}
+
 .page-frame {
   display: grid;
-  grid-template-rows: 34px minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
+  row-gap: 12px;
   min-height: 0;
-  padding: 10px 28px 24px;
+  padding: 10px 16px 20px;
 }
 
 
@@ -106,7 +202,7 @@
 }
 
 .login-footnote {
-  margin: 22px 0 0;
+  margin: 26px 0 0;
   color: #7d9abb;
   font-size: 11px;
 }
@@ -620,5 +716,21 @@
 
   .masthead-actions .el-button:not(.el-button--primary) {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-content {
+    padding: 18px;
+  }
+
+  .login-card {
+    gap: 16px;
+    margin-top: 32px;
+    padding: 28px 24px;
+  }
+
+  .captcha-row {
+    grid-template-columns: minmax(0, 1fr) 116px;
   }
 }

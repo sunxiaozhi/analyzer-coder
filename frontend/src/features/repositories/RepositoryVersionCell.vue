@@ -10,7 +10,7 @@ const shortSnapshot = computed(() => props.repository.snapshotId?.slice(0, 8) ??
 const snapshotTime = computed(() =>
   props.repository.snapshotCreatedAt
     ? new Date(props.repository.snapshotCreatedAt).toLocaleString()
-    : '无快照',
+    : '无版本',
 );
 </script>
 
@@ -26,8 +26,8 @@ const snapshotTime = computed(() =>
       </el-tag>
       <span class="mono digest">{{ shortDigest }}</span>
     </div>
-    <div class="snapshot-meta" :title="repository.snapshotId ?? '尚未发布快照'">
-      <el-tag type="info" effect="plain" size="small">快照 {{ shortSnapshot }}</el-tag>
+    <div class="snapshot-meta" :title="repository.snapshotId ?? '尚未发布代码版本'">
+      <el-tag type="info" effect="plain" size="small">版本 {{ shortSnapshot }}</el-tag>
       <span class="snapshot-time">{{ snapshotTime }}</span>
     </div>
   </div>

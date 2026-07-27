@@ -26,7 +26,7 @@ public class PostgresCodeRepositoryStore implements CodeRepositoryStore {
         return repository;
     }
     @Override public CodeRepository save(CodeRepository repository) {
-        if (mapper.update(RepositoryRow.forUpdate(repository)) != 1) throw new IllegalArgumentException("Repository not found");
+        if (mapper.update(RepositoryRow.forUpdate(repository)) != 1) throw new IllegalArgumentException("仓库不存在");
         return repository;
     }
     @Override public Optional<CodeRepository> findById(CodeRepositoryId id) { return Optional.ofNullable(mapper.findById(id.value())).map(PostgresCodeRepositoryStore::toDomain); }

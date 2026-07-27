@@ -12,7 +12,6 @@ import com.analyzercoder.domain.repository.RepositorySnapshotPort;
 import com.analyzercoder.infrastructure.chunk.InMemoryCodeChunkStore;
 import com.analyzercoder.infrastructure.indexing.InMemoryIndexJobStore;
 import com.analyzercoder.infrastructure.repository.InMemoryCodeRepositoryStore;
-import com.analyzercoder.infrastructure.repository.InMemoryRepositorySnapshotStore;
 import com.analyzercoder.infrastructure.repository.RepositoryPathPolicy;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -32,7 +31,7 @@ class RegisterRepositoryServiceTest {
         assertThat(repository.currentSnapshotId()).isNotNull();
         assertThat(repository.currentSnapshotPath()).isNotEqualTo(repository.path());
         assertThatThrownBy(() -> service.register(new RegisterRepositoryCommand("other", root.toString())))
-            .isInstanceOf(IllegalStateException.class).hasMessageContaining("path");
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("路径");
     }
 
     @Test
@@ -53,8 +52,7 @@ class RegisterRepositoryServiceTest {
     private RegisterRepositoryService service(LocalGitInspector inspector) {
         return new RegisterRepositoryService(
             new InMemoryCodeRepositoryStore(), new InMemoryCodeChunkStore(), new InMemoryIndexJobStore(),
-            new RepositoryPathPolicy(root.toString()), inspector, new FakeSnapshotPort(root.resolve("managed")),
-            new InMemoryRepositorySnapshotStore()
+            new RepositoryPathPolicy(root.toString()), inspector, new FakeSnapshotPort(root.resolve("managed"))
         );
     }
 

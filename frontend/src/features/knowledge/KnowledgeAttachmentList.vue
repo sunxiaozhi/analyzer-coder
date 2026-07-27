@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Delete, Document, Picture } from '@element-plus/icons-vue';
 import type { KnowledgeAttachment } from '@/api/intelligence';
+import { scanStatusLabel } from '@/utils/displayLabels';
 defineProps<{ items: KnowledgeAttachment[]; repositoryId: string; removable?: boolean }>();
 const emit = defineEmits<{ remove: [id: string]; insert: [attachment: KnowledgeAttachment] }>();
 const isImage = (item: KnowledgeAttachment) => item.mediaType.startsWith('image/');
@@ -11,7 +12,7 @@ const formatSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.ceil(bytes /
   <div v-if="items.length" class="attachment-list">
     <div v-for="item in items" :key="item.id" class="attachment-row">
       <el-icon><Picture v-if="isImage(item)" /><Document v-else /></el-icon>
-      <div><b>{{ item.originalName }}</b><span>{{ formatSize(item.sizeBytes) }} · {{ item.scanStatus }}</span></div>
+      <div><b>{{ item.originalName }}</b><span>{{ formatSize(item.sizeBytes) }} · {{ scanStatusLabel(item.scanStatus) }}</span></div>
       <el-button v-if="isImage(item)" link type="primary" @click="emit('insert', item)">插入正文</el-button>
       <a :href="`/api/repositories/${repositoryId}/knowledge/attachments/${item.id}`" target="_blank">下载</a>
       <el-button v-if="removable" link type="danger" :icon="Delete" @click="emit('remove', item.id)" />

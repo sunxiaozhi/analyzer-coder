@@ -1,4 +1,76 @@
 package com.analyzercoder.application.intelligence;
-import com.analyzercoder.infrastructure.persistence.mapper.KnowledgeHistoryMapper;import com.analyzercoder.infrastructure.persistence.model.*;import java.time.Instant;import java.util.*;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
-@Service public class KnowledgeCardHistoryService{private final KnowledgeHistoryMapper mapper;private final KnowledgeAttachmentService attachments;private final MarkdownRenderingService markdown;public KnowledgeCardHistoryService(KnowledgeHistoryMapper mapper,KnowledgeAttachmentService attachments,MarkdownRenderingService markdown){this.mapper=mapper;this.attachments=attachments;this.markdown=markdown;}public List<Revision> history(UUID repoId,UUID cardId){return mapper.findHistory(repoId,cardId).stream().map(KnowledgeCardHistoryService::revision).toList();}@Transactional public IntelligenceService.KnowledgeCard restore(UUID repoId,UUID cardId,int revision,UUID actor){KnowledgeRevisionRow source=mapper.findRevision(repoId,cardId,revision);if(source==null)throw new IllegalArgumentException("知识卡片历史修订不存在");if(mapper.restore(repoId,cardId,source,actor)==0)throw new IllegalArgumentException("知识卡片不存在");KnowledgeCardRow card=mapper.findCard(repoId,cardId);attachments.attach(repoId,cardId,card.revision(),attachments.list(repoId,cardId,revision).stream().map(KnowledgeAttachmentService.Attachment::id).toList());return new IntelligenceService.KnowledgeCard(card.id(),card.repositoryId(),card.title(),card.cardType(),card.content(),markdown.render(repoId,card.content()),List.of(card.tags()),card.status(),card.revision(),card.createdAt(),card.updatedAt(),attachments.list(repoId,cardId,card.revision()),List.of());}private static Revision revision(KnowledgeRevisionRow row){return new Revision(row.cardId(),row.revision(),row.repositoryId(),row.title(),row.cardType(),row.content(),List.of(row.tags()),row.status(),row.changedBy(),row.changedAt());}public record Revision(UUID cardId,int revision,UUID repositoryId,String title,String cardType,String content,List<String>tags,String status,UUID changedBy,Instant changedAt){}
+
+import com.analyzercoder.infrastructure.persistence.mapper.KnowledgeHistoryMapper;
+import com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow;
+import com.analyzercoder.infrastructure.persistence.model.KnowledgeRevisionRow;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+public class KnowledgeCardHistoryService {
+    private final KnowledgeHistoryMapper mapper;
+    private final KnowledgeAttachmentService attachments;
+    private final MarkdownRenderingService markdown;
+
+    public KnowledgeCardHistoryService(
+            KnowledgeHistoryMapper mapper,
+            KnowledgeAttachmentService attachments,
+            MarkdownRenderingService markdown
+    ) {
+        this.mapper = mapper;
+        this.attachments = attachments;
+        this.markdown = markdown;
+    }
+
+    private static Revision revision(KnowledgeRevisionRow row) {
+        return new Revision(
+                row.cardId(), row.revision(), row.repositoryId(), row.title(), row.cardType(),
+                row.content(), List.of(row.tags()), row.status(), row.changedBy(), row.changedAt()
+        );
+    }
+
+    public List<Revision> history(UUID repoId, UUID cardId) {
+        return mapper.findHistory(repoId, cardId).stream().map(KnowledgeCardHistoryService::revision).toList();
+    }
+
+    @Transactional
+    public IntelligenceService.KnowledgeCard restore(UUID repoId, UUID cardId, int revision, UUID actor) {
+        KnowledgeRevisionRow source = mapper.findRevision(repoId, cardId, revision);
+        if (source == null) throw new IllegalArgumentException("知识卡片历史修订不存在");
+        if (mapper.restore(repoId, cardId, source, actor) == 0) throw new IllegalArgumentException("知识卡片不存在");
+        KnowledgeCardRow card = mapper.findCard(repoId, cardId);
+        attachments.attach(
+                repoId,
+                cardId,
+                card.revision(),
+                attachments.list(repoId, cardId, revision).stream()
+                        .map(KnowledgeAttachmentService.Attachment::id)
+                        .toList()
+        );
+        return new IntelligenceService.KnowledgeCard(
+                card.id(), card.repositoryId(), card.title(), card.cardType(), card.content(),
+                markdown.render(repoId, card.content()), List.of(card.tags()), card.status(),
+                card.revision(), card.createdAt(), card.updatedAt(), card.verifiedCommit(),
+                card.codeReviewStatus(), card.codeReviewedAt(),
+                attachments.list(repoId, cardId, card.revision()), List.of()
+        );
+    }
+
+    public record Revision(
+            UUID cardId,
+            int revision,
+            UUID repositoryId,
+            String title,
+            String cardType,
+            String content,
+            List<String> tags,
+            String status,
+            UUID changedBy,
+            Instant changedAt
+    ) {
+    }
 }

@@ -5,7 +5,8 @@ import jakarta.servlet.http.HttpServletRequest;
 public final class SecurityContext {
     public static final String SESSION_ATTRIBUTE = SecurityContext.class.getName() + ".session";
 
-    private SecurityContext() {}
+    private SecurityContext() {
+    }
 
     public static AuthenticatedSession session(HttpServletRequest request) {
         Object value = request.getAttribute(SESSION_ATTRIBUTE);

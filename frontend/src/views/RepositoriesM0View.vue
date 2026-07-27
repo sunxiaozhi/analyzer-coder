@@ -59,6 +59,7 @@ async function reloadAll() { await Promise.all([store.loadRepositories(), loadPa
 async function changePage(value: number) { pageNum.value = value; await loadPage(); }
 async function changePageSize(value: number) { pageSize.value = value; pageNum.value = 1; await loadPage(); }
 async function create(input: Input) {
+  if (importing.value) return;
   importing.value = true;
   try {
     if (input.sourceType === 'LOCAL_GIT') await store.createRepository({ name: input.name, path: input.path });
@@ -67,7 +68,7 @@ async function create(input: Input) {
     dialogOpen.value = false;
     pageNum.value = 1;
     await reloadAll();
-    ElMessage.success('仓库快照已验证并发布');
+    ElMessage.success('仓库代码版本已验证并发布');
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导入失败'); }
   finally { importing.value = false; }
 }
@@ -79,7 +80,7 @@ async function saveEdit(input: { name: string; description: string; defaultBranc
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存失败'); }
   finally { editBusy.value = false; }
 }
-async function rescan(id: string) { rescanningId.value = id; try { const result = await store.rescanRepository(id); await loadPage(); ElMessage.success(result.changed ? '检测到代码变化，已发布新快照' : '代码版本无变化'); } finally { rescanningId.value = null; } }
+async function rescan(id: string) { rescanningId.value = id; try { const result = await store.rescanRepository(id); await loadPage(); ElMessage.success(result.changed ? '检测到代码变化，已发布最新版本' : '代码版本无变化'); } finally { rescanningId.value = null; } }
 async function startIndex(id: string) { await store.createIndexJob(id, 'FULL'); ElMessage.success('全量内容索引任务已进入队列'); }
 async function buildCodeGraph(repository: Repository) { buildingId.value = repository.id; try { await intelligenceApi.buildGraph(repository.id); await reloadAll(); ElMessage.success('CodeGraph 产物已发布'); } finally { buildingId.value = null; } }
 function govern(repository: Repository) { governedRepository.value = repository; governanceOpen.value = true; }
@@ -112,7 +113,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
       </div>
       <AppPagination :page-num="pageNum" :page-size="pageSize" :total="total" :disabled="pageLoading" @page-change="changePage" @size-change="changePageSize" />
     </div>
-    <RepositoryFormDialog v-model="dialogOpen" @submit="create" />
+    <RepositoryFormDialog v-model="dialogOpen" :busy="importing" @submit="create" />
     <RepositoryEditDialog v-model="editOpen" :repository="editing" :busy="editBusy" @submit="saveEdit" />
     <RepositoryGovernanceDialog v-model="governanceOpen" :repository="governedRepository" @changed="governanceChanged" />
   </section>

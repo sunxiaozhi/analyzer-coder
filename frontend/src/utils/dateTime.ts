@@ -2,7 +2,7 @@ const shanghaiFormatter=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai
 
 export function formatShanghaiDateTime(value:string):string{
   const parts=Object.fromEntries(shanghaiFormatter.formatToParts(new Date(value)).map(part=>[part.type,part.value]));
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+  return `${parts.year}年${parts.month}月${parts.day}日 ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 export function formatRelativeTime(value:string):string{
@@ -14,4 +14,4 @@ export function formatRelativeTime(value:string):string{
   return formatter.format(Math.round(seconds/86400),'day');
 }
 
-export function shanghaiDateTimeTitle(value:string):string{return `${formatShanghaiDateTime(value)} Asia/Shanghai`;}
+export function shanghaiDateTimeTitle(value:string):string{return `${formatShanghaiDateTime(value)}（中国标准时间）`;}

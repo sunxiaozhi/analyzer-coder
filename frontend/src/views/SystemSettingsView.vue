@@ -134,9 +134,9 @@ async function saveProvider() {
     const saved = await llmSettingsApi.save(input);
     fillProvider(saved);
     check.value = null;
-    ElMessage.success('Provider 已保存，下一步请测试连接');
+    ElMessage.success('模型服务配置已保存，下一步请测试连接');
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : 'Provider 保存失败');
+    ElMessage.error(error instanceof Error ? error.message : '模型服务配置保存失败');
   } finally {
     apiKey.value = '';
     savingProvider.value = false;
@@ -199,9 +199,9 @@ async function activateProvider() {
         expectedActivationVersion: value.activationVersion,
       }),
     );
-    ElMessage.success('Provider 已启用');
+    ElMessage.success('模型服务已启用');
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : 'Provider 启用失败');
+    ElMessage.error(error instanceof Error ? error.message : '模型服务启用失败');
   }
 }
 

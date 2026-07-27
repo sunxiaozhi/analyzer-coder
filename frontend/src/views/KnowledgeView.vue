@@ -9,6 +9,7 @@ import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorD
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
 import { renderMarkdown } from '@/features/knowledge/markdown';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { statusLabel } from '@/utils/displayLabels';
 
 const repositories = useRepositoryStore();
 const router = useRouter();
@@ -108,29 +109,31 @@ onMounted(() => void load());
 </script>
 
 <template>
-  <section class="page">
+  <section class="page knowledge-page">
     <div class="summary-strip">
       <div><b>{{ cards.length }}</b><span>知识卡片</span></div>
       <div><b>{{ cards.filter(x=>x.status==='PUBLISHED').length }}</b><span>已发布</span></div>
       <div><b>{{ cards.filter(x=>x.status==='DRAFT').length }}</b><span>草稿</span></div>
       <div><b>{{ cards.reduce((n,x)=>n+x.attachments.length,0) }}</b><span>附件</span></div>
     </div>
-    <div class="surface">
+    <div class="surface knowledge-surface">
       <div class="toolbar">
         <el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索标题" clearable />
         <span class="spacer" />
         <el-button type="primary" :icon="Plus" :disabled="!repositories.selectedRepositoryId" @click="openCreate">新建卡片</el-button>
       </div>
-      <el-empty v-if="!rows.length" description="当前仓库暂无知识卡片" />
-      <div class="knowledge-grid">
-        <KnowledgeCardListItem
-          v-for="card in rows"
-          :key="card.id"
-          :card="card"
-          @view="openDetail"
-          @edit="openEdit"
-          @history="showHistory"
-        />
+      <div class="knowledge-scroll">
+        <el-empty v-if="!rows.length" description="当前仓库暂无知识卡片" />
+        <div v-else class="knowledge-grid">
+          <KnowledgeCardListItem
+            v-for="card in rows"
+            :key="card.id"
+            :card="card"
+            @view="openDetail"
+            @edit="openEdit"
+            @history="showHistory"
+          />
+        </div>
       </div>
     </div>
     <KnowledgeCardDetailDialog v-model="detailDialog" :card="viewing"
@@ -140,7 +143,7 @@ onMounted(() => void load());
       @submit="save" @open-code="openCode" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">
-        <el-card shadow="never"><template #header><div class="toolbar"><b>v{{ item.revision }} · {{ item.status }}</b><span class="spacer" /><el-button link type="primary" @click="restore(item.revision)">恢复为新草稿</el-button></div></template>
+        <el-card shadow="never"><template #header><div class="toolbar"><b>v{{ item.revision }} · {{ statusLabel(item.status) }}</b><span class="spacer" /><el-button link type="primary" @click="restore(item.revision)">恢复为新草稿</el-button></div></template>
           <div class="history-markdown" v-html="renderMarkdown(item.content, item.repositoryId)" /><small>{{ item.cardType }} · {{ item.tags.join(', ')||'无标签' }}</small>
         </el-card>
       </el-timeline-item></el-timeline>
@@ -149,5 +152,38 @@ onMounted(() => void load());
 </template>
 
 <style scoped>
+.knowledge-page {
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+.knowledge-surface {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: 12px;
+  min-height: 0;
+  overflow: hidden !important;
+}
+.knowledge-scroll {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.knowledge-scroll .knowledge-grid {
+  padding-top: 0;
+}
 .history-markdown :deep(pre){overflow:auto;padding:10px;border-radius:8px;background:#18212f;color:#e6edf3}.history-markdown{line-height:1.7}
+@media (max-width: 760px) {
+  .knowledge-page,
+  .knowledge-surface {
+    display: block !important;
+    height: auto;
+    overflow: visible !important;
+  }
+  .knowledge-scroll { overflow: visible; }
+  .knowledge-surface { row-gap: 12px; }
+}
 </style>

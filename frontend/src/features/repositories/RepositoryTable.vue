@@ -2,6 +2,7 @@
 import { ArrowDown } from '@element-plus/icons-vue';
 import RepositoryVersionCell from '@/features/repositories/RepositoryVersionCell.vue';
 import type { Repository } from '@/types/api';
+import { relationshipLabel } from '@/utils/displayLabels';
 
 defineProps<{
   rows: readonly Repository[];
@@ -53,7 +54,7 @@ function command(action: string, row: Repository) {
       <template #default="{ row }">
         <div class="primary-cell">
           <b>{{ row.name }}</b>
-          <span>{{ sourceLabel(row.sourceType) }} · {{ row.ownerDisplayName }} · {{ row.relationship }}</span>
+          <span>{{ sourceLabel(row.sourceType) }} · {{ row.ownerDisplayName }} · {{ relationshipLabel(row.relationship) }}</span>
         </div>
       </template>
     </el-table-column>

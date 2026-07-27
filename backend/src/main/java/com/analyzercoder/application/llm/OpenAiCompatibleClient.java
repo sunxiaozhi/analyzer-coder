@@ -162,7 +162,7 @@ public class OpenAiCompatibleClient {
             JsonNode root = json.readTree(response.body());
             JsonNode content = root.path("choices").path(0).path("message").path("content");
             if (!content.isTextual()) {
-                throw new LlmConnectionException("LLM_PROTOCOL_INVALID", "模型响应缺少 choices[0].message.content");
+                throw new LlmConnectionException("LLM_PROTOCOL_INVALID", "模型响应格式错误，缺少回答正文");
             }
             return content.asText();
         } catch (LlmConnectionException exception) {
@@ -195,7 +195,7 @@ public class OpenAiCompatibleClient {
             requireAllowedStatus(response.statusCode(), "");
             String contentType = response.headers().firstValue("Content-Type").orElse("");
             if (!contentType.toLowerCase().contains("text/event-stream")) {
-                throw new LlmConnectionException("LLM_STREAM_UNSUPPORTED", "Provider 未返回事件流");
+                throw new LlmConnectionException("LLM_STREAM_UNSUPPORTED", "模型服务未返回流式响应");
             }
             try (Stream<String> lines = response.body()) {
                 var iterator = lines.iterator();
@@ -223,7 +223,7 @@ public class OpenAiCompatibleClient {
     }
 
     private static long throwStreamUnsupported(Exception cause) {
-        throw new LlmConnectionException("LLM_STREAM_UNSUPPORTED", "无法解析 Provider 事件流", cause);
+        throw new LlmConnectionException("LLM_STREAM_UNSUPPORTED", "无法解析模型服务的流式响应", cause);
     }
 
     private ObjectNode completionPayload(LlmProviderSpec spec, String prompt, boolean stream) {
@@ -254,7 +254,7 @@ public class OpenAiCompatibleClient {
             for (JsonNode item : data) {
                 if (model.equals(item.path("id").asText())) return;
             }
-            throw new LlmConnectionException("LLM_MODEL_NOT_FOUND", "Provider 未提供指定模型");
+            throw new LlmConnectionException("LLM_MODEL_NOT_FOUND", "模型服务未提供指定模型");
         } catch (LlmConnectionException exception) {
             throw exception;
         } catch (Exception ignored) {
@@ -265,15 +265,15 @@ public class OpenAiCompatibleClient {
     private static void requireAllowedStatus(int status, String body) {
         if (status >= 200 && status < 300) return;
         if (status == 401 || status == 403) {
-            throw new LlmConnectionException("LLM_AUTH_FAILED", "Provider 拒绝了当前凭据");
+            throw new LlmConnectionException("LLM_AUTH_FAILED", "模型服务拒绝了当前凭据");
         }
         if (status == 429) {
-            throw new LlmConnectionException("LLM_RATE_LIMITED", "Provider 当前触发限流");
+            throw new LlmConnectionException("LLM_RATE_LIMITED", "模型服务当前请求过多，请稍后重试");
         }
         if (status == 404 && body != null && body.toLowerCase().contains("model")) {
-            throw new LlmConnectionException("LLM_MODEL_NOT_FOUND", "Provider 未找到指定模型");
+            throw new LlmConnectionException("LLM_MODEL_NOT_FOUND", "模型服务未找到指定模型");
         }
-        throw new LlmConnectionException("LLM_PROTOCOL_INVALID", "Provider 返回了不支持的 HTTP 状态 " + status);
+        throw new LlmConnectionException("LLM_PROTOCOL_INVALID", "模型服务返回了不支持的 HTTP 状态码：" + status);
     }
 
     private static LlmConnectionException mapTransport(Exception exception) {

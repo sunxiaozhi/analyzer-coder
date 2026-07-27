@@ -45,7 +45,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
         try {
             Files.createDirectories(this.snapshotRoot);
         } catch (IOException exception) {
-            throw new IllegalStateException("Unable to create managed snapshot root", exception);
+            throw new IllegalStateException("无法创建平台受管代码目录", exception);
         }
     }
 
@@ -56,9 +56,9 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
         GitRepositorySnapshot sourceVersion
     ) {
         RepositorySnapshotId snapshotId = RepositorySnapshotId.newId();
-        Path repositoryRoot = snapshotRoot.resolve(repositoryId.value().toString()).resolve("snapshots");
-        Path temporary = repositoryRoot.resolve(".tmp-" + snapshotId.value());
-        Path target = repositoryRoot.resolve(snapshotId.value().toString());
+        Path repositoryRoot = snapshotRoot.resolve(repositoryId.value().toString());
+        Path temporary = repositoryRoot.resolve(".staging-" + snapshotId.value());
+        Path target = repositoryRoot.resolve("current-" + snapshotId.value());
         Path content = temporary.resolve("content");
         try {
             Files.createDirectories(content);
@@ -66,7 +66,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
             try {
                 Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
             } catch (AtomicMoveNotSupportedException exception) {
-                throw new IllegalStateException("Managed snapshot storage does not support atomic publication", exception);
+                throw new IllegalStateException("当前存储不支持代码版本原子发布", exception);
             }
             makeReadOnly(target);
             return new ManagedRepositorySnapshot(
@@ -98,7 +98,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
     private void copyVersionedFiles(Path sourceRoot, Path content, String expectedDigest) throws IOException {
         List<String> paths = gitPaths(sourceRoot).stream().sorted().toList();
         if (paths.size() > maxFiles) {
-            throw new IllegalArgumentException("Repository exceeds configured snapshot file limit");
+            throw new IllegalArgumentException("仓库文件数量超过系统限制");
         }
         MessageDigest digest = sha256();
         long totalBytes = 0;
@@ -107,18 +107,18 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
             Path relative = Path.of(relativeName).normalize();
             Path source = sourceRoot.resolve(relative).normalize();
             if (relative.isAbsolute() || !source.startsWith(sourceRoot)) {
-                throw new IllegalArgumentException("Git returned a path outside the repository");
+                throw new IllegalArgumentException("Git 返回了仓库范围之外的文件路径");
             }
             if (Files.isSymbolicLink(source)) {
-                throw new IllegalArgumentException("Repository snapshots do not allow symbolic links");
+                throw new IllegalArgumentException("仓库代码中不允许包含符号链接");
             }
             if (!Files.isRegularFile(source)) {
-                throw new IllegalArgumentException("Repository contains a non-regular versioned file");
+                throw new IllegalArgumentException("仓库包含无法处理的特殊文件");
             }
             long fileSize = Files.size(source);
             totalBytes = Math.addExact(totalBytes, fileSize);
             if (totalBytes > maxTotalBytes) {
-                throw new IllegalArgumentException("Repository exceeds configured snapshot size limit");
+                throw new IllegalArgumentException("仓库代码总大小超过系统限制");
             }
 
             byte[] name = relative.toString().replace('\\', '/').getBytes(StandardCharsets.UTF_8);
@@ -128,7 +128,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
 
             Path destination = content.resolve(relative).normalize();
             if (!destination.startsWith(content)) {
-                throw new IllegalArgumentException("Snapshot destination escaped managed storage");
+                throw new IllegalArgumentException("代码文件目标路径超出平台受管目录");
             }
             Files.createDirectories(destination.getParent());
             try (InputStream input = Files.newInputStream(source);
@@ -142,7 +142,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
         }
         String actualDigest = HexFormat.of().formatHex(digest.digest());
         if (!actualDigest.equals(expectedDigest)) {
-            throw new IllegalStateException("Source changed while the managed snapshot was being created; retry");
+            throw new IllegalStateException("发布代码版本期间源仓库发生变化，请重试");
         }
     }
 
@@ -161,18 +161,18 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
             CompletableFuture<byte[]> error = CompletableFuture.supplyAsync(() -> read(process.getErrorStream()));
             if (!process.waitFor(15, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
-                throw new IllegalStateException("Git snapshot file enumeration timed out");
+                throw new IllegalStateException("读取 Git 文件清单超时");
             }
             error.join();
             if (process.exitValue() != 0) {
-                throw new IllegalArgumentException("Unable to enumerate Git snapshot files");
+                throw new IllegalArgumentException("无法读取 Git 文件清单");
             }
             return splitPaths(output.join());
         } catch (IOException exception) {
-            throw new IllegalStateException("Git CLI is unavailable", exception);
+            throw new IllegalStateException("Git 命令行工具不可用，请确认已安装 Git 并配置环境变量", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Git snapshot enumeration was interrupted", exception);
+            throw new IllegalStateException("读取 Git 文件清单的操作被中断", exception);
         }
     }
 
@@ -196,7 +196,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
         try (input) {
             return input.readAllBytes();
         } catch (IOException exception) {
-            throw new IllegalStateException("Unable to read Git command output", exception);
+            throw new IllegalStateException("无法读取 Git 命令输出", exception);
         }
     }
 
@@ -204,7 +204,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
         try {
             return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 digest is unavailable", exception);
+            throw new IllegalStateException("SHA-256 摘要功能不可用", exception);
         }
     }
 
@@ -224,11 +224,11 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
                     path.toFile().setWritable(true, false);
                     Files.deleteIfExists(path);
                 } catch (IOException exception) {
-                    throw new IllegalStateException("Unable to delete managed snapshot", exception);
+                    throw new IllegalStateException("无法删除旧代码版本", exception);
                 }
             });
         } catch (IOException exception) {
-            throw new IllegalStateException("Unable to delete managed snapshot", exception);
+            throw new IllegalStateException("无法删除旧代码版本", exception);
         }
     }
 }

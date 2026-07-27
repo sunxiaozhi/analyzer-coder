@@ -1,17 +1,129 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd"><mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper">
-<resultMap id="card" type="com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow"><constructor><idArg column="id" javaType="java.util.UUID"/><arg column="repo_id" javaType="java.util.UUID"/><arg column="title" javaType="string"/><arg column="card_type" javaType="string"/><arg column="content" javaType="string"/><arg column="tags" javaType="[Ljava.lang.String;" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/><arg column="status" javaType="string"/><arg column="revision" javaType="_int"/><arg column="created_at" javaType="java.time.Instant"/><arg column="updated_at" javaType="java.time.Instant"/></constructor></resultMap>
-<select id="search" resultType="map">SELECT c.id,c.snapshot_id,c.file_path,c.symbol_name,c.symbol_kind,c.start_line,c.end_line,c.content,c.content_hash,(CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.file_path))&gt;0 THEN .35 ELSE 0 END+CASE WHEN POSITION(LOWER(#{query}) IN LOWER(COALESCE(c.symbol_name,'')))&gt;0 THEN .4 ELSE 0 END+CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.content))&gt;0 THEN .25 ELSE 0 END+(1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector)))*.55) score FROM code_chunks c JOIN chunk_embeddings e ON e.chunk_id=c.id WHERE c.repo_id=#{repositoryId} ORDER BY score DESC,c.file_path,c.start_line NULLS FIRST LIMIT #{limit}</select>
-<select id="searchKnowledge" resultType="map">SELECT c.id,c.title,c.card_type,c.content,c.revision,e.content_hash,(CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.title))&gt;0 THEN .55 ELSE 0 END+CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.content))&gt;0 THEN .3 ELSE 0 END+CASE WHEN POSITION(LOWER(#{query}) IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0 THEN .25 ELSE 0 END+(1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector)))*.55) score FROM knowledge_cards c JOIN knowledge_card_embeddings e ON e.card_id=c.id AND e.revision=c.revision WHERE c.repo_id=#{repositoryId} AND c.status='PUBLISHED' ORDER BY score DESC,c.updated_at DESC LIMIT #{limit}</select>
-<insert id="insertConversation">INSERT INTO qa_conversations(id,repo_id,account_id,question,answer,snapshot_id) VALUES(#{id},#{repositoryId},#{accountId},#{question},#{answer},#{snapshotId})</insert><insert id="insertCitation">INSERT INTO qa_citations(id,conversation_id,source_type,chunk_id,knowledge_card_id,title,file_path,symbol_name,start_line,end_line,evidence_hash,rank) VALUES(#{id},#{conversationId},#{sourceType},#{chunkId},#{knowledgeCardId},#{title},#{filePath},#{symbolName},#{startLine},#{endLine},#{evidenceHash},#{rank})</insert>
-<select id="graphEdges" resultType="map">SELECT source_symbol,target_symbol,relation FROM code_graph_edges WHERE repo_id=#{repositoryId} LIMIT 500</select><delete id="deleteGraphEdges">DELETE FROM code_graph_edges WHERE repo_id=#{repositoryId}</delete><select id="graphChunks" resultType="map">SELECT id,snapshot_id,symbol_name,content FROM code_chunks WHERE repo_id=#{repositoryId} AND symbol_name IS NOT NULL</select><insert id="insertGraphEdge">INSERT INTO code_graph_edges(id,repo_id,snapshot_id,source_chunk_id,target_chunk_id,source_symbol,target_symbol,relation) VALUES(#{id},#{repositoryId},#{snapshotId},#{sourceChunkId},#{targetChunkId},#{sourceSymbol},#{targetSymbol},'CALLS') ON CONFLICT DO NOTHING</insert>
-<select id="cards" resultMap="card">SELECT id,repo_id,title,card_type,content,tags,status,revision,created_at,updated_at FROM knowledge_cards WHERE repo_id=#{repositoryId}<if test="!includeDraft"> AND status='PUBLISHED'</if> ORDER BY updated_at DESC</select><insert id="insertCard">INSERT INTO knowledge_cards(id,repo_id,title,card_type,content,tags,status,created_by,updated_by) VALUES(#{id},#{repositoryId},#{title},#{cardType},#{content},#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},#{status},#{actorId},#{actorId})</insert><update id="updateCard">UPDATE knowledge_cards SET title=#{title},card_type=#{cardType},content=#{content},tags=#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},status=#{status},revision=revision+1,updated_by=#{actorId},updated_at=CURRENT_TIMESTAMP WHERE id=#{id} AND repo_id=#{repositoryId}</update>
-<select id="findChunk" resultType="map">SELECT id,snapshot_id,file_path,symbol_name,start_line,end_line,content,content_hash FROM code_chunks WHERE repo_id=#{repositoryId} AND id=#{chunkId}</select>
-<select id="codeReferences" resultType="map">SELECT r.chunk_id,r.snapshot_id,r.file_path,r.symbol_name,r.start_line,r.end_line,r.content_hash,(c.id IS NULL) stale FROM knowledge_code_refs r LEFT JOIN code_chunks c ON c.id=r.chunk_id AND c.content_hash=r.content_hash WHERE r.repo_id=#{repositoryId} AND r.card_id=#{cardId} AND r.revision=#{revision} ORDER BY r.position</select>
-<insert id="insertCodeReference">INSERT INTO knowledge_code_refs(card_id,revision,position,repo_id,snapshot_id,chunk_id,file_path,symbol_name,start_line,end_line,content_hash) VALUES(#{cardId},#{revision},#{position},#{repositoryId},#{snapshotId},#{chunkId},#{filePath},#{symbolName},#{startLine},#{endLine},#{contentHash})</insert>
-<select id="settings" resultType="map">SELECT setting_key,CASE WHEN sensitive THEN '******' ELSE setting_value END value FROM system_settings ORDER BY setting_key</select><insert id="upsertSetting">INSERT INTO system_settings(setting_key,setting_value,updated_by) VALUES(#{key},#{value},#{actorId}) ON CONFLICT(setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP</insert>
-<select id="missingKnowledgeEmbeddings" resultType="map">SELECT c.id,c.revision,CONCAT(c.title,E'\n',c.content,E'\n',ARRAY_TO_STRING(c.tags,' ')) content FROM knowledge_cards c LEFT JOIN knowledge_card_embeddings e ON e.card_id=c.id WHERE c.repo_id=#{repositoryId} AND c.status='PUBLISHED' AND(e.card_id IS NULL OR e.revision&lt;&gt;c.revision)</select>
-<insert id="upsertKnowledgeEmbedding">INSERT INTO knowledge_card_embeddings(card_id,repo_id,revision,embedding,content_hash) VALUES(#{cardId},#{repositoryId},#{revision},CAST(#{vector} AS vector),#{contentHash}) ON CONFLICT(card_id) DO UPDATE SET revision=EXCLUDED.revision,embedding=EXCLUDED.embedding,content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP</insert>
-<select id="backups" resultType="map">SELECT id,status,checksum,created_at,restored_at FROM backup_sets ORDER BY created_at DESC</select><select id="backupKnowledge" resultType="map">SELECT * FROM knowledge_cards</select><select id="backupRepositories" resultType="map">SELECT id,name,source_type,current_snapshot_id FROM repositories WHERE deleted_at IS NULL</select><select id="backupAccounts" resultType="map">SELECT id,username,display_name,account_role,enabled FROM accounts</select><insert id="insertBackup">INSERT INTO backup_sets(id,status,manifest,checksum,created_by) VALUES(#{id},'READY',CAST(#{manifest} AS jsonb),#{checksum},#{actorId})</insert><select id="backupManifest" resultType="string">SELECT manifest::text FROM backup_sets WHERE id=#{id} AND status='READY'</select><select id="backupChecksum" resultType="string">SELECT checksum FROM backup_sets WHERE id=#{id}</select><delete id="clearSessions">DELETE FROM login_sessions</delete><update id="markRestored">UPDATE backup_sets SET restored_at=CURRENT_TIMESTAMP WHERE id=#{id}</update>
-<select id="missingEmbeddings" resultType="map">SELECT c.id,c.content,c.content_hash FROM code_chunks c LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id WHERE c.repo_id=#{repositoryId} AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash)</select><insert id="upsertEmbedding">INSERT INTO chunk_embeddings(chunk_id,repo_id,model,dimension,embedding,content_hash) VALUES(#{chunkId},#{repositoryId},'local-hash-64',64,CAST(#{vector} AS vector),#{contentHash}) ON CONFLICT(chunk_id) DO UPDATE SET embedding=EXCLUDED.embedding,content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP</insert>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper">
+    <resultMap id="card" type="com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="repo_id" javaType="java.util.UUID"/>
+            <arg column="title" javaType="string"/>
+            <arg column="card_type" javaType="string"/>
+            <arg column="content" javaType="string"/>
+            <arg column="tags" javaType="[Ljava.lang.String;" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/>
+            <arg column="status" javaType="string"/>
+            <arg column="revision" javaType="_int"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+            <arg column="updated_at" javaType="java.time.Instant"/>
+            <arg column="verified_commit" javaType="string"/>
+            <arg column="code_review_status" javaType="string"/>
+            <arg column="code_reviewed_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+
+    <select id="search" resultType="map">
+        SELECT c.id,c.snapshot_id,c.file_path,c.symbol_name,c.symbol_kind,c.start_line,c.end_line,c.content,c.content_hash,
+        (CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.file_path))&gt;0 THEN .35 ELSE 0 END
+        +CASE WHEN POSITION(LOWER(#{query}) IN LOWER(COALESCE(c.symbol_name,'')))&gt;0 THEN .4 ELSE 0 END
+        +CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.content))&gt;0 THEN .25 ELSE 0 END
+        +(1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector)))*.55) score
+        FROM code_chunks c JOIN chunk_embeddings e ON e.chunk_id=c.id
+        WHERE c.repo_id=#{repositoryId}
+        ORDER BY score DESC,c.file_path,c.start_line NULLS FIRST LIMIT #{limit}
+    </select>
+    <select id="searchKnowledge" resultType="map">
+        SELECT c.id,c.title,c.card_type,c.content,c.revision,e.content_hash,
+        (CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.title))&gt;0 THEN .55 ELSE 0 END
+        +CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.content))&gt;0 THEN .3 ELSE 0 END
+        +CASE WHEN POSITION(LOWER(#{query}) IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0 THEN .25 ELSE 0 END
+        +(1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector)))*.55) score
+        FROM knowledge_cards c JOIN knowledge_card_embeddings e ON e.card_id=c.id AND e.revision=c.revision
+        WHERE c.repo_id=#{repositoryId} AND c.status='PUBLISHED'
+        ORDER BY score DESC,c.updated_at DESC LIMIT #{limit}
+    </select>
+    <insert id="insertConversation">
+        INSERT INTO qa_conversations(id,repo_id,account_id,question,answer,snapshot_id)
+        VALUES(#{id},#{repositoryId},#{accountId},#{question},#{answer},#{snapshotId})
+    </insert>
+    <insert id="insertCitation">
+        INSERT INTO qa_citations(id,conversation_id,source_type,chunk_id,knowledge_card_id,title,file_path,symbol_name,start_line,end_line,evidence_hash,rank)
+        VALUES(#{id},#{conversationId},#{sourceType},#{chunkId},#{knowledgeCardId},#{title},#{filePath},#{symbolName},#{startLine},#{endLine},#{evidenceHash},#{rank})
+    </insert>
+
+    <select id="graphEdges" resultType="map">SELECT source_symbol,target_symbol,relation FROM code_graph_edges WHERE repo_id=#{repositoryId} LIMIT 500</select>
+    <delete id="deleteGraphEdges">DELETE FROM code_graph_edges WHERE repo_id=#{repositoryId}</delete>
+    <select id="graphChunks" resultType="map">SELECT id,snapshot_id,symbol_name,content FROM code_chunks WHERE repo_id=#{repositoryId} AND symbol_name IS NOT NULL</select>
+    <insert id="insertGraphEdge">
+        INSERT INTO code_graph_edges(id,repo_id,snapshot_id,source_chunk_id,target_chunk_id,source_symbol,target_symbol,relation)
+        VALUES(#{id},#{repositoryId},#{snapshotId},#{sourceChunkId},#{targetChunkId},#{sourceSymbol},#{targetSymbol},'CALLS')
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <select id="cards" resultMap="card">
+        SELECT id,repo_id,title,card_type,content,tags,status,revision,created_at,updated_at,
+        verified_commit,code_review_status,code_reviewed_at
+        FROM knowledge_cards WHERE repo_id=#{repositoryId}
+        <if test="!includeDraft">AND status='PUBLISHED'</if>
+        ORDER BY updated_at DESC
+    </select>
+    <insert id="insertCard">
+        INSERT INTO knowledge_cards(id,repo_id,title,card_type,content,tags,status,created_by,updated_by)
+        VALUES(#{id},#{repositoryId},#{title},#{cardType},#{content},#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},#{status},#{actorId},#{actorId})
+    </insert>
+    <update id="updateCard">
+        UPDATE knowledge_cards SET title=#{title},card_type=#{cardType},content=#{content},
+        tags=#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},status=#{status},
+        revision=revision+1,updated_by=#{actorId},updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND repo_id=#{repositoryId}
+    </update>
+    <select id="findChunk" resultType="map">
+        SELECT id,snapshot_id,file_path,symbol_name,start_line,end_line,content,content_hash
+        FROM code_chunks WHERE repo_id=#{repositoryId} AND id=#{chunkId}
+    </select>
+    <select id="codeReferences" resultType="map">
+        SELECT r.chunk_id,r.snapshot_id,r.file_path,r.symbol_name,r.start_line,r.end_line,r.content_hash,
+        (c.id IS NULL) stale
+        FROM knowledge_code_refs r LEFT JOIN code_chunks c ON c.id=r.chunk_id AND c.content_hash=r.content_hash
+        WHERE r.repo_id=#{repositoryId} AND r.card_id=#{cardId} AND r.revision=#{revision}
+        ORDER BY r.position
+    </select>
+    <insert id="insertCodeReference">
+        INSERT INTO knowledge_code_refs(card_id,revision,position,repo_id,snapshot_id,chunk_id,file_path,symbol_name,start_line,end_line,content_hash)
+        VALUES(#{cardId},#{revision},#{position},#{repositoryId},#{snapshotId},#{chunkId},#{filePath},#{symbolName},#{startLine},#{endLine},#{contentHash})
+    </insert>
+
+    <select id="settings" resultType="map">SELECT setting_key,CASE WHEN sensitive THEN '******' ELSE setting_value END value FROM system_settings ORDER BY setting_key</select>
+    <insert id="upsertSetting">
+        INSERT INTO system_settings(setting_key,setting_value,updated_by) VALUES(#{key},#{value},#{actorId})
+        ON CONFLICT(setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP
+    </insert>
+    <select id="missingKnowledgeEmbeddings" resultType="map">
+        SELECT c.id,c.revision,CONCAT(c.title,E'\n',c.content,E'\n',ARRAY_TO_STRING(c.tags,' ')) content
+        FROM knowledge_cards c LEFT JOIN knowledge_card_embeddings e ON e.card_id=c.id
+        WHERE c.repo_id=#{repositoryId} AND c.status='PUBLISHED'
+        AND(e.card_id IS NULL OR e.revision&lt;&gt;c.revision)
+    </select>
+    <insert id="upsertKnowledgeEmbedding">
+        INSERT INTO knowledge_card_embeddings(card_id,repo_id,revision,embedding,content_hash)
+        VALUES(#{cardId},#{repositoryId},#{revision},CAST(#{vector} AS vector),#{contentHash})
+        ON CONFLICT(card_id) DO UPDATE SET revision=EXCLUDED.revision,embedding=EXCLUDED.embedding,
+        content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
+    </insert>
+
+    <select id="backups" resultType="map">SELECT id,status,checksum,created_at,restored_at FROM backup_sets ORDER BY created_at DESC</select>
+    <select id="backupKnowledge" resultType="map">SELECT * FROM knowledge_cards</select>
+    <select id="backupRepositories" resultType="map">SELECT id,name,source_type,current_snapshot_id FROM repositories WHERE deleted_at IS NULL</select>
+    <select id="backupAccounts" resultType="map">SELECT id,username,display_name,account_role,enabled FROM accounts</select>
+    <insert id="insertBackup">INSERT INTO backup_sets(id,status,manifest,checksum,created_by) VALUES(#{id},'READY',CAST(#{manifest} AS jsonb),#{checksum},#{actorId})</insert>
+    <select id="backupManifest" resultType="string">SELECT manifest::text FROM backup_sets WHERE id=#{id} AND status='READY'</select>
+    <select id="backupChecksum" resultType="string">SELECT checksum FROM backup_sets WHERE id=#{id}</select>
+    <delete id="clearSessions">DELETE FROM login_sessions</delete>
+    <update id="markRestored">UPDATE backup_sets SET restored_at=CURRENT_TIMESTAMP WHERE id=#{id}</update>
+    <select id="missingEmbeddings" resultType="map">
+        SELECT c.id,c.content,c.content_hash FROM code_chunks c LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
+        WHERE c.repo_id=#{repositoryId} AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash)
+    </select>
+    <insert id="upsertEmbedding">
+        INSERT INTO chunk_embeddings(chunk_id,repo_id,model,dimension,embedding,content_hash)
+        VALUES(#{chunkId},#{repositoryId},'local-hash-64',64,CAST(#{vector} AS vector),#{contentHash})
+        ON CONFLICT(chunk_id) DO UPDATE SET embedding=EXCLUDED.embedding,content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
+    </insert>
 </mapper>

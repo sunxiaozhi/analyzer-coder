@@ -36,7 +36,6 @@ public interface RepositoryGovernanceMapper {
     int deleteCodeGraphArtifacts(@Param("repositoryId") UUID repositoryId);
     int deleteChunkEmbeddings(@Param("repositoryId") UUID repositoryId);
     int deleteCodeChunks(@Param("repositoryId") UUID repositoryId);
-    int deleteRepositorySnapshots(@Param("repositoryId") UUID repositoryId);
     int deleteIndexJobs(@Param("repositoryId") UUID repositoryId);
     int deleteRepositoryGrants(@Param("repositoryId") UUID repositoryId);
     int deleteRepositoryCredentials(@Param("repositoryId") UUID repositoryId);

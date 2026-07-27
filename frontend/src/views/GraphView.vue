@@ -6,6 +6,7 @@ import { Search } from '@element-plus/icons-vue';
 import { intelligenceApi, type CodeGraphArtifact, type GraphResult } from '@/api/intelligence';
 import CallGraphCanvas from '@/features/graph/CallGraphCanvas.vue';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { statusLabel } from '@/utils/displayLabels';
 
 const repositories = useRepositoryStore();
 const route = useRoute();
@@ -104,7 +105,7 @@ watch(
         <el-input-number v-model="depth" :min="1" :max="5" size="small" />
       </label>
       <el-tag v-if="artifact" type="success">
-        CodeGraph {{ artifact.cliVersion }} · {{ artifact.status }}
+        CodeGraph {{ artifact.cliVersion }} · {{ statusLabel(artifact.status) }}
       </el-tag>
       <el-button :loading="building" @click="build">
         {{ artifact ? '重新构建' : '构建 CodeGraph' }}
@@ -142,6 +143,21 @@ watch(
 </template>
 
 <style scoped>
+.graph-page {
+  gap: 10px;
+}
+.graph-toolbar {
+  min-height: 54px;
+  padding: 8px 12px;
+  border: 1px solid #dce4eb;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 1px 3px #24384c0a;
+}
+.impact-panel .pane-head {
+  min-height: 44px;
+  height: 44px;
+}
 .impact-relations {
   display: grid;
   gap: 8px;
@@ -177,7 +193,7 @@ watch(
 .impact-panel :deep(.el-alert) { margin: 8px 14px; width: auto; }
 
 @media (max-width: 760px) {
-  .graph-toolbar { flex-wrap: wrap; min-height: 112px; padding: 8px 0; }
+  .graph-toolbar { flex-wrap: wrap; min-height: 112px; padding: 10px; }
   .graph-search { width: 100%; }
 }
 </style>

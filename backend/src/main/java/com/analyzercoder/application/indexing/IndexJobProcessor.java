@@ -42,7 +42,7 @@ public class IndexJobProcessor {
             if (finishCancellation(runningJob.id())) return true;
             CodeRepository repository = repositoryStore.findById(runningJob.repositoryId())
                 .orElseThrow(() -> new IllegalArgumentException("Repository not found: " + runningJob.repositoryId().value()));
-            if (repository.currentSnapshotId() == null) throw new IllegalStateException("Repository has no published snapshot");
+            if (repository.currentSnapshotId() == null) throw new IllegalStateException("仓库尚未发布可用的代码版本");
 
             List<CodeChunk> chunks = repositoryScannerPort.scan(repository).stream()
                 .flatMap(file -> splitIntoChunks(repository, file).stream()).toList();
