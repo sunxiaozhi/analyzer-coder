@@ -15,7 +15,7 @@ export const router = createRouter({
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
     { path: '/', component: WorkspaceShell, children: [
-      { path: '', redirect: '/repositories' },
+      { path: '', redirect: '/ask' },
       { path: 'repositories', name: 'repositories', component: RepositoriesView, meta: { title: '仓库管理' } },
       { path: 'indexing', name: 'indexing', component: IndexJobsView, meta: { title: '索引任务' } },
       { path: 'search', name: 'search', component: ChunksView, meta: { title: '代码工作台' } },
@@ -33,11 +33,11 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore();
   await auth.restore();
   if (to.meta.public) {
-    if (auth.authenticated && !auth.account?.mustChangePassword) return '/repositories';
+    if (auth.authenticated && !auth.account?.mustChangePassword) return '/ask';
     return true;
   }
   if (!auth.authenticated) return { path: '/login', query: { redirect: to.fullPath } };
   if (auth.account?.mustChangePassword) return '/login';
-  if (to.meta.admin && !auth.isAdmin) return '/repositories';
+  if (to.meta.admin && !auth.isAdmin) return '/ask';
   return true;
 });

@@ -20,7 +20,7 @@ const navItems = computed(() => [
 const titles: Record<string, string> = { repositories: '仓库管理', indexing: '索引任务', search: '代码工作台', ask: '代码问答', graph: '调用图谱', knowledge: '知识卡片', accounts: '账号管理', settings: '系统设置' };
 const pageTitle = computed(() => titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
-async function logout() { await auth.logout(); await router.replace('/login'); }
+async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }
 async function changeRepository(repositoryId: string | null) {
   try {
     await repositoryStore.selectRepository(repositoryId);
@@ -35,7 +35,7 @@ function closeTab(tab: WorkspaceTab) {
   const wasActive = tab.name === activeRouteName.value;
   const next = workspaceTabs.close(tab.name);
   if (!wasActive) return;
-  const target = next?.fullPath ?? '/repositories';
+  const target = next?.fullPath ?? '/ask';
   if (target === route.fullPath) {
     workspaceTabs.open({
       name: activeRouteName.value,
@@ -51,10 +51,10 @@ function closeOtherTabs() {
 }
 function closeAllTabs() {
   workspaceTabs.closeAll();
-  if (route.path !== '/repositories') {
-    void router.push('/repositories');
+  if (route.path !== '/ask') {
+    void router.push('/ask');
   } else {
-    workspaceTabs.open({ name: 'repositories', title: '仓库管理', fullPath: route.fullPath });
+    workspaceTabs.open({ name: 'ask', title: '代码问答', fullPath: route.fullPath });
   }
 }
 watch(() => route.fullPath, () => {
@@ -73,7 +73,7 @@ onMounted(() => {
 </script>
 
 <template><div class="app-shell">
-  <aside class="sidebar"><RouterLink class="brand" to="/repositories"><span class="brand-mark"><ProductLogo /></span><span>代码知识平台</span></RouterLink>
+  <aside class="sidebar"><RouterLink class="brand" to="/ask"><span class="brand-mark"><ProductLogo /></span><span>代码知识平台</span></RouterLink>
     <nav class="nav-list" aria-label="主导航"><RouterLink v-for="item in navItems" :key="item.to" class="nav-link" :to="item.to"><component :is="item.icon" :size="16" /><span>{{ item.label }}</span></RouterLink></nav>
   </aside>
   <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" clearable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
