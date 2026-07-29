@@ -99,31 +99,24 @@
         SELECT c.id,c.revision,CONCAT(c.title,E'\n',c.content,E'\n',ARRAY_TO_STRING(c.tags,' ')) content
         FROM knowledge_cards c LEFT JOIN knowledge_card_embeddings e ON e.card_id=c.id
         WHERE c.repo_id=#{repositoryId} AND c.status='PUBLISHED'
-        AND(e.card_id IS NULL OR e.revision&lt;&gt;c.revision)
+        AND(e.card_id IS NULL OR e.revision&lt;&gt;c.revision OR e.model&lt;&gt;#{model})
     </select>
     <insert id="upsertKnowledgeEmbedding">
-        INSERT INTO knowledge_card_embeddings(card_id,repo_id,revision,embedding,content_hash)
-        VALUES(#{cardId},#{repositoryId},#{revision},CAST(#{vector} AS vector),#{contentHash})
+        INSERT INTO knowledge_card_embeddings(card_id,repo_id,revision,model,embedding,content_hash)
+        VALUES(#{cardId},#{repositoryId},#{revision},#{model},CAST(#{vector} AS vector),#{contentHash})
         ON CONFLICT(card_id) DO UPDATE SET revision=EXCLUDED.revision,embedding=EXCLUDED.embedding,
-        content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
+        model=EXCLUDED.model,content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
     </insert>
 
-    <select id="backups" resultType="map">SELECT id,status,checksum,created_at,restored_at FROM backup_sets ORDER BY created_at DESC</select>
-    <select id="backupKnowledge" resultType="map">SELECT * FROM knowledge_cards</select>
-    <select id="backupRepositories" resultType="map">SELECT id,name,source_type,current_snapshot_id FROM repositories WHERE deleted_at IS NULL</select>
-    <select id="backupAccounts" resultType="map">SELECT id,username,display_name,account_role,enabled FROM accounts</select>
-    <insert id="insertBackup">INSERT INTO backup_sets(id,status,manifest,checksum,created_by) VALUES(#{id},'READY',CAST(#{manifest} AS jsonb),#{checksum},#{actorId})</insert>
-    <select id="backupManifest" resultType="string">SELECT manifest::text FROM backup_sets WHERE id=#{id} AND status='READY'</select>
-    <select id="backupChecksum" resultType="string">SELECT checksum FROM backup_sets WHERE id=#{id}</select>
-    <delete id="clearSessions">DELETE FROM login_sessions</delete>
-    <update id="markRestored">UPDATE backup_sets SET restored_at=CURRENT_TIMESTAMP WHERE id=#{id}</update>
     <select id="missingEmbeddings" resultType="map">
         SELECT c.id,c.content,c.content_hash FROM code_chunks c LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
-        WHERE c.repo_id=#{repositoryId} AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash)
+        WHERE c.repo_id=#{repositoryId}
+        AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash OR e.model&lt;&gt;#{model})
     </select>
     <insert id="upsertEmbedding">
         INSERT INTO chunk_embeddings(chunk_id,repo_id,model,dimension,embedding,content_hash)
-        VALUES(#{chunkId},#{repositoryId},'local-hash-64',64,CAST(#{vector} AS vector),#{contentHash})
-        ON CONFLICT(chunk_id) DO UPDATE SET embedding=EXCLUDED.embedding,content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
+        VALUES(#{chunkId},#{repositoryId},#{model},64,CAST(#{vector} AS vector),#{contentHash})
+        ON CONFLICT(chunk_id) DO UPDATE SET model=EXCLUDED.model,embedding=EXCLUDED.embedding,
+        content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
     </insert>
 </mapper>

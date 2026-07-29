@@ -139,6 +139,57 @@ public class OpenAiCompatibleClient {
         );
     }
 
+    public String embed(
+        String baseUrl,
+        String model,
+        String apiKey,
+        String input,
+        int dimension,
+        int requestTimeoutMs
+    ) {
+        URI baseUri = endpointPolicy.validateAndResolve(baseUrl);
+        HttpClient http = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofMillis(Math.min(requestTimeoutMs, 10000)))
+            .followRedirects(HttpClient.Redirect.NEVER)
+            .build();
+        ObjectNode payload = json.createObjectNode();
+        payload.put("model", model);
+        payload.put("input", input);
+        payload.put("dimensions", dimension);
+        long deadline = System.nanoTime() + Duration.ofMillis(requestTimeoutMs).toNanos();
+        try {
+            HttpResponse<String> response = http.send(
+                request(baseUri, "/embeddings", apiKey, deadline)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            requireAllowedStatus(response.statusCode(), response.body());
+            JsonNode values = json.readTree(response.body()).path("data").path(0).path("embedding");
+            if (!values.isArray() || values.size() != dimension) {
+                throw new LlmConnectionException(
+                    "VECTOR_DIMENSION_INCOMPATIBLE",
+                    "向量模型返回维度与当前索引不兼容，要求 " + dimension + " 维"
+                );
+            }
+            StringBuilder vector = new StringBuilder("[");
+            for (int index = 0; index < values.size(); index++) {
+                JsonNode value = values.get(index);
+                if (!value.isNumber() || !Double.isFinite(value.asDouble())) {
+                    throw new LlmConnectionException("LLM_PROTOCOL_INVALID", "向量模型返回了无效数值");
+                }
+                if (index > 0) vector.append(',');
+                vector.append(value.asDouble());
+            }
+            return vector.append(']').toString();
+        } catch (LlmConnectionException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw mapTransport(exception);
+        }
+    }
+
     private String generate(
         HttpClient client,
         URI baseUri,

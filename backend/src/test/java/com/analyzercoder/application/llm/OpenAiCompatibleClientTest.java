@@ -44,6 +44,15 @@ class OpenAiCompatibleClientTest {
                 );
             }
         });
+        server.createContext("/v1/embeddings", exchange -> {
+            StringBuilder values = new StringBuilder();
+            for (int index = 0; index < 64; index++) {
+                if (index > 0) values.append(',');
+                values.append(index / 64.0);
+            }
+            respond(exchange, 200, "application/json",
+                "{\"data\":[{\"embedding\":[" + values + "]}]}");
+        });
         server.start();
     }
 
@@ -86,6 +95,26 @@ class OpenAiCompatibleClientTest {
         assertEquals("AVAILABLE", result.availability());
         assertTrue(stages.stream().anyMatch(stage -> stage.stage().equals("AUTHENTICATE")));
         assertTrue(stages.stream().anyMatch(stage -> stage.stage().equals("STREAM_FIRST_TOKEN")));
+    }
+
+    @Test
+    void readsOpenAiCompatibleEmbeddingWithRequiredDimension() {
+        OpenAiCompatibleClient client = new OpenAiCompatibleClient(
+            new ObjectMapper(),
+            new LlmEndpointPolicy(true)
+        );
+
+        String vector = client.embed(
+            "http://localhost:" + server.getAddress().getPort() + "/v1",
+            "embedding-model",
+            "test-key",
+            "sample code",
+            64,
+            5000
+        );
+
+        assertTrue(vector.startsWith("[0.0,0.015625"));
+        assertEquals(64, vector.substring(1, vector.length() - 1).split(",").length);
     }
 
     private static void respond(

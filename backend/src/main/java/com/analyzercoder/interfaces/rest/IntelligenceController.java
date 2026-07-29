@@ -82,15 +82,6 @@ public class IntelligenceController {
         var account = SecurityContext.requireAdmin(request); return service.saveSettings(account.id(), body);
     }
 
-    @GetMapping("/backups")
-    public List<IntelligenceService.BackupView> backups(HttpServletRequest request) { SecurityContext.requireAdmin(request); return service.backups(); }
-
-    @PostMapping("/backups")
-    public IntelligenceService.BackupView backup(HttpServletRequest request) { var account = SecurityContext.requireAdmin(request); return service.createBackup(account.id()); }
-
-    @PostMapping("/backups/{id}/restore")
-    public void restore(@PathVariable UUID id, HttpServletRequest request) { SecurityContext.requireAdmin(request); service.restoreBackup(id); }
-
     private com.analyzercoder.security.AuthenticatedAccount require(HttpServletRequest request, UUID repoId, RepositoryPermission permission) {
         var account = SecurityContext.account(request); access.require(account, CodeRepositoryId.of(repoId), permission); return account;
     }

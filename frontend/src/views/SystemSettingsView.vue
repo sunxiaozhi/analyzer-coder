@@ -1,32 +1,37 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Activity, Check, KeyRound, Power, Save, Server, ShieldCheck, Unplug } from 'lucide-vue-next';
-import { intelligenceApi, type Backup } from '@/api/intelligence';
+import {
+  Activity, ArrowRightLeft, Box, Check, CirclePlus, Cpu, Database, KeyRound,
+  Pencil, Power, Save, Server, ShieldCheck, Unplug,
+} from 'lucide-vue-next';
+import { intelligenceApi } from '@/api/intelligence';
 import {
   llmSettingsApi,
-  type LlmAvailability,
   type LlmConnectivityCheck,
   type LlmProvider,
   type LlmProviderInput,
+  type VectorModel,
+  type VectorModelInput,
 } from '@/api/llmSettings';
 
-const tab = shallowRef('基础设置');
-const tabs = ['基础设置', '模型与检索', '排除规则', '备份恢复'];
+const section = shallowRef<'generation' | 'vector'>('generation');
+const providers = shallowRef<LlmProvider[]>([]);
+const vectorModels = shallowRef<VectorModel[]>([]);
 const settings = reactive<Record<string, string>>({});
-const backups = shallowRef<Backup[]>([]);
-const busy = shallowRef(false);
-const provider = shallowRef<LlmProvider | null>(null);
-const check = shallowRef<LlmConnectivityCheck | null>(null);
-const savingProvider = shallowRef(false);
-const checking = computed(() => check.value?.status === 'QUEUED' || check.value?.status === 'RUNNING');
-const formDirty = shallowRef(false);
+const loading = shallowRef(false);
+const saving = shallowRef(false);
+const checkingId = shallowRef<string | null>(null);
+const providerDialog = shallowRef(false);
+const vectorDialog = shallowRef(false);
+const editingProviderId = shallowRef<string | null>(null);
+const editingVectorId = shallowRef<string | null>(null);
 const apiKey = ref('');
+const vectorApiKey = ref('');
 let checkTimer: number | undefined;
-let hydratingProvider = false;
 
 const providerForm = reactive<LlmProviderInput>({
-  name: '团队模型服务',
+  name: '',
   providerType: 'OPENAI_COMPATIBLE',
   baseUrl: '',
   model: '',
@@ -38,880 +43,396 @@ const providerForm = reactive<LlmProviderInput>({
   secretAction: 'CLEAR',
 });
 
-const stageDefinitions = [
-  ['VALIDATE_CONFIG', '配置'],
-  ['RESOLVE_AND_AUTHORIZE_TARGET', '目标'],
-  ['CONNECT_TLS', 'TLS'],
-  ['AUTHENTICATE', '鉴权'],
-  ['GENERATE_MINIMAL', '生成'],
-  ['STREAM_FIRST_TOKEN', '流式'],
-] as const;
+const vectorForm = reactive<VectorModelInput>({
+  name: '',
+  providerType: 'LOCAL_HASH',
+  baseUrl: '',
+  model: '',
+  dimension: 64,
+  requestTimeoutMs: 30000,
+  secretAction: 'CLEAR',
+});
 
-const availabilityCopy: Record<LlmAvailability, { label: string; note: string }> = {
-  UNCONFIGURED: { label: '未配置', note: '保存一个 Provider 后开始检测' },
-  UNTESTED: { label: '待检测', note: '配置已保存，但尚未验证连接' },
-  AVAILABLE: { label: '连接可用', note: '模型与流式能力均已验证' },
-  DEGRADED: { label: '部分可用', note: '基础生成可用，流式能力异常' },
-  UNAVAILABLE: { label: '连接不可用', note: '根据错误提示修正配置后重试' },
-};
+const activeProvider = computed(() => providers.value.find(item => item.active) ?? null);
 
-const availability = computed(() => provider.value?.availability ?? 'UNCONFIGURED');
-const canActivate = computed(
-  () =>
-    provider.value?.id &&
-    provider.value.availability === 'AVAILABLE' &&
-    provider.value.latestCheckId &&
-    provider.value.fingerprint &&
-    !formDirty.value,
-);
-
-function fillProvider(value: LlmProvider) {
-  provider.value = value;
-  if (!value.id) return;
-  hydratingProvider = true;
-  Object.assign(providerForm, {
-    name: value.name,
-    providerType: value.providerType,
-    baseUrl: value.baseUrl,
-    model: value.model,
-    connectTimeoutMs: value.connectTimeoutMs,
-    requestTimeoutMs: value.requestTimeoutMs,
-    maxOutputTokens: value.maxOutputTokens,
-    temperature: value.temperature,
-    streamingEnabled: value.streamingEnabled,
-    secretAction: value.secretConfigured ? 'KEEP' : 'CLEAR',
-  });
-  apiKey.value = '';
-  formDirty.value = false;
-  queueMicrotask(() => {
-    hydratingProvider = false;
-    formDirty.value = false;
-  });
-}
+const availabilityCopy = {
+  UNCONFIGURED: ['未配置', 'neutral'],
+  UNTESTED: ['待检测', 'pending'],
+  AVAILABLE: ['可用', 'available'],
+  DEGRADED: ['部分可用', 'warning'],
+  UNAVAILABLE: ['不可用', 'danger'],
+} as const;
 
 async function load() {
-  const [loadedSettings, loadedBackups, loadedProvider] = await Promise.all([
-    intelligenceApi.settings(),
-    intelligenceApi.backups(),
-    llmSettingsApi.provider(),
-  ]);
-  Object.assign(settings, loadedSettings);
-  backups.value = loadedBackups;
-  fillProvider(loadedProvider);
-  if (loadedProvider.latestCheckId) {
-    check.value = await llmSettingsApi.check(loadedProvider.latestCheckId).catch(() => null);
+  loading.value = true;
+  try {
+    const [loadedSettings, loadedProviders, loadedVectors] = await Promise.all([
+      intelligenceApi.settings(),
+      llmSettingsApi.providers(),
+      llmSettingsApi.vectorModels(),
+    ]);
+    Object.assign(settings, loadedSettings);
+    providers.value = loadedProviders;
+    vectorModels.value = loadedVectors;
+  } finally {
+    loading.value = false;
   }
 }
 
-async function saveSettings(message = '配置已持久化') {
-  busy.value = true;
-  try {
-    Object.assign(settings, await intelligenceApi.saveSettings({ ...settings }));
-    ElMessage.success(message);
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败');
-  } finally {
-    busy.value = false;
-  }
+function openCreateProvider() {
+  editingProviderId.value = null;
+  Object.assign(providerForm, {
+    name: '', providerType: 'OPENAI_COMPATIBLE', baseUrl: '', model: '',
+    connectTimeoutMs: 5000, requestTimeoutMs: 60000, maxOutputTokens: 2048,
+    temperature: 0.2, streamingEnabled: true, secretAction: 'CLEAR',
+  });
+  apiKey.value = '';
+  providerDialog.value = true;
+}
+
+function openEditProvider(item: LlmProvider) {
+  editingProviderId.value = item.id;
+  Object.assign(providerForm, {
+    name: item.name,
+    providerType: item.providerType,
+    baseUrl: item.baseUrl,
+    model: item.model,
+    connectTimeoutMs: item.connectTimeoutMs,
+    requestTimeoutMs: item.requestTimeoutMs,
+    maxOutputTokens: item.maxOutputTokens,
+    temperature: item.temperature,
+    streamingEnabled: item.streamingEnabled,
+    secretAction: item.secretConfigured ? 'KEEP' : 'CLEAR',
+  });
+  apiKey.value = '';
+  providerDialog.value = true;
 }
 
 async function saveProvider() {
-  if (!providerForm.baseUrl.trim() || !providerForm.model.trim()) {
-    ElMessage.warning('请填写服务地址和模型标识');
-    return;
+  if (!providerForm.name.trim() || !providerForm.baseUrl.trim() || !providerForm.model.trim()) {
+    return ElMessage.warning('请填写名称、服务地址和模型标识');
   }
-  savingProvider.value = true;
+  saving.value = true;
   try {
     const input: LlmProviderInput = {
       ...providerForm,
-      secretAction: apiKey.value
-        ? 'REPLACE'
-        : provider.value?.secretConfigured
-          ? 'KEEP'
-          : 'CLEAR',
+      secretAction: apiKey.value ? 'REPLACE' : editingProviderId.value
+        ? providerForm.secretAction
+        : 'CLEAR',
       ...(apiKey.value ? { apiKey: apiKey.value } : {}),
     };
-    const saved = await llmSettingsApi.save(input);
-    fillProvider(saved);
-    check.value = null;
-    ElMessage.success('模型服务配置已保存，下一步请测试连接');
+    if (editingProviderId.value) {
+      await llmSettingsApi.updateProvider(editingProviderId.value, input);
+      ElMessage.success('模型备案已更新，请重新检测');
+    } else {
+      await llmSettingsApi.createProvider(input);
+      ElMessage.success('模型已备案');
+    }
+    providerDialog.value = false;
+    await load();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '模型服务配置保存失败');
+    ElMessage.error(error instanceof Error ? error.message : '保存失败');
   } finally {
     apiKey.value = '';
-    savingProvider.value = false;
+    saving.value = false;
   }
 }
 
-async function startCheck() {
-  if (!provider.value?.id) return ElMessage.warning('请先保存 Provider');
-  if (formDirty.value) return ElMessage.warning('配置有未保存修改，请先保存');
+async function testProvider(item: LlmProvider) {
+  if (!item.id) return;
+  checkingId.value = item.id;
   try {
-    check.value = await llmSettingsApi.startCheck(provider.value.id);
-    scheduleCheckPoll();
+    let result = await llmSettingsApi.startCheck(item.id);
+    const poll = async () => {
+      result = await llmSettingsApi.check(result.id);
+      if (['QUEUED', 'RUNNING'].includes(result.status)) {
+        checkTimer = window.setTimeout(() => void poll(), 700);
+        return;
+      }
+      checkingId.value = null;
+      await load();
+      if (result.status === 'SUCCEEDED' && result.availability === 'AVAILABLE') {
+        ElMessage.success(`${item.name} 连接检测通过`);
+      } else {
+        ElMessage.warning(result.errorSummary ?? '连接检测未通过');
+      }
+    };
+    await poll();
   } catch (error) {
+    checkingId.value = null;
     ElMessage.error(error instanceof Error ? error.message : '无法开始连接检测');
   }
 }
 
-function scheduleCheckPoll() {
-  window.clearTimeout(checkTimer);
-  if (!check.value || !['QUEUED', 'RUNNING'].includes(check.value.status)) return;
-  checkTimer = window.setTimeout(async () => {
-    try {
-      if (!check.value) return;
-      check.value = await llmSettingsApi.check(check.value.id);
-      if (['QUEUED', 'RUNNING'].includes(check.value.status)) {
-        scheduleCheckPoll();
-      } else {
-        const loaded = await llmSettingsApi.provider();
-        fillProvider(loaded);
-        check.value = loaded.latestCheckId
-          ? await llmSettingsApi.check(loaded.latestCheckId)
-          : check.value;
-        if (check.value.status === 'SUCCEEDED' && check.value.availability === 'AVAILABLE') {
-          ElMessage.success('连接检测通过，可以启用 Provider');
-        } else if (check.value.status !== 'CANCELED') {
-          ElMessage.warning(check.value.errorSummary ?? '连接检测未通过');
-        }
-      }
-    } catch (error) {
-      ElMessage.error(error instanceof Error ? error.message : '连接检测状态读取失败');
-    }
-  }, 650);
-}
-
-async function cancelCheck() {
-  if (!check.value) return;
-  check.value = await llmSettingsApi.cancelCheck(check.value.id);
-  window.clearTimeout(checkTimer);
-  ElMessage.info('连接检测已取消');
-}
-
-async function activateProvider() {
-  const value = provider.value;
-  if (!value?.id || !value.latestCheckId || !value.fingerprint) return;
+async function activateProvider(item: LlmProvider) {
+  if (!item.id || !item.latestCheckId || !item.fingerprint) {
+    return ElMessage.warning('请先完成连接检测');
+  }
   try {
-    fillProvider(
-      await llmSettingsApi.activate(value.id, {
-        latestCheckId: value.latestCheckId,
-        fingerprint: value.fingerprint,
-        expectedActivationVersion: value.activationVersion,
-      }),
-    );
-    ElMessage.success('模型服务已启用');
+    await llmSettingsApi.activate(item.id, {
+      latestCheckId: item.latestCheckId,
+      fingerprint: item.fingerprint,
+      expectedActivationVersion: item.activationVersion,
+    });
+    await load();
+    ElMessage.success(`已切换到 ${item.name}`);
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '模型服务启用失败');
+    ElMessage.error(error instanceof Error ? error.message : '切换失败');
   }
 }
 
 async function deactivateProvider() {
-  if (!provider.value) return;
-  await ElMessageBox.confirm(
-    '停用后问答会立即回退到 deterministic-local。是否继续？',
-    '停用外部 Provider',
-    { type: 'warning', confirmButtonText: '停用', cancelButtonText: '取消' },
-  );
-  fillProvider(await llmSettingsApi.deactivate(provider.value.activationVersion));
-  ElMessage.success('外部 Provider 已停用');
+  const item = activeProvider.value;
+  if (!item) return;
+  await ElMessageBox.confirm('停用后问答将立即回退到本地模式。', '停用问答模型', {
+    type: 'warning', confirmButtonText: '停用', cancelButtonText: '取消',
+  });
+  await llmSettingsApi.deactivate(item.activationVersion);
+  await load();
+  ElMessage.success('问答模型已停用');
 }
 
-async function backup() {
-  busy.value = true;
+async function toggleOutbound() {
   try {
-    await intelligenceApi.backup();
-    await load();
-    ElMessage.success('一致性清单备份已生成');
-  } finally {
-    busy.value = false;
+    Object.assign(settings, await intelligenceApi.saveSettings({ ...settings }));
+    ElMessage.success('代码外发策略已更新');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '策略更新失败');
   }
 }
 
-async function restore(id: string) {
-  await ElMessageBox.confirm(
-    '恢复会使所有现有登录会话失效，是否继续？',
-    '确认恢复',
-    { type: 'warning' },
-  );
-  await intelligenceApi.restore(id);
-  ElMessage.success('备份校验通过，恢复点已应用，请重新登录');
-  location.href = '/login';
+function openCreateVector() {
+  editingVectorId.value = null;
+  Object.assign(vectorForm, {
+    name: '', providerType: 'LOCAL_HASH', baseUrl: '', model: '', dimension: 64,
+    requestTimeoutMs: 30000, secretAction: 'CLEAR',
+  });
+  vectorApiKey.value = '';
+  vectorDialog.value = true;
 }
 
-function stageState(stage: string) {
-  const result = check.value?.stages.find((item) => item.stage === stage);
-  if (result) return result.status.toLowerCase();
-  if (check.value?.currentStage === stage && checking.value) return 'running';
-  return 'pending';
+function openEditVector(item: VectorModel) {
+  editingVectorId.value = item.id;
+  Object.assign(vectorForm, {
+    name: item.name, providerType: item.providerType, model: item.model, dimension: item.dimension,
+    baseUrl: item.baseUrl ?? '', requestTimeoutMs: item.requestTimeoutMs,
+    secretAction: item.secretConfigured ? 'KEEP' : 'CLEAR',
+  });
+  vectorApiKey.value = '';
+  vectorDialog.value = true;
 }
 
-function stageDuration(stage: string) {
-  const result = check.value?.stages.find((item) => item.stage === stage);
-  return result ? `${result.durationMs}ms` : '—';
+async function saveVector() {
+  if (!vectorForm.name.trim() || !vectorForm.model.trim()) {
+    return ElMessage.warning('请填写名称和模型标识');
+  }
+  saving.value = true;
+  try {
+    const input: VectorModelInput = {
+      ...vectorForm,
+      secretAction: vectorApiKey.value ? 'REPLACE' : editingVectorId.value
+        ? vectorForm.secretAction : vectorForm.providerType === 'OPENAI_COMPATIBLE' ? 'REPLACE' : 'CLEAR',
+      ...(vectorApiKey.value ? { apiKey: vectorApiKey.value } : {}),
+    };
+    if (editingVectorId.value) {
+      await llmSettingsApi.updateVectorModel(editingVectorId.value, input);
+      ElMessage.success('向量模型备案已更新');
+    } else {
+      await llmSettingsApi.createVectorModel(input);
+      ElMessage.success('向量模型已备案');
+    }
+    vectorDialog.value = false;
+    await load();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '保存失败');
+  } finally {
+    vectorApiKey.value = '';
+    saving.value = false;
+  }
 }
 
-function formatTime(value: string | null | undefined) {
+async function activateVector(item: VectorModel) {
+  try {
+    await llmSettingsApi.activateVectorModel(item.id, item.activationVersion);
+    await load();
+    ElMessage.success(`已切换到 ${item.name}，后续检索会重建不匹配的向量`);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '切换失败');
+  }
+}
+
+function status(item: LlmProvider) {
+  return availabilityCopy[item.availability] ?? availabilityCopy.UNCONFIGURED;
+}
+
+function formatTime(value: string | null) {
   return value ? new Date(value).toLocaleString() : '尚无记录';
 }
 
-watch(
-  providerForm,
-  () => {
-    if (provider.value?.id && !hydratingProvider) formDirty.value = true;
-  },
-  { deep: true },
-);
-
-watch(apiKey, (value) => {
-  if (value) formDirty.value = true;
-});
-
-onMounted(() => {
-  void load().catch((error) =>
-    ElMessage.error(error instanceof Error ? error.message : '加载设置失败'),
-  );
-});
-
+onMounted(() => void load().catch(error =>
+  ElMessage.error(error instanceof Error ? error.message : '加载模型配置失败')));
 onBeforeUnmount(() => window.clearTimeout(checkTimer));
 </script>
 
 <template>
-  <section class="settings-design surface">
-    <aside class="settings-nav" aria-label="系统设置分类">
-      <button
-        v-for="item in tabs"
-        :key="item"
-        :class="{ active: tab === item }"
-        @click="tab = item"
-      >
-        {{ item }}
+  <section class="model-registry surface" v-loading="loading">
+    <nav class="registry-tabs" aria-label="模型类型">
+      <button :class="{ active: section === 'generation' }" @click="section = 'generation'">
+        <Cpu :size="16" />问答模型 <span>{{ providers.length }}</span>
       </button>
-    </aside>
+      <button :class="{ active: section === 'vector' }" @click="section = 'vector'">
+        <Database :size="16" />向量模型 <span>{{ vectorModels.length }}</span>
+      </button>
+    </nav>
 
-    <main class="settings-content">
-      <template v-if="tab === '模型与检索'">
-        <div class="settings-heading model-heading">
-          <div>
-            <span class="eyebrow">LLM CONTROL PLANE</span>
-            <h2>模型与检索</h2>
-            <p>保存、检测和启用相互独立。连接测试只发送固定探针，不携带代码。</p>
-          </div>
-          <div class="availability-pill" :data-state="availability">
-            <Activity :size="15" />
-            <span>{{ availabilityCopy[availability].label }}</span>
-          </div>
-        </div>
+    <main v-if="section === 'generation'" class="registry-body">
+      <div class="section-toolbar actions-only">
+        <el-button type="primary" @click="openCreateProvider"><CirclePlus :size="15" />新增模型</el-button>
+      </div>
 
-        <section class="connection-rail" aria-label="模型接入进度">
-          <div :class="{ complete: provider?.id }">
-            <span><Save :size="15" /></span>
-            <div><b>配置</b><small>{{ provider?.id ? `版本 ${provider.version}` : '尚未保存' }}</small></div>
-          </div>
-          <i></i>
-          <div :class="{ complete: availability === 'AVAILABLE', warning: availability === 'DEGRADED' }">
-            <span><ShieldCheck :size="15" /></span>
-            <div><b>检测</b><small>{{ availabilityCopy[availability].label }}</small></div>
-          </div>
-          <i></i>
-          <div :class="{ complete: provider?.activeConfigId }">
-            <span><Power :size="15" /></span>
+      <div v-if="providers.length" class="model-grid">
+        <article v-for="item in providers" :key="item.id ?? item.version" class="model-card" :class="{ active: item.active }">
+          <i class="signal-rail" :data-state="item.active ? 'active' : status(item)[1]"></i>
+          <header>
+            <div class="model-icon"><Server :size="18" /></div>
             <div>
-              <b>启用</b>
-              <small>
-                {{
-                  provider?.active
-                    ? '当前版本正在承接问答'
-                    : provider?.activeConfigId
-                      ? '上一有效版本仍在运行'
-                      : '仍使用本地模式'
-                }}
-              </small>
+              <h4>{{ item.name }}</h4>
+              <code>{{ item.model }}</code>
             </div>
-          </div>
-        </section>
-
-        <div class="model-grid">
-          <section class="provider-card">
-            <header>
-              <div>
-                <span class="card-index">CONFIGURATION</span>
-                <h3>Provider 配置</h3>
-              </div>
-              <span v-if="formDirty" class="dirty-mark">有未保存修改</span>
-            </header>
-
-            <el-form label-position="top" class="provider-form">
-              <div class="form-pair">
-                <el-form-item label="配置名称">
-                  <el-input v-model="providerForm.name" placeholder="团队模型服务" />
-                </el-form-item>
-                <el-form-item label="协议">
-                  <el-select v-model="providerForm.providerType">
-                    <el-option label="OpenAI-compatible" value="OPENAI_COMPATIBLE" />
-                  </el-select>
-                </el-form-item>
-              </div>
-              <el-form-item label="服务地址">
-                <el-input v-model="providerForm.baseUrl" placeholder="https://llm.example.com/v1">
-                  <template #prefix><Server :size="14" /></template>
-                </el-input>
-                <small>生产环境仅允许 HTTPS；地址、DNS 和实际 IP 会在检测时复核。</small>
-              </el-form-item>
-              <div class="form-pair">
-                <el-form-item label="模型标识">
-                  <el-input v-model="providerForm.model" placeholder="model-name" />
-                </el-form-item>
-                <el-form-item label="API Key">
-                  <el-input
-                    v-model="apiKey"
-                    type="password"
-                    show-password
-                    autocomplete="new-password"
-                    :placeholder="provider?.secretConfigured ? '已配置；留空表示保留' : '输入写入型密钥'"
-                  >
-                    <template #prefix><KeyRound :size="14" /></template>
-                  </el-input>
-                </el-form-item>
-              </div>
-              <div class="parameter-row">
-                <el-form-item label="连接超时">
-                  <el-input-number v-model="providerForm.connectTimeoutMs" :min="1000" :max="10000" :step="500" />
-                  <small>毫秒</small>
-                </el-form-item>
-                <el-form-item label="请求超时">
-                  <el-input-number v-model="providerForm.requestTimeoutMs" :min="3000" :max="120000" :step="1000" />
-                  <small>毫秒</small>
-                </el-form-item>
-                <el-form-item label="最大 Token">
-                  <el-input-number v-model="providerForm.maxOutputTokens" :min="1" :max="32768" :step="256" />
-                </el-form-item>
-                <el-form-item label="Temperature">
-                  <el-input-number v-model="providerForm.temperature" :min="0" :max="2" :step="0.1" />
-                </el-form-item>
-              </div>
-              <div class="switch-row">
-                <div>
-                  <b>检测流式输出</b>
-                  <small>连接测试会验证首个 Token 和 SSE 帧格式。</small>
-                </div>
-                <el-switch v-model="providerForm.streamingEnabled" />
-              </div>
-              <div class="card-actions">
-                <el-button type="primary" :loading="savingProvider" @click="saveProvider">
-                  <Save :size="14" />保存 Provider
-                </el-button>
-                <span>保存不会自动检测或启用。</span>
-              </div>
-            </el-form>
-          </section>
-
-          <section class="diagnostic-card">
-            <header>
-              <div>
-                <span class="card-index">CONNECTIVITY</span>
-                <h3>连接诊断</h3>
-              </div>
-              <span class="request-id" v-if="check"># {{ check.requestId.slice(0, 8) }}</span>
-            </header>
-
-            <div class="diagnostic-summary" :data-state="check?.availability ?? availability">
-              <div class="signal">
-                <Check v-if="check?.availability === 'AVAILABLE'" :size="20" />
-                <Unplug v-else :size="20" />
-              </div>
-              <div>
-                <b>{{ availabilityCopy[check?.availability ?? availability].label }}</b>
-                <p>{{ check?.errorSummary ?? availabilityCopy[check?.availability ?? availability].note }}</p>
-              </div>
-            </div>
-
-            <div class="stage-list">
-              <div v-for="[stage, label] in stageDefinitions" :key="stage" :data-state="stageState(stage)">
-                <span class="stage-dot"></span>
-                <b>{{ label }}</b>
-                <small>{{ stageDuration(stage) }}</small>
-              </div>
-            </div>
-
-            <dl class="diagnostic-meta">
-              <div><dt>最近成功</dt><dd>{{ formatTime(provider?.lastSuccessAt) }}</dd></div>
-              <div><dt>首 Token</dt><dd>{{ check?.firstTokenDurationMs ? `${check.firstTokenDurationMs}ms` : '—' }}</dd></div>
-              <div><dt>错误码</dt><dd class="mono">{{ check?.errorCode ?? provider?.lastErrorCode ?? '—' }}</dd></div>
-              <div><dt>熔断器</dt><dd>{{ provider?.breakerState === 'OPEN' ? '已打开' : '关闭' }}</dd></div>
-            </dl>
-
-            <div class="diagnostic-actions">
-              <el-button v-if="!checking" :disabled="!provider?.id || formDirty" @click="startCheck">
-                <Activity :size="14" />测试连接
+            <span class="state-pill" :data-state="status(item)[1]">
+              <Check v-if="item.availability === 'AVAILABLE'" :size="12" />
+              <Unplug v-else :size="12" />{{ status(item)[0] }}
+            </span>
+          </header>
+          <dl>
+            <div><dt>协议</dt><dd>OpenAI-compatible</dd></div>
+            <div><dt>服务地址</dt><dd>{{ item.baseUrl }}</dd></div>
+            <div><dt>最近成功</dt><dd>{{ formatTime(item.lastSuccessAt) }}</dd></div>
+            <div><dt>输出上限</dt><dd>{{ item.maxOutputTokens }} tokens</dd></div>
+          </dl>
+          <footer>
+            <span v-if="item.active" class="active-label"><Power :size="13" />当前启用</span>
+            <el-button v-else text :disabled="item.availability !== 'AVAILABLE'" @click="activateProvider(item)">
+              <ArrowRightLeft :size="14" />切换使用
+            </el-button>
+            <div class="card-actions">
+              <el-button text :loading="checkingId === item.id" @click="testProvider(item)">
+                <Activity :size="14" />检测
               </el-button>
-              <el-button v-else type="danger" plain @click="cancelCheck">取消检测</el-button>
-              <el-button
-                v-if="!provider?.active"
-                type="primary"
-                :disabled="!canActivate"
-                @click="activateProvider"
-              >
-                <Power :size="14" />启用 Provider
+              <el-button text :disabled="item.active" @click="openEditProvider(item)">
+                <Pencil :size="14" />编辑
               </el-button>
-              <el-button v-if="provider?.activeConfigId" type="danger" plain @click="deactivateProvider">停用</el-button>
             </div>
-          </section>
-        </div>
+          </footer>
+        </article>
+      </div>
+      <div v-else class="empty-registry">
+        <Box :size="28" /><b>尚未备案问答模型</b><p>新增配置后先检测连接，再切换为系统模型。</p>
+      </div>
 
-        <section class="outbound-policy">
-          <div>
-            <ShieldCheck :size="18" />
-            <div>
-              <b>允许发送检索命中的代码片段</b>
-              <p>Provider 启用后仍需此全局策略允许；测试连接不会改变该开关。</p>
-            </div>
-          </div>
-          <el-switch
-            v-model="settings.externalModelEnabled"
-            active-value="true"
-            inactive-value="false"
-            @change="saveSettings('外发策略已更新')"
-          />
-        </section>
-      </template>
-
-      <template v-else>
-        <div class="settings-heading">
-          <h2>{{ tab }}</h2>
-          <p>配置保存在 PostgreSQL 中，修改模型或过滤规则后应重建相应索引。</p>
-        </div>
-
-        <el-form v-if="tab === '基础设置'" label-position="top">
-          <el-form-item label="最大检索结果数">
-            <el-input v-model="settings.maxSearchResults" />
-          </el-form-item>
-          <el-form-item label="备份保留天数">
-            <el-input v-model="settings.backupRetentionDays" />
-          </el-form-item>
-          <el-button type="primary" :loading="busy" @click="saveSettings()">保存设置</el-button>
-        </el-form>
-
-        <el-form v-else-if="tab === '排除规则'" label-position="top">
-          <el-form-item label="敏感文件排除">
-            <el-input v-model="settings.excludedPatterns" type="textarea" :rows="5" />
-          </el-form-item>
-          <el-button type="primary" :loading="busy" @click="saveSettings('排除规则已保存')">保存规则</el-button>
-        </el-form>
-
-        <div v-else>
-          <div class="toolbar">
-            <el-button type="primary" :loading="busy" @click="backup">立即创建备份</el-button>
-          </div>
-          <el-table :data="backups">
-            <el-table-column prop="status" label="状态" width="100" />
-            <el-table-column label="校验和">
-              <template #default="{ row }"><span class="mono">{{ row.checksum.slice(0, 16) }}…</span></template>
-            </el-table-column>
-            <el-table-column label="创建时间" width="190">
-              <template #default="{ row }">{{ new Date(row.createdAt).toLocaleString() }}</template>
-            </el-table-column>
-            <el-table-column label="恢复时间" width="190">
-              <template #default="{ row }">{{ row.restoredAt ? new Date(row.restoredAt).toLocaleString() : '—' }}</template>
-            </el-table-column>
-            <el-table-column label="操作" width="100">
-              <template #default="{ row }"><el-button link type="danger" @click="restore(row.id)">校验并恢复</el-button></template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </template>
+      <section class="policy-row">
+        <div><ShieldCheck :size="18" /><span><b>允许发送检索命中的代码片段</b><small>模型启用后仍需此策略允许。</small></span></div>
+        <el-switch v-model="settings.externalModelEnabled" active-value="true" inactive-value="false" @change="toggleOutbound" />
+      </section>
+      <el-button v-if="activeProvider" class="deactivate-button" type="danger" plain @click="deactivateProvider">
+        停用当前问答模型
+      </el-button>
     </main>
+
+    <main v-else class="registry-body">
+      <div class="section-toolbar actions-only">
+        <el-button type="primary" @click="openCreateVector"><CirclePlus :size="15" />新增向量模型</el-button>
+      </div>
+      <div v-if="vectorModels.length" class="model-grid vector-grid">
+        <article v-for="item in vectorModels" :key="item.id" class="model-card" :class="{ active: item.active }">
+          <i class="signal-rail" :data-state="item.active ? 'active' : item.providerType === 'OPENAI_COMPATIBLE' ? 'external' : 'available'"></i>
+          <header>
+            <div class="model-icon vector"><Database :size="18" /></div>
+            <div><h4>{{ item.name }}</h4><code>{{ item.model }}</code></div>
+            <span v-if="item.active" class="state-pill" data-state="available"><Check :size="12" />使用中</span>
+          </header>
+          <dl>
+            <div><dt>运行方式</dt><dd>{{ item.providerType === 'LOCAL_HASH' ? '本地确定性' : '外部 API' }}</dd></div>
+            <div><dt>向量维度</dt><dd>{{ item.dimension }}</dd></div>
+            <div><dt>数据外发</dt><dd>{{ item.providerType === 'LOCAL_HASH' ? '无' : '索引文本' }}</dd></div>
+            <div><dt>备案时间</dt><dd>{{ formatTime(item.createdAt) }}</dd></div>
+          </dl>
+          <footer>
+            <span v-if="item.active" class="active-label"><Power :size="13" />当前启用</span>
+            <el-button v-else text @click="activateVector(item)"><ArrowRightLeft :size="14" />切换使用</el-button>
+            <el-button text :disabled="item.active" @click="openEditVector(item)"><Pencil :size="14" />编辑</el-button>
+          </footer>
+        </article>
+      </div>
+      <div v-else class="empty-registry">
+        <Database :size="28" />
+        <b>尚未备案向量模型</b>
+        <p>新增配置后先检测连接，再切换为系统模型。</p>
+      </div>
+    </main>
+
+    <el-dialog v-model="providerDialog" :title="editingProviderId ? '编辑问答模型' : '新增问答模型'" width="680px" destroy-on-close>
+      <el-form label-position="top" class="dialog-form">
+        <div class="form-pair">
+          <el-form-item label="备案名称"><el-input v-model="providerForm.name" placeholder="例如：生产问答模型" /></el-form-item>
+          <el-form-item label="协议"><el-select v-model="providerForm.providerType"><el-option label="OpenAI-compatible" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
+        </div>
+        <el-form-item label="服务地址"><el-input v-model="providerForm.baseUrl" placeholder="https://llm.example.com/v1"><template #prefix><Server :size="14" /></template></el-input></el-form-item>
+        <div class="form-pair">
+          <el-form-item label="模型标识"><el-input v-model="providerForm.model" placeholder="model-name" /></el-form-item>
+          <el-form-item label="API Key"><el-input v-model="apiKey" type="password" show-password :placeholder="editingProviderId ? '留空保留现有密钥' : '可选'" ><template #prefix><KeyRound :size="14" /></template></el-input></el-form-item>
+        </div>
+        <div class="form-quad">
+          <el-form-item label="连接超时(ms)"><el-input-number v-model="providerForm.connectTimeoutMs" :min="1000" :max="10000" /></el-form-item>
+          <el-form-item label="请求超时(ms)"><el-input-number v-model="providerForm.requestTimeoutMs" :min="3000" :max="120000" /></el-form-item>
+          <el-form-item label="最大 Token"><el-input-number v-model="providerForm.maxOutputTokens" :min="1" :max="32768" /></el-form-item>
+          <el-form-item label="Temperature"><el-input-number v-model="providerForm.temperature" :min="0" :max="2" :step="0.1" /></el-form-item>
+        </div>
+        <div class="switch-field"><span><b>检测流式能力</b><small>连接检测会验证 SSE 与首 Token。</small></span><el-switch v-model="providerForm.streamingEnabled" /></div>
+      </el-form>
+      <template #footer><el-button @click="providerDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveProvider"><Save :size="14" />保存备案</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="vectorDialog" :title="editingVectorId ? '编辑向量模型' : '新增向量模型'" width="520px" destroy-on-close>
+      <el-form label-position="top" class="dialog-form">
+        <el-form-item label="备案名称"><el-input v-model="vectorForm.name" placeholder="例如：默认代码向量" /></el-form-item>
+        <el-form-item label="模型标识"><el-input v-model="vectorForm.model" :placeholder="vectorForm.providerType === 'LOCAL_HASH' ? 'local-hash-64' : 'text-embedding-model'" /></el-form-item>
+        <div class="form-pair">
+          <el-form-item label="运行方式"><el-select v-model="vectorForm.providerType"><el-option label="本地哈希" value="LOCAL_HASH" /><el-option label="OpenAI-compatible" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
+          <el-form-item label="向量维度"><el-input-number v-model="vectorForm.dimension" :min="64" :max="64" /></el-form-item>
+        </div>
+        <template v-if="vectorForm.providerType === 'OPENAI_COMPATIBLE'">
+          <el-form-item label="服务地址"><el-input v-model="vectorForm.baseUrl" placeholder="https://api.example.com/v1"><template #prefix><Server :size="14" /></template></el-input></el-form-item>
+          <div class="form-pair">
+            <el-form-item label="API Key"><el-input v-model="vectorApiKey" type="password" show-password :placeholder="editingVectorId ? '留空保留现有密钥' : '请输入 API Key'"><template #prefix><KeyRound :size="14" /></template></el-input></el-form-item>
+            <el-form-item label="请求超时(ms)"><el-input-number v-model="vectorForm.requestTimeoutMs" :min="3000" :max="120000" /></el-form-item>
+          </div>
+        </template>
+        <el-alert type="info" :closable="false" title="外部模型必须支持 dimensions=64，并返回 64 维 OpenAI-compatible embedding。" />
+      </el-form>
+      <template #footer><el-button @click="vectorDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveVector"><Save :size="14" />保存备案</el-button></template>
+    </el-dialog>
   </section>
 </template>
 
 <style scoped>
-.model-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.eyebrow,
-.card-index {
-  color: #75808d;
-  font: 600 10px/1.2 "SFMono-Regular", Consolas, monospace;
-  letter-spacing: 0.12em;
-}
-
-.model-heading h2 {
-  margin-top: 6px;
-}
-
-.availability-pill {
-  display: inline-flex;
-  gap: 7px;
-  align-items: center;
-  padding: 7px 10px;
-  color: #74520f;
-  font-size: 12px;
-  font-weight: 600;
-  background: #fff8e7;
-  border: 1px solid #ead79f;
-  border-radius: 999px;
-}
-
-.availability-pill[data-state="AVAILABLE"] {
-  color: #126442;
-  background: #edf9f3;
-  border-color: #a8d8c2;
-}
-
-.availability-pill[data-state="UNAVAILABLE"] {
-  color: #a13737;
-  background: #fff1f1;
-  border-color: #e7b8b8;
-}
-
-.connection-rail {
-  display: grid;
-  grid-template-columns: minmax(130px, 1fr) 36px minmax(130px, 1fr) 36px minmax(130px, 1fr);
-  align-items: center;
-  max-width: 760px;
-  margin: 0 0 22px;
-}
-
-.connection-rail > div {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  min-width: 0;
-  color: #7e8792;
-}
-
-.connection-rail > div > span {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  background: #f3f5f7;
-  border: 1px solid #dfe3e8;
-  border-radius: 50%;
-}
-
-.connection-rail > div.complete {
-  color: #176b4a;
-}
-
-.connection-rail > div.complete > span {
-  background: #ebf8f1;
-  border-color: #9fd4ba;
-}
-
-.connection-rail > div.warning {
-  color: #8a6417;
-}
-
-.connection-rail > div div {
-  display: grid;
-}
-
-.connection-rail b {
-  color: currentcolor;
-  font-size: 12px;
-}
-
-.connection-rail small {
-  overflow: hidden;
-  color: #8b929b;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connection-rail > i {
-  height: 1px;
-  margin: 0 8px;
-  background: #dfe3e8;
-}
-
-.model-grid {
-  display: grid;
-  grid-template-columns: minmax(440px, 1.45fr) minmax(300px, 0.8fr);
-  gap: 14px;
-  align-items: start;
-}
-
-.provider-card,
-.diagnostic-card,
-.outbound-policy {
-  background: #fff;
-  border: 1px solid #dfe3e8;
-  border-radius: 8px;
-}
-
-.provider-card > header,
-.diagnostic-card > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 66px;
-  padding: 14px 18px;
-  border-bottom: 1px solid #edf0f2;
-}
-
-.provider-card h3,
-.diagnostic-card h3 {
-  margin: 4px 0 0;
-  color: #24272b;
-  font-size: 15px;
-}
-
-.dirty-mark {
-  color: #936b1a;
-  font-size: 11px;
-}
-
-.provider-form {
-  max-width: none !important;
-  padding: 18px;
-}
-
-.form-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
-.parameter-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.parameter-row :deep(.el-input-number) {
-  width: 100%;
-}
-
-.provider-form small {
-  margin-top: 5px;
-}
-
-.switch-row,
-.card-actions,
-.outbound-policy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.switch-row {
-  min-height: 56px;
-  padding: 0 2px 16px;
-}
-
-.switch-row div {
-  display: grid;
-  gap: 3px;
-}
-
-.switch-row b,
-.outbound-policy b {
-  color: #34383d;
-  font-size: 12px;
-}
-
-.card-actions {
-  padding-top: 15px;
-  border-top: 1px solid #edf0f2;
-}
-
-.card-actions span {
-  color: #888f98;
-  font-size: 10px;
-}
-
-.request-id {
-  color: #808893;
-  font: 10px "SFMono-Regular", Consolas, monospace;
-}
-
-.diagnostic-summary {
-  display: grid;
-  grid-template-columns: 38px 1fr;
-  gap: 11px;
-  align-items: center;
-  margin: 16px;
-  padding: 13px;
-  background: #f7f8fa;
-  border: 1px solid #e5e8ec;
-  border-radius: 7px;
-}
-
-.signal {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  color: #8b6417;
-  background: #fff8e7;
-  border-radius: 7px;
-}
-
-.diagnostic-summary[data-state="AVAILABLE"] .signal {
-  color: #176b4a;
-  background: #e9f7f0;
-}
-
-.diagnostic-summary[data-state="UNAVAILABLE"] .signal {
-  color: #a33d3d;
-  background: #fff0f0;
-}
-
-.diagnostic-summary b {
-  font-size: 13px;
-}
-
-.diagnostic-summary p {
-  margin: 4px 0 0;
-  color: #727a84;
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.stage-list {
-  display: grid;
-  padding: 0 18px;
-}
-
-.stage-list > div {
-  display: grid;
-  grid-template-columns: 14px 1fr auto;
-  gap: 8px;
-  align-items: center;
-  min-height: 34px;
-  color: #747c86;
-  border-bottom: 1px solid #f0f2f4;
-}
-
-.stage-list b {
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.stage-list small {
-  margin: 0;
-  font: 10px "SFMono-Regular", Consolas, monospace;
-}
-
-.stage-dot {
-  width: 7px;
-  height: 7px;
-  background: #d9dde2;
-  border-radius: 50%;
-}
-
-.stage-list [data-state="running"] .stage-dot {
-  background: #337fc7;
-  box-shadow: 0 0 0 4px rgb(51 127 199 / 13%);
-}
-
-.stage-list [data-state="succeeded"] .stage-dot {
-  background: #2e966b;
-}
-
-.stage-list [data-state="failed"] .stage-dot {
-  background: #c55454;
-}
-
-.diagnostic-meta {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 16px 18px;
-}
-
-.diagnostic-meta div {
-  min-width: 0;
-}
-
-.diagnostic-meta dt {
-  color: #9298a0;
-  font-size: 9px;
-}
-
-.diagnostic-meta dd {
-  margin: 3px 0 0;
-  overflow: hidden;
-  color: #4f555d;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.diagnostic-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 14px 18px 18px;
-  border-top: 1px solid #edf0f2;
-}
-
-.outbound-policy {
-  margin-top: 14px;
-  padding: 15px 18px;
-}
-
-.outbound-policy > div {
-  display: flex;
-  gap: 11px;
-  align-items: center;
-}
-
-.outbound-policy svg {
-  color: #3675ad;
-}
-
-.outbound-policy p {
-  margin: 4px 0 0;
-  color: #7d858e;
-  font-size: 10px;
-}
-
-@media (max-width: 1080px) {
-  .model-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 760px) {
-  .settings-content {
-    padding: 20px 16px;
-  }
-
-  .connection-rail {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .connection-rail > i {
-    width: 1px;
-    height: 12px;
-    margin-left: 15px;
-  }
-
-  .form-pair,
-  .parameter-row {
-    grid-template-columns: 1fr;
-  }
-
-  .model-heading {
-    display: grid;
-  }
-
-  .outbound-policy {
-    align-items: flex-start;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stage-dot {
-    transition: none;
-  }
-}
+.model-registry{min-height:100%;overflow:auto;background:#f8fafc}
+.section-toolbar p{margin:0;color:#7a838d;font-size:12px}
+.registry-tabs{display:flex;gap:4px;padding:12px 28px 0;background:#fff;border-bottom:1px solid #e5e9ee}
+.registry-tabs button{display:flex;align-items:center;gap:8px;padding:11px 14px;border:0;border-bottom:2px solid transparent;background:none;color:#697580}
+.registry-tabs button.active{border-color:#1769aa;color:#155f99;font-weight:650}.registry-tabs span{padding:1px 6px;border-radius:10px;background:#eef2f5;font:10px Consolas}
+.registry-body{padding:24px 28px 32px}.section-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.section-toolbar h3{margin:0 0 5px;font-size:16px}
+.section-toolbar.actions-only{justify-content:flex-end}
+.model-grid{display:grid;grid-template-columns:repeat(2,minmax(330px,1fr));gap:13px}.model-card{position:relative;overflow:hidden;padding:17px 18px 0;border:1px solid #dfe5ea;border-radius:11px;background:#fff;box-shadow:0 1px 2px #18222d08}
+.model-card.active{border-color:#9fc3df;box-shadow:0 0 0 2px #2475b317}.signal-rail{position:absolute;inset:0 auto 0 0;width:4px;background:#cbd3da}.signal-rail[data-state=active]{background:#1769aa}.signal-rail[data-state=available]{background:#2e936b}.signal-rail[data-state=external]{background:#7356b5}.signal-rail[data-state=pending]{background:#d3972c}.signal-rail[data-state=warning]{background:#d2792c}.signal-rail[data-state=danger]{background:#c65353}
+.model-card header{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:11px;align-items:center}.model-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:9px;background:#edf4fa;color:#2f6f9f}.model-icon.vector{background:#eef6f1;color:#33785c}
+.model-card h4{margin:0 0 4px;font-size:14px}.model-card code{display:block;overflow:hidden;color:#6d7780;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.state-pill{display:flex;align-items:center;gap:4px;padding:4px 7px;border-radius:999px;background:#f0f2f4;color:#68727b;font-size:10px}.state-pill[data-state=available]{background:#eaf6f0;color:#247453}.state-pill[data-state=pending]{background:#fff5df;color:#996511}.state-pill[data-state=danger]{background:#fceeee;color:#a53f3f}
+.model-card dl{display:grid;grid-template-columns:1fr 1fr;gap:13px 18px;margin:18px 0}.model-card dt{color:#8a949d;font-size:9px;text-transform:uppercase}.model-card dd{margin:4px 0 0;overflow:hidden;color:#3f4952;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.model-card footer{display:flex;align-items:center;justify-content:space-between;min-height:48px;margin:0 -18px;padding:0 14px 0 18px;border-top:1px solid #edf0f2}.card-actions{display:flex}.active-label{display:flex;align-items:center;gap:5px;color:#1769aa;font-size:11px;font-weight:650}
+.policy-row{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding:14px 17px;border:1px solid #dfe5ea;border-radius:10px;background:#fff}.policy-row>div{display:flex;align-items:center;gap:10px}.policy-row span{display:grid;gap:3px}.policy-row small{color:#7e8790}
+.deactivate-button{margin-top:12px}.empty-registry{display:grid;place-items:center;gap:7px;padding:58px;border:1px dashed #cfd8df;border-radius:11px;color:#7b8791}.empty-registry p{margin:0;font-size:11px}
+.dialog-form{padding:2px 4px}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}.form-quad{display:grid;grid-template-columns:repeat(2,1fr);gap:0 14px}.switch-field{display:flex;align-items:center;justify-content:space-between;padding:12px 0}.switch-field span{display:grid;gap:4px}.switch-field small{color:#818991}
+@media(max-width:1000px){.model-grid{grid-template-columns:1fr}}
+@media(max-width:700px){.section-toolbar{align-items:flex-start;flex-direction:column}.registry-body{padding:18px 14px}.registry-tabs{padding-left:14px}.form-pair,.form-quad{grid-template-columns:1fr}}
 </style>

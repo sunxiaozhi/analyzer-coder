@@ -41,6 +41,22 @@ public interface LlmSettingsMapper {
         @Param("actorId") UUID actorId
     );
     int insertRuntimeState(@Param("configId") UUID configId);
+    int updateConfig(
+        @Param("id") UUID id,
+        @Param("name") String name,
+        @Param("providerType") String providerType,
+        @Param("baseUrl") String baseUrl,
+        @Param("model") String model,
+        @Param("connectTimeoutMs") int connectTimeoutMs,
+        @Param("requestTimeoutMs") int requestTimeoutMs,
+        @Param("maxOutputTokens") int maxOutputTokens,
+        @Param("temperature") double temperature,
+        @Param("streamingEnabled") boolean streamingEnabled,
+        @Param("secretVersionId") UUID secretVersionId,
+        @Param("fingerprint") String fingerprint,
+        @Param("actorId") UUID actorId
+    );
+    int resetRuntimeState(@Param("configId") UUID configId);
 
     Map<String, Object> activation();
     int activate(
@@ -97,4 +113,20 @@ public interface LlmSettingsMapper {
         @Param("threshold") int threshold
     );
     boolean externalModelEnabled();
+
+    List<Map<String, Object>> vectorModels();
+    Map<String, Object> vectorModel(@Param("id") UUID id);
+    Map<String, Object> activeVectorModel();
+    int insertVectorModel(@Param("id") UUID id, @Param("name") String name,
+        @Param("providerType") String providerType, @Param("baseUrl") String baseUrl,
+        @Param("model") String model, @Param("dimension") int dimension,
+        @Param("requestTimeoutMs") int requestTimeoutMs, @Param("secretVersionId") UUID secretVersionId,
+        @Param("actorId") UUID actorId);
+    int updateVectorModel(@Param("id") UUID id, @Param("name") String name,
+        @Param("providerType") String providerType, @Param("baseUrl") String baseUrl,
+        @Param("model") String model, @Param("dimension") int dimension,
+        @Param("requestTimeoutMs") int requestTimeoutMs, @Param("secretVersionId") UUID secretVersionId,
+        @Param("actorId") UUID actorId);
+    int activateVectorModel(@Param("id") UUID id, @Param("actorId") UUID actorId,
+        @Param("expectedVersion") long expectedVersion);
 }

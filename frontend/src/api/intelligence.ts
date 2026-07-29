@@ -53,7 +53,6 @@ export interface KnowledgeCard {
 }
 export interface CardInput { title: string; cardType: string; content: string; tags: string[]; status: string; attachmentIds: string[]; codeReferences: { chunkId: string }[] }
 export interface CardRevision { cardId: string; revision: number; repositoryId: string; title: string; cardType: string; content: string; renderedContent: string; tags: string[]; status: string; changedBy: string | null; changedAt: string }
-export interface Backup { id: string; status: string; checksum: string; createdAt: string; restoredAt: string | null }
 
 export const intelligenceApi = {
   ask: (repositoryId: string, question: string) => request<Answer>(`/api/repositories/${repositoryId}/ask`, {
@@ -77,7 +76,4 @@ export const intelligenceApi = {
   restoreCardRevision: (repositoryId: string, id: string, revision: number) => request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}/history/${revision}/restore`, { method: 'POST' }),
   settings: () => request<Record<string, string>>('/api/settings'),
   saveSettings: (input: Record<string, string>) => request<Record<string, string>>('/api/settings', { method: 'PUT', body: JSON.stringify(input) }),
-  backups: () => request<Backup[]>('/api/backups'),
-  backup: () => request<Backup>('/api/backups', { method: 'POST' }),
-  restore: (id: string) => request<void>(`/api/backups/${id}/restore`, { method: 'POST' }),
 };

@@ -35,6 +35,61 @@ public class LlmSettingsController {
         return service.versions();
     }
 
+    @GetMapping("/providers")
+    public List<LlmSettingsService.ProviderView> providers(HttpServletRequest request) {
+        SecurityContext.requireAdmin(request);
+        return service.providers();
+    }
+
+    @PostMapping("/providers")
+    public LlmSettingsService.ProviderView createProvider(
+        @RequestBody LlmSettingsService.ProviderInput body, HttpServletRequest request
+    ) {
+        var account = SecurityContext.requireAdmin(request);
+        return service.save(account.id(), body);
+    }
+
+    @PutMapping("/providers/{configId}")
+    public LlmSettingsService.ProviderView updateProvider(
+        @PathVariable UUID configId, @RequestBody LlmSettingsService.ProviderInput body,
+        HttpServletRequest request
+    ) {
+        var account = SecurityContext.requireAdmin(request);
+        return service.update(account.id(), configId, body);
+    }
+
+    @GetMapping("/vector-models")
+    public List<LlmSettingsService.VectorModelView> vectorModels(HttpServletRequest request) {
+        SecurityContext.requireAdmin(request);
+        return service.vectorModels();
+    }
+
+    @PostMapping("/vector-models")
+    public LlmSettingsService.VectorModelView createVectorModel(
+        @RequestBody LlmSettingsService.VectorModelInput body, HttpServletRequest request
+    ) {
+        var account = SecurityContext.requireAdmin(request);
+        return service.saveVectorModel(account.id(), body);
+    }
+
+    @PutMapping("/vector-models/{id}")
+    public LlmSettingsService.VectorModelView updateVectorModel(
+        @PathVariable UUID id, @RequestBody LlmSettingsService.VectorModelInput body,
+        HttpServletRequest request
+    ) {
+        var account = SecurityContext.requireAdmin(request);
+        return service.updateVectorModel(account.id(), id, body);
+    }
+
+    @PostMapping("/vector-models/{id}/activate")
+    public LlmSettingsService.VectorModelView activateVectorModel(
+        @PathVariable UUID id, @RequestParam long expectedActivationVersion,
+        HttpServletRequest request
+    ) {
+        var account = SecurityContext.requireAdmin(request);
+        return service.activateVectorModel(account.id(), id, expectedActivationVersion);
+    }
+
     @PutMapping("/provider")
     public LlmSettingsService.ProviderView save(
         @RequestBody LlmSettingsService.ProviderInput body,

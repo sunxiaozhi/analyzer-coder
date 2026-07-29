@@ -48,6 +48,32 @@ export interface LlmProviderInput {
   apiKey?: string;
 }
 
+export interface VectorModel {
+  id: string;
+  name: string;
+  providerType: 'LOCAL_HASH' | 'OPENAI_COMPATIBLE';
+  baseUrl: string | null;
+  model: string;
+  dimension: number;
+  requestTimeoutMs: number;
+  secretConfigured: boolean;
+  active: boolean;
+  activationVersion: number;
+  createdAt: string;
+  activatedAt: string | null;
+}
+
+export interface VectorModelInput {
+  name: string;
+  providerType: 'LOCAL_HASH' | 'OPENAI_COMPATIBLE';
+  baseUrl: string;
+  model: string;
+  dimension: number;
+  requestTimeoutMs: number;
+  secretAction: 'KEEP' | 'REPLACE' | 'CLEAR';
+  apiKey?: string;
+}
+
 export interface LlmCheckStage {
   stage: string;
   status: 'SUCCEEDED' | 'FAILED' | 'CANCELED';
@@ -77,6 +103,17 @@ export interface LlmConnectivityCheck {
 }
 
 export const llmSettingsApi = {
+  providers: () => request<LlmProvider[]>('/api/settings/llm/providers'),
+  createProvider: (input: LlmProviderInput) =>
+    request<LlmProvider>('/api/settings/llm/providers', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateProvider: (id: string, input: LlmProviderInput) =>
+    request<LlmProvider>(`/api/settings/llm/providers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
   provider: () => request<LlmProvider>('/api/settings/llm/provider'),
   versions: () => request<LlmProvider[]>('/api/settings/llm/provider/versions'),
   save: (input: LlmProviderInput) =>
@@ -106,6 +143,22 @@ export const llmSettingsApi = {
   deactivate: (expectedActivationVersion: number) =>
     request<LlmProvider>(
       `/api/settings/llm/provider/deactivate?expectedActivationVersion=${expectedActivationVersion}`,
+      { method: 'POST' },
+    ),
+  vectorModels: () => request<VectorModel[]>('/api/settings/llm/vector-models'),
+  createVectorModel: (input: VectorModelInput) =>
+    request<VectorModel>('/api/settings/llm/vector-models', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateVectorModel: (id: string, input: VectorModelInput) =>
+    request<VectorModel>(`/api/settings/llm/vector-models/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  activateVectorModel: (id: string, expectedActivationVersion: number) =>
+    request<VectorModel>(
+      `/api/settings/llm/vector-models/${id}/activate?expectedActivationVersion=${expectedActivationVersion}`,
       { method: 'POST' },
     ),
 };

@@ -57,6 +57,20 @@
     <insert id="insertRuntimeState">
         INSERT INTO llm_provider_runtime_states(config_id) VALUES(#{configId})
     </insert>
+    <update id="updateConfig">
+        UPDATE llm_provider_configs SET
+        name=#{name},provider_type=#{providerType},base_url=#{baseUrl},model=#{model},
+        connect_timeout_ms=#{connectTimeoutMs},request_timeout_ms=#{requestTimeoutMs},
+        max_output_tokens=#{maxOutputTokens},temperature=#{temperature},streaming_enabled=#{streamingEnabled},
+        secret_version_id=#{secretVersionId},fingerprint=#{fingerprint},created_by=#{actorId},
+        created_at=CURRENT_TIMESTAMP
+        WHERE id=#{id}
+    </update>
+    <update id="resetRuntimeState">
+        UPDATE llm_provider_runtime_states SET availability='UNTESTED',latest_check_id=NULL,
+        consecutive_failures=0,breaker_state='CLOSED',breaker_opened_at=NULL,last_error_code=NULL,
+        updated_at=CURRENT_TIMESTAMP WHERE config_id=#{configId}
+    </update>
 
     <select id="activation" resultType="map">
         SELECT active_config_id,activation_version,activated_at FROM llm_provider_activation WHERE singleton_id=1
@@ -165,4 +179,43 @@
         SELECT COALESCE((SELECT LOWER(setting_value)='true' FROM system_settings WHERE
         setting_key='externalModelEnabled'),FALSE)
     </select>
+
+    <select id="vectorModels" resultType="map">
+        SELECT c.id,c.name,c.provider_type,c.base_url,c.model,c.dimension,c.request_timeout_ms,
+        c.secret_version_id,c.created_at,
+        a.active_config_id,a.activation_version,a.activated_at
+        FROM vector_model_configs c CROSS JOIN vector_model_activation a
+        ORDER BY (c.id=a.active_config_id) DESC,c.created_at DESC
+    </select>
+    <select id="vectorModel" resultType="map">
+        SELECT c.id,c.name,c.provider_type,c.base_url,c.model,c.dimension,c.request_timeout_ms,
+        c.secret_version_id,c.created_at,
+        a.active_config_id,a.activation_version,a.activated_at
+        FROM vector_model_configs c CROSS JOIN vector_model_activation a WHERE c.id=#{id}
+    </select>
+    <select id="activeVectorModel" resultType="map">
+        SELECT c.id,c.name,c.provider_type,c.base_url,c.model,c.dimension,c.request_timeout_ms,
+        c.secret_version_id,c.created_at,
+        a.active_config_id,a.activation_version,a.activated_at
+        FROM vector_model_activation a JOIN vector_model_configs c ON c.id=a.active_config_id
+        WHERE a.singleton_id=1
+    </select>
+    <insert id="insertVectorModel">
+        INSERT INTO vector_model_configs(
+        id,name,provider_type,base_url,model,dimension,request_timeout_ms,secret_version_id,created_by,updated_by
+        ) VALUES(
+        #{id},#{name},#{providerType},#{baseUrl},#{model},#{dimension},#{requestTimeoutMs},
+        #{secretVersionId},#{actorId},#{actorId})
+    </insert>
+    <update id="updateVectorModel">
+        UPDATE vector_model_configs SET name=#{name},provider_type=#{providerType},base_url=#{baseUrl},
+        model=#{model},dimension=#{dimension},request_timeout_ms=#{requestTimeoutMs},
+        secret_version_id=#{secretVersionId},
+        updated_by=#{actorId},updated_at=CURRENT_TIMESTAMP WHERE id=#{id}
+    </update>
+    <update id="activateVectorModel">
+        UPDATE vector_model_activation SET active_config_id=#{id},activation_version=activation_version+1,
+        activated_by=#{actorId},activated_at=CURRENT_TIMESTAMP
+        WHERE singleton_id=1 AND activation_version=#{expectedVersion}
+    </update>
 </mapper>

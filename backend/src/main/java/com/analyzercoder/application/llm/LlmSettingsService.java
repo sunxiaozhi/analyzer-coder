@@ -93,11 +93,14 @@ public class LlmSettingsService {
         return mapper.configVersions().stream().map(this::providerView).toList();
     }
 
+    public List<ProviderView> providers() {
+        return versions();
+    }
+
     @Transactional
     public ProviderView save(UUID actorId, ProviderInput input) {
         ValidatedInput validated = validate(input);
-        Map<String, Object> latest = mapper.latestConfig();
-        SecretMaterial secret = resolveSecretForSave(actorId, input, latest);
+        SecretMaterial secret = resolveSecretForSave(actorId, input, null);
         long version = mapper.nextConfigVersion();
         UUID configId = UUID.randomUUID();
         String fingerprint = fingerprint(validated, secret.digest());
@@ -119,6 +122,84 @@ public class LlmSettingsService {
         );
         mapper.insertRuntimeState(configId);
         return providerView(requireConfig(configId));
+    }
+
+    @Transactional
+    public ProviderView update(UUID actorId, UUID configId, ProviderInput input) {
+        Map<String, Object> current = requireConfig(configId);
+        if (Objects.equals(configId, uuid(current, "active_config_id"))) {
+            throw new ApiSecurityException(409, "LLM_ACTIVE_CONFIG_IMMUTABLE", "请先切换或停用当前模型再编辑");
+        }
+        ValidatedInput validated = validate(input);
+        SecretMaterial secret = resolveSecretForSave(actorId, input, current);
+        String fingerprint = fingerprint(validated, secret.digest());
+        mapper.updateConfig(configId, validated.name(), validated.providerType(), validated.baseUrl(),
+            validated.model(), validated.connectTimeoutMs(), validated.requestTimeoutMs(),
+            validated.maxOutputTokens(), validated.temperature(), validated.streamingEnabled(),
+            secret.secretVersionId(), fingerprint, actorId);
+        mapper.resetRuntimeState(configId);
+        return providerView(requireConfig(configId));
+    }
+
+    public List<VectorModelView> vectorModels() {
+        return mapper.vectorModels().stream().map(this::vectorModelView).toList();
+    }
+
+    @Transactional
+    public VectorModelView saveVectorModel(UUID actorId, VectorModelInput input) {
+        VectorModelInput value = validateVectorModel(input);
+        UUID id = UUID.randomUUID();
+        UUID secretId = resolveVectorSecret(actorId, value, null);
+        mapper.insertVectorModel(id, value.name(), value.providerType(), value.baseUrl(), value.model(),
+            value.dimension(), value.requestTimeoutMs(), secretId, actorId);
+        return vectorModelView(mapper.vectorModel(id));
+    }
+
+    @Transactional
+    public VectorModelView updateVectorModel(UUID actorId, UUID id, VectorModelInput input) {
+        Map<String, Object> current = mapper.vectorModel(id);
+        if (current == null) throw new ApiSecurityException(404, "VECTOR_MODEL_NOT_FOUND", "向量模型不存在");
+        if (Objects.equals(id, uuid(current, "active_config_id"))) {
+            throw new ApiSecurityException(409, "VECTOR_MODEL_ACTIVE", "请先切换当前向量模型再编辑");
+        }
+        VectorModelInput value = validateVectorModel(input);
+        UUID secretId = resolveVectorSecret(actorId, value, current);
+        mapper.updateVectorModel(id, value.name(), value.providerType(), value.baseUrl(), value.model(),
+            value.dimension(), value.requestTimeoutMs(), secretId, actorId);
+        return vectorModelView(mapper.vectorModel(id));
+    }
+
+    @Transactional
+    public VectorModelView activateVectorModel(UUID actorId, UUID id, long expectedVersion) {
+        Map<String, Object> candidate = mapper.vectorModel(id);
+        if (candidate == null) {
+            throw new ApiSecurityException(404, "VECTOR_MODEL_NOT_FOUND", "向量模型不存在");
+        }
+        if ("OPENAI_COMPATIBLE".equals(string(candidate, "provider_type"))) {
+            client.embed(string(candidate, "base_url"), string(candidate, "model"),
+                readSecret(uuid(candidate, "secret_version_id")), "connection probe",
+                integer(candidate, "dimension", 64), integer(candidate, "request_timeout_ms", 30000));
+        }
+        if (mapper.activateVectorModel(id, actorId, expectedVersion) == 0) {
+            throw new ApiSecurityException(409, "VECTOR_MODEL_ACTIVATION_CONFLICT", "向量模型启用状态已变化，请刷新后重试");
+        }
+        return vectorModelView(mapper.vectorModel(id));
+    }
+
+    public String activeVectorModelName() {
+        Map<String, Object> row = mapper.activeVectorModel();
+        return row == null ? "local-hash-64" : string(row, "model");
+    }
+
+    public VectorEmbedding vectorize(String input) {
+        Map<String, Object> row = mapper.activeVectorModel();
+        if (row == null || "LOCAL_HASH".equals(string(row, "provider_type"))) {
+            return new VectorEmbedding(activeVectorModelName(), null);
+        }
+        String vector = client.embed(string(row, "base_url"), string(row, "model"),
+            readSecret(uuid(row, "secret_version_id")), input, integer(row, "dimension", 64),
+            integer(row, "request_timeout_ms", 30000));
+        return new VectorEmbedding(string(row, "model"), vector);
     }
 
     public CheckView startCheck(UUID actorId, ConnectivityCheckRequest request) {
@@ -467,6 +548,62 @@ public class LlmSettingsService {
         );
     }
 
+    private VectorModelInput validateVectorModel(VectorModelInput input) {
+        if (input == null) throw new ApiSecurityException(400, "VECTOR_MODEL_INVALID", "向量模型不能为空");
+        String name = clean(input.name(), 1, 100, "配置名称");
+        String providerType = input.providerType() == null
+            ? "LOCAL_HASH" : input.providerType().trim().toUpperCase(Locale.ROOT);
+        if (!List.of("LOCAL_HASH", "OPENAI_COMPATIBLE").contains(providerType)) {
+            throw new ApiSecurityException(400, "VECTOR_MODEL_INVALID", "不支持的向量模型协议");
+        }
+        String model = clean(input.model(), 1, 200, "模型标识");
+        int dimension = input.dimension() == null ? 64 : input.dimension();
+        if (dimension != 64) {
+            throw new ApiSecurityException(400, "VECTOR_DIMENSION_INCOMPATIBLE", "当前索引只兼容 64 维向量模型");
+        }
+        String baseUrl = null;
+        if ("OPENAI_COMPATIBLE".equals(providerType)) {
+            try {
+                baseUrl = endpointPolicy.normalize(input.baseUrl()).toString();
+            } catch (LlmConnectionException exception) {
+                throw new ApiSecurityException(400, exception.code(), exception.getMessage());
+            }
+        }
+        int timeout = value(input.requestTimeoutMs(), 30000, 3000, 120000, "请求超时");
+        return new VectorModelInput(name, providerType, baseUrl, model, dimension, timeout,
+            input.secretAction(), input.apiKey());
+    }
+
+    private UUID resolveVectorSecret(UUID actorId, VectorModelInput input, Map<String, Object> current) {
+        if ("LOCAL_HASH".equals(input.providerType())) return null;
+        String action = input.secretAction() == null ? "KEEP" : input.secretAction().toUpperCase(Locale.ROOT);
+        if ("KEEP".equals(action)) {
+            UUID existing = current == null ? null : uuid(current, "secret_version_id");
+            if (existing == null) {
+                throw new ApiSecurityException(400, "VECTOR_MODEL_INVALID", "外部向量模型需要 API Key");
+            }
+            return existing;
+        }
+        if (!"REPLACE".equals(action) || input.apiKey() == null || input.apiKey().isBlank()) {
+            throw new ApiSecurityException(400, "VECTOR_MODEL_INVALID", "外部向量模型需要 API Key");
+        }
+        LlmSecretCipher.EncryptedSecret encrypted = secretCipher.encrypt(input.apiKey().trim());
+        UUID secretId = UUID.randomUUID();
+        mapper.insertSecret(secretId, encrypted.cipherText(), encrypted.iv(), encrypted.digest(),
+            encrypted.algorithm(), actorId);
+        return secretId;
+    }
+
+    private VectorModelView vectorModelView(Map<String, Object> row) {
+        UUID id = uuid(row, "id");
+        UUID activeId = uuid(row, "active_config_id");
+        return new VectorModelView(id, string(row, "name"), string(row, "provider_type"),
+            string(row, "base_url"), string(row, "model"), integer(row, "dimension", 64),
+            integer(row, "request_timeout_ms", 30000), uuid(row, "secret_version_id") != null,
+            Objects.equals(id, activeId), number(row, "activation_version", 0),
+            instant(row, "created_at"), instant(row, "activated_at"));
+    }
+
     private CheckView checkView(Map<String, Object> row) {
         return new CheckView(
             uuid(row, "id"),
@@ -697,6 +834,13 @@ public class LlmSettingsService {
         String secretAction,
         String apiKey
     ) {}
+
+    public record VectorModelInput(String name, String providerType, String baseUrl, String model,
+        Integer dimension, Integer requestTimeoutMs, String secretAction, String apiKey) {}
+    public record VectorModelView(UUID id, String name, String providerType, String baseUrl, String model,
+        int dimension, int requestTimeoutMs, boolean secretConfigured, boolean active,
+        long activationVersion, Instant createdAt, Instant activatedAt) {}
+    public record VectorEmbedding(String model, String vector) {}
 
     public record ConnectivityCheckRequest(UUID configId, ProviderInput candidate) {}
     public record ActivationRequest(

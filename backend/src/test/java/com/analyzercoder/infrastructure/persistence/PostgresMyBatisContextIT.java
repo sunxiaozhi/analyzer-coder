@@ -38,8 +38,9 @@ class PostgresMyBatisContextIT {
     @Test void loadsFlywaySchemaAndExecutesRepresentativeMapperSql(){
         assertDoesNotThrow(()->{
             auth.accountCount();auth.listAccounts();repositories.findAll();governance.findEnabledAccounts();
-            tasks.findAll();captcha.failureCount("__mapper_smoke__");intelligence.settings();intelligence.backups();
+            tasks.findAll();captcha.failureCount("__mapper_smoke__");intelligence.settings();
             llmSettings.latestConfig();llmSettings.activation();llmSettings.externalModelEnabled();
+            llmSettings.vectorModels();llmSettings.activeVectorModel();
             var visible=repositories.findAll();if(!visible.isEmpty()){UUID id=visible.get(0).id();chunks.count(id,null);intelligence.cards(id,true);history.findHistory(id,UUID.randomUUID());}
         });
     }
