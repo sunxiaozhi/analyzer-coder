@@ -591,6 +591,7 @@ CREATE TABLE knowledge_card_embeddings (
     card_id UUID PRIMARY KEY REFERENCES knowledge_cards(id) ON DELETE CASCADE,
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
     revision INTEGER NOT NULL,
+    model VARCHAR(200) NOT NULL DEFAULT 'local-hash-64',
     embedding vector(64) NOT NULL,
     content_hash VARCHAR(64) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -600,7 +601,8 @@ COMMENT ON TABLE knowledge_card_embeddings IS '知识卡片当前修订的检索
 COMMENT ON COLUMN knowledge_card_embeddings.card_id IS '知识卡片标识';
 COMMENT ON COLUMN knowledge_card_embeddings.repo_id IS '所属仓库';
 COMMENT ON COLUMN knowledge_card_embeddings.revision IS '向量对应的知识修订号';
-COMMENT ON COLUMN knowledge_card_embeddings.embedding IS '本地语义检索向量';
+COMMENT ON COLUMN knowledge_card_embeddings.model IS '生成向量的模型标识';
+COMMENT ON COLUMN knowledge_card_embeddings.embedding IS '语义检索向量';
 COMMENT ON COLUMN knowledge_card_embeddings.content_hash IS '参与向量计算的内容摘要';
 COMMENT ON COLUMN knowledge_card_embeddings.created_at IS '向量生成时间';
 
@@ -702,25 +704,6 @@ COMMENT ON COLUMN system_settings.sensitive IS '读取时是否必须掩码';
 COMMENT ON COLUMN system_settings.updated_by IS '最后修改账号';
 COMMENT ON COLUMN system_settings.updated_at IS '最后更新时间';
 
-CREATE TABLE backup_sets (
-    id UUID PRIMARY KEY,
-    status VARCHAR(30) NOT NULL,
-    manifest JSONB NOT NULL,
-    checksum VARCHAR(64) NOT NULL,
-    created_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    restored_at TIMESTAMPTZ
-);
-
-COMMENT ON TABLE backup_sets IS '数据库内一致性清单及校验摘要，不是物理备份';
-COMMENT ON COLUMN backup_sets.id IS '清单唯一标识';
-COMMENT ON COLUMN backup_sets.status IS '清单状态';
-COMMENT ON COLUMN backup_sets.manifest IS '一致性清单内容';
-COMMENT ON COLUMN backup_sets.checksum IS '清单 SHA-256 摘要';
-COMMENT ON COLUMN backup_sets.created_by IS '创建账号';
-COMMENT ON COLUMN backup_sets.created_at IS '创建时间';
-COMMENT ON COLUMN backup_sets.restored_at IS '最近校验恢复时间';
-
 -- ============================================================================
 -- LLM provider configuration
 -- ============================================================================
@@ -743,6 +726,40 @@ COMMENT ON COLUMN encrypted_secret_versions.secret_digest IS '明文指纹摘要
 COMMENT ON COLUMN encrypted_secret_versions.algorithm IS '加密算法';
 COMMENT ON COLUMN encrypted_secret_versions.created_by IS '创建账号';
 COMMENT ON COLUMN encrypted_secret_versions.created_at IS '创建时间';
+
+CREATE TABLE vector_model_configs (
+    id UUID PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    provider_type VARCHAR(40) NOT NULL
+        CHECK (provider_type IN ('LOCAL_HASH', 'OPENAI_COMPATIBLE')),
+    base_url TEXT,
+    model VARCHAR(200) NOT NULL UNIQUE,
+    dimension INTEGER NOT NULL CHECK (dimension = 64),
+    request_timeout_ms INTEGER NOT NULL DEFAULT 30000
+        CHECK (request_timeout_ms BETWEEN 3000 AND 120000),
+    secret_version_id UUID REFERENCES encrypted_secret_versions(id),
+    created_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    updated_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE vector_model_configs IS '本地及外部向量模型备案';
+COMMENT ON COLUMN vector_model_configs.provider_type IS '向量模型运行方式';
+COMMENT ON COLUMN vector_model_configs.base_url IS '外部向量服务基础地址';
+COMMENT ON COLUMN vector_model_configs.model IS '向量模型标识';
+COMMENT ON COLUMN vector_model_configs.dimension IS '输出向量维度';
+COMMENT ON COLUMN vector_model_configs.secret_version_id IS '外部服务密钥版本';
+
+CREATE TABLE vector_model_activation (
+    singleton_id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (singleton_id = 1),
+    active_config_id UUID NOT NULL REFERENCES vector_model_configs(id),
+    activation_version BIGINT NOT NULL DEFAULT 0,
+    activated_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    activated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE vector_model_activation IS '系统当前启用的向量模型单例';
 
 CREATE SEQUENCE llm_provider_config_version_seq START WITH 1;
 COMMENT ON SEQUENCE llm_provider_config_version_seq IS 'LLM Provider 配置递增版本号';
@@ -955,12 +972,19 @@ CREATE TRIGGER trg_confirm_knowledge_code_version
 BEFORE INSERT OR UPDATE OF title, content, tags, status ON knowledge_cards
 FOR EACH ROW EXECUTE FUNCTION confirm_knowledge_code_version();
 
-INSERT INTO system_settings(setting_key, setting_value) VALUES
-    ('externalModelEnabled', 'false'),
-    ('embeddingModel', 'local-hash-64'),
-    ('llmProvider', 'deterministic-local'),
-    ('maxSearchResults', '20'),
-    ('excludedPatterns', '.env*,*.pem,*.key,credentials.*,secrets/**'),
-    ('backupRetentionDays', '30');
+INSERT INTO system_settings(setting_key, setting_value)
+VALUES ('externalModelEnabled', 'false');
 
 INSERT INTO llm_provider_activation(singleton_id) VALUES (1);
+
+INSERT INTO vector_model_configs(id,name,provider_type,model,dimension)
+VALUES(
+    '00000000-0000-0000-0000-000000000064',
+    '内置向量模型',
+    'LOCAL_HASH',
+    'local-hash-64',
+    64
+);
+
+INSERT INTO vector_model_activation(singleton_id,active_config_id)
+VALUES(1,'00000000-0000-0000-0000-000000000064');
