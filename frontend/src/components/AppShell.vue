@@ -25,7 +25,7 @@ const activeRepository = ref('ai-platform-service');
 const navItems = [
   { to: '/repositories', label: '仓库管理', icon: GitBranch },
   { to: '/indexing', label: '索引任务', icon: ListChecks },
-  { to: '/search', label: '代码工作台', icon: Search },
+  { to: '/search', label: '源码检索', icon: Search },
   { to: '/ask', label: '代码问答', icon: Sparkles },
   { to: '/graph', label: '调用图谱', icon: Network },
   { to: '/knowledge', label: '知识卡片', icon: BookOpen },
@@ -45,7 +45,7 @@ const breadcrumbLabel = computed(() => {
 const pageMeta = computed(() => ({
   repositories: { title: '仓库', subtitle: '管理本地代码仓库与知识索引', secondary: '批量检测', primary: '添加仓库' },
   indexing: { title: '索引任务', subtitle: '追踪每个阶段，失败时保留上一版可用索引', secondary: '查看产物', primary: '开始全量索引' },
-  search: { title: '代码工作台', subtitle: '浏览完整分支目录，并在当前代码版本中定位实现', secondary: '', primary: '检索说明' },
+  search: { title: '源码检索', subtitle: '浏览完整分支目录，并在当前代码版本中定位实现', secondary: '', primary: '检索说明' },
   ask: { title: '代码问答', subtitle: '回答中的每个仓库事实都可回到代码证据', secondary: '', primary: '新建会话' },
   graph: { title: '调用图与影响分析', subtitle: '查看修改 OrderService.createOrder 的潜在影响', secondary: '导出清单', primary: '重新分析' },
   knowledge: { title: '知识卡片', subtitle: '保存经过人工确认的团队知识', secondary: '导入', primary: '新建卡片' },

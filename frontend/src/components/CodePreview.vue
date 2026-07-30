@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import hljs from 'highlight.js/lib/common';
+import dos from 'highlight.js/lib/languages/dos';
 import EmptyState from '@/components/EmptyState.vue';
 import type { CodeChunk } from '@/types/api';
 
@@ -24,7 +25,12 @@ const languageAliases: Record<string, string> = {
   yml: 'yaml',
   shell: 'bash',
   sh: 'bash',
+  bat: 'dos',
+  cmd: 'dos',
+  batch: 'dos',
 };
+
+hljs.registerLanguage('dos', dos);
 
 const props = defineProps<{
   chunk: CodeChunk | null;

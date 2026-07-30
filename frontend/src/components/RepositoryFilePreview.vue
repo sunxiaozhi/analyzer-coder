@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 import { CopyDocument } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { FileCode2, TriangleAlert } from 'lucide-vue-next';
 import hljs from 'highlight.js/lib/common';
+import dos from 'highlight.js/lib/languages/dos';
+import MarkdownPreview from '@/components/MarkdownPreview.vue';
 import type { RepositoryFileContent } from '@/types/api';
 
 const aliases: Record<string, string> = {
@@ -18,7 +20,12 @@ const aliases: Record<string, string> = {
   shell: 'bash',
   sh: 'bash',
   properties: 'ini',
+  bat: 'dos',
+  cmd: 'dos',
+  batch: 'dos',
 };
+
+hljs.registerLanguage('dos', dos);
 
 const props = defineProps<{
   file: RepositoryFileContent | null;
@@ -29,6 +36,9 @@ const props = defineProps<{
   focusVersion: number;
 }>();
 const root = ref<HTMLElement>();
+const previewMode = shallowRef<'preview' | 'source'>('source');
+
+const isMarkdown = computed(() => /\.(md|markdown)$/i.test(props.file?.path ?? ''));
 
 const highlightedLines = computed(() => {
   if (!props.file) return [];
@@ -72,7 +82,10 @@ async function revealFocus() {
 
 watch(
   () => [props.file?.path, props.focusLine, props.focusVersion],
-  revealFocus,
+  async ([path, focusLine]) => {
+    previewMode.value = isMarkdown.value && !focusLine ? 'preview' : 'source';
+    if (path && focusLine) await revealFocus();
+  },
   { flush: 'post' },
 );
 </script>
@@ -86,7 +99,25 @@ watch(
             <h2>{{ file.name }}</h2>
             <p class="mono">{{ file.path }}</p>
           </div>
-          <el-button :icon="CopyDocument" plain @click="copyContent">复制代码</el-button>
+          <div class="file-actions">
+            <el-button-group v-if="isMarkdown" aria-label="Markdown 查看方式">
+              <el-button
+                :type="previewMode === 'preview' ? 'primary' : 'default'"
+                @click="previewMode = 'preview'"
+              >
+                预览
+              </el-button>
+              <el-button
+                :type="previewMode === 'source' ? 'primary' : 'default'"
+                @click="previewMode = 'source'"
+              >
+                源码
+              </el-button>
+            </el-button-group>
+            <el-button :icon="CopyDocument" plain @click="copyContent">
+              {{ isMarkdown ? '复制内容' : '复制代码' }}
+            </el-button>
+          </div>
         </div>
         <div class="file-facts">
           <span>{{ file.language || '文本' }}</span>
@@ -97,7 +128,11 @@ watch(
           </span>
         </div>
       </header>
-      <div class="file-code-scroll" role="region" :aria-label="`${file.name} 完整代码`">
+      <MarkdownPreview
+        v-if="isMarkdown && previewMode === 'preview'"
+        :content="file.content"
+      />
+      <div v-else class="file-code-scroll" role="region" :aria-label="`${file.name} 完整代码`">
         <div class="file-code-lines">
           <div
             v-for="line in highlightedLines"
@@ -269,6 +304,13 @@ watch(
   min-width: 0;
 }
 
+.file-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
 .file-title h2 {
   margin: 0;
   color: #242428;
@@ -379,7 +421,12 @@ watch(
 .file-line-content :deep(.hljs-attr) { color: #c9d1d9; }
 
 @media (max-width: 760px) {
-  .file-title .el-button {
+  .file-actions {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+
+  .file-actions .el-button {
     padding-inline: 10px;
   }
 }

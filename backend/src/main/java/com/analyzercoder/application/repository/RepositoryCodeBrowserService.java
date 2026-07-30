@@ -5,6 +5,7 @@ import com.analyzercoder.domain.repository.CodeRepositoryId;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -64,7 +65,7 @@ public class RepositoryCodeBrowserService {
             if (containsNullByte(bytes)) {
                 throw new IllegalArgumentException("二进制文件不支持在线预览");
             }
-            String content = decodeUtf8(bytes);
+            String content = decodeText(file, bytes);
             if (content.startsWith("\uFEFF")) content = content.substring(1);
             String path = portable(root.relativize(file));
             return new FileContent(
@@ -122,16 +123,28 @@ public class RepositoryCodeBrowserService {
         return resolved;
     }
 
-    private static String decodeUtf8(byte[] bytes) {
+    private static String decodeText(Path path, byte[] bytes) {
         try {
-            return StandardCharsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
-                .decode(ByteBuffer.wrap(bytes))
-                .toString();
-        } catch (CharacterCodingException exception) {
-            throw new IllegalArgumentException("文件不是可预览的 UTF-8 文本", exception);
+            return decode(bytes, StandardCharsets.UTF_8);
+        } catch (CharacterCodingException utf8Failure) {
+            String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+            if (!name.endsWith(".bat") && !name.endsWith(".cmd")) {
+                throw new IllegalArgumentException("文件不是可预览的 UTF-8 文本", utf8Failure);
+            }
+            try {
+                return decode(bytes, Charset.forName("GB18030"));
+            } catch (CharacterCodingException legacyFailure) {
+                throw new IllegalArgumentException("批处理文件编码无法识别", legacyFailure);
+            }
         }
+    }
+
+    private static String decode(byte[] bytes, Charset charset) throws CharacterCodingException {
+        return charset.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+            .toString();
     }
 
     private static boolean containsNullByte(byte[] bytes) {
@@ -175,6 +188,7 @@ public class RepositoryCodeBrowserService {
             case "php" -> "php";
             case "rb" -> "ruby";
             case "sh", "bash", "zsh" -> "shell";
+            case "bat", "cmd" -> "batch";
             case "md", "mdx" -> "markdown";
             case "yml", "yaml" -> "yaml";
             case "json" -> "json";

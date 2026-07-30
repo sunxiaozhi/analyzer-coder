@@ -9,6 +9,7 @@ import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.RepositorySnapshotId;
 import com.analyzercoder.domain.repository.RepositorySourceType;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -34,6 +35,20 @@ class RepositoryCodeBrowserServiceTest {
         assertThat(content.language()).isEqualTo("vue");
         assertThat(content.lineCount()).isEqualTo(3);
         assertThat(content.content()).contains("<main />");
+    }
+
+    @Test
+    void readsLegacyEncodedWindowsBatchFiles() throws Exception {
+        Files.createDirectories(root.resolve("scripts"));
+        String source = "@echo off\r\necho 构建成功\r\n";
+        Files.write(root.resolve("scripts/build.bat"), source.getBytes(Charset.forName("GB18030")));
+        RepositoryCodeBrowserService service = service(2_000_000);
+
+        var content = service.read(repositoryId(), "scripts/build.bat");
+
+        assertThat(content.language()).isEqualTo("batch");
+        assertThat(content.content()).isEqualTo(source);
+        assertThat(content.lineCount()).isEqualTo(2);
     }
 
     @Test

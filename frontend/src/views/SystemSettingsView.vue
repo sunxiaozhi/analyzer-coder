@@ -291,29 +291,24 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
     </nav>
 
     <main v-if="section === 'generation'" class="registry-body">
-      <div class="section-toolbar actions-only">
+      <div class="section-toolbar generation-toolbar">
+        <div class="policy-inline">
+          <span class="policy-icon"><ShieldCheck :size="16" /></span>
+          <span class="policy-copy">
+            <b>数据外发策略</b>
+            <small>允许发送检索命中的代码片段</small>
+          </span>
+          <el-switch
+            v-if="settingsReady"
+            v-model="settings.externalModelEnabled"
+            active-value="true"
+            inactive-value="false"
+            aria-label="允许发送检索命中的代码片段"
+            @change="toggleOutbound"
+          />
+        </div>
         <el-button type="primary" @click="openCreateProvider"><CirclePlus :size="15" />新增模型</el-button>
       </div>
-
-      <section class="policy-row">
-        <div class="policy-copy">
-          <span class="policy-icon"><ShieldCheck :size="18" /></span>
-          <span>
-            <small class="policy-kicker">数据外发策略</small>
-            <b>允许发送检索命中的代码片段</b>
-            <small>关闭后，问答会回退到本地模式，不向外部模型发送代码。</small>
-          </span>
-        </div>
-        <el-switch
-          v-if="settingsReady"
-          v-model="settings.externalModelEnabled"
-          active-value="true"
-          inactive-value="false"
-          aria-label="允许发送检索命中的代码片段"
-          @change="toggleOutbound"
-        />
-      </section>
-
       <div v-if="providers.length" class="model-grid">
         <article v-for="item in providers" :key="item.id ?? item.version" class="model-card" :class="{ active: item.active }">
           <header class="card-header">
@@ -588,49 +583,51 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
   margin-left: 0;
 }
 
-.policy-row {
-  display: flex;
-  align-items: center;
+.generation-toolbar {
+  min-height: 36px;
   justify-content: space-between;
-  margin-bottom: 12px;
-  padding: 14px 16px;
-  background: #fff;
-  border: 1px solid #d6dbe2;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgb(24 39 58 / 6%);
+  gap: 12px;
+}
+
+.policy-inline {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
 }
 
 .policy-copy {
-  display: flex;
-  align-items: center;
-  gap: 11px;
+  display: grid;
+  min-width: 0;
+  gap: 1px;
 }
 
-.policy-copy > span:last-child {
-  display: grid;
-  gap: 3px;
+.policy-copy b {
+  font-size: 12px;
+}
+
+.policy-copy small {
+  overflow: hidden;
+  color: #77777e;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .policy-icon {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
+  flex: none;
   border-radius: 6px;
   background: #f1f3f5;
   color: #0066cc;
 }
 
-.policy-row small {
-  color: #77777e;
+.policy-inline > .el-switch {
+  margin-left: 3px;
 }
-
-.policy-row .policy-kicker {
-  color: #0066cc;
-  font-size: 9px;
-  font-weight: 600;
-}
-
 .empty-registry {
   display: grid;
   place-items: center;
@@ -693,9 +690,17 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
     padding: 0 8px;
   }
 
-  .policy-row {
-    align-items: flex-start;
-    gap: 14px;
+  .generation-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .policy-copy {
+    flex: 1;
+  }
+
+  .generation-toolbar > .el-button {
+    align-self: flex-end;
   }
 
   .form-pair,

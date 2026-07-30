@@ -142,7 +142,7 @@ async function search() {
     resultsVisible.value = true;
     mobilePane.value = 'results';
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '代码检索失败');
+    ElMessage.error(error instanceof Error ? error.message : '源码检索失败');
   } finally {
     searchLoading.value = false;
   }
@@ -216,7 +216,7 @@ watch(
           结果 {{ hits.length }}
         </el-button>
       </div>
-      <div class="mobile-pane-switch" role="tablist" aria-label="代码工作台面板">
+      <div class="mobile-pane-switch" role="tablist" aria-label="源码检索面板">
         <button :class="{ active: mobilePane === 'tree' }" @click="mobilePane = 'tree'">目录</button>
         <button :class="{ active: mobilePane === 'code' }" :disabled="!selectedPath" @click="mobilePane = 'code'">代码</button>
         <button

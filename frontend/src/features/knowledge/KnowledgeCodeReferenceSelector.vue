@@ -42,7 +42,7 @@ async function search() {
     results.value = response.chunks;
     total.value = response.total;
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '代码检索失败');
+    ElMessage.error(error instanceof Error ? error.message : '源码检索失败');
   } finally {
     loading.value = false;
   }
