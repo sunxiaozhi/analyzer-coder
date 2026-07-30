@@ -988,3 +988,18 @@ VALUES(
 
 INSERT INTO vector_model_activation(singleton_id,active_config_id)
 VALUES(1,'00000000-0000-0000-0000-000000000064');
+
+-- ============================================================================
+-- Retrieval accuracy indexes merged from V2
+-- ============================================================================
+CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_cosine
+    ON chunk_embeddings USING hnsw (embedding vector_cosine_ops);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_embeddings_cosine
+    ON knowledge_card_embeddings USING hnsw (embedding vector_cosine_ops);
+
+CREATE INDEX IF NOT EXISTS idx_code_chunks_repo_path_line
+    ON code_chunks(repo_id, file_path, start_line);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_refs_current_lookup
+    ON knowledge_code_refs(repo_id, file_path, start_line, content_hash);

@@ -2,8 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
-  Activity, ArrowRightLeft, Box, Check, CirclePlus, Cpu, Database, KeyRound,
-  Pencil, Power, Save, Server, ShieldCheck, Unplug,
+  Activity, ArrowRightLeft, Box, CirclePlus, Cpu, Database, KeyRound,
+  Pencil, Power, Save, Server, ShieldCheck,
 } from 'lucide-vue-next';
 import { intelligenceApi } from '@/api/intelligence';
 import {
@@ -19,6 +19,7 @@ const section = shallowRef<'generation' | 'vector'>('generation');
 const providers = shallowRef<LlmProvider[]>([]);
 const vectorModels = shallowRef<VectorModel[]>([]);
 const settings = reactive<Record<string, string>>({});
+const settingsReady = shallowRef(false);
 const loading = shallowRef(false);
 const saving = shallowRef(false);
 const checkingId = shallowRef<string | null>(null);
@@ -71,9 +72,12 @@ async function load() {
       llmSettingsApi.providers(),
       llmSettingsApi.vectorModels(),
     ]);
-    Object.assign(settings, loadedSettings);
+    Object.assign(settings, loadedSettings, {
+      externalModelEnabled: loadedSettings.externalModelEnabled === 'true' ? 'true' : 'false',
+    });
     providers.value = loadedProviders;
     vectorModels.value = loadedVectors;
+    settingsReady.value = true;
   } finally {
     loading.value = false;
   }
@@ -193,6 +197,7 @@ async function deactivateProvider() {
 }
 
 async function toggleOutbound() {
+  if (!settingsReady.value) return;
   try {
     Object.assign(settings, await intelligenceApi.saveSettings({ ...settings }));
     ElMessage.success('代码外发策略已更新');
@@ -290,53 +295,65 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
         <el-button type="primary" @click="openCreateProvider"><CirclePlus :size="15" />新增模型</el-button>
       </div>
 
+      <section class="policy-row">
+        <div class="policy-copy">
+          <span class="policy-icon"><ShieldCheck :size="18" /></span>
+          <span>
+            <small class="policy-kicker">数据外发策略</small>
+            <b>允许发送检索命中的代码片段</b>
+            <small>关闭后，问答会回退到本地模式，不向外部模型发送代码。</small>
+          </span>
+        </div>
+        <el-switch
+          v-if="settingsReady"
+          v-model="settings.externalModelEnabled"
+          active-value="true"
+          inactive-value="false"
+          aria-label="允许发送检索命中的代码片段"
+          @change="toggleOutbound"
+        />
+      </section>
+
       <div v-if="providers.length" class="model-grid">
         <article v-for="item in providers" :key="item.id ?? item.version" class="model-card" :class="{ active: item.active }">
-          <i class="signal-rail" :data-state="item.active ? 'active' : status(item)[1]"></i>
-          <header>
-            <div class="model-icon"><Server :size="18" /></div>
-            <div>
-              <h4>{{ item.name }}</h4>
-              <code>{{ item.model }}</code>
-            </div>
-            <span class="state-pill" :data-state="status(item)[1]">
-              <Check v-if="item.availability === 'AVAILABLE'" :size="12" />
-              <Unplug v-else :size="12" />{{ status(item)[0] }}
-            </span>
+          <header class="card-header">
+            <el-tag effect="plain" size="small">OpenAI-compatible</el-tag>
+            <el-tag
+              :type="item.active ? 'success' : item.availability === 'UNAVAILABLE' ? 'danger' : item.availability === 'DEGRADED' ? 'warning' : 'info'"
+              size="small"
+            >
+              {{ item.active ? '当前启用' : status(item)[0] }}
+            </el-tag>
           </header>
+          <div class="model-title">
+            <h4>{{ item.name }}</h4>
+            <code>{{ item.model }}</code>
+          </div>
           <dl>
             <div><dt>协议</dt><dd>OpenAI-compatible</dd></div>
             <div><dt>服务地址</dt><dd>{{ item.baseUrl }}</dd></div>
             <div><dt>最近成功</dt><dd>{{ formatTime(item.lastSuccessAt) }}</dd></div>
             <div><dt>输出上限</dt><dd>{{ item.maxOutputTokens }} tokens</dd></div>
           </dl>
-          <footer>
-            <span v-if="item.active" class="active-label"><Power :size="13" />当前启用</span>
-            <el-button v-else text :disabled="item.availability !== 'AVAILABLE'" @click="activateProvider(item)">
+          <footer class="card-actions">
+            <el-button v-if="!item.active" link type="primary" :disabled="item.availability !== 'AVAILABLE'" @click="activateProvider(item)">
               <ArrowRightLeft :size="14" />切换使用
             </el-button>
-            <div class="card-actions">
-              <el-button text :loading="checkingId === item.id" @click="testProvider(item)">
-                <Activity :size="14" />检测
-              </el-button>
-              <el-button text :disabled="item.active" @click="openEditProvider(item)">
-                <Pencil :size="14" />编辑
-              </el-button>
-            </div>
+            <el-button link :loading="checkingId === item.id" @click="testProvider(item)">
+              <Activity :size="14" />检测
+            </el-button>
+            <el-button link :disabled="item.active" @click="openEditProvider(item)">
+              <Pencil :size="14" />编辑
+            </el-button>
+            <el-button v-if="item.active" link type="danger" @click="deactivateProvider">
+              <Power :size="14" />停用
+            </el-button>
           </footer>
         </article>
       </div>
       <div v-else class="empty-registry">
         <Box :size="28" /><b>尚未备案问答模型</b><p>新增配置后先检测连接，再切换为系统模型。</p>
       </div>
-
-      <section class="policy-row">
-        <div><ShieldCheck :size="18" /><span><b>允许发送检索命中的代码片段</b><small>模型启用后仍需此策略允许。</small></span></div>
-        <el-switch v-model="settings.externalModelEnabled" active-value="true" inactive-value="false" @change="toggleOutbound" />
-      </section>
-      <el-button v-if="activeProvider" class="deactivate-button" type="danger" plain @click="deactivateProvider">
-        停用当前问答模型
-      </el-button>
     </main>
 
     <main v-else class="registry-body">
@@ -345,22 +362,20 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
       </div>
       <div v-if="vectorModels.length" class="model-grid vector-grid">
         <article v-for="item in vectorModels" :key="item.id" class="model-card" :class="{ active: item.active }">
-          <i class="signal-rail" :data-state="item.active ? 'active' : item.providerType === 'OPENAI_COMPATIBLE' ? 'external' : 'available'"></i>
-          <header>
-            <div class="model-icon vector"><Database :size="18" /></div>
-            <div><h4>{{ item.name }}</h4><code>{{ item.model }}</code></div>
-            <span v-if="item.active" class="state-pill" data-state="available"><Check :size="12" />使用中</span>
+          <header class="card-header">
+            <el-tag effect="plain" size="small">{{ item.providerType === 'LOCAL_HASH' ? '本地哈希' : 'OpenAI-compatible' }}</el-tag>
+            <el-tag :type="item.active ? 'success' : 'info'" size="small">{{ item.active ? '当前启用' : '已备案' }}</el-tag>
           </header>
+          <div class="model-title"><h4>{{ item.name }}</h4><code>{{ item.model }}</code></div>
           <dl>
             <div><dt>运行方式</dt><dd>{{ item.providerType === 'LOCAL_HASH' ? '本地确定性' : '外部 API' }}</dd></div>
             <div><dt>向量维度</dt><dd>{{ item.dimension }}</dd></div>
             <div><dt>数据外发</dt><dd>{{ item.providerType === 'LOCAL_HASH' ? '无' : '索引文本' }}</dd></div>
             <div><dt>备案时间</dt><dd>{{ formatTime(item.createdAt) }}</dd></div>
           </dl>
-          <footer>
-            <span v-if="item.active" class="active-label"><Power :size="13" />当前启用</span>
-            <el-button v-else text @click="activateVector(item)"><ArrowRightLeft :size="14" />切换使用</el-button>
-            <el-button text :disabled="item.active" @click="openEditVector(item)"><Pencil :size="14" />编辑</el-button>
+          <footer class="card-actions">
+            <el-button v-if="!item.active" link type="primary" @click="activateVector(item)"><ArrowRightLeft :size="14" />切换使用</el-button>
+            <el-button link :disabled="item.active" @click="openEditVector(item)"><Pencil :size="14" />编辑</el-button>
           </footer>
         </article>
       </div>
@@ -416,23 +431,276 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
 </template>
 
 <style scoped>
-.model-registry{min-height:100%;overflow:auto;background:#f8fafc}
-.section-toolbar p{margin:0;color:#7a838d;font-size:12px}
-.registry-tabs{display:flex;gap:4px;padding:12px 28px 0;background:#fff;border-bottom:1px solid #e5e9ee}
-.registry-tabs button{display:flex;align-items:center;gap:8px;padding:11px 14px;border:0;border-bottom:2px solid transparent;background:none;color:#697580}
-.registry-tabs button.active{border-color:#1769aa;color:#155f99;font-weight:650}.registry-tabs span{padding:1px 6px;border-radius:10px;background:#eef2f5;font:10px Consolas}
-.registry-body{padding:24px 28px 32px}.section-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.section-toolbar h3{margin:0 0 5px;font-size:16px}
-.section-toolbar.actions-only{justify-content:flex-end}
-.model-grid{display:grid;grid-template-columns:repeat(2,minmax(330px,1fr));gap:13px}.model-card{position:relative;overflow:hidden;padding:17px 18px 0;border:1px solid #dfe5ea;border-radius:11px;background:#fff;box-shadow:0 1px 2px #18222d08}
-.model-card.active{border-color:#9fc3df;box-shadow:0 0 0 2px #2475b317}.signal-rail{position:absolute;inset:0 auto 0 0;width:4px;background:#cbd3da}.signal-rail[data-state=active]{background:#1769aa}.signal-rail[data-state=available]{background:#2e936b}.signal-rail[data-state=external]{background:#7356b5}.signal-rail[data-state=pending]{background:#d3972c}.signal-rail[data-state=warning]{background:#d2792c}.signal-rail[data-state=danger]{background:#c65353}
-.model-card header{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:11px;align-items:center}.model-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:9px;background:#edf4fa;color:#2f6f9f}.model-icon.vector{background:#eef6f1;color:#33785c}
-.model-card h4{margin:0 0 4px;font-size:14px}.model-card code{display:block;overflow:hidden;color:#6d7780;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
-.state-pill{display:flex;align-items:center;gap:4px;padding:4px 7px;border-radius:999px;background:#f0f2f4;color:#68727b;font-size:10px}.state-pill[data-state=available]{background:#eaf6f0;color:#247453}.state-pill[data-state=pending]{background:#fff5df;color:#996511}.state-pill[data-state=danger]{background:#fceeee;color:#a53f3f}
-.model-card dl{display:grid;grid-template-columns:1fr 1fr;gap:13px 18px;margin:18px 0}.model-card dt{color:#8a949d;font-size:9px;text-transform:uppercase}.model-card dd{margin:4px 0 0;overflow:hidden;color:#3f4952;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
-.model-card footer{display:flex;align-items:center;justify-content:space-between;min-height:48px;margin:0 -18px;padding:0 14px 0 18px;border-top:1px solid #edf0f2}.card-actions{display:flex}.active-label{display:flex;align-items:center;gap:5px;color:#1769aa;font-size:11px;font-weight:650}
-.policy-row{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding:14px 17px;border:1px solid #dfe5ea;border-radius:10px;background:#fff}.policy-row>div{display:flex;align-items:center;gap:10px}.policy-row span{display:grid;gap:3px}.policy-row small{color:#7e8790}
-.deactivate-button{margin-top:12px}.empty-registry{display:grid;place-items:center;gap:7px;padding:58px;border:1px dashed #cfd8df;border-radius:11px;color:#7b8791}.empty-registry p{margin:0;font-size:11px}
-.dialog-form{padding:2px 4px}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}.form-quad{display:grid;grid-template-columns:repeat(2,1fr);gap:0 14px}.switch-field{display:flex;align-items:center;justify-content:space-between;padding:12px 0}.switch-field span{display:grid;gap:4px}.switch-field small{color:#818991}
-@media(max-width:1000px){.model-grid{grid-template-columns:1fr}}
-@media(max-width:700px){.section-toolbar{align-items:flex-start;flex-direction:column}.registry-body{padding:18px 14px}.registry-tabs{padding-left:14px}.form-pair,.form-quad{grid-template-columns:1fr}}
+.model-registry {
+  min-height: 100%;
+  overflow: auto;
+  background: #fff;
+}
+
+.registry-tabs {
+  display: flex;
+  min-height: 54px;
+  gap: 4px;
+  padding: 0 16px;
+  background: #fff;
+  border-bottom: 1px solid #ececef;
+}
+
+.registry-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: #65656c;
+  font-size: 13px;
+}
+
+.registry-tabs button:hover {
+  color: #1d1d1f;
+}
+
+.registry-tabs button.active {
+  border-color: #0066cc;
+  color: #005eb8;
+  font-weight: 600;
+}
+
+.registry-tabs span {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f1f3f5;
+  color: #5e6670;
+  font: 10px Consolas, monospace;
+}
+
+.registry-body {
+  padding: 16px;
+}
+
+.section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(330px, 1fr));
+  gap: 10px;
+}
+
+.model-card {
+  display: flex;
+  min-height: 220px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #d6dbe2;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgb(24 39 58 / 6%);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.model-card:hover {
+  border-color: #b9c5d3;
+  box-shadow: 0 6px 16px rgb(24 39 58 / 10%);
+}
+
+.model-card.active {
+  border-color: #9fc3df;
+  box-shadow: 0 0 0 1px rgb(0 102 204 / 10%), 0 2px 8px rgb(24 39 58 / 6%);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.model-title {
+  min-height: 42px;
+}
+
+.model-title h4 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-title code {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: #71717a;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1px solid #eeeeef;
+  border-bottom: 1px solid #eeeeef;
+}
+
+.model-card dl div {
+  min-width: 0;
+}
+
+.model-card dt {
+  margin-bottom: 4px;
+  color: #8a8a91;
+  font-size: 10px;
+}
+
+.model-card dd {
+  margin: 0;
+  overflow: hidden;
+  color: #4a4a4f;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.card-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.policy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #d6dbe2;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgb(24 39 58 / 6%);
+}
+
+.policy-copy {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.policy-copy > span:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.policy-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: #f1f3f5;
+  color: #0066cc;
+}
+
+.policy-row small {
+  color: #77777e;
+}
+
+.policy-row .policy-kicker {
+  color: #0066cc;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.empty-registry {
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  padding: 58px;
+  border: 1px dashed #d6dbe2;
+  border-radius: 6px;
+  color: #7a7a81;
+}
+
+.empty-registry p {
+  margin: 0;
+  font-size: 11px;
+}
+
+.dialog-form {
+  padding: 2px 4px;
+}
+
+.form-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.form-quad {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0 14px;
+}
+
+.switch-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+
+.switch-field span {
+  display: grid;
+  gap: 4px;
+}
+
+.switch-field small {
+  color: #818991;
+}
+
+@media (max-width: 1000px) {
+  .model-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .registry-body {
+    padding: 14px;
+  }
+
+  .registry-tabs {
+    padding: 0 8px;
+  }
+
+  .policy-row {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .form-pair,
+  .form-quad {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

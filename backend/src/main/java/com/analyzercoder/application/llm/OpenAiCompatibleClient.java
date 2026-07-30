@@ -281,7 +281,7 @@ public class OpenAiCompatibleClient {
         ObjectNode payload = json.createObjectNode();
         payload.put("model", spec.model());
         payload.put("temperature", spec.temperature());
-        payload.put("max_tokens", Math.min(spec.maxOutputTokens(), stream ? 16 : 64));
+        payload.put("max_tokens", Math.min(spec.maxOutputTokens(), stream ? 16 : 4096));
         payload.put("stream", stream);
         ArrayNode messages = payload.putArray("messages");
         messages.addObject().put("role", "user").put("content", prompt);

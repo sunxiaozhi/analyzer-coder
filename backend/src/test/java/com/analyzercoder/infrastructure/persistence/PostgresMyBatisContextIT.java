@@ -2,6 +2,7 @@ package com.analyzercoder.infrastructure.persistence;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.analyzercoder.CodebaseKnowledgeApplication;
+import com.analyzercoder.application.indexing.VectorIndexQueryService;
 import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.application.repository.RepositorySourceImportService;
 import com.analyzercoder.domain.repository.CodeRepository;
@@ -31,6 +32,8 @@ class PostgresMyBatisContextIT {
     @Autowired LlmSettingsMapper llmSettings;
     @Autowired LlmSettingsService llmService;
     @Autowired CodeChunkMapper chunks;
+    @Autowired VectorIndexQueryMapper vectorIndex;
+    @Autowired VectorIndexQueryService vectorIndexService;
     @Autowired KnowledgeHistoryMapper history;
     @Autowired RepositorySourceImportService imports;
     @Autowired RepositorySnapshotPort managedFiles;
@@ -41,7 +44,7 @@ class PostgresMyBatisContextIT {
             tasks.findAll();captcha.failureCount("__mapper_smoke__");intelligence.settings();
             llmSettings.latestConfig();llmSettings.activation();llmSettings.externalModelEnabled();
             llmSettings.vectorModels();llmSettings.activeVectorModel();
-            var visible=repositories.findAll();if(!visible.isEmpty()){UUID id=visible.get(0).id();chunks.count(id,null);intelligence.cards(id,true);history.findHistory(id,UUID.randomUUID());}
+            var visible=repositories.findAll();if(!visible.isEmpty()){UUID id=visible.get(0).id();chunks.count(id,null);intelligence.cards(id,true);history.findHistory(id,UUID.randomUUID());vectorIndex.summary(id);vectorIndex.chunks(id,null,null,null);vectorIndex.knowledge(id,null,null);vectorIndexService.summary(id);vectorIndexService.chunks(id,null,null,null,1,15);vectorIndexService.knowledge(id,null,null,1,15);}
         });
     }
 

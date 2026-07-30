@@ -2,12 +2,14 @@
 import { onMounted, shallowRef } from 'vue';
 import { ElMessage } from 'element-plus';
 import AppPagination from '@/components/AppPagination.vue';
+import CurrentVectorIndexPanel from '@/features/indexing/CurrentVectorIndexPanel.vue';
 import IndexJobTable from '@/features/indexing/IndexJobTable.vue';
 import UnifiedIndexJobDetail from '@/features/indexing/UnifiedIndexJobDetail.vue';
 import { useIndexJobs } from '@/features/indexing/useIndexJobs';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
 const repositoryStore = useRepositoryStore();
+const section = shallowRef<'jobs' | 'vectors'>('jobs');
 const actionPending = shallowRef(false);
 const {
   jobs,
@@ -60,12 +62,17 @@ onMounted(async () => {
 
 <template>
   <section class="page index-jobs-design">
-    <div class="index-jobs-content">
+    <div class="surface index-view-shell">
+      <nav class="index-view-tabs" aria-label="索引页面">
+        <button :class="{ active: section === 'jobs' }" @click="section = 'jobs'">索引任务</button>
+        <button :class="{ active: section === 'vectors' }" @click="section = 'vectors'">当前向量索引</button>
+      </nav>
+
+      <div v-if="section === 'jobs'" class="index-view-body index-jobs-content">
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
       <div class="split detail-split index-jobs-split">
         <div class="surface index-jobs-list">
           <div class="toolbar">
-            <strong>索引任务</strong>
             <span class="spacer" />
             <span class="muted">成功 {{ counts.SUCCEEDED }} · 已取消 {{ counts.CANCELED }}</span>
             <el-button :loading="loading" @click="refresh()">刷新</el-button>
@@ -97,6 +104,8 @@ onMounted(async () => {
           @retry="retryJob"
         />
       </div>
+      </div>
+      <CurrentVectorIndexPanel v-else class="index-view-body" />
     </div>
   </section>
 </template>
@@ -105,6 +114,50 @@ onMounted(async () => {
 .index-jobs-design {
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
+}
+
+.index-view-shell {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+}
+
+.index-view-tabs {
+  display: flex;
+  flex: none;
+  min-height: 54px;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid #ececef;
+}
+
+.index-view-tabs button {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: #65656c;
+  font-size: 13px;
+}
+
+.index-view-tabs button:hover {
+  color: #1d1d1f;
+}
+
+.index-view-tabs button.active {
+  border-color: #0066cc;
+  color: #005eb8;
+  font-weight: 600;
+}
+
+.index-view-body {
+  min-height: 0;
+  flex: 1;
+  padding: 12px;
 }
 
 .index-jobs-content {
@@ -135,9 +188,22 @@ onMounted(async () => {
 
 @media (max-width: 760px) {
   .index-jobs-design {
-    grid-template-rows: auto;
+    display: block;
     height: auto;
     overflow: visible;
+  }
+
+  .index-view-shell {
+    height: auto;
+    overflow: visible;
+  }
+
+  .index-view-tabs {
+    padding: 0 8px;
+  }
+
+  .index-view-body {
+    padding: 10px;
   }
 
   .index-jobs-content {

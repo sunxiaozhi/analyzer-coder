@@ -36,11 +36,51 @@ public record CodeChunk(
         int endLine,
         String content
     ) {
+        return create(
+            repositoryId, snapshotId, commitSha, filePath, null, null, null,
+            language, ChunkType.FILE, startLine, endLine, content
+        );
+    }
+
+    public static CodeChunk symbolChunk(
+        CodeRepositoryId repositoryId,
+        RepositorySnapshotId snapshotId,
+        String commitSha,
+        String filePath,
+        String language,
+        String symbolName,
+        String symbolKind,
+        int startLine,
+        int endLine,
+        String content
+    ) {
+        String symbolId = filePath + "#" + symbolName + ":" + startLine;
+        return create(
+            repositoryId, snapshotId, commitSha, filePath, symbolId,
+            symbolName, symbolKind, language, ChunkType.SYMBOL,
+            startLine, endLine, content
+        );
+    }
+
+    private static CodeChunk create(
+        CodeRepositoryId repositoryId,
+        RepositorySnapshotId snapshotId,
+        String commitSha,
+        String filePath,
+        String symbolId,
+        String symbolName,
+        String symbolKind,
+        String language,
+        ChunkType chunkType,
+        int startLine,
+        int endLine,
+        String content
+    ) {
         return new CodeChunk(
             CodeChunkId.newId(), repositoryId, snapshotId,
             commitSha == null || commitSha.isBlank() ? "unknown" : commitSha,
-            filePath, null, null, null, language, ChunkType.FILE, startLine, endLine,
-            content, sha256(content), Instant.now()
+            filePath, symbolId, symbolName, symbolKind, language, chunkType,
+            startLine, endLine, content, sha256(content), Instant.now()
         );
     }
 
@@ -58,7 +98,10 @@ public record CodeChunk(
 
     private static String sha256(String content) {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content.getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256")
+                    .digest(content.getBytes(StandardCharsets.UTF_8))
+            );
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 摘要功能不可用", exception);
         }

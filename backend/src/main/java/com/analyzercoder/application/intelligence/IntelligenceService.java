@@ -1,24 +1,806 @@
 package com.analyzercoder.application.intelligence;
-import com.analyzercoder.application.llm.LlmSettingsService;import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;import com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow;import java.nio.charset.StandardCharsets;import java.security.*;import java.sql.Timestamp;import java.time.Instant;import java.util.*;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
-@Service public class IntelligenceService{
-private static final int DIM=64;private final IntelligenceMapper mapper;private final KnowledgeAttachmentService attachments;private final MarkdownRenderingService markdown;private final LlmSettingsService llm;public IntelligenceService(IntelligenceMapper mapper,KnowledgeAttachmentService attachments,MarkdownRenderingService markdown,LlmSettingsService llm){this.mapper=mapper;this.attachments=attachments;this.markdown=markdown;this.llm=llm;}
-@Transactional public List<SearchHit> hybridSearch(UUID repoId,String query,int limit){ensureEmbeddings(repoId);var embedding=llm.vectorize(query);String queryVector=embedding.vector()==null?vector(query):embedding.vector();return mapper.search(repoId,query,queryVector,Math.max(1,Math.min(limit,100))).stream().map(row->new SearchHit(uuid(row,"id"),uuid(row,"snapshot_id"),string(row,"file_path"),string(row,"symbol_name"),string(row,"symbol_kind"),integer(row,"start_line"),integer(row,"end_line"),string(row,"content"),string(row,"content_hash"),number(row,"score").doubleValue(),List.of("KEYWORD","SEMANTIC"))).toList();}
-@Transactional public List<Evidence> unifiedSearch(UUID repoId,String query,int limit){List<Evidence> all=new ArrayList<>();for(SearchHit hit:hybridSearch(repoId,query,6))all.add(new Evidence("CODE",hit.chunkId(),null,hit.snapshotId(),hit.symbolName()==null?hit.filePath():hit.symbolName(),hit.filePath(),hit.symbolName(),hit.symbolKind(),hit.startLine(),hit.endLine(),hit.content(),hit.contentHash(),hit.score(),hit.channels(),List.of()));ensureKnowledgeEmbeddings(repoId);var embedding=llm.vectorize(query);String queryVector=embedding.vector()==null?vector(query):embedding.vector();for(Map<String,Object> row:mapper.searchKnowledge(repoId,query,queryVector,4)){UUID cardId=uuid(row,"id");all.add(new Evidence("KNOWLEDGE",null,cardId,null,string(row,"title"),"knowledge://"+cardId,null,string(row,"card_type"),null,null,string(row,"content"),string(row,"content_hash"),number(row,"score").doubleValue(),List.of("KNOWLEDGE","KEYWORD","SEMANTIC"),codeReferences(repoId,cardId,integer(row,"revision"))));}all.sort(Comparator.comparingDouble(Evidence::score).reversed());return all.stream().limit(Math.max(1,Math.min(limit,20))).toList();}
-@Transactional public Answer ask(UUID repoId,UUID accountId,String question){List<Evidence> evidence=unifiedSearch(repoId,question,8);UUID id=UUID.randomUUID(),snapshot=evidence.stream().map(Evidence::snapshotId).filter(Objects::nonNull).findFirst().orElse(null);String answer,provider="deterministic-local";if(evidence.isEmpty())answer="当前仓库的代码索引和已发布知识中没有找到足够证据。请先完成索引、发布相关知识，或换一种更具体的描述。";else{var generated=llm.generate(llmPrompt(question,evidence));if(generated.isPresent()){answer=generated.get().answer();provider=generated.get().provider();}else{StringBuilder b=new StringBuilder("根据当前代码与团队知识，最相关的证据是：");for(int i=0;i<Math.min(5,evidence.size());i++){Evidence item=evidence.get(i);b.append("\n").append(i+1).append(". [").append(item.sourceType().equals("CODE")?"代码":"知识").append("] ").append(item.title());if(item.startLine()!=null)b.append("（第 ").append(item.startLine()).append(" 行附近）");}answer=b.append("。\n\n当前未启用外部模型，请打开证据查看原文并结合图谱验证调用关系。").toString();}}mapper.insertConversation(id,repoId,accountId,question,answer,snapshot);List<Citation> citations=new ArrayList<>();for(int i=0;i<evidence.size();i++){Evidence item=evidence.get(i);UUID cid=UUID.randomUUID();mapper.insertCitation(cid,id,item.sourceType(),item.chunkId(),item.knowledgeCardId(),item.title(),item.filePath(),item.symbolName(),item.startLine(),item.endLine(),item.contentHash(),i+1);citations.add(new Citation(cid,item.sourceType(),item.chunkId(),item.knowledgeCardId(),item.snapshotId(),item.title(),item.filePath(),item.symbolName(),item.startLine(),item.endLine(),item.content(),item.rankOr(i+1),item.codeReferences()));}return new Answer(id,answer,snapshot,citations,provider,Instant.now());}
-@Transactional public GraphResult graph(UUID repoId,String symbol,int depth,String direction){rebuildGraph(repoId);int max=Math.max(1,Math.min(depth,5));List<GraphEdge> all=mapper.graphEdges(repoId).stream().map(row->new GraphEdge(string(row,"source_symbol"),string(row,"target_symbol"),string(row,"relation"))).toList();Map<String,Integer> distances=new LinkedHashMap<>();distances.put(symbol,0);List<GraphEdge> edges=new ArrayList<>();for(int d=0;d<max;d++)for(GraphEdge e:all){Integer from=distances.get(e.source()),to=distances.get(e.target());if(from!=null&&from==d&&!"UPSTREAM".equals(direction)){distances.putIfAbsent(e.target(),d+1);edges.add(e);}if(to!=null&&to==d&&!"DOWNSTREAM".equals(direction)){distances.putIfAbsent(e.source(),d+1);edges.add(e);}}List<GraphNode> nodes=distances.entrySet().stream().map(e->new GraphNode(e.getKey(),e.getValue(),e.getKey().equals(symbol))).toList();List<GraphEdge> unique=edges.stream().distinct().toList();return new GraphResult(nodes,unique,unique.size()>20?"HIGH":unique.size()>5?"MEDIUM":"LOW",List.of("静态关系不包含运行时反射与动态分派","结果绑定当前已发布快照"));}
-public GraphTarget graphTarget(UUID repoId,UUID chunkId){Map<String,Object> row=mapper.findChunk(repoId,chunkId);if(row==null)throw new IllegalArgumentException("代码片段不存在");String symbol=string(row,"symbol_name");if(symbol==null||symbol.isBlank())symbol=inferSymbol(string(row,"content"),string(row,"file_path"));return new GraphTarget(symbol,string(row,"file_path"),integer(row,"start_line"));}
-public List<KnowledgeCard> cards(UUID repoId,boolean includeDraft){return mapper.cards(repoId,includeDraft).stream().map(this::card).toList();}
-@Transactional public KnowledgeCard createCard(UUID repoId,UUID actor,CardInput in){UUID id=UUID.randomUUID();mapper.insertCard(id,repoId,actor,in.title(),in.cardType(),in.content(),in.tags().toArray(String[]::new),in.status());KnowledgeCard card=findCard(repoId,id);attachments.attach(repoId,id,card.revision(),in.attachmentIds());attachCodeReferences(repoId,id,card.revision(),in.codeReferences());return findCard(repoId,id);}
-@Transactional public KnowledgeCard updateCard(UUID repoId,UUID id,UUID actor,CardInput in){if(mapper.updateCard(id,repoId,actor,in.title(),in.cardType(),in.content(),in.tags().toArray(String[]::new),in.status())==0)throw new IllegalArgumentException("知识卡片不存在");KnowledgeCard card=findCard(repoId,id);attachments.attach(repoId,id,card.revision(),in.attachmentIds());attachCodeReferences(repoId,id,card.revision(),in.codeReferences());return findCard(repoId,id);}private KnowledgeCard findCard(UUID repoId,UUID id){return cards(repoId,true).stream().filter(card->card.id().equals(id)).findFirst().orElseThrow();}
-public Map<String,String> settings(){Map<String,String> out=new LinkedHashMap<>();for(Map<String,Object> row:mapper.settings())out.put(string(row,"setting_key"),string(row,"value"));return out;}@Transactional public Map<String,String> saveSettings(UUID actor,Map<String,String> values){values.forEach((key,value)->mapper.upsertSetting(key,value,actor));return settings();}
-private void ensureEmbeddings(UUID repoId){String model=llm.activeVectorModelName();for(Map<String,Object> row:mapper.missingEmbeddings(repoId,model)){var embedding=llm.vectorize(string(row,"content"));String value=embedding.vector()==null?vector(string(row,"content")):embedding.vector();mapper.upsertEmbedding(uuid(row,"id"),repoId,embedding.model(),value,string(row,"content_hash"));}}
-private void ensureKnowledgeEmbeddings(UUID repoId){String model=llm.activeVectorModelName();for(Map<String,Object> row:mapper.missingKnowledgeEmbeddings(repoId,model)){String content=string(row,"content"),hash=sha256(content);var embedding=llm.vectorize(content);String value=embedding.vector()==null?vector(content):embedding.vector();mapper.upsertKnowledgeEmbedding(uuid(row,"id"),repoId,integer(row,"revision"),embedding.model(),value,hash);}}
-private void attachCodeReferences(UUID repoId,UUID cardId,int revision,List<CodeReferenceInput> refs){List<UUID> ids=(refs==null?List.<CodeReferenceInput>of():refs).stream().map(CodeReferenceInput::chunkId).filter(Objects::nonNull).distinct().limit(30).toList();int position=0;for(UUID chunkId:ids){Map<String,Object> row=mapper.findChunk(repoId,chunkId);if(row==null)throw new IllegalArgumentException("关联代码不存在或不属于当前仓库");mapper.insertCodeReference(cardId,revision,position++,repoId,uuid(row,"snapshot_id"),chunkId,string(row,"file_path"),string(row,"symbol_name"),integer(row,"start_line"),integer(row,"end_line"),string(row,"content_hash"));}}
-private List<CodeReference> codeReferences(UUID repoId,UUID cardId,int revision){return mapper.codeReferences(repoId,cardId,revision).stream().map(row->new CodeReference(uuid(row,"chunk_id"),uuid(row,"snapshot_id"),string(row,"file_path"),string(row,"symbol_name"),integer(row,"start_line"),integer(row,"end_line"),string(row,"content_hash"),bool(row,"stale"))).toList();}
-private void rebuildGraph(UUID repoId){mapper.deleteGraphEdges(repoId);List<Map<String,Object>> chunks=mapper.graphChunks(repoId);for(Map<String,Object> source:chunks)for(Map<String,Object> target:chunks){UUID sid=uuid(source,"id"),tid=uuid(target,"id");if(sid.equals(tid))continue;String name=string(target,"symbol_name");if(name!=null&&!name.isBlank()&&string(source,"content").contains(name+"("))mapper.insertGraphEdge(UUID.randomUUID(),repoId,uuid(source,"snapshot_id"),sid,tid,string(source,"symbol_name"),name);}}
-private static String llmPrompt(String question,List<Evidence> evidence){StringBuilder prompt=new StringBuilder("你是仓库知识与代码问答助手。只能根据下面带编号的团队知识和代码证据回答，不确定时明确说明，不要编造调用关系。\\n问题：").append(question).append("\\n证据：");for(int i=0;i<evidence.size();i++){Evidence item=evidence.get(i);prompt.append("\\n[S").append(i+1).append("][").append(item.sourceType()).append("] ").append(item.title());if(item.startLine()!=null)prompt.append(":").append(item.startLine());prompt.append("\\n").append(item.content(),0,Math.min(item.content().length(),4000));if(!item.codeReferences().isEmpty())for(CodeReference ref:item.codeReferences())prompt.append("\\n关联代码：").append(ref.filePath()).append(":").append(ref.startLine());}return prompt.append("\\n请用中文回答，在事实后标注 [S编号]，并区分团队知识与源码事实；冲突时以当前快照源码为准。").toString();}
-private static String inferSymbol(String content,String filePath){if(content!=null){java.util.regex.Matcher declaration=java.util.regex.Pattern.compile("(?m)\\b(?:class|interface|record|enum|function|def|func)\\s+([A-Za-z_$][\\w$]*)").matcher(content);if(declaration.find())return declaration.group(1);java.util.regex.Matcher callable=java.util.regex.Pattern.compile("(?m)\\b(?:public|protected|private|static|final|async|export)\\s+(?:[\\w<>\\[\\],.?]+\\s+)?([A-Za-z_$][\\w$]*)\\s*\\(").matcher(content);if(callable.find())return callable.group(1);}String name=filePath==null?"unknown":filePath.replace('\\','/');name=name.substring(name.lastIndexOf('/')+1);int dot=name.lastIndexOf('.');return dot>0?name.substring(0,dot):name;}
-private KnowledgeCard card(KnowledgeCardRow row){return new KnowledgeCard(row.id(),row.repositoryId(),row.title(),row.cardType(),row.content(),markdown.render(row.repositoryId(),row.content()),List.of(row.tags()),row.status(),row.revision(),row.createdAt(),row.updatedAt(),row.verifiedCommit(),row.codeReviewStatus(),row.codeReviewedAt(),attachments.list(row.repositoryId(),row.id(),row.revision()),codeReferences(row.repositoryId(),row.id(),row.revision()));}private static Object value(Map<String,Object> row,String key){Object value=row.get(key);if(value==null)value=row.get(key.toUpperCase(Locale.ROOT));return value;}private static String string(Map<String,Object> row,String key){Object value=value(row,key);return value==null?null:String.valueOf(value);}private static UUID uuid(Map<String,Object> row,String key){Object value=value(row,key);return value==null?null:value instanceof UUID id?id:UUID.fromString(value.toString());}private static Integer integer(Map<String,Object> row,String key){Object value=value(row,key);return value==null?null:((Number)value).intValue();}private static Number number(Map<String,Object> row,String key){return(Number)value(row,key);}private static boolean bool(Map<String,Object> row,String key){Object value=value(row,key);return value instanceof Boolean b?b:Boolean.parseBoolean(String.valueOf(value));}private static Instant instant(Object value){return value==null?null:value instanceof Instant i?i:((Timestamp)value).toInstant();}
-private static String vector(String text){float[]out=new float[DIM];String s=text.toLowerCase(Locale.ROOT);for(int i=0;i<s.length();i++){int h=s.substring(i,Math.min(s.length(),i+3)).hashCode();out[Math.floorMod(h,DIM)]+=(h&1)==0?1:-1;}double norm=0;for(float x:out)norm+=x*x;norm=Math.sqrt(norm);StringBuilder b=new StringBuilder("[");for(int i=0;i<DIM;i++){if(i>0)b.append(',');b.append(norm==0?0:out[i]/norm);}return b.append(']').toString();}private static String sha256(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}}
-public record SearchHit(UUID chunkId,UUID snapshotId,String filePath,String symbolName,String symbolKind,Integer startLine,Integer endLine,String content,String contentHash,double score,List<String>channels){}public record Evidence(String sourceType,UUID chunkId,UUID knowledgeCardId,UUID snapshotId,String title,String filePath,String symbolName,String symbolKind,Integer startLine,Integer endLine,String content,String contentHash,double score,List<String>channels,List<CodeReference>codeReferences){int rankOr(int fallback){return fallback;}}public record Citation(UUID id,String sourceType,UUID chunkId,UUID knowledgeCardId,UUID snapshotId,String title,String filePath,String symbolName,Integer startLine,Integer endLine,String content,int rank,List<CodeReference>codeReferences){}public record Answer(UUID conversationId,String answer,UUID snapshotId,List<Citation>citations,String provider,Instant createdAt){}public record GraphTarget(String symbol,String filePath,Integer startLine){}public record GraphNode(String symbol,int depth,boolean focus){}public record GraphEdge(String source,String target,String relation){}public record GraphResult(List<GraphNode>nodes,List<GraphEdge>edges,String risk,List<String>limitations){}public record CodeReferenceInput(UUID chunkId){}public record CodeReference(UUID chunkId,UUID snapshotId,String filePath,String symbolName,Integer startLine,Integer endLine,String contentHash,boolean stale){}public record CardInput(String title,String cardType,String content,List<String>tags,String status,List<UUID>attachmentIds,List<CodeReferenceInput>codeReferences){public CardInput{if(tags==null)tags=List.of();if(status==null)status="DRAFT";if(attachmentIds==null)attachmentIds=List.of();if(codeReferences==null)codeReferences=List.of();}}public record KnowledgeCard(UUID id,UUID repositoryId,String title,String cardType,String content,String renderedContent,List<String>tags,String status,int revision,Instant createdAt,Instant updatedAt,String verifiedCommit,String codeReviewStatus,Instant codeReviewedAt,List<KnowledgeAttachmentService.Attachment>attachments,List<CodeReference>codeReferences){}
+
+import com.analyzercoder.application.llm.LlmSettingsService;
+import com.analyzercoder.infrastructure.persistence.mapper.GraphRetrievalMapper;
+import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
+import com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class IntelligenceService {
+    private static final int DIMENSION = 64;
+    private static final int MAX_CANDIDATES_PER_CHANNEL = 40;
+    private static final Set<String> CARD_STATUSES = Set.of(
+        "DRAFT", "PUBLISHED", "NEEDS_REVIEW", "ARCHIVED"
+    );
+
+    private final IntelligenceMapper mapper;
+    private final GraphRetrievalMapper graphRetrievalMapper;
+    private final KnowledgeAttachmentService attachments;
+    private final MarkdownRenderingService markdown;
+    private final LlmSettingsService llm;
+    private final RetrievalQueryAnalyzer queryAnalyzer;
+    private final RetrievalRanker ranker;
+    private final AnswerCitationValidator citationValidator;
+
+    public IntelligenceService(
+        IntelligenceMapper mapper,
+        GraphRetrievalMapper graphRetrievalMapper,
+        KnowledgeAttachmentService attachments,
+        MarkdownRenderingService markdown,
+        LlmSettingsService llm,
+        RetrievalQueryAnalyzer queryAnalyzer,
+        RetrievalRanker ranker,
+        AnswerCitationValidator citationValidator
+    ) {
+        this.mapper = mapper;
+        this.graphRetrievalMapper = graphRetrievalMapper;
+        this.attachments = attachments;
+        this.markdown = markdown;
+        this.llm = llm;
+        this.queryAnalyzer = queryAnalyzer;
+        this.ranker = ranker;
+        this.citationValidator = citationValidator;
+    }
+
+    @Transactional
+    public List<SearchHit> hybridSearch(UUID repositoryId, String query, int limit) {
+        RetrievalQueryAnalyzer.Query analyzed = queryAnalyzer.analyze(query);
+        if (analyzed.normalized().isBlank()) return List.of();
+        int resolvedLimit = Math.max(1, Math.min(limit, 100));
+        List<RetrievalRanker.RankedCandidate> ranked = retrieve(
+            repositoryId, analyzed, false, resolvedLimit
+        );
+        return ranked.stream().map(this::searchHit).toList();
+    }
+
+    @Transactional
+    public List<Evidence> unifiedSearch(UUID repositoryId, String query, int limit) {
+        RetrievalQueryAnalyzer.Query analyzed = queryAnalyzer.analyze(query);
+        if (analyzed.normalized().isBlank()) return List.of();
+        int resolvedLimit = Math.max(1, Math.min(limit, 20));
+        return retrieve(repositoryId, analyzed, true, resolvedLimit).stream()
+            .map(candidate -> evidence(repositoryId, candidate))
+            .toList();
+    }
+
+    @Transactional
+    public Answer ask(UUID repositoryId, UUID accountId, String question) {
+        List<Evidence> evidence = unifiedSearch(repositoryId, question, 10);
+        UUID conversationId = UUID.randomUUID();
+        UUID snapshotId = evidence.stream()
+            .map(Evidence::snapshotId)
+            .filter(Objects::nonNull)
+            .findFirst()
+            .orElse(null);
+
+        String answer;
+        String provider = "deterministic-local";
+        String evidenceStatus;
+        List<IndexedEvidence> cited;
+
+        if (evidence.isEmpty()) {
+            answer = "当前仓库的代码索引和有效知识中没有找到达到相关度门槛的证据。"
+                + "请先完成索引、发布相关知识，或使用更具体的模块名、符号名和业务术语。";
+            evidenceStatus = "INSUFFICIENT";
+            cited = List.of();
+        } else {
+            Optional<LlmSettingsService.GenerationResult> generated = llm.generate(llmPrompt(question, evidence));
+            if (generated.isPresent()) {
+                AnswerCitationValidator.Validation validation =
+                    citationValidator.validate(generated.get().answer(), evidence.size());
+                if (validation.valid()) {
+                    answer = generated.get().answer();
+                    provider = generated.get().provider();
+                    evidenceStatus = "SUPPORTED";
+                    cited = validation.citedEvidence().stream()
+                        .map(index -> new IndexedEvidence(index, evidence.get(index - 1)))
+                        .toList();
+                } else {
+                    answer = deterministicAnswer(evidence)
+                        + "\n\n外部模型回答因“" + validation.reason() + "”未通过引用校验，已安全降级。";
+                    evidenceStatus = "MODEL_OUTPUT_REJECTED";
+                    cited = indexed(evidence, Math.min(5, evidence.size()));
+                }
+            } else {
+                answer = deterministicAnswer(evidence);
+                evidenceStatus = "DEGRADED";
+                cited = indexed(evidence, Math.min(5, evidence.size()));
+            }
+        }
+
+        mapper.insertConversation(
+            conversationId, repositoryId, accountId, question, answer, snapshotId
+        );
+        List<Citation> citations = persistCitations(conversationId, cited);
+        return new Answer(
+            conversationId, answer, snapshotId, citations, provider,
+            evidenceStatus, Instant.now()
+        );
+    }
+
+    public boolean prepareRepositoryEmbeddings(UUID repositoryId) {
+        try {
+            rebuildGraph(repositoryId);
+            ensureCodeEmbeddings(repositoryId);
+            ensureKnowledgeEmbeddings(repositoryId);
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private List<RetrievalRanker.RankedCandidate> retrieve(
+        UUID repositoryId,
+        RetrievalQueryAnalyzer.Query query,
+        boolean includeKnowledge,
+        int limit
+    ) {
+        int candidateLimit = Math.min(
+            MAX_CANDIDATES_PER_CHANNEL,
+            Math.max(16, limit * 4)
+        );
+        int termCount = Math.max(1, query.terms().size());
+        List<RetrievalRanker.ChannelResult> channels = new ArrayList<>();
+
+        List<Map<String, Object>> codeKeywordRows = mapper.searchCodeKeyword(
+            repositoryId, query.normalized(), query.terms(), termCount, candidateLimit
+        );
+        channels.add(channel("CODE_KEYWORD", 1.15, "CODE", codeKeywordRows, true));
+        List<String> matchedSymbols = codeKeywordRows.stream()
+            .map(row -> string(row, "symbol_name"))
+            .filter(Objects::nonNull)
+            .filter(symbol -> !symbol.isBlank())
+            .distinct()
+            .limit(8)
+            .toList();
+        if (!matchedSymbols.isEmpty()) {
+            channels.add(channel(
+                "CODE_GRAPH", 0.9, "CODE",
+                graphRetrievalMapper.relatedCodeChunks(
+                    repositoryId, matchedSymbols, candidateLimit
+                ),
+                true
+            ));
+        }
+        if (includeKnowledge) {
+            channels.add(channel(
+                "KNOWLEDGE_KEYWORD", 1.2, "KNOWLEDGE",
+                mapper.searchKnowledgeKeyword(
+                    repositoryId, query.normalized(), query.terms(), termCount, candidateLimit
+                ),
+                true
+            ));
+        }
+
+        try {
+            rebuildGraph(repositoryId);
+            ensureCodeEmbeddings(repositoryId);
+            if (includeKnowledge) ensureKnowledgeEmbeddings(repositoryId);
+            LlmSettingsService.VectorEmbedding embedding = llm.vectorize(query.normalized());
+            String vector = embedding.vector() == null
+                ? localVector(query.normalized())
+                : embedding.vector();
+            String model = embedding.model();
+            channels.add(channel(
+                "CODE_SEMANTIC", 1.0, "CODE",
+                mapper.searchCodeVector(repositoryId, vector, model, candidateLimit),
+                false
+            ));
+            if (includeKnowledge) {
+                channels.add(channel(
+                    "KNOWLEDGE_SEMANTIC", 1.05, "KNOWLEDGE",
+                    mapper.searchKnowledgeVector(repositoryId, vector, model, candidateLimit),
+                    false
+                ));
+            }
+        } catch (RuntimeException ignored) {
+            // Keyword and symbol retrieval remain available when embedding is unavailable.
+        }
+        return ranker.fuse(channels, limit);
+    }
+
+    private RetrievalRanker.ChannelResult channel(
+        String name,
+        double weight,
+        String sourceType,
+        List<Map<String, Object>> rows,
+        boolean lexical
+    ) {
+        List<RetrievalRanker.Candidate> candidates = rows.stream()
+            .map(row -> new RetrievalRanker.Candidate(
+                sourceType + ":" + uuid(row, "id"),
+                sourceType,
+                row,
+                lexical ? decimal(row, "lexical_score") : 0,
+                lexical ? 0 : decimal(row, "semantic_score")
+            ))
+            .toList();
+        return new RetrievalRanker.ChannelResult(name, weight, candidates);
+    }
+
+    private SearchHit searchHit(RetrievalRanker.RankedCandidate candidate) {
+        Map<String, Object> row = candidate.row();
+        return new SearchHit(
+            uuid(row, "id"), uuid(row, "snapshot_id"), string(row, "file_path"),
+            string(row, "symbol_name"), string(row, "symbol_kind"),
+            integer(row, "start_line"), integer(row, "end_line"),
+            string(row, "content"), string(row, "content_hash"),
+            candidate.score(), candidate.lexicalScore(), candidate.semanticScore(),
+            candidate.channels()
+        );
+    }
+
+    private Evidence evidence(UUID repositoryId, RetrievalRanker.RankedCandidate candidate) {
+        Map<String, Object> row = candidate.row();
+        if ("KNOWLEDGE".equals(candidate.sourceType())) {
+            UUID cardId = uuid(row, "id");
+            int revision = integer(row, "revision");
+            return new Evidence(
+                "KNOWLEDGE", null, cardId, null, string(row, "title"),
+                "knowledge://" + cardId, null, string(row, "card_type"),
+                null, null, string(row, "content"), string(row, "content_hash"),
+                candidate.score(), candidate.lexicalScore(), candidate.semanticScore(),
+                candidate.channels(), codeReferences(repositoryId, cardId, revision)
+            );
+        }
+        return new Evidence(
+            "CODE", uuid(row, "id"), null, uuid(row, "snapshot_id"),
+            string(row, "symbol_name") == null
+                ? string(row, "file_path")
+                : string(row, "symbol_name"),
+            string(row, "file_path"), string(row, "symbol_name"),
+            string(row, "symbol_kind"), integer(row, "start_line"),
+            integer(row, "end_line"), string(row, "content"),
+            string(row, "content_hash"), candidate.score(),
+            candidate.lexicalScore(), candidate.semanticScore(),
+            candidate.channels(), List.of()
+        );
+    }
+
+    private List<Citation> persistCitations(
+        UUID conversationId,
+        List<IndexedEvidence> cited
+    ) {
+        List<Citation> citations = new ArrayList<>();
+        for (IndexedEvidence indexed : cited) {
+            Evidence item = indexed.evidence();
+            UUID citationId = UUID.randomUUID();
+            mapper.insertCitation(
+                citationId, conversationId, item.sourceType(), item.chunkId(),
+                item.knowledgeCardId(), item.title(), item.filePath(),
+                item.symbolName(), item.startLine(), item.endLine(),
+                item.contentHash(), indexed.index()
+            );
+            citations.add(new Citation(
+                citationId, item.sourceType(), item.chunkId(),
+                item.knowledgeCardId(), item.snapshotId(), item.title(),
+                item.filePath(), item.symbolName(), item.startLine(),
+                item.endLine(), item.content(), indexed.index(), item.score(),
+                item.lexicalScore(), item.semanticScore(), item.channels(),
+                item.codeReferences()
+            ));
+        }
+        return citations;
+    }
+
+    private static List<IndexedEvidence> indexed(List<Evidence> evidence, int limit) {
+        List<IndexedEvidence> result = new ArrayList<>();
+        for (int index = 0; index < limit; index++) {
+            result.add(new IndexedEvidence(index + 1, evidence.get(index)));
+        }
+        return result;
+    }
+
+    private static String deterministicAnswer(List<Evidence> evidence) {
+        StringBuilder answer = new StringBuilder("根据当前有效代码与团队知识，检索到以下高相关证据：");
+        for (int index = 0; index < Math.min(5, evidence.size()); index++) {
+            Evidence item = evidence.get(index);
+            answer.append("\n").append(index + 1).append(". [S").append(index + 1).append("] [")
+                .append("CODE".equals(item.sourceType()) ? "代码" : "知识")
+                .append("] ").append(item.title());
+            if (item.startLine() != null) {
+                answer.append("（第 ").append(item.startLine()).append(" 行附近）");
+            }
+        }
+        return answer.append(
+            "。\n\n当前未使用外部模型生成解释，请打开引用核对原文，并使用调用图谱验证结构关系。"
+        ).toString();
+    }
+
+    private static String llmPrompt(String question, List<Evidence> evidence) {
+        StringBuilder prompt = new StringBuilder(
+            "你是仓库知识与代码问答助手。只能依据下面带编号的证据回答；"
+                + "不能从证据推出的内容必须明确说不知道；不要编造调用关系。"
+        ).append("\n问题：").append(question).append("\n证据：");
+        int remaining = 18_000;
+        for (int index = 0; index < evidence.size() && remaining > 0; index++) {
+            Evidence item = evidence.get(index);
+            String header = "\n[S" + (index + 1) + "][" + item.sourceType() + "] "
+                + item.title() + (item.startLine() == null ? "" : ":" + item.startLine()) + "\n";
+            prompt.append(header);
+            remaining -= header.length();
+            int length = Math.min(Math.min(item.content().length(), 2_400), Math.max(0, remaining));
+            prompt.append(item.content(), 0, length);
+            remaining -= length;
+            for (CodeReference reference : item.codeReferences()) {
+                String link = "\n关联代码：" + reference.filePath() + ":" + reference.startLine();
+                if (link.length() > remaining) break;
+                prompt.append(link);
+                remaining -= link.length();
+            }
+        }
+        return prompt.append(
+            "\n请用中文回答；每个事实句末必须标注一个或多个 [S编号]；"
+                + "区分团队知识和源码事实；冲突时以当前快照源码为准。"
+        ).toString();
+    }
+
+    private void ensureCodeEmbeddings(UUID repositoryId) {
+        String model = llm.activeVectorModelName();
+        for (Map<String, Object> row : mapper.missingEmbeddings(repositoryId, model)) {
+            LlmSettingsService.VectorEmbedding embedding = llm.vectorize(string(row, "content"));
+            String vector = embedding.vector() == null
+                ? localVector(string(row, "content"))
+                : embedding.vector();
+            mapper.upsertEmbedding(
+                uuid(row, "id"), repositoryId, embedding.model(), vector,
+                string(row, "content_hash")
+            );
+        }
+    }
+
+    private void ensureKnowledgeEmbeddings(UUID repositoryId) {
+        String model = llm.activeVectorModelName();
+        for (Map<String, Object> row : mapper.missingKnowledgeEmbeddings(repositoryId, model)) {
+            String content = string(row, "content");
+            LlmSettingsService.VectorEmbedding embedding = llm.vectorize(content);
+            String vector = embedding.vector() == null
+                ? localVector(content)
+                : embedding.vector();
+            mapper.upsertKnowledgeEmbedding(
+                uuid(row, "id"), repositoryId, integer(row, "revision"),
+                embedding.model(), vector, sha256(content)
+            );
+        }
+    }
+
+    @Transactional
+    public GraphResult graph(UUID repositoryId, String symbol, int depth, String direction) {
+        rebuildGraph(repositoryId);
+        int maximumDepth = Math.max(1, Math.min(depth, 5));
+        List<GraphEdge> all = mapper.graphEdges(repositoryId).stream()
+            .map(row -> new GraphEdge(
+                string(row, "source_symbol"),
+                string(row, "target_symbol"),
+                string(row, "relation")
+            ))
+            .toList();
+        Map<String, Integer> distances = new LinkedHashMap<>();
+        distances.put(symbol, 0);
+        List<GraphEdge> edges = new ArrayList<>();
+        for (int currentDepth = 0; currentDepth < maximumDepth; currentDepth++) {
+            for (GraphEdge edge : all) {
+                Integer from = distances.get(edge.source());
+                Integer to = distances.get(edge.target());
+                if (from != null && from == currentDepth && !"UPSTREAM".equals(direction)) {
+                    distances.putIfAbsent(edge.target(), currentDepth + 1);
+                    edges.add(edge);
+                }
+                if (to != null && to == currentDepth && !"DOWNSTREAM".equals(direction)) {
+                    distances.putIfAbsent(edge.source(), currentDepth + 1);
+                    edges.add(edge);
+                }
+            }
+        }
+        List<GraphNode> nodes = distances.entrySet().stream()
+            .map(entry -> new GraphNode(
+                entry.getKey(), entry.getValue(), entry.getKey().equals(symbol)
+            ))
+            .toList();
+        List<GraphEdge> uniqueEdges = edges.stream().distinct().toList();
+        return new GraphResult(
+            nodes, uniqueEdges,
+            uniqueEdges.size() > 20 ? "HIGH" : uniqueEdges.size() > 5 ? "MEDIUM" : "LOW",
+            List.of("静态关系不包含运行时反射与动态分派", "结果绑定当前已发布快照")
+        );
+    }
+
+    public GraphTarget graphTarget(UUID repositoryId, UUID chunkId) {
+        Map<String, Object> row = mapper.findChunk(repositoryId, chunkId);
+        if (row == null) throw new IllegalArgumentException("代码片段不存在");
+        String symbol = string(row, "symbol_name");
+        if (symbol == null || symbol.isBlank()) {
+            symbol = inferSymbol(string(row, "content"), string(row, "file_path"));
+        }
+        return new GraphTarget(symbol, string(row, "file_path"), integer(row, "start_line"));
+    }
+
+    public List<KnowledgeCard> cards(UUID repositoryId, boolean includeDraft) {
+        return mapper.cards(repositoryId, includeDraft).stream().map(this::card).toList();
+    }
+
+    @Transactional
+    public KnowledgeCard createCard(UUID repositoryId, UUID actor, CardInput input) {
+        CardInput validated = validateCardInput(input);
+        UUID id = UUID.randomUUID();
+        mapper.insertCard(
+            id, repositoryId, actor, validated.title(), validated.cardType(),
+            validated.content(), validated.tags().toArray(String[]::new), validated.status()
+        );
+        KnowledgeCard card = findCard(repositoryId, id);
+        attachments.attach(repositoryId, id, card.revision(), validated.attachmentIds());
+        attachCodeReferences(repositoryId, id, card.revision(), validated.codeReferences());
+        if ("PUBLISHED".equals(validated.status())) prepareRepositoryEmbeddings(repositoryId);
+        return findCard(repositoryId, id);
+    }
+
+    @Transactional
+    public KnowledgeCard updateCard(
+        UUID repositoryId,
+        UUID id,
+        UUID actor,
+        CardInput input
+    ) {
+        CardInput validated = validateCardInput(input);
+        if (mapper.updateCard(
+            id, repositoryId, actor, validated.title(), validated.cardType(),
+            validated.content(), validated.tags().toArray(String[]::new), validated.status()
+        ) == 0) {
+            throw new IllegalArgumentException("知识卡片不存在");
+        }
+        KnowledgeCard card = findCard(repositoryId, id);
+        attachments.attach(repositoryId, id, card.revision(), validated.attachmentIds());
+        attachCodeReferences(repositoryId, id, card.revision(), validated.codeReferences());
+        if ("PUBLISHED".equals(validated.status())) prepareRepositoryEmbeddings(repositoryId);
+        return findCard(repositoryId, id);
+    }
+
+    public Map<String, String> settings() {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map<String, Object> row : mapper.settings()) {
+            result.put(string(row, "setting_key"), string(row, "value"));
+        }
+        return result;
+    }
+
+    @Transactional
+    public Map<String, String> saveSettings(UUID actor, Map<String, String> values) {
+        values.forEach((key, value) -> mapper.upsertSetting(key, value, actor));
+        return settings();
+    }
+
+    private KnowledgeCard findCard(UUID repositoryId, UUID id) {
+        return cards(repositoryId, true).stream()
+            .filter(card -> card.id().equals(id))
+            .findFirst()
+            .orElseThrow();
+    }
+
+    private static CardInput validateCardInput(CardInput input) {
+        if (input == null) throw new IllegalArgumentException("知识卡片不能为空");
+        String title = clean(input.title(), 1, 200, "知识标题");
+        String cardType = clean(input.cardType(), 1, 40, "知识类型");
+        String content = clean(input.content(), 1, 100_000, "知识正文");
+        String status = input.status() == null
+            ? "DRAFT"
+            : input.status().trim().toUpperCase(Locale.ROOT);
+        if (!CARD_STATUSES.contains(status)) throw new IllegalArgumentException("知识状态无效");
+        List<String> tags = input.tags().stream()
+            .filter(Objects::nonNull)
+            .map(String::trim)
+            .filter(value -> !value.isBlank())
+            .distinct()
+            .limit(20)
+            .toList();
+        return new CardInput(
+            title, cardType, content, tags, status,
+            input.attachmentIds(), input.codeReferences()
+        );
+    }
+
+    private static String clean(String value, int minimum, int maximum, String label) {
+        String cleaned = value == null ? "" : value.trim();
+        if (cleaned.length() < minimum || cleaned.length() > maximum) {
+            throw new IllegalArgumentException(label + "长度无效");
+        }
+        return cleaned;
+    }
+
+    private void attachCodeReferences(
+        UUID repositoryId,
+        UUID cardId,
+        int revision,
+        List<CodeReferenceInput> references
+    ) {
+        List<UUID> ids = references.stream()
+            .map(CodeReferenceInput::chunkId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .limit(30)
+            .toList();
+        int position = 0;
+        for (UUID chunkId : ids) {
+            Map<String, Object> row = mapper.findChunk(repositoryId, chunkId);
+            if (row == null) throw new IllegalArgumentException("关联代码不存在或不属于当前仓库");
+            mapper.insertCodeReference(
+                cardId, revision, position++, repositoryId,
+                uuid(row, "snapshot_id"), chunkId, string(row, "file_path"),
+                string(row, "symbol_name"), integer(row, "start_line"),
+                integer(row, "end_line"), string(row, "content_hash")
+            );
+        }
+    }
+
+    private List<CodeReference> codeReferences(
+        UUID repositoryId,
+        UUID cardId,
+        int revision
+    ) {
+        return mapper.codeReferences(repositoryId, cardId, revision).stream()
+            .map(row -> new CodeReference(
+                uuid(row, "chunk_id"), uuid(row, "snapshot_id"),
+                string(row, "file_path"), string(row, "symbol_name"),
+                integer(row, "start_line"), integer(row, "end_line"),
+                string(row, "content_hash"), bool(row, "stale")
+            ))
+            .toList();
+    }
+
+    private void rebuildGraph(UUID repositoryId) {
+        mapper.deleteGraphEdges(repositoryId);
+        List<Map<String, Object>> chunks = mapper.graphChunks(repositoryId);
+        Map<String, Map<String, Object>> symbols = new LinkedHashMap<>();
+        for (Map<String, Object> chunk : chunks) {
+            String symbol = string(chunk, "symbol_name");
+            if (symbol != null && !symbol.isBlank()) symbols.putIfAbsent(symbol, chunk);
+        }
+        for (Map<String, Object> source : chunks) {
+            String content = string(source, "content");
+            for (Map.Entry<String, Map<String, Object>> target : symbols.entrySet()) {
+                UUID sourceId = uuid(source, "id");
+                UUID targetId = uuid(target.getValue(), "id");
+                if (sourceId.equals(targetId) || !content.contains(target.getKey() + "(")) continue;
+                mapper.insertGraphEdge(
+                    UUID.randomUUID(), repositoryId, uuid(source, "snapshot_id"),
+                    sourceId, targetId, string(source, "symbol_name"), target.getKey()
+                );
+            }
+        }
+    }
+
+    private static String inferSymbol(String content, String filePath) {
+        if (content != null) {
+            Matcher declaration = Pattern.compile(
+                "(?m)\\b(?:class|interface|record|enum|function|def|func)\\s+([A-Za-z_$][\\w$]*)"
+            ).matcher(content);
+            if (declaration.find()) return declaration.group(1);
+            Matcher callable = Pattern.compile(
+                "(?m)\\b(?:public|protected|private|static|final|async|export)\\s+"
+                    + "(?:[\\w<>\\[\\],.?]+\\s+)?([A-Za-z_$][\\w$]*)\\s*\\("
+            ).matcher(content);
+            if (callable.find()) return callable.group(1);
+        }
+        String name = filePath == null ? "unknown" : filePath.replace('\\', '/');
+        name = name.substring(name.lastIndexOf('/') + 1);
+        int extension = name.lastIndexOf('.');
+        return extension > 0 ? name.substring(0, extension) : name;
+    }
+
+    private KnowledgeCard card(KnowledgeCardRow row) {
+        return new KnowledgeCard(
+            row.id(), row.repositoryId(), row.title(), row.cardType(), row.content(),
+            markdown.render(row.repositoryId(), row.content()), List.of(row.tags()),
+            row.status(), row.revision(), row.createdAt(), row.updatedAt(),
+            row.verifiedCommit(), row.codeReviewStatus(), row.codeReviewedAt(),
+            attachments.list(row.repositoryId(), row.id(), row.revision()),
+            codeReferences(row.repositoryId(), row.id(), row.revision())
+        );
+    }
+
+    private static Object value(Map<String, Object> row, String key) {
+        Object result = row.get(key);
+        if (result == null) result = row.get(key.toUpperCase(Locale.ROOT));
+        return result;
+    }
+
+    private static String string(Map<String, Object> row, String key) {
+        Object result = value(row, key);
+        return result == null ? null : String.valueOf(result);
+    }
+
+    private static UUID uuid(Map<String, Object> row, String key) {
+        Object result = value(row, key);
+        if (result == null) return null;
+        return result instanceof UUID id ? id : UUID.fromString(result.toString());
+    }
+
+    private static Integer integer(Map<String, Object> row, String key) {
+        Object result = value(row, key);
+        return result == null ? null : ((Number) result).intValue();
+    }
+
+    private static double decimal(Map<String, Object> row, String key) {
+        Object result = value(row, key);
+        return result == null ? 0 : ((Number) result).doubleValue();
+    }
+
+    private static boolean bool(Map<String, Object> row, String key) {
+        Object result = value(row, key);
+        return result instanceof Boolean booleanValue
+            ? booleanValue
+            : Boolean.parseBoolean(String.valueOf(result));
+    }
+
+    private static String localVector(String text) {
+        float[] output = new float[DIMENSION];
+        String normalized = text.toLowerCase(Locale.ROOT);
+        for (int index = 0; index < normalized.length(); index++) {
+            int hash = normalized.substring(index, Math.min(normalized.length(), index + 3)).hashCode();
+            output[Math.floorMod(hash, DIMENSION)] += (hash & 1) == 0 ? 1 : -1;
+        }
+        double norm = 0;
+        for (float number : output) norm += number * number;
+        norm = Math.sqrt(norm);
+        StringBuilder vector = new StringBuilder("[");
+        for (int index = 0; index < DIMENSION; index++) {
+            if (index > 0) vector.append(',');
+            vector.append(norm == 0 ? 0 : output[index] / norm);
+        }
+        return vector.append(']').toString();
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8))
+            );
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private record IndexedEvidence(int index, Evidence evidence) {}
+
+    public record SearchHit(
+        UUID chunkId,
+        UUID snapshotId,
+        String filePath,
+        String symbolName,
+        String symbolKind,
+        Integer startLine,
+        Integer endLine,
+        String content,
+        String contentHash,
+        double score,
+        double lexicalScore,
+        double semanticScore,
+        List<String> channels
+    ) {}
+
+    public record Evidence(
+        String sourceType,
+        UUID chunkId,
+        UUID knowledgeCardId,
+        UUID snapshotId,
+        String title,
+        String filePath,
+        String symbolName,
+        String symbolKind,
+        Integer startLine,
+        Integer endLine,
+        String content,
+        String contentHash,
+        double score,
+        double lexicalScore,
+        double semanticScore,
+        List<String> channels,
+        List<CodeReference> codeReferences
+    ) {}
+
+    public record Citation(
+        UUID id,
+        String sourceType,
+        UUID chunkId,
+        UUID knowledgeCardId,
+        UUID snapshotId,
+        String title,
+        String filePath,
+        String symbolName,
+        Integer startLine,
+        Integer endLine,
+        String content,
+        int rank,
+        double score,
+        double lexicalScore,
+        double semanticScore,
+        List<String> channels,
+        List<CodeReference> codeReferences
+    ) {}
+
+    public record Answer(
+        UUID conversationId,
+        String answer,
+        UUID snapshotId,
+        List<Citation> citations,
+        String provider,
+        String evidenceStatus,
+        Instant createdAt
+    ) {}
+
+    public record GraphTarget(String symbol, String filePath, Integer startLine) {}
+    public record GraphNode(String symbol, int depth, boolean focus) {}
+    public record GraphEdge(String source, String target, String relation) {}
+    public record GraphResult(
+        List<GraphNode> nodes,
+        List<GraphEdge> edges,
+        String risk,
+        List<String> limitations
+    ) {}
+    public record CodeReferenceInput(UUID chunkId) {}
+    public record CodeReference(
+        UUID chunkId,
+        UUID snapshotId,
+        String filePath,
+        String symbolName,
+        Integer startLine,
+        Integer endLine,
+        String contentHash,
+        boolean stale
+    ) {}
+    public record CardInput(
+        String title,
+        String cardType,
+        String content,
+        List<String> tags,
+        String status,
+        List<UUID> attachmentIds,
+        List<CodeReferenceInput> codeReferences
+    ) {
+        public CardInput {
+            if (tags == null) tags = List.of();
+            if (status == null) status = "DRAFT";
+            if (attachmentIds == null) attachmentIds = List.of();
+            if (codeReferences == null) codeReferences = List.of();
+        }
+    }
+    public record KnowledgeCard(
+        UUID id,
+        UUID repositoryId,
+        String title,
+        String cardType,
+        String content,
+        String renderedContent,
+        List<String> tags,
+        String status,
+        int revision,
+        Instant createdAt,
+        Instant updatedAt,
+        String verifiedCommit,
+        String codeReviewStatus,
+        Instant codeReviewedAt,
+        List<KnowledgeAttachmentService.Attachment> attachments,
+        List<CodeReference> codeReferences
+    ) {}
 }

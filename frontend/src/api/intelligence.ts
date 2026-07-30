@@ -25,14 +25,49 @@ export interface Citation {
   endLine: number | null;
   content: string;
   rank: number;
+  score: number;
+  lexicalScore: number;
+  semanticScore: number;
+  channels: string[];
   codeReferences: CodeReference[];
 }
 
-export interface Answer { conversationId: string; answer: string; snapshotId: string | null; citations: Citation[]; provider: string; createdAt: string }
-export interface GraphResult { nodes: { symbol: string; depth: number; focus: boolean }[]; edges: { source: string; target: string; relation: string }[]; risk: string; limitations: string[] }
+export interface Answer {
+  conversationId: string;
+  answer: string;
+  snapshotId: string | null;
+  citations: Citation[];
+  provider: string;
+  evidenceStatus: 'SUPPORTED' | 'DEGRADED' | 'MODEL_OUTPUT_REJECTED' | 'INSUFFICIENT';
+  createdAt: string;
+}
+
+export interface GraphResult {
+  nodes: { symbol: string; depth: number; focus: boolean }[];
+  edges: { source: string; target: string; relation: string }[];
+  risk: string;
+  limitations: string[];
+}
 export interface GraphTarget { symbol: string; filePath: string; startLine: number | null }
-export interface CodeGraphArtifact { id: string; repositoryId: string; snapshotId: string; cliVersion: string; status: string; artifactPath: string; nodeCount: number; edgeCount: number }
-export interface KnowledgeAttachment { id: string; originalName: string; mediaType: string; sizeBytes: number; sha256: string; scanStatus: string; createdAt: string }
+export interface CodeGraphArtifact {
+  id: string;
+  repositoryId: string;
+  snapshotId: string;
+  cliVersion: string;
+  status: string;
+  artifactPath: string;
+  nodeCount: number;
+  edgeCount: number;
+}
+export interface KnowledgeAttachment {
+  id: string;
+  originalName: string;
+  mediaType: string;
+  sizeBytes: number;
+  sha256: string;
+  scanStatus: string;
+  createdAt: string;
+}
 export interface KnowledgeCard {
   id: string;
   repositoryId: string;
@@ -51,29 +86,76 @@ export interface KnowledgeCard {
   attachments: KnowledgeAttachment[];
   codeReferences: CodeReference[];
 }
-export interface CardInput { title: string; cardType: string; content: string; tags: string[]; status: string; attachmentIds: string[]; codeReferences: { chunkId: string }[] }
-export interface CardRevision { cardId: string; revision: number; repositoryId: string; title: string; cardType: string; content: string; renderedContent: string; tags: string[]; status: string; changedBy: string | null; changedAt: string }
+export interface CardInput {
+  title: string;
+  cardType: string;
+  content: string;
+  tags: string[];
+  status: string;
+  attachmentIds: string[];
+  codeReferences: { chunkId: string }[];
+}
+export interface CardRevision {
+  cardId: string;
+  revision: number;
+  repositoryId: string;
+  title: string;
+  cardType: string;
+  content: string;
+  renderedContent: string;
+  tags: string[];
+  status: string;
+  changedBy: string | null;
+  changedAt: string;
+}
 
 export const intelligenceApi = {
-  ask: (repositoryId: string, question: string) => request<Answer>(`/api/repositories/${repositoryId}/ask`, {
-    method: 'POST', body: JSON.stringify({ question }),
-  }),
+  ask: (repositoryId: string, question: string) =>
+    request<Answer>(`/api/repositories/${repositoryId}/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    }),
   graph: (repositoryId: string, symbol: string, depth: number, _direction: string) =>
-    request<GraphResult>(`/api/repositories/${repositoryId}/codegraph/impact?symbol=${encodeURIComponent(symbol)}&depth=${depth}`),
+    request<GraphResult>(
+      `/api/repositories/${repositoryId}/codegraph/impact?symbol=${encodeURIComponent(symbol)}&depth=${depth}`
+    ),
   graphTarget: (repositoryId: string, chunkId: string) =>
     request<GraphTarget>(`/api/repositories/${repositoryId}/chunks/${chunkId}/graph-target`),
-  buildGraph: (repositoryId: string) => request<IndexJob>(`/api/repositories/${repositoryId}/codegraph/build`, { method: 'POST' }),
-  latestGraph: (repositoryId: string) => request<CodeGraphArtifact | null>(`/api/repositories/${repositoryId}/codegraph/latest`),
+  buildGraph: (repositoryId: string) =>
+    request<IndexJob>(`/api/repositories/${repositoryId}/codegraph/build`, { method: 'POST' }),
+  latestGraph: (repositoryId: string) =>
+    request<CodeGraphArtifact | null>(`/api/repositories/${repositoryId}/codegraph/latest`),
   uploadAttachment: (repositoryId: string, file: File) => {
     const body = new FormData();
     body.append('file', file);
-    return request<KnowledgeAttachment>(`/api/repositories/${repositoryId}/knowledge/attachments`, { method: 'POST', body });
+    return request<KnowledgeAttachment>(
+      `/api/repositories/${repositoryId}/knowledge/attachments`,
+      { method: 'POST', body }
+    );
   },
-  cards: (repositoryId: string) => request<KnowledgeCard[]>(`/api/repositories/${repositoryId}/knowledge`),
-  createCard: (repositoryId: string, input: CardInput) => request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge`, { method: 'POST', body: JSON.stringify(input) }),
-  updateCard: (repositoryId: string, id: string, input: CardInput) => request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
-  cardHistory: (repositoryId: string, id: string) => request<CardRevision[]>(`/api/repositories/${repositoryId}/knowledge/${id}/history`),
-  restoreCardRevision: (repositoryId: string, id: string, revision: number) => request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}/history/${revision}/restore`, { method: 'POST' }),
+  cards: (repositoryId: string) =>
+    request<KnowledgeCard[]>(`/api/repositories/${repositoryId}/knowledge`),
+  createCard: (repositoryId: string, input: CardInput) =>
+    request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateCard: (repositoryId: string, id: string, input: CardInput) =>
+    request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  cardHistory: (repositoryId: string, id: string) =>
+    request<CardRevision[]>(`/api/repositories/${repositoryId}/knowledge/${id}/history`),
+  restoreCardRevision: (repositoryId: string, id: string, revision: number) =>
+    request<KnowledgeCard>(
+      `/api/repositories/${repositoryId}/knowledge/${id}/history/${revision}/restore`,
+      { method: 'POST' }
+    ),
   settings: () => request<Record<string, string>>('/api/settings'),
-  saveSettings: (input: Record<string, string>) => request<Record<string, string>>('/api/settings', { method: 'PUT', body: JSON.stringify(input) }),
+  saveSettings: (input: Record<string, string>) =>
+    request<Record<string, string>>('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
 };

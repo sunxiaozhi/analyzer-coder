@@ -19,26 +19,112 @@
         </constructor>
     </resultMap>
 
-    <select id="search" resultType="map">
-        SELECT c.id,c.snapshot_id,c.file_path,c.symbol_name,c.symbol_kind,c.start_line,c.end_line,c.content,c.content_hash,
-        (CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.file_path))&gt;0 THEN .35 ELSE 0 END
-        +CASE WHEN POSITION(LOWER(#{query}) IN LOWER(COALESCE(c.symbol_name,'')))&gt;0 THEN .4 ELSE 0 END
-        +CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.content))&gt;0 THEN .25 ELSE 0 END
-        +(1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector)))*.55) score
-        FROM code_chunks c JOIN chunk_embeddings e ON e.chunk_id=c.id
-        WHERE c.repo_id=#{repositoryId}
-        ORDER BY score DESC,c.file_path,c.start_line NULLS FIRST LIMIT #{limit}
+    <sql id="codeColumns">
+        c.id,c.snapshot_id,c.file_path,c.symbol_name,c.symbol_kind,c.start_line,c.end_line,
+        c.content,c.content_hash
+    </sql>
+    <sql id="knowledgeColumns">
+        c.id,c.title,c.card_type,c.content,c.revision,
+        MD5(CONCAT(c.title,E'\n',c.content,E'\n',ARRAY_TO_STRING(c.tags,' '))) content_hash
+    </sql>
+    <sql id="validKnowledge">
+        c.repo_id=#{repositoryId} AND c.status='PUBLISHED'
+        AND c.code_review_status&lt;&gt;'REVIEW_REQUIRED'
+        AND NOT EXISTS(
+            SELECT 1 FROM knowledge_code_refs r
+            LEFT JOIN code_chunks current_chunk
+              ON current_chunk.repo_id=r.repo_id
+             AND current_chunk.file_path=r.file_path
+             AND current_chunk.start_line=r.start_line
+             AND current_chunk.content_hash=r.content_hash
+            WHERE r.card_id=c.id AND r.revision=c.revision AND current_chunk.id IS NULL
+        )
+    </sql>
+
+    <select id="searchCodeKeyword" resultType="map">
+        SELECT <include refid="codeColumns"/>,
+        LEAST(1.0,
+          CASE WHEN POSITION(#{query} IN LOWER(c.file_path))&gt;0 THEN .75 ELSE 0 END
+          +CASE WHEN POSITION(#{query} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0 THEN .95 ELSE 0 END
+          +CASE WHEN POSITION(#{query} IN LOWER(c.content))&gt;0 THEN .65 ELSE 0 END
+          +(
+            <foreach collection="terms" item="term" separator="+">
+              CASE
+                WHEN LOWER(COALESCE(c.symbol_name,''))=#{term} THEN .85
+                WHEN POSITION(#{term} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0 THEN .65
+                WHEN POSITION(#{term} IN LOWER(c.file_path))&gt;0 THEN .5
+                WHEN POSITION(#{term} IN LOWER(c.content))&gt;0 THEN .3
+                ELSE 0
+              END
+            </foreach>
+          ) / #{termCount}
+        ) lexical_score,0.0 semantic_score
+        FROM code_chunks c
+        WHERE c.repo_id=#{repositoryId} AND(
+          POSITION(#{query} IN LOWER(c.file_path))&gt;0
+          OR POSITION(#{query} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0
+          OR POSITION(#{query} IN LOWER(c.content))&gt;0
+          <foreach collection="terms" item="term">
+            OR POSITION(#{term} IN LOWER(c.file_path))&gt;0
+            OR POSITION(#{term} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0
+            OR POSITION(#{term} IN LOWER(c.content))&gt;0
+          </foreach>
+        )
+        ORDER BY lexical_score DESC,c.file_path,c.start_line NULLS FIRST
+        LIMIT #{limit}
     </select>
-    <select id="searchKnowledge" resultType="map">
-        SELECT c.id,c.title,c.card_type,c.content,c.revision,e.content_hash,
-        (CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.title))&gt;0 THEN .55 ELSE 0 END
-        +CASE WHEN POSITION(LOWER(#{query}) IN LOWER(c.content))&gt;0 THEN .3 ELSE 0 END
-        +CASE WHEN POSITION(LOWER(#{query}) IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0 THEN .25 ELSE 0 END
-        +(1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector)))*.55) score
-        FROM knowledge_cards c JOIN knowledge_card_embeddings e ON e.card_id=c.id AND e.revision=c.revision
-        WHERE c.repo_id=#{repositoryId} AND c.status='PUBLISHED'
-        ORDER BY score DESC,c.updated_at DESC LIMIT #{limit}
+
+    <select id="searchCodeVector" resultType="map">
+        SELECT <include refid="codeColumns"/>,0.0 lexical_score,
+        GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
+        FROM chunk_embeddings e JOIN code_chunks c ON c.id=e.chunk_id
+        WHERE c.repo_id=#{repositoryId} AND e.model=#{model} AND e.content_hash=c.content_hash
+        ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.file_path,c.start_line NULLS FIRST
+        LIMIT #{limit}
     </select>
+
+    <select id="searchKnowledgeKeyword" resultType="map">
+        SELECT <include refid="knowledgeColumns"/>,
+        LEAST(1.0,
+          CASE WHEN POSITION(#{query} IN LOWER(c.title))&gt;0 THEN .95 ELSE 0 END
+          +CASE WHEN POSITION(#{query} IN LOWER(c.content))&gt;0 THEN .65 ELSE 0 END
+          +CASE WHEN POSITION(#{query} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0 THEN .8 ELSE 0 END
+          +(
+            <foreach collection="terms" item="term" separator="+">
+              CASE
+                WHEN POSITION(#{term} IN LOWER(c.title))&gt;0 THEN .7
+                WHEN POSITION(#{term} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0 THEN .6
+                WHEN POSITION(#{term} IN LOWER(c.content))&gt;0 THEN .35
+                ELSE 0
+              END
+            </foreach>
+          ) / #{termCount}
+        ) lexical_score,0.0 semantic_score
+        FROM knowledge_cards c
+        WHERE <include refid="validKnowledge"/> AND(
+          POSITION(#{query} IN LOWER(c.title))&gt;0
+          OR POSITION(#{query} IN LOWER(c.content))&gt;0
+          OR POSITION(#{query} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0
+          <foreach collection="terms" item="term">
+            OR POSITION(#{term} IN LOWER(c.title))&gt;0
+            OR POSITION(#{term} IN LOWER(c.content))&gt;0
+            OR POSITION(#{term} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0
+          </foreach>
+        )
+        ORDER BY lexical_score DESC,c.updated_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="searchKnowledgeVector" resultType="map">
+        SELECT <include refid="knowledgeColumns"/>,0.0 lexical_score,
+        GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
+        FROM knowledge_card_embeddings e
+        JOIN knowledge_cards c ON c.id=e.card_id AND c.revision=e.revision
+        WHERE <include refid="validKnowledge"/> AND e.model=#{model}
+        ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.updated_at DESC
+        LIMIT #{limit}
+    </select>
+
     <insert id="insertConversation">
         INSERT INTO qa_conversations(id,repo_id,account_id,question,answer,snapshot_id)
         VALUES(#{id},#{repositoryId},#{accountId},#{question},#{answer},#{snapshotId})
@@ -48,9 +134,15 @@
         VALUES(#{id},#{conversationId},#{sourceType},#{chunkId},#{knowledgeCardId},#{title},#{filePath},#{symbolName},#{startLine},#{endLine},#{evidenceHash},#{rank})
     </insert>
 
-    <select id="graphEdges" resultType="map">SELECT source_symbol,target_symbol,relation FROM code_graph_edges WHERE repo_id=#{repositoryId} LIMIT 500</select>
+    <select id="graphEdges" resultType="map">
+        SELECT source_symbol,target_symbol,relation FROM code_graph_edges
+        WHERE repo_id=#{repositoryId} LIMIT 500
+    </select>
     <delete id="deleteGraphEdges">DELETE FROM code_graph_edges WHERE repo_id=#{repositoryId}</delete>
-    <select id="graphChunks" resultType="map">SELECT id,snapshot_id,symbol_name,content FROM code_chunks WHERE repo_id=#{repositoryId} AND symbol_name IS NOT NULL</select>
+    <select id="graphChunks" resultType="map">
+        SELECT id,snapshot_id,symbol_name,content FROM code_chunks
+        WHERE repo_id=#{repositoryId} AND symbol_name IS NOT NULL
+    </select>
     <insert id="insertGraphEdge">
         INSERT INTO code_graph_edges(id,repo_id,snapshot_id,source_chunk_id,target_chunk_id,source_symbol,target_symbol,relation)
         VALUES(#{id},#{repositoryId},#{snapshotId},#{sourceChunkId},#{targetChunkId},#{sourceSymbol},#{targetSymbol},'CALLS')
@@ -79,9 +171,12 @@
         FROM code_chunks WHERE repo_id=#{repositoryId} AND id=#{chunkId}
     </select>
     <select id="codeReferences" resultType="map">
-        SELECT r.chunk_id,r.snapshot_id,r.file_path,r.symbol_name,r.start_line,r.end_line,r.content_hash,
+        SELECT COALESCE(c.id,r.chunk_id) chunk_id,COALESCE(c.snapshot_id,r.snapshot_id) snapshot_id,
+        r.file_path,COALESCE(c.symbol_name,r.symbol_name) symbol_name,r.start_line,r.end_line,r.content_hash,
         (c.id IS NULL) stale
-        FROM knowledge_code_refs r LEFT JOIN code_chunks c ON c.id=r.chunk_id AND c.content_hash=r.content_hash
+        FROM knowledge_code_refs r LEFT JOIN code_chunks c
+          ON c.repo_id=r.repo_id AND c.file_path=r.file_path AND c.start_line=r.start_line
+         AND c.content_hash=r.content_hash
         WHERE r.repo_id=#{repositoryId} AND r.card_id=#{cardId} AND r.revision=#{revision}
         ORDER BY r.position
     </select>
@@ -90,15 +185,19 @@
         VALUES(#{cardId},#{revision},#{position},#{repositoryId},#{snapshotId},#{chunkId},#{filePath},#{symbolName},#{startLine},#{endLine},#{contentHash})
     </insert>
 
-    <select id="settings" resultType="map">SELECT setting_key,CASE WHEN sensitive THEN '******' ELSE setting_value END value FROM system_settings ORDER BY setting_key</select>
+    <select id="settings" resultType="map">
+        SELECT setting_key,CASE WHEN sensitive THEN '******' ELSE setting_value END value
+        FROM system_settings ORDER BY setting_key
+    </select>
     <insert id="upsertSetting">
         INSERT INTO system_settings(setting_key,setting_value,updated_by) VALUES(#{key},#{value},#{actorId})
-        ON CONFLICT(setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP
+        ON CONFLICT(setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value,
+        updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP
     </insert>
     <select id="missingKnowledgeEmbeddings" resultType="map">
         SELECT c.id,c.revision,CONCAT(c.title,E'\n',c.content,E'\n',ARRAY_TO_STRING(c.tags,' ')) content
         FROM knowledge_cards c LEFT JOIN knowledge_card_embeddings e ON e.card_id=c.id
-        WHERE c.repo_id=#{repositoryId} AND c.status='PUBLISHED'
+        WHERE <include refid="validKnowledge"/>
         AND(e.card_id IS NULL OR e.revision&lt;&gt;c.revision OR e.model&lt;&gt;#{model})
     </select>
     <insert id="upsertKnowledgeEmbedding">
@@ -109,7 +208,8 @@
     </insert>
 
     <select id="missingEmbeddings" resultType="map">
-        SELECT c.id,c.content,c.content_hash FROM code_chunks c LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
+        SELECT c.id,c.content,c.content_hash FROM code_chunks c
+        LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
         WHERE c.repo_id=#{repositoryId}
         AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash OR e.model&lt;&gt;#{model})
     </select>

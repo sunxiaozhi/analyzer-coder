@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.VectorIndexQueryMapper">
+    <sql id="validKnowledge">
+        k.repo_id=#{repositoryId}
+        AND k.status='PUBLISHED'
+        AND k.code_review_status&lt;&gt;'REVIEW_REQUIRED'
+        AND NOT EXISTS(
+            SELECT 1
+            FROM knowledge_code_refs ref
+            LEFT JOIN code_chunks current_chunk
+              ON current_chunk.repo_id=ref.repo_id
+             AND current_chunk.file_path=ref.file_path
+             AND current_chunk.start_line=ref.start_line
+             AND current_chunk.content_hash=ref.content_hash
+            WHERE ref.card_id=k.id
+              AND ref.revision=k.revision
+              AND current_chunk.id IS NULL
+        )
+    </sql>
+
+    <select id="summary" resultType="map">
+        SELECT
+            r.id repository_id,
+            r.current_snapshot_id snapshot_id,
+            r.current_commit commit_sha,
+            COUNT(c.id) total_chunks,
+            COUNT(e.chunk_id) vectorized_chunks,
+            COUNT(c.id) FILTER (WHERE e.chunk_id IS NULL) missing_chunks,
+            (SELECT COUNT(*) FROM knowledge_cards k WHERE <include refid="validKnowledge"/>) knowledge_cards,
+            (
+                SELECT COUNT(*)
+                FROM knowledge_cards k
+                JOIN knowledge_card_embeddings ke ON ke.card_id=k.id AND ke.revision=k.revision
+                WHERE <include refid="validKnowledge"/>
+            ) vectorized_knowledge_cards,
+            COALESCE(
+                MAX(e.model),
+                (SELECT vm.model FROM vector_model_activation va
+                 JOIN vector_model_configs vm ON vm.id=va.active_config_id
+                 WHERE va.singleton_id=1)
+            ) vector_model,
+            COALESCE(
+                MAX(e.dimension),
+                (SELECT vm.dimension FROM vector_model_activation va
+                 JOIN vector_model_configs vm ON vm.id=va.active_config_id
+                 WHERE va.singleton_id=1)
+            ) dimension,
+            GREATEST(
+                MAX(e.created_at),
+                (SELECT MAX(ke.created_at) FROM knowledge_card_embeddings ke WHERE ke.repo_id=r.id)
+            ) updated_at
+        FROM repositories r
+        LEFT JOIN code_chunks c ON c.repo_id=r.id AND c.snapshot_id=r.current_snapshot_id
+        LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
+        WHERE r.id=#{repositoryId}
+        GROUP BY r.id,r.current_snapshot_id,r.current_commit
+    </select>
+
+    <select id="chunks" resultType="map">
+        SELECT
+            c.id,c.snapshot_id,c.commit_sha,c.file_path,c.symbol_name,c.symbol_kind,c.language,
+            c.chunk_type,c.start_line,c.end_line,
+            LEFT(REGEXP_REPLACE(c.content,E'\\s+',' ','g'),260) content_excerpt,
+            c.content_hash,e.model vector_model,e.dimension,e.created_at vectorized_at,
+            CASE WHEN e.chunk_id IS NULL THEN 'MISSING' ELSE 'EMBEDDED' END vector_status
+        FROM repositories r
+        JOIN code_chunks c ON c.repo_id=r.id AND c.snapshot_id=r.current_snapshot_id
+        LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
+        WHERE r.id=#{repositoryId}
+        <if test="query != null and query != ''">
+            AND(
+                POSITION(LOWER(#{query}) IN LOWER(c.file_path))&gt;0
+                OR POSITION(LOWER(#{query}) IN LOWER(COALESCE(c.symbol_name,'')))&gt;0
+                OR POSITION(LOWER(#{query}) IN LOWER(c.content))&gt;0
+            )
+        </if>
+        <if test="status == 'EMBEDDED'">AND e.chunk_id IS NOT NULL</if>
+        <if test="status == 'MISSING'">AND e.chunk_id IS NULL</if>
+        <if test="chunkType != null and chunkType != ''">AND c.chunk_type=#{chunkType}</if>
+        ORDER BY CASE WHEN e.chunk_id IS NULL THEN 0 ELSE 1 END,c.file_path,c.start_line,c.id
+    </select>
+
+    <select id="knowledge" resultType="map">
+        SELECT
+            k.id,k.title,k.card_type,k.revision,
+            LEFT(REGEXP_REPLACE(k.content,E'\\s+',' ','g'),260) content_excerpt,
+            ke.content_hash,ke.model vector_model,
+            CASE WHEN ke.card_id IS NULL THEN NULL ELSE 64 END dimension,
+            ke.created_at vectorized_at,
+            CASE WHEN ke.card_id IS NULL THEN 'MISSING' ELSE 'EMBEDDED' END vector_status
+        FROM knowledge_cards k
+        LEFT JOIN knowledge_card_embeddings ke ON ke.card_id=k.id AND ke.revision=k.revision
+        WHERE <include refid="validKnowledge"/>
+        <if test="query != null and query != ''">
+            AND(
+                POSITION(LOWER(#{query}) IN LOWER(k.title))&gt;0
+                OR POSITION(LOWER(#{query}) IN LOWER(k.content))&gt;0
+                OR POSITION(LOWER(#{query}) IN LOWER(ARRAY_TO_STRING(k.tags,' ')))&gt;0
+            )
+        </if>
+        <if test="status == 'EMBEDDED'">AND ke.card_id IS NOT NULL</if>
+        <if test="status == 'MISSING'">AND ke.card_id IS NULL</if>
+        ORDER BY CASE WHEN ke.card_id IS NULL THEN 0 ELSE 1 END,k.updated_at DESC,k.id
+    </select>
+</mapper>
