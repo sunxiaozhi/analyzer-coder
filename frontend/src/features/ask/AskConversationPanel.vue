@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Promotion } from '@element-plus/icons-vue';
-import { nextTick, watch, useTemplateRef } from 'vue';
+import { nextTick, onActivated, watch, useTemplateRef } from 'vue';
 import type { AskMessage } from './useAskConversation';
 
 const question = defineModel<string>({ required: true });
@@ -16,15 +16,19 @@ const emit = defineEmits<{
 }>();
 const messagesElement = useTemplateRef<HTMLElement>('messages');
 
+async function scrollToLatest() {
+  await nextTick();
+  if (messagesElement.value) {
+    messagesElement.value.scrollTop = messagesElement.value.scrollHeight;
+  }
+}
+
 watch(
   () => props.messages.length,
-  async () => {
-    await nextTick();
-    if (messagesElement.value) {
-      messagesElement.value.scrollTop = messagesElement.value.scrollHeight;
-    }
-  }
+  scrollToLatest
 );
+
+onActivated(scrollToLatest);
 
 function statusLabel(status: string) {
   return {

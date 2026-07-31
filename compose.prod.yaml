@@ -1,0 +1,76 @@
+name: analyzer-coder
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-codebase_kb}
+      POSTGRES_USER: ${POSTGRES_USER:-codebase_kb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    user: "${APP_RUNTIME_UID:-10001}:${APP_RUNTIME_GID:-10001}"
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        CODEGRAPH_VERSION: ${CODEGRAPH_VERSION:-1.5.0}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-codebase_kb}
+      APP_DATASOURCE_USERNAME: ${POSTGRES_USER:-codebase_kb}
+      APP_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      APP_FLYWAY_ENABLED: "true"
+      APP_INITIAL_ADMIN_USERNAME: ${APP_INITIAL_ADMIN_USERNAME:-admin}
+      APP_INITIAL_ADMIN_PASSWORD: ${APP_INITIAL_ADMIN_PASSWORD:?APP_INITIAL_ADMIN_PASSWORD is required}
+      APP_REPOSITORY_ALLOWED_ROOTS: /repositories
+      APP_MANAGED_DATA_ROOT: /data/analyzer-coder
+      HOME: /data/analyzer-coder/home
+      APP_CODEGRAPH_EXECUTABLE: codegraph
+      APP_LLM_MASTER_KEY: ${APP_LLM_MASTER_KEY:?APP_LLM_MASTER_KEY is required}
+      APP_LLM_ALLOW_INSECURE_LOCAL: ${APP_LLM_ALLOW_INSECURE_LOCAL:-false}
+      APP_SESSION_COOKIE_SECURE: ${APP_SESSION_COOKIE_SECURE:-true}
+      APP_FORWARD_HEADERS_STRATEGY: framework
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - type: bind
+        source: ${APP_REPOSITORY_HOST_ROOT:?APP_REPOSITORY_HOST_ROOT is required}
+        target: /repositories
+        read_only: true
+      - type: bind
+        source: ${APP_MANAGED_DATA_HOST_ROOT:?APP_MANAGED_DATA_HOST_ROOT is required}
+        target: /data/analyzer-coder
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${APP_HTTP_BIND_ADDRESS:-127.0.0.1}:${APP_HTTP_PORT:-8088}:8080"
+
+volumes:
+  postgres-data:

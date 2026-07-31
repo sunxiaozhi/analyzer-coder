@@ -24,7 +24,6 @@ import java.util.regex.Pattern;
 
 @Service
 public class AuthService {
-    public static final String RESET_PASSWORD = "12345678";
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthService.class);
     private static final Pattern USERNAME_PATTERN = Pattern.compile("[A-Za-z0-9._-]{3,32}");
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -228,12 +227,14 @@ public class AuthService {
 
     @Transactional
     public String resetPassword(UUID actorId, UUID targetId, String sourceIp) {
-        findById(targetId).orElseThrow(() -> new IllegalArgumentException("Account not found"));
+        AccountRow account = findById(targetId).orElseThrow(() -> new IllegalArgumentException("Account not found"));
+        String temporaryPassword = generateTemporaryPassword();
+        passwordHasher.validate(account.username(), temporaryPassword);
         Instant now = Instant.now();
-        mapper.resetPassword(targetId, passwordHasher.hash(RESET_PASSWORD), now.plus(Duration.ofHours(24)), now);
+        mapper.resetPassword(targetId, passwordHasher.hash(temporaryPassword), now.plus(Duration.ofHours(24)), now);
         mapper.deleteAccountSessions(targetId);
         audit(actorId, targetId, null, "PASSWORD_RESET", "SUCCESS", sourceIp);
-        return RESET_PASSWORD;
+        return temporaryPassword;
     }
 
     public void unlock(UUID actorId, UUID targetId, String sourceIp) {

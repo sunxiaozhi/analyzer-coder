@@ -148,7 +148,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
 
     private static List<String> gitPaths(Path root) {
         List<String> command = new ArrayList<>(List.of(
-            "git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=NUL",
+            "git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + GitRuntimePolicy.disabledHooksPath(),
             "-c", "protocol.ext.allow=never", "-C", root.toString(),
             "ls-files", "-co", "--exclude-standard", "-z"
         ));

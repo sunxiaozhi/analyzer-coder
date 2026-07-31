@@ -91,7 +91,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
 
     private static CommandResult run(Path root, boolean allowExitOne, String... arguments) {
         List<String> command = new ArrayList<>(List.of(
-            "git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=NUL",
+            "git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + GitRuntimePolicy.disabledHooksPath(),
             "-c", "protocol.ext.allow=never", "-C", root.toString()
         ));
         command.addAll(List.of(arguments));

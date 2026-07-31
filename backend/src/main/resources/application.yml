@@ -4,7 +4,7 @@ spring:
   datasource:
     url: ${APP_DATASOURCE_URL:jdbc:postgresql://localhost:5432/codebase_kb}
     username: ${APP_DATASOURCE_USERNAME:codebase_kb}
-    password: ${APP_DATASOURCE_PASSWORD:codebase_kb}
+    password: ${APP_DATASOURCE_PASSWORD}
   flyway:
     enabled: ${APP_FLYWAY_ENABLED:true}
     baseline-on-migrate: true
@@ -32,6 +32,7 @@ pagehelper:
   support-methods-arguments: false
 server:
   port: ${APP_SERVER_PORT:8080}
+  forward-headers-strategy: ${APP_FORWARD_HEADERS_STRATEGY:none}
 
 management:
   endpoints:
@@ -41,14 +42,15 @@ management:
 
 app:
   security:
-    initial-admin-username: ${APP_INITIAL_ADMIN_USERNAME:admin}
-    initial-admin-password: ${APP_INITIAL_ADMIN_PASSWORD:1qaz@WSX}
+    initial-admin-username: ${APP_INITIAL_ADMIN_USERNAME}
+    initial-admin-password: ${APP_INITIAL_ADMIN_PASSWORD}
     session-idle-minutes: ${APP_SESSION_IDLE_MINUTES:30}
     session-max-hours: ${APP_SESSION_MAX_HOURS:12}
     lock-minutes: ${APP_LOGIN_LOCK_MINUTES:15}
+    cookie-secure: ${APP_SESSION_COOKIE_SECURE:false}
   repository:
-    allowed-roots: ${APP_REPOSITORY_ALLOWED_ROOTS:.}
-    managed-data-root: ${APP_MANAGED_DATA_ROOT:${java.io.tmpdir}/analyzer-coder}
+    allowed-roots: ${APP_REPOSITORY_ALLOWED_ROOTS}
+    managed-data-root: ${APP_MANAGED_DATA_ROOT}
     snapshot-root: ${app.repository.managed-data-root}/repositories
     import-root: ${app.repository.managed-data-root}/staging/imports
     snapshot-max-files: ${APP_REPOSITORY_SNAPSHOT_MAX_FILES:20000}
@@ -62,7 +64,7 @@ app:
     timeout-minutes: ${APP_CODEGRAPH_TIMEOUT_MINUTES:10}
     artifact-root: ${app.repository.managed-data-root}/repositories
   llm:
-    master-key: ${APP_LLM_MASTER_KEY:analyzer-coder-local-development-key}
+    master-key: ${APP_LLM_MASTER_KEY}
     allow-insecure-local: ${APP_LLM_ALLOW_INSECURE_LOCAL:false}
     connectivity-timeout-seconds: ${APP_LLM_CONNECTIVITY_TIMEOUT_SECONDS:15}
     breaker-failure-threshold: ${APP_LLM_BREAKER_FAILURE_THRESHOLD:3}

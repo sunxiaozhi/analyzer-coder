@@ -12,3 +12,9 @@ frontend/*.log
 Thumbs.db
 /shell
 runtime-logs
+
+.env
+.env.production
+deploy/.env.production
+
+/runtime/

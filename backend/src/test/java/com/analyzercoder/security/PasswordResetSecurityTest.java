@@ -22,7 +22,7 @@ import org.mockito.ArgumentCaptor;
 
 class PasswordResetSecurityTest {
     @Test
-    void resetUsesFixedPasswordAndInvalidatesExistingSessions() {
+    void resetUsesRandomTemporaryPasswordAndInvalidatesExistingSessions() {
         AuthMapper mapper = mock(AuthMapper.class);
         UUID accountId = UUID.randomUUID();
         Instant now = Instant.now();
@@ -37,10 +37,10 @@ class PasswordResetSecurityTest {
 
         String resetPassword = service.resetPassword(UUID.randomUUID(), accountId, "127.0.0.1");
 
-        assertThat(resetPassword).isEqualTo("12345678");
+        assertThat(resetPassword).hasSizeGreaterThanOrEqualTo(12).isNotEqualTo("12345678");
         ArgumentCaptor<String> passwordHash = ArgumentCaptor.forClass(String.class);
         verify(mapper).resetPassword(eq(accountId), passwordHash.capture(), any(Instant.class), any(Instant.class));
-        assertThat(hasher.matches("12345678", passwordHash.getValue())).isTrue();
+        assertThat(hasher.matches(resetPassword, passwordHash.getValue())).isTrue();
         verify(mapper).deleteAccountSessions(accountId);
     }
 

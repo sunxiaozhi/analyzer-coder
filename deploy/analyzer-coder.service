@@ -1,0 +1,25 @@
+[Unit]
+Description=Analyzer Coder backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=analyzer
+Group=analyzer
+WorkingDirectory=/opt/analyzer-coder
+EnvironmentFile=/etc/analyzer-coder/analyzer-coder.env
+ExecStart=/usr/bin/java -Xms512m -Xmx2g -jar /opt/analyzer-coder/app/analyzer-coder.jar
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/analyzer-coder
+ReadOnlyPaths=/srv/analyzer-repositories
+
+[Install]
+WantedBy=multi-user.target
