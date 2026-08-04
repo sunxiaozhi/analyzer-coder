@@ -4,8 +4,10 @@ spring:
   datasource:
     url: ${APP_DATASOURCE_URL:jdbc:postgresql://localhost:5432/codebase_kb}
     username: ${APP_DATASOURCE_USERNAME:codebase_kb}
+    # 必填；数据库账号密码不提供默认值，生产环境请通过环境变量注入。
     password: ${APP_DATASOURCE_PASSWORD}
   flyway:
+    # 启动时自动执行数据库结构迁移；正常部署建议保持 true。
     enabled: ${APP_FLYWAY_ENABLED:true}
     baseline-on-migrate: true
     baseline-version: 0
@@ -13,6 +15,7 @@ spring:
     schemas: public
     create-schemas: true
     placeholders:
+      # 预留的迁移脚本占位符；当前版本的迁移脚本尚未引用。
       repositoryMigrationOwner: ${APP_REPOSITORY_MIGRATION_OWNER:}
 
 mybatis:
@@ -32,39 +35,61 @@ pagehelper:
   support-methods-arguments: false
 server:
   port: ${APP_SERVER_PORT:8080}
+  # 仅在受信任反向代理后按部署方式设置 framework/native；直连部署保持 none。
   forward-headers-strategy: ${APP_FORWARD_HEADERS_STRATEGY:none}
 
 management:
   endpoints:
     web:
       exposure:
+        # 仅开放健康、版本和指标端点；生产环境仍应在网关层限制管理端点访问。
         include: health,info,metrics
 
 app:
   security:
+    # 仅当数据库中没有任何账号时，用以下账号和密码创建首个超级管理员。
     initial-admin-username: ${APP_INITIAL_ADMIN_USERNAME}
     initial-admin-password: ${APP_INITIAL_ADMIN_PASSWORD}
+    # 会话连续无操作超过该分钟数后失效。
     session-idle-minutes: ${APP_SESSION_IDLE_MINUTES:30}
+    # 会话无论是否活跃，达到该小时数后强制失效。
     session-max-hours: ${APP_SESSION_MAX_HOURS:12}
+    # 同一账号连续登录失败 5 次后的锁定时长（分钟）。
     lock-minutes: ${APP_LOGIN_LOCK_MINUTES:15}
+    # HTTPS 部署必须设为 true，使会话 Cookie 仅通过 HTTPS 发送。
     cookie-secure: ${APP_SESSION_COOKIE_SECURE:false}
   repository:
+    # 可接入仓库的本地根目录白名单，多个目录使用逗号或分号分隔；目录必须已存在且可读。
     allowed-roots: ${APP_REPOSITORY_ALLOWED_ROOTS}
+    # 平台快照、导入暂存和知识附件的持久化根目录；容器部署必须挂载持久化卷。
     managed-data-root: ${APP_MANAGED_DATA_ROOT}
+    # 以下两个目录由受管数据根目录派生，通常无需单独修改。
     snapshot-root: ${app.repository.managed-data-root}/repositories
     import-root: ${app.repository.managed-data-root}/staging/imports
+    # 单个仓库快照允许复制的最大文件数。
     snapshot-max-files: ${APP_REPOSITORY_SNAPSHOT_MAX_FILES:20000}
+    # 单个仓库快照允许复制的最大总字节数，默认 2 GiB。
     snapshot-max-total-bytes: ${APP_REPOSITORY_SNAPSHOT_MAX_TOTAL_BYTES:2147483648}
+    # 源码预览允许读取的单文件最大字节数，默认 2 MiB。
     browser-max-file-bytes: ${APP_REPOSITORY_BROWSER_MAX_FILE_BYTES:2097152}
   indexing:
+    # 后台索引任务轮询间隔（毫秒）。
     poll-interval-ms: 5000
+    # 纳入代码索引的单文件最大字节数，超过后跳过，默认 512 KiB。
     max-file-bytes: 524288
   codegraph:
+    # CodeGraph CLI 命令或可执行文件路径；服务进程必须能够执行。
     executable: ${APP_CODEGRAPH_EXECUTABLE:codegraph}
+    # 单次 CodeGraph 构建允许执行的最长时间（分钟）。
     timeout-minutes: ${APP_CODEGRAPH_TIMEOUT_MINUTES:10}
+    # 图谱产物随仓库快照存放，通常无需单独修改。
     artifact-root: ${app.repository.managed-data-root}/repositories
   llm:
+    # 用于加密模型管理中保存的 API Key；至少 24 个字符，保存密钥后不可随意更换。
     master-key: ${APP_LLM_MASTER_KEY}
+    # 是否允许 localhost/127.0.0.1/::1 模型服务使用 HTTP；生产环境建议保持 false。
     allow-insecure-local: ${APP_LLM_ALLOW_INSECURE_LOCAL:false}
+    # 模型连通性检测的总超时（秒），不同于模型管理中的单次请求超时。
     connectivity-timeout-seconds: ${APP_LLM_CONNECTIVITY_TIMEOUT_SECONDS:15}
+    # 模型运行时连续失败达到该次数后熔断，后续问答降级为本地证据模式。
     breaker-failure-threshold: ${APP_LLM_BREAKER_FAILURE_THRESHOLD:3}
