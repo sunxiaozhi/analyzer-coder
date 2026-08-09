@@ -204,18 +204,26 @@
 
 - 来源 Tab：本地 Git、远程 Git、GitLab、ZIP。
 - 本地 Git 填服务端路径。
-- 远程 Git/GitLab 填 HTTPS Git 地址和可选分支；当前实际也接受 HTTP，但 UI 应继续引导 HTTPS。
-- 私有仓库提示先配置运行服务账号的 Git 凭据，不接受内嵌用户名或 Token。
+- 远程 Git/GitLab 填 HTTPS Git 地址和可选分支，并可选择已有凭据。
+- “管理凭据”弹窗支持新增、编辑、检测通用 Git HTTPS Token 与 GitLab PAT；接口不回显令牌明文。
+- 私有仓库必须选择与目标主机匹配的凭据，不接受内嵌用户名或 Token。
 - ZIP 使用文件选择。
 - 导入期间禁用关闭和重复提交。
 
 仓库表格：
 
 - 展示仓库/OWNER、来源、分支/commit、当前快照、CodeGraph 状态和最近扫描。
-- 操作由 capabilities 决定：编辑、重扫、内容索引、CodeGraph、成员与权限、删除。
+- 操作由 capabilities 决定：准备/画像、编辑、重扫、内容索引、CodeGraph、成员与权限、删除。
 - 重扫按 changed 返回“已发布最新版本”或“代码版本无变化”。
 - CodeGraph 构建返回任务终态后提示成功/失败。
 - 删除明确说明只删除平台数据和受管派生数据，不修改本地原目录。
+
+“准备 / 画像”抽屉：
+
+- 顶部准备轨道固定为代码快照、内容索引、向量索引、调用图谱四阶段，状态来自后端，不模拟百分比动画。
+- MAINTAIN 可点击开始/继续准备；前端等待内容索引终态后自动推进 CodeGraph，失败保留具体原因和重试入口。
+- 项目画像展示文件/大小、chunk/向量、知识、图节点/边、语言构成、一级目录和按约定文件名识别的关键入口。
+- READ 账号可查看画像和跨页快捷入口；没有维护权限时不展示准备按钮。
 
 治理对话框：
 
@@ -321,7 +329,7 @@ Tab 2“当前向量索引”：
 | AskView | AskConversationPanel、AnswerEvidencePanel、useAskConversation | 问答编排、消息、证据 |
 | KnowledgeView | CardListItem、Editor、Detail、AttachmentList、ReferenceSelector | 卡片列表、编辑、详情和引用 |
 | UnifiedIndexJobsView | useIndexJobs、IndexJobTable、UnifiedIndexJobDetail、CurrentVectorIndexPanel | 任务和向量产物 |
-| RepositoriesM0View | RepositoryTable、FormDialog、EditDialog、GovernanceDialog | 仓库 CRUD 与治理 |
+| RepositoriesM0View | RepositoryTable、FormDialog、EditDialog、GovernanceDialog、PreparationDrawer | 仓库 CRUD、准备、画像与治理 |
 | AccountsView | AccountTable、Dialog、EditDialog、AuditLogPanel | 账号与审计 |
 | GraphView | CallGraphCanvas、callGraphLayout | 图数据和画布 |
 | ChunksM0View | RepositoryFileTree、RepositoryFilePreview | 文件加载和预览 |

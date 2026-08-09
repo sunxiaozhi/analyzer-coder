@@ -11,6 +11,46 @@ import type {
   RescanRepositoryResponse,
 } from '@/types/api';
 
+export type PreparationStageState = 'READY' | 'RUNNING' | 'PENDING' | 'FAILED' | 'DEGRADED';
+
+export interface PreparationStage {
+  key: 'snapshot' | 'content' | 'vectors' | 'graph';
+  label: string;
+  state: PreparationStageState;
+  detail: string;
+}
+
+export interface ProjectProfileCount {
+  name: string;
+  count: number;
+}
+
+export interface ProjectProfile {
+  fileCount: number;
+  totalBytes: number;
+  chunkCount: number;
+  vectorizedChunks: number;
+  missingChunks: number;
+  knowledgeCards: number;
+  graphNodes: number;
+  graphEdges: number;
+  languages: ProjectProfileCount[];
+  modules: ProjectProfileCount[];
+  entryPoints: string[];
+}
+
+export interface RepositoryPreparation {
+  repositoryId: string;
+  state: 'READY' | 'DEGRADED' | 'PROCESSING' | 'ACTION_REQUIRED' | 'NOT_READY';
+  progress: number;
+  message: string;
+  stages: PreparationStage[];
+  profile: ProjectProfile;
+  activeJobId: string | null;
+  activeJobType: IndexJobType | 'CODEGRAPH' | null;
+  activeJobStatus: IndexJob['status'] | null;
+}
+
 export function listRepositories(): Promise<Repository[]> {
   return request<Repository[]>('/api/repositories');
 }
@@ -72,6 +112,17 @@ export function listChunks(
   if (params.offset) search.set('offset', String(params.offset));
   const suffix = search.toString() ? `?${search}` : '';
   return request<CodeChunkListResponse>(`/api/repositories/${repositoryId}/chunks${suffix}`);
+}
+export function syncRemoteRepository(repositoryId: string): Promise<RescanRepositoryResponse & { indexJobId: string | null }> {
+  return request(`/api/repositories/${repositoryId}/sync`, { method: 'POST' });
+}
+
+export function getRepositoryProfile(repositoryId: string): Promise<RepositoryPreparation> {
+  return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/profile`);
+}
+
+export function prepareRepository(repositoryId: string): Promise<RepositoryPreparation> {
+  return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/prepare`, { method: 'POST' });
 }
 
 export function listRepositoryFiles(repositoryId: string): Promise<RepositorySnapshotFiles> {

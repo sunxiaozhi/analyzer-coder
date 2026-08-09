@@ -130,8 +130,8 @@
         VALUES(#{id},#{repositoryId},#{accountId},#{question},#{answer},#{snapshotId})
     </insert>
     <insert id="insertCitation">
-        INSERT INTO qa_citations(id,conversation_id,source_type,chunk_id,knowledge_card_id,title,file_path,symbol_name,start_line,end_line,evidence_hash,rank)
-        VALUES(#{id},#{conversationId},#{sourceType},#{chunkId},#{knowledgeCardId},#{title},#{filePath},#{symbolName},#{startLine},#{endLine},#{evidenceHash},#{rank})
+        INSERT INTO qa_citations(id,conversation_id,repository_id,source_type,chunk_id,knowledge_card_id,title,file_path,symbol_name,start_line,end_line,evidence_hash,rank)
+        VALUES(#{id},#{conversationId},#{repositoryId},#{sourceType},#{chunkId},#{knowledgeCardId},#{title},#{filePath},#{symbolName},#{startLine},#{endLine},#{evidenceHash},#{rank})
     </insert>
 
     <select id="graphEdges" resultType="map">

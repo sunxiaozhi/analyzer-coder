@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,7 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class IntelligenceController {
     private final IntelligenceService service;
     private final AccessControlService access;
-    public IntelligenceController(IntelligenceService service, AccessControlService access) { this.service = service; this.access = access; }
+    private final com.analyzercoder.application.intelligence.QaSessionService sessions;
+    public IntelligenceController(IntelligenceService service, AccessControlService access,
+        com.analyzercoder.application.intelligence.QaSessionService sessions) { this.service = service; this.access = access;this.sessions=sessions; }
 
     @GetMapping("/repositories/{repoId}/hybrid-search")
     public List<IntelligenceService.SearchHit> search(@PathVariable UUID repoId, @RequestParam String query,
@@ -37,8 +40,18 @@ public class IntelligenceController {
     @PostMapping("/repositories/{repoId}/ask")
     public IntelligenceService.Answer ask(@PathVariable UUID repoId, @Valid @RequestBody Question body, HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
-        return service.ask(repoId, account.id(), body.question());
+        List<UUID> repositories=body.repositoryIds()==null||body.repositoryIds().isEmpty()?List.of(repoId):body.repositoryIds().stream().distinct().toList();
+        repositories.forEach(id->access.require(account,CodeRepositoryId.of(id),RepositoryPermission.READ));
+        IntelligenceService.Answer answer=repositories.size()==1?service.ask(repoId,account.id(),body.question()):service.askMulti(repositories,account.id(),body.question());
+        if(body.sessionId()!=null)sessions.append(account.id(),body.sessionId(),body.question(),answer);
+        return answer;
     }
+
+    @GetMapping("/qa/sessions") public List<com.analyzercoder.application.intelligence.QaSessionService.Session> sessions(HttpServletRequest request){return sessions.list(SecurityContext.account(request).id());}
+    @PostMapping("/qa/sessions") public com.analyzercoder.application.intelligence.QaSessionService.Session createSession(@RequestBody SessionInput body,HttpServletRequest request){var account=SecurityContext.account(request);body.repositoryIds().forEach(id->access.require(account,CodeRepositoryId.of(id),RepositoryPermission.READ));return sessions.create(account.id(),body.repositoryIds(),body.title());}
+    @GetMapping("/qa/sessions/{id}/messages") public List<com.analyzercoder.application.intelligence.QaSessionService.Message> sessionMessages(@PathVariable UUID id,HttpServletRequest request){return sessions.messages(SecurityContext.account(request).id(),id);}
+    @PatchMapping("/qa/sessions/{id}") public com.analyzercoder.application.intelligence.QaSessionService.Session renameSession(@PathVariable UUID id,@RequestBody SessionTitle body,HttpServletRequest request){return sessions.rename(SecurityContext.account(request).id(),id,body.title());}
+    @DeleteMapping("/qa/sessions/{id}") public void deleteSession(@PathVariable UUID id,HttpServletRequest request){sessions.delete(SecurityContext.account(request).id(),id);}
 
     @GetMapping("/repositories/{repoId}/chunks/{chunkId}/graph-target")
     public IntelligenceService.GraphTarget graphTarget(
@@ -85,5 +98,7 @@ public class IntelligenceController {
     private com.analyzercoder.security.AuthenticatedAccount require(HttpServletRequest request, UUID repoId, RepositoryPermission permission) {
         var account = SecurityContext.account(request); access.require(account, CodeRepositoryId.of(repoId), permission); return account;
     }
-    public record Question(@NotBlank String question) {}
+    public record Question(@NotBlank String question,UUID sessionId,List<UUID> repositoryIds) {}
+    public record SessionInput(String title,List<UUID> repositoryIds){}
+    public record SessionTitle(String title){}
 }

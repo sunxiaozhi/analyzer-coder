@@ -15,6 +15,14 @@ public class PostgresCodeChunkStore implements CodeChunkStore {
     private final CodeChunkMapper mapper;
     public PostgresCodeChunkStore(CodeChunkMapper mapper){this.mapper=mapper;}
     @Override @Transactional public void replaceRepositoryChunks(CodeRepositoryId repositoryId,Collection<CodeChunk> chunks){mapper.deleteByRepositoryId(repositoryId.value());List<CodeChunkRow> rows=chunks.stream().map(PostgresCodeChunkStore::row).toList();for(int start=0;start<rows.size();start+=250)mapper.insertBatch(rows.subList(start,Math.min(start+250,rows.size())));}
+    @Override @Transactional public void replaceRepositoryPaths(CodeRepositoryId repositoryId,Collection<String> paths,
+        Collection<CodeChunk> chunks,RepositorySnapshotId snapshotId,String commitSha){
+        if(!paths.isEmpty())mapper.deleteByPaths(repositoryId.value(),paths);
+        mapper.rebaseUnchanged(repositoryId.value(),paths,snapshotId.value(),commitSha);
+        List<CodeChunkRow> rows=chunks.stream().map(PostgresCodeChunkStore::row).toList();
+        for(int start=0;start<rows.size();start+=250)mapper.insertBatch(rows.subList(start,Math.min(start+250,rows.size())));
+    }
+    @Override public String latestIndexedCommit(CodeRepositoryId repositoryId){return mapper.latestIndexedCommit(repositoryId.value());}
     @Override public List<CodeChunk> findByRepositoryId(CodeRepositoryId id){return mapper.find(id.value(),null,null,null).stream().map(PostgresCodeChunkStore::domain).toList();}
     @Override public List<CodeChunk> findByRepositoryId(CodeRepositoryId id,int limit,int offset){return mapper.find(id.value(),null,limit,offset).stream().map(PostgresCodeChunkStore::domain).toList();}
     @Override public List<CodeChunk> searchByRepositoryId(CodeRepositoryId id,String query,int limit,int offset){return mapper.find(id.value(),query,limit,offset).stream().map(PostgresCodeChunkStore::domain).toList();}

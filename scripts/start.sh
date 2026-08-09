@@ -48,6 +48,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   postgres_password="Db$(random_hex 24)"
   admin_password="Ac!$(random_hex 12)9z"
   llm_master_key="$(random_hex 32)"
+  credential_master_key="$(random_hex 32)"
   runtime_uid="$(id -u)"
   runtime_gid="$(id -g)"
   if [[ "$runtime_uid" == "0" ]]; then
@@ -65,6 +66,7 @@ POSTGRES_PASSWORD=$postgres_password
 APP_INITIAL_ADMIN_USERNAME=admin
 APP_INITIAL_ADMIN_PASSWORD=$admin_password
 APP_LLM_MASTER_KEY=$llm_master_key
+APP_CREDENTIAL_MASTER_KEY=$credential_master_key
 APP_REPOSITORY_HOST_ROOT="$ROOT_DIR/runtime/repositories"
 APP_MANAGED_DATA_HOST_ROOT="$ROOT_DIR/runtime/data"
 APP_RUNTIME_UID=$runtime_uid

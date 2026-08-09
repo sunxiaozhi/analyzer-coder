@@ -86,7 +86,19 @@ public class IntelligenceService {
 
     @Transactional
     public Answer ask(UUID repositoryId, UUID accountId, String question) {
-        List<Evidence> evidence = unifiedSearch(repositoryId, question, 10);
+        return answer(repositoryId,accountId,question,unifiedSearch(repositoryId,question,10));
+    }
+
+    @Transactional
+    public Answer askMulti(List<UUID> repositoryIds,UUID accountId,String question){
+        if(repositoryIds==null||repositoryIds.isEmpty())throw new IllegalArgumentException("至少选择一个仓库");
+        List<Evidence> evidence=repositoryIds.stream().distinct().limit(8)
+            .flatMap(id->unifiedSearch(id,question,10).stream()).sorted(Comparator.comparingDouble(Evidence::score).reversed())
+            .limit(10).toList();
+        return answer(repositoryIds.get(0),accountId,question,evidence);
+    }
+
+    private Answer answer(UUID repositoryId,UUID accountId,String question,List<Evidence> evidence){
         UUID conversationId = UUID.randomUUID();
         UUID snapshotId = evidence.stream()
             .map(Evidence::snapshotId)
@@ -257,7 +269,7 @@ public class IntelligenceService {
             UUID cardId = uuid(row, "id");
             int revision = integer(row, "revision");
             return new Evidence(
-                "KNOWLEDGE", null, cardId, null, string(row, "title"),
+                repositoryId, "KNOWLEDGE", null, cardId, null, string(row, "title"),
                 "knowledge://" + cardId, null, string(row, "card_type"),
                 null, null, string(row, "content"), string(row, "content_hash"),
                 candidate.score(), candidate.lexicalScore(), candidate.semanticScore(),
@@ -265,7 +277,7 @@ public class IntelligenceService {
             );
         }
         return new Evidence(
-            "CODE", uuid(row, "id"), null, uuid(row, "snapshot_id"),
+            repositoryId, "CODE", uuid(row, "id"), null, uuid(row, "snapshot_id"),
             string(row, "symbol_name") == null
                 ? string(row, "file_path")
                 : string(row, "symbol_name"),
@@ -287,13 +299,13 @@ public class IntelligenceService {
             Evidence item = indexed.evidence();
             UUID citationId = UUID.randomUUID();
             mapper.insertCitation(
-                citationId, conversationId, item.sourceType(), item.chunkId(),
+                citationId, conversationId, item.repositoryId(), item.sourceType(), item.chunkId(),
                 item.knowledgeCardId(), item.title(), item.filePath(),
                 item.symbolName(), item.startLine(), item.endLine(),
                 item.contentHash(), indexed.index()
             );
             citations.add(new Citation(
-                citationId, item.sourceType(), item.chunkId(),
+                citationId, item.repositoryId(), item.sourceType(), item.chunkId(),
                 item.knowledgeCardId(), item.snapshotId(), item.title(),
                 item.filePath(), item.symbolName(), item.startLine(),
                 item.endLine(), item.content(), indexed.index(), item.score(),
@@ -700,6 +712,7 @@ public class IntelligenceService {
     ) {}
 
     public record Evidence(
+        UUID repositoryId,
         String sourceType,
         UUID chunkId,
         UUID knowledgeCardId,
@@ -721,6 +734,7 @@ public class IntelligenceService {
 
     public record Citation(
         UUID id,
+        UUID repositoryId,
         String sourceType,
         UUID chunkId,
         UUID knowledgeCardId,

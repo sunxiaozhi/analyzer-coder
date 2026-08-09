@@ -159,10 +159,12 @@ chmod 600 .env.production
 - `POSTGRES_PASSWORD`
 - `APP_INITIAL_ADMIN_PASSWORD`
 - `APP_LLM_MASTER_KEY`
+- `APP_CREDENTIAL_MASTER_KEY`
 - `APP_REPOSITORY_HOST_ROOT`
 - `APP_MANAGED_DATA_HOST_ROOT`
 
 `APP_LLM_MASTER_KEY` 保存模型密钥后必须稳定保管，变更会导致已有密钥无法解密。CodeGraph 容器版本固定为 1.5.0。
+`APP_CREDENTIAL_MASTER_KEY` 独立加密 Git/GitLab Token，变更会导致已有仓库凭据无法解密。
 
 ### 4.3 构建和启动
 

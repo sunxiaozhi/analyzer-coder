@@ -92,10 +92,14 @@
     </update>
     <update id="updateManagedSource">
         UPDATE repositories SET path=#{path},source_type=#{sourceType},
+        remote_url=#{remoteUrl},
         default_branch=CASE WHEN #{hideGitVersion} THEN NULL ELSE default_branch END,
         current_commit=CASE WHEN #{hideGitVersion} THEN NULL ELSE current_commit END,
         updated_at=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted_at IS NULL
     </update>
+    <select id="findRemoteUrl" resultType="string">
+        SELECT remote_url FROM repositories WHERE id=#{id} AND deleted_at IS NULL
+    </select>
     <update id="updateSourceMetadata">
         UPDATE repositories SET source_type=#{sourceType},
         default_branch=CASE WHEN #{hideGitVersion} THEN NULL ELSE default_branch END,

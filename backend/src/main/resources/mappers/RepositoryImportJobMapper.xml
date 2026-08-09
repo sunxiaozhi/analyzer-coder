@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.RepositoryImportJobMapper">
+ <insert id="insert">INSERT INTO repository_import_jobs(id,account_id,credential_id,source_type,repository_name,remote_url,branch)
+ VALUES(#{id},#{actorId},#{credentialId},#{sourceType},#{name},#{url},#{branch})</insert>
+ <select id="find" resultType="map">SELECT * FROM repository_import_jobs WHERE id=#{id}</select>
+ <select id="list" resultType="map">SELECT * FROM repository_import_jobs WHERE #{admin}=TRUE OR account_id=#{actorId} ORDER BY created_at DESC LIMIT 100</select>
+ <select id="claim" resultType="map">
+  UPDATE repository_import_jobs SET status='RUNNING',current_step='validating',started_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+  WHERE id=(SELECT id FROM repository_import_jobs WHERE status='QUEUED' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)
+  RETURNING *
+ </select>
+ <update id="step">UPDATE repository_import_jobs SET current_step=#{step},updated_at=CURRENT_TIMESTAMP WHERE id=#{id} AND status='RUNNING'</update>
+ <update id="succeed">UPDATE repository_import_jobs SET status='SUCCEEDED',current_step='completed',result_repository_id=#{repositoryId},finished_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=#{id}</update>
+ <update id="fail">UPDATE repository_import_jobs SET status='FAILED',current_step='failed',error_message=#{error},finished_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=#{id}</update>
+ <update id="requestCancel">UPDATE repository_import_jobs SET cancel_requested=TRUE,updated_at=CURRENT_TIMESTAMP WHERE id=#{id} AND (#{admin}=TRUE OR account_id=#{actorId}) AND status IN('QUEUED','RUNNING')</update>
+ <update id="cancel">UPDATE repository_import_jobs SET status='CANCELED',current_step='canceled',finished_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=#{id}</update>
+</mapper>

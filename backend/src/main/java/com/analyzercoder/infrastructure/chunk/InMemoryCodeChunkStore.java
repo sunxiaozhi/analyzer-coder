@@ -27,6 +27,20 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
     }
 
     @Override
+    public void replaceRepositoryPaths(CodeRepositoryId repositoryId, Collection<String> paths,
+        Collection<CodeChunk> chunks, com.analyzercoder.domain.repository.RepositorySnapshotId snapshotId,
+        String commitSha) {
+        List<CodeChunk> merged=new ArrayList<>(findByRepositoryId(repositoryId).stream()
+            .filter(chunk->!paths.contains(chunk.filePath())).toList());
+        merged.addAll(chunks);replaceRepositoryChunks(repositoryId,merged);
+    }
+
+    @Override
+    public String latestIndexedCommit(CodeRepositoryId repositoryId) {
+        return findByRepositoryId(repositoryId).stream().findFirst().map(CodeChunk::commitSha).orElse(null);
+    }
+
+    @Override
     public List<CodeChunk> findByRepositoryId(CodeRepositoryId repositoryId) {
         return chunksByRepository.getOrDefault(repositoryId.value(), List.of());
     }

@@ -1,0 +1,2 @@
+package com.analyzercoder.worker;import com.analyzercoder.application.repository.RepositoryImportJobService;import org.springframework.scheduling.annotation.Scheduled;import org.springframework.stereotype.Component;
+@Component public class RepositoryImportJobWorker{private final RepositoryImportJobService service;public RepositoryImportJobWorker(RepositoryImportJobService service){this.service=service;}@Scheduled(fixedDelayString="${app.repository.import-poll-interval-ms:2000}")public synchronized void poll(){service.processNext();}}

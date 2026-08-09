@@ -46,6 +46,7 @@ public interface IntelligenceMapper {
     int insertCitation(
         @Param("id") UUID id,
         @Param("conversationId") UUID conversationId,
+        @Param("repositoryId") UUID repositoryId,
         @Param("sourceType") String sourceType,
         @Param("chunkId") UUID chunkId,
         @Param("knowledgeCardId") UUID knowledgeCardId,

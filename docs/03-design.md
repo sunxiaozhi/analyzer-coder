@@ -117,7 +117,8 @@ Browser
 | `repositories` | 来源、分支、commit、快照、OWNER、状态和乐观锁版本 |
 | `repository_deletion_tombstones` | 逻辑删除后的物理清理队列 |
 | `index_jobs` | FULL/INCREMENTAL/CODEGRAPH 任务和重试关系 |
-| `repository_credentials` | 预留凭据结构；当前无完整 API/UI |
+| `git_credentials` | 可复用的加密 Git HTTPS Token/GitLab PAT，按创建人隔离 |
+| `repository_credential_bindings` | 仓库与凭据的用途绑定 |
 
 当前没有独立 `code_snapshots` 表；快照标识和路径直接保存在 `repositories.current_snapshot_*`。
 
@@ -205,7 +206,7 @@ POST /api/repositories
 
 ### 6.2 远程 Git/GitLab
 
-`POST /api/repository-imports/remote` 接收 name、url、branch、sourceType。REMOTE_GIT 与 GITLAB 走同一 shallow clone 流程，凭据来自运行账号 Git 环境。导入在请求线程内同步完成。
+`POST /api/repository-imports/remote` 接收 name、url、branch、sourceType 和可选 credentialId。REMOTE_GIT 与 GITLAB 走同一 shallow clone 流程；凭据由 `/api/repository-credentials` 创建、更新和检测，Token 加密保存并通过临时 GIT_ASKPASS 注入。导入在请求线程内同步完成。
 
 ### 6.3 ZIP
 
@@ -231,6 +232,14 @@ DELETE /repositories/{id}
 ```
 
 LOCAL_GIT 原始目录不在清理范围。
+
+### 6.6 一键准备与项目画像
+
+- `GET /api/repositories/{id}/profile` 返回当前准备状态、四阶段轨道和事实型项目画像，要求 READ。
+- `POST /api/repositories/{id}/prepare` 幂等推进准备流程，要求 MAINTAIN：远程来源执行同步，本地/ZIP 执行重扫；快照变化后启动增量索引，无 chunk 时启动全量索引；内容就绪后构建当前快照 CodeGraph。
+- 内容索引继续由 `IndexJobWorker` 后台执行，前端轮询子任务并再次调用 prepare 推进下一阶段；关闭页面不会取消已入队任务。
+- 项目画像由 `RepositoryPreparationService` 聚合当前快照文件、`VectorIndexQueryService` 汇总和当前 `codegraph_artifacts`，不调用模型，不生成推测性架构结论。
+- 当前尚无独立 preparation job 表；CodeGraph 阶段仍沿用同步执行的 `CodeGraphTaskService`。
 
 ## 7. 源码浏览与预览
 
@@ -448,6 +457,8 @@ LOCAL_HASH 不需要端点或密钥；OPENAI_COMPATIBLE 需要 Base URL、模型
 
 仓库、账号、问答、知识和索引已拆出部分 feature 组件。`SystemSettingsView` 和 `ChunksM0View` 仍同时包含编排、API 状态和大量展示，是当前维护性债务；后续拆分不得改变本文接口行为。
 
+仓库准备与画像使用 `RepositoryPreparationDrawer`；准备轨道是流程状态主视觉，语言、一级目录和关键入口均来自当前快照统计。
+
 ## 16. UI 视觉与交互实现
 
 1. 基础画布 `#f5f5f7`，内容和侧栏为白色，交互主色 `#0066cc`。
@@ -473,6 +484,7 @@ LOCAL_HASH 不需要端点或密钥；OPENAI_COMPATIBLE 需要 Base URL、模型
 - `APP_REPOSITORY_SNAPSHOT_MAX_FILES/MAX_TOTAL_BYTES/BROWSER_MAX_FILE_BYTES`
 - `APP_CODEGRAPH_EXECUTABLE/APP_CODEGRAPH_TIMEOUT_MINUTES`
 - `APP_LLM_MASTER_KEY/APP_LLM_ALLOW_INSECURE_LOCAL`
+- `APP_CREDENTIAL_MASTER_KEY`
 - `APP_LLM_CONNECTIVITY_TIMEOUT_SECONDS/APP_LLM_BREAKER_FAILURE_THRESHOLD`
 
 数据库密码、初始管理员、仓库根、受管数据根和模型主密钥没有代码默认值，缺失时启动失败。生产模板进一步启用 Secure Cookie 和受信代理头处理。
@@ -485,7 +497,7 @@ LOCAL_HASH 不需要端点或密钥；OPENAI_COMPATIBLE 需要 Base URL、模型
 2. OnboardingApplicationService、路径、进度、笔记和投影表。
 3. 问答 SSE 事件流、message 状态机和会话 CRUD。
 4. 多仓检索、真实增量索引和版本化内容索引指针。
-5. 仓库级外发策略和完整凭据 UI。
+5. 仓库级外发策略、SSH 凭据和 GitLab 项目 API/Webhook。
 6. 备份、恢复、维护模式、RPO/RTO。
 7. 统一任务对导入、附件、删除、备份的完整覆盖。
 8. CodeGraph 符号候选、结构证据、聚合与截断协议。
@@ -494,6 +506,6 @@ LOCAL_HASH 不需要端点或密钥；OPENAI_COMPATIBLE 需要 Base URL、模型
 
 ## 19. 验证与测试
 
-当前 `mvn test` 执行 44 个单元/组件测试；`npm run build` 通过 Vue 类型检查和生产构建。Linux CI 在 Ubuntu runner 重复执行测试、构建并组装发布产物。数据库集成测试 `PostgresMyBatisContextIT` 不在默认 Surefire 测试命名范围，前端没有组件测试和浏览器 E2E。
+当前 `mvn test` 执行 50 个单元/组件测试；`npm run build` 通过 Vue 类型检查和生产构建。Linux CI 在 Ubuntu runner 重复执行测试、构建并组装发布产物。数据库集成测试 `PostgresMyBatisContextIT` 不在默认 Surefire 测试命名范围，前端没有组件测试和浏览器 E2E。
 
 完成定义：接口、权限、持久化、失败路径、UI 状态和自动化测试同时与 `01-requirements.md` 当前基线一致。

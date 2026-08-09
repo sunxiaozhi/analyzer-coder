@@ -46,6 +46,9 @@ management:
         include: health,info,metrics
 
 app:
+  credentials:
+    # Git/GitLab 凭据加密主密钥；兼容旧部署时回退到 LLM 主密钥，生产环境应单独配置。
+    master-key: ${APP_CREDENTIAL_MASTER_KEY:${APP_LLM_MASTER_KEY}}
   security:
     # 仅当数据库中没有任何账号时，用以下账号和密码创建首个超级管理员。
     initial-admin-username: ${APP_INITIAL_ADMIN_USERNAME}

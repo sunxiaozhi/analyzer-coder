@@ -18,7 +18,9 @@ public interface RepositoryMapper {
     int countByOwnerAndNormalizedNameExcludingId(@Param("ownerId") UUID ownerId,@Param("normalizedName") String normalizedName,@Param("id") UUID id);
     int updateEditableMetadata(@Param("id") UUID id,@Param("name") String name,@Param("normalizedName") String normalizedName,@Param("description") String description,@Param("defaultBranch") String defaultBranch,@Param("expectedVersion") long expectedVersion);
     int updateManagedSource(@Param("id") UUID id, @Param("path") String path, @Param("sourceType") String sourceType,
-        @Param("hideGitVersion") boolean hideGitVersion);    int updateSourceMetadata(@Param("id") UUID id, @Param("sourceType") String sourceType,
+        @Param("remoteUrl") String remoteUrl, @Param("hideGitVersion") boolean hideGitVersion);
+    String findRemoteUrl(@Param("id") UUID id);
+    int updateSourceMetadata(@Param("id") UUID id, @Param("sourceType") String sourceType,
         @Param("hideGitVersion") boolean hideGitVersion);
     int delete(@Param("id") UUID id);
 }

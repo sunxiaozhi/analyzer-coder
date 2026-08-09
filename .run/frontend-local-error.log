@@ -1,0 +1,54 @@
+[2m06:37:51[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:37:52[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:37:54[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:37:56[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:37:58[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:00[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:02[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:04[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:06[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:08[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:10[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:12[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:14[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:18[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:20[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:22[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m06:38:24[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)

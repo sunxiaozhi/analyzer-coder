@@ -59,6 +59,7 @@ if (-not (Test-Path -LiteralPath $envFile)) {
     $postgresPassword = 'Db' + (New-HexToken 24)
     $adminPassword = 'Ac!' + (New-HexToken 12) + '9z'
     $llmMasterKey = New-HexToken 32
+    $credentialMasterKey = New-HexToken 32
     $secureCookie = if ($Https) { 'true' } else { 'false' }
     $repositoryPath = $repositoryDir.Replace('\', '/')
     $dataPath = $dataDir.Replace('\', '/')
@@ -69,6 +70,7 @@ POSTGRES_PASSWORD=$postgresPassword
 APP_INITIAL_ADMIN_USERNAME=admin
 APP_INITIAL_ADMIN_PASSWORD=$adminPassword
 APP_LLM_MASTER_KEY=$llmMasterKey
+APP_CREDENTIAL_MASTER_KEY=$credentialMasterKey
 APP_REPOSITORY_HOST_ROOT="$repositoryPath"
 APP_MANAGED_DATA_HOST_ROOT="$dataPath"
 APP_RUNTIME_UID=10001

@@ -7,6 +7,10 @@ import java.util.List;
 public interface CodeChunkStore {
 
     void replaceRepositoryChunks(CodeRepositoryId repositoryId, Collection<CodeChunk> chunks);
+    void replaceRepositoryPaths(CodeRepositoryId repositoryId, Collection<String> paths,
+        Collection<CodeChunk> chunks, com.analyzercoder.domain.repository.RepositorySnapshotId snapshotId,
+        String commitSha);
+    String latestIndexedCommit(CodeRepositoryId repositoryId);
 
     List<CodeChunk> findByRepositoryId(CodeRepositoryId repositoryId);
 

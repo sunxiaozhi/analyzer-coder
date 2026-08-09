@@ -13,6 +13,7 @@ import com.analyzercoder.domain.repository.CodeRepositoryStore;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,7 @@ public class IndexJobProcessor {
     private final RepositoryScannerPort repositoryScannerPort;
     private final CodeChunkStore codeChunkStore;
     private final IntelligenceService intelligenceService;
+    private final GitDiffService gitDiffService;
 
     @Autowired
     public IndexJobProcessor(
@@ -44,13 +46,15 @@ public class IndexJobProcessor {
         CodeRepositoryStore repositoryStore,
         RepositoryScannerPort repositoryScannerPort,
         CodeChunkStore codeChunkStore,
-        IntelligenceService intelligenceService
+        IntelligenceService intelligenceService,
+        GitDiffService gitDiffService
     ) {
         this.indexJobStore = indexJobStore;
         this.repositoryStore = repositoryStore;
         this.repositoryScannerPort = repositoryScannerPort;
         this.codeChunkStore = codeChunkStore;
         this.intelligenceService = intelligenceService;
+        this.gitDiffService = gitDiffService;
     }
 
     public IndexJobProcessor(
@@ -59,7 +63,7 @@ public class IndexJobProcessor {
         RepositoryScannerPort repositoryScannerPort,
         CodeChunkStore codeChunkStore
     ) {
-        this(indexJobStore, repositoryStore, repositoryScannerPort, codeChunkStore, null);
+        this(indexJobStore, repositoryStore, repositoryScannerPort, codeChunkStore, null, new GitDiffService());
     }
 
     public boolean processNextQueuedJob() {
@@ -77,7 +81,13 @@ public class IndexJobProcessor {
                 throw new IllegalStateException("仓库尚未发布可用的代码版本");
             }
 
+            String indexedCommit=codeChunkStore.latestIndexedCommit(repository.id());
+            Set<String> changedPaths=runningJob.type()==com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL
+                ?gitDiffService.changedPaths(repository,indexedCommit):Set.of();
+            boolean incremental=runningJob.type()==com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL
+                && indexedCommit!=null&&!indexedCommit.isBlank();
             List<CodeChunk> chunks = repositoryScannerPort.scan(repository).stream()
+                .filter(file->!incremental||changedPaths.contains(file.relativePath().replace('\\','/')))
                 .flatMap(file -> splitIntoChunks(repository, file).stream())
                 .toList();
             if (finishCancellation(runningJob.id())) return true;
@@ -86,7 +96,9 @@ public class IndexJobProcessor {
                 .orElseThrow()
                 .start("write_chunks");
             indexJobStore.save(writingJob);
-            codeChunkStore.replaceRepositoryChunks(repository.id(), chunks);
+            if(incremental)codeChunkStore.replaceRepositoryPaths(repository.id(),changedPaths,chunks,
+                repository.currentSnapshotId(),repository.currentCommit());
+            else codeChunkStore.replaceRepositoryChunks(repository.id(), chunks);
 
             boolean vectorsReady = true;
             if (intelligenceService != null) {
@@ -100,7 +112,7 @@ public class IndexJobProcessor {
             }
 
             IndexJob publishState = indexJobStore.findById(runningJob.id()).orElseThrow();
-            String completion = "completed:" + chunks.size()
+            String completion = (incremental?"incremental":"full")+":completed:" + chunks.size()
                 + (vectorsReady ? ":vectors-ready" : ":vectors-degraded");
             indexJobStore.save(publishState.succeed(completion));
             return true;

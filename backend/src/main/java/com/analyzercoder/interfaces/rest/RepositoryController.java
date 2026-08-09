@@ -29,15 +29,20 @@ public class RepositoryController {
     private final RepositoryEditingService editing;
     private final RepositoryPageService pageService;
     private final CodeGraphArtifactMapper codeGraphArtifacts;
+    private final RepositoryRemoteSyncService remoteSync;
+    private final RepositoryPreparationService preparation;
 
     public RepositoryController(RegisterRepositoryUseCase useCase, AccessControlService accessControl,
-                                RepositoryGovernanceService governance, RepositoryEditingService editing, RepositoryPageService pageService, CodeGraphArtifactMapper codeGraphArtifacts) {
+                                RepositoryGovernanceService governance, RepositoryEditingService editing, RepositoryPageService pageService, CodeGraphArtifactMapper codeGraphArtifacts,
+                                RepositoryRemoteSyncService remoteSync, RepositoryPreparationService preparation) {
         this.useCase = useCase;
         this.accessControl = accessControl;
         this.governance = governance;
         this.editing = editing;
         this.pageService = pageService;
         this.codeGraphArtifacts = codeGraphArtifacts;
+        this.remoteSync = remoteSync;
+        this.preparation = preparation;
     }
 
     @PostMapping
@@ -82,6 +87,33 @@ public class RepositoryController {
         return new RescanRepositoryResponse(result.changed(), response(result.repository(), account));
     }
 
+    @PostMapping("/{repositoryId}/sync")
+    public RemoteSyncResponse sync(@PathVariable UUID repositoryId, HttpServletRequest request) {
+        var account=SecurityContext.account(request);
+        var result=remoteSync.sync(account,CodeRepositoryId.of(repositoryId));
+        return new RemoteSyncResponse(result.changed(),response(result.repository(),account),result.indexJobId());
+    }
+
+    @GetMapping("/{repositoryId}/profile")
+    public RepositoryPreparationService.PreparationView profile(
+        @PathVariable UUID repositoryId, HttpServletRequest request
+    ) {
+        var account = SecurityContext.account(request);
+        var id = CodeRepositoryId.of(repositoryId);
+        accessControl.require(account, id, RepositoryPermission.READ);
+        return preparation.view(id);
+    }
+
+    @PostMapping("/{repositoryId}/prepare")
+    public RepositoryPreparationService.PreparationView prepare(
+        @PathVariable UUID repositoryId, HttpServletRequest request
+    ) {
+        var account = SecurityContext.account(request);
+        var id = CodeRepositoryId.of(repositoryId);
+        accessControl.require(account, id, RepositoryPermission.MAINTAIN);
+        return preparation.prepare(account, id);
+    }
+
     @PatchMapping("/{repositoryId}")
     public RepositoryResponse update(@PathVariable UUID repositoryId, @Valid @RequestBody UpdateRepositoryRequest body, HttpServletRequest request) {
         var account = SecurityContext.account(request);
@@ -111,6 +143,7 @@ public class RepositoryController {
 
     public record RescanRepositoryResponse(boolean changed, RepositoryResponse repository) {
     }
+    public record RemoteSyncResponse(boolean changed, RepositoryResponse repository, UUID indexJobId) {}
 
     public record RepositoryResponse(
             UUID id, String name, String description, long version, String path, RepositorySourceType sourceType,

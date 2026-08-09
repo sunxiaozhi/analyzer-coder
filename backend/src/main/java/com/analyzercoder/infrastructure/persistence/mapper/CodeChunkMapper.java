@@ -9,6 +9,10 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface CodeChunkMapper {
     int deleteByRepositoryId(@Param("repositoryId") UUID repositoryId);
+    int deleteByPaths(@Param("repositoryId") UUID repositoryId,@Param("paths") java.util.Collection<String> paths);
+    int rebaseUnchanged(@Param("repositoryId") UUID repositoryId,@Param("paths") java.util.Collection<String> paths,
+        @Param("snapshotId") UUID snapshotId,@Param("commitSha") String commitSha);
+    String latestIndexedCommit(@Param("repositoryId") UUID repositoryId);
     int insertBatch(@Param("rows") List<CodeChunkRow> rows);
     List<CodeChunkRow> find(@Param("repositoryId") UUID repositoryId,@Param("query") String query,
         @Param("limit") Integer limit,@Param("offset") Integer offset);

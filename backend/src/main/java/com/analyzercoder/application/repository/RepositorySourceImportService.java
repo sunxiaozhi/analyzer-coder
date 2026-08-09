@@ -3,6 +3,7 @@ package com.analyzercoder.application.repository;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryMapper;
+import com.analyzercoder.security.AuthenticatedAccount;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -28,23 +29,35 @@ public class RepositorySourceImportService {
     private final RepositoryMapper mapper;
     private final Path importRoot;
     private final Path managedRepositoriesRoot;
+    private final RepositoryCredentialService credentials;
+    private final GitCredentialExecutor credentialGit;
 
     public RepositorySourceImportService(RegisterRepositoryUseCase repositories,RepositoryMapper mapper,
+        RepositoryCredentialService credentials, GitCredentialExecutor credentialGit,
         @Value("${app.repository.import-root:${java.io.tmpdir}/analyzer-coder/staging/imports}") String root,
         @Value("${app.repository.snapshot-root:${java.io.tmpdir}/analyzer-coder/repositories}") String repositoriesRoot) {
         this.repositories=repositories;this.mapper=mapper;
+        this.credentials=credentials;this.credentialGit=credentialGit;
         this.importRoot=Path.of(root).toAbsolutePath().normalize();
         this.managedRepositoriesRoot=Path.of(repositoriesRoot).toAbsolutePath().normalize();
     }
 
-    public CodeRepository importRemote(String name,String url,String branch,RepositorySourceType type,UUID ownerAccountId) {
+    public CodeRepository importRemote(String name,String url,String branch,RepositorySourceType type,
+        UUID credentialId, AuthenticatedAccount owner) {
         if(type!=RepositorySourceType.REMOTE_GIT&&type!=RepositorySourceType.GITLAB)throw new IllegalArgumentException("来源类型必须是 REMOTE_GIT 或 GITLAB");
         URI uri=URI.create(url);
         if(!List.of("https","http").contains(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw new IllegalArgumentException("远程地址必须是无内嵌凭据的 HTTP(S) Git URL");
         Path target=allocate();
         try {
-            runGit(branch==null||branch.isBlank()?List.of("clone","--depth","1",url,target.toString()):List.of("clone","--depth","1","--branch",branch,url,target.toString()),null,180);
-            return registerImported(name,target,type,false,ownerAccountId);
+            if (credentialId == null) {
+                runGit(branch==null||branch.isBlank()?List.of("clone","--depth","1",url,target.toString()):List.of("clone","--depth","1","--branch",branch,url,target.toString()),null,180);
+            } else {
+                var credential = credentials.resolve(owner, credentialId, url);
+                credentialGit.cloneRepository(url, branch, target, credential.value());
+            }
+            CodeRepository repository = registerImported(name,target,type,false,url,owner.id());
+            if (credentialId != null) credentials.bind(repository.id().value(), credentialId, owner.id());
+            return repository;
         } catch(RuntimeException exception) { deleteTree(target); throw exception; }
     }
 
@@ -57,19 +70,20 @@ public class RepositorySourceImportService {
             runGit(List.of("init"),target,30);runGit(List.of("config","user.email","platform@local"),target,10);
             runGit(List.of("config","user.name","Code Knowledge Platform"),target,10);runGit(List.of("add","."),target,60);
             runGit(List.of("commit","--allow-empty","-m","Imported ZIP snapshot"),target,60);
-            return registerImported(name,target,RepositorySourceType.ZIP,true,ownerAccountId);
+            return registerImported(name,target,RepositorySourceType.ZIP,true,null,ownerAccountId);
         } catch(IOException exception) { deleteTree(target); throw new IllegalStateException("ZIP 导入失败",exception); }
           catch(RuntimeException exception) { deleteTree(target); throw exception; }
     }
 
-    private CodeRepository registerImported(String name,Path staging,RepositorySourceType type,boolean hideGitVersion,UUID ownerAccountId) {
+    private CodeRepository registerImported(String name,Path staging,RepositorySourceType type,boolean hideGitVersion,
+        String remoteUrl,UUID ownerAccountId) {
         CodeRepository created=repositories.registerManaged(new RegisterRepositoryCommand(name,staging.toString(),ownerAccountId));
         Path worktree=managedRepositoriesRoot.resolve(created.id().value().toString()).resolve("worktree").normalize();
         if(!worktree.startsWith(managedRepositoriesRoot))throw new IllegalStateException("受管工作副本路径越界");
         try {
             Files.createDirectories(worktree.getParent());
             Files.move(staging,worktree,StandardCopyOption.ATOMIC_MOVE);
-            if(mapper.updateManagedSource(created.id().value(),worktree.toString(),type.name(),hideGitVersion)!=1)throw new IllegalStateException("无法发布受管仓库工作副本");
+            if(mapper.updateManagedSource(created.id().value(),worktree.toString(),type.name(),remoteUrl,hideGitVersion)!=1)throw new IllegalStateException("无法发布受管仓库工作副本");
             return repositories.get(created.id());
         } catch(IOException|RuntimeException exception) {
             try { repositories.delete(created.id()); } catch(RuntimeException cleanup) { exception.addSuppressed(cleanup); }
@@ -112,6 +126,20 @@ public class RepositorySourceImportService {
             }
         } catch(IOException exception) { throw new IllegalStateException("无法执行 Git",exception); }
           catch(InterruptedException exception) { Thread.currentThread().interrupt();throw new IllegalStateException("Git 操作被中断",exception); }
+    }
+
+    public CodeRepository importRemoteQueued(String name,String url,String branch,RepositorySourceType type,
+        UUID credentialId,UUID ownerAccountId){
+        if(type!=RepositorySourceType.REMOTE_GIT&&type!=RepositorySourceType.GITLAB)throw new IllegalArgumentException("来源类型必须是 REMOTE_GIT 或 GITLAB");
+        URI uri=URI.create(url);if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)
+            throw new IllegalArgumentException("远程地址必须是无内嵌凭据的 HTTPS Git URL");
+        Path target=allocate();try{
+            if(credentialId==null)runGit(branch==null||branch.isBlank()?List.of("clone","--depth","1",url,target.toString()):List.of("clone","--depth","1","--branch",branch,url,target.toString()),null,180);
+            else credentialGit.cloneRepository(url,branch,target,credentials.resolveInternal(credentialId,url).value());
+            CodeRepository repository=registerImported(name,target,type,false,url,ownerAccountId);
+            if(credentialId!=null)credentials.bind(repository.id().value(),credentialId,ownerAccountId);
+            return repository;
+        }catch(RuntimeException exception){deleteTree(target);throw exception;}
     }
 
     static String gitFailureMessage(List<String> args,String output) {

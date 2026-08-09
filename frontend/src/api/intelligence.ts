@@ -14,6 +14,7 @@ export interface CodeReference {
 
 export interface Citation {
   id: string;
+  repositoryId: string;
   sourceType: 'CODE' | 'KNOWLEDGE';
   chunkId: string | null;
   knowledgeCardId: string | null;
@@ -41,6 +42,8 @@ export interface Answer {
   evidenceStatus: 'SUPPORTED' | 'DEGRADED' | 'MODEL_OUTPUT_REJECTED' | 'INSUFFICIENT';
   createdAt: string;
 }
+export interface QaSession { id:string;title:string;repositoryIds:string[];createdAt:string;updatedAt:string }
+export interface QaMessage { id:string;role:'user'|'assistant';content:string;citations:string;conversationId:string|null;createdAt:string }
 
 export interface GraphResult {
   nodes: { symbol: string; depth: number; focus: boolean }[];
@@ -110,11 +113,16 @@ export interface CardRevision {
 }
 
 export const intelligenceApi = {
-  ask: (repositoryId: string, question: string) =>
+  ask: (repositoryId: string, question: string, options?:{sessionId?:string;repositoryIds?:string[]}) =>
     request<Answer>(`/api/repositories/${repositoryId}/ask`, {
       method: 'POST',
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, ...options }),
     }),
+  sessions:()=>request<QaSession[]>('/api/qa/sessions'),
+  createSession:(repositoryIds:string[],title='新会话')=>request<QaSession>('/api/qa/sessions',{method:'POST',body:JSON.stringify({repositoryIds,title})}),
+  sessionMessages:(id:string)=>request<QaMessage[]>(`/api/qa/sessions/${id}/messages`),
+  renameSession:(id:string,title:string)=>request<QaSession>(`/api/qa/sessions/${id}`,{method:'PATCH',body:JSON.stringify({title})}),
+  deleteSession:(id:string)=>request<void>(`/api/qa/sessions/${id}`,{method:'DELETE'}),
   graph: (repositoryId: string, symbol: string, depth: number, _direction: string) =>
     request<GraphResult>(
       `/api/repositories/${repositoryId}/codegraph/impact?symbol=${encodeURIComponent(symbol)}&depth=${depth}`

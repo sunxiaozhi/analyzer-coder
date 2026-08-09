@@ -25,14 +25,14 @@ export function useAskConversation() {
       ))?.answer ?? latestAnswer.value;
   });
 
-  async function send(repositoryId: string) {
+  async function send(repositoryId: string, options?:{sessionId?:string;repositoryIds?:string[]}) {
     const value = question.value.trim();
     if (!value || busy.value) return;
     messages.value = [...messages.value, message('user', value)];
     question.value = '';
     busy.value = true;
     try {
-      const answer = await intelligenceApi.ask(repositoryId, value);
+      const answer = await intelligenceApi.ask(repositoryId, value, options);
       messages.value = [...messages.value, {
         ...message('assistant', answer.answer),
         answer,
@@ -51,6 +51,9 @@ export function useAskConversation() {
   function selectCitation(id: string) {
     activeCitationId.value = id;
   }
+  function restore(items:{id:string;role:'user'|'assistant';content:string;citations:string;conversationId:string|null;createdAt:string}[]){
+    messages.value=items.map(item=>{let answer:Answer|undefined;if(item.role==='assistant'&&item.conversationId){try{answer={conversationId:item.conversationId,answer:item.content,snapshotId:null,citations:JSON.parse(item.citations||'[]'),provider:'history',evidenceStatus:'SUPPORTED',createdAt:item.createdAt}}catch{answer=undefined}}return{id:item.id,role:item.role,text:item.content,answer}});activeCitationId.value=null;
+  }
 
   return {
     question,
@@ -61,6 +64,7 @@ export function useAskConversation() {
     send,
     clear,
     selectCitation,
+    restore,
   };
 }
 
