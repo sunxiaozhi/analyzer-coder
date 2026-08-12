@@ -51,6 +51,24 @@ export const useWorkspaceTabsStore = defineStore('workspace-tabs', () => {
     persist();
   }
 
+  function closeLeft(name: string) {
+    const index = tabs.value.findIndex(tab => tab.name === name);
+    if (index <= 0) return [];
+    const closed = tabs.value.slice(0, index);
+    tabs.value = tabs.value.slice(index);
+    persist();
+    return closed;
+  }
+
+  function closeRight(name: string) {
+    const index = tabs.value.findIndex(tab => tab.name === name);
+    if (index < 0 || index === tabs.value.length - 1) return [];
+    const closed = tabs.value.slice(index + 1);
+    tabs.value = tabs.value.slice(0, index + 1);
+    persist();
+    return closed;
+  }
+
   function closeAll() {
     tabs.value = [];
     persist();
@@ -61,5 +79,5 @@ export const useWorkspaceTabsStore = defineStore('workspace-tabs', () => {
     persist();
   }
 
-  return { tabs, open, close, closeOthers, closeAll, retain };
+  return { tabs, open, close, closeOthers, closeLeft, closeRight, closeAll, retain };
 });

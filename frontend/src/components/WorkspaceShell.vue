@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BookOpen, Boxes, GitBranch, ListChecks, LogOut, Search, Settings, Users } from 'lucide-vue-next';
-import { computed, onMounted, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
@@ -11,6 +11,7 @@ import ProductLogo from '@/components/ProductLogo.vue';
 
 const route = useRoute(); const router = useRouter(); const auth = useAuthStore(); const repositoryStore = useRepositoryStore();
 const workspaceTabs = useWorkspaceTabsStore();
+const refreshVersions = reactive<Record<string, number>>({});
 const navItems = computed(() => [
   { to: '/ask', label: '知识问答', icon: BookOpen }, { to: '/knowledge', label: '知识卡片', icon: BookOpen },
   { to: '/graph', label: '调用图谱', icon: Boxes }, { to: '/search', label: '源码检索', icon: Search },
@@ -31,6 +32,11 @@ async function changeRepository(repositoryId: string | null) {
 function activateTab(tab: WorkspaceTab) {
   if (tab.fullPath !== route.fullPath) void router.push(tab.fullPath);
 }
+async function refreshTab(tab: WorkspaceTab) {
+  refreshVersions[tab.name] = (refreshVersions[tab.name] ?? 0) + 1;
+  if (tab.fullPath !== route.fullPath) await router.push(tab.fullPath);
+  await nextTick();
+}
 function closeTab(tab: WorkspaceTab) {
   const wasActive = tab.name === activeRouteName.value;
   const next = workspaceTabs.close(tab.name);
@@ -46,8 +52,28 @@ function closeTab(tab: WorkspaceTab) {
     void router.push(target);
   }
 }
-function closeOtherTabs() {
-  workspaceTabs.closeOthers(activeRouteName.value);
+function closeOtherTabs(tab?: WorkspaceTab) {
+  const target = tab ?? workspaceTabs.tabs.find(item => item.name === activeRouteName.value);
+  if (!target) return;
+  workspaceTabs.closeOthers(target.name);
+  if (target.fullPath !== route.fullPath) void router.push(target.fullPath);
+}
+function closeLeftTabs(tab: WorkspaceTab) {
+  const closed = workspaceTabs.closeLeft(tab.name);
+  if (closed.some(item => item.name === activeRouteName.value)) void router.push(tab.fullPath);
+}
+function closeRightTabs(tab: WorkspaceTab) {
+  const closed = workspaceTabs.closeRight(tab.name);
+  if (closed.some(item => item.name === activeRouteName.value)) void router.push(tab.fullPath);
+}
+async function copyTabLink(tab: WorkspaceTab) {
+  const link = new URL(tab.fullPath, window.location.origin).toString();
+  try {
+    await navigator.clipboard.writeText(link);
+    ElMessage.success('页面链接已复制');
+  } catch {
+    ElMessage.error('复制失败，请检查浏览器剪贴板权限');
+  }
 }
 function closeAllTabs() {
   workspaceTabs.closeAll();
@@ -82,14 +108,21 @@ onMounted(() => {
         :tabs="workspaceTabs.tabs"
         :active-name="activeRouteName"
         @activate="activateTab"
+        @refresh="refreshTab"
         @close="closeTab"
         @close-others="closeOtherTabs"
+        @close-left="closeLeftTabs"
+        @close-right="closeRightTabs"
         @close-all="closeAllTabs"
+        @copy-link="copyTabLink"
       />
       <div class="route-view">
         <RouterView v-slot="{ Component, route: viewRoute }">
           <KeepAlive :max="12">
-            <component :is="Component" :key="String(viewRoute.name)" />
+            <component
+              :is="Component"
+              :key="`${String(viewRoute.name)}:${refreshVersions[String(viewRoute.name)] ?? 0}`"
+            />
           </KeepAlive>
         </RouterView>
       </div>
