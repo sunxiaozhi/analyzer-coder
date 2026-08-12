@@ -62,6 +62,7 @@ function add(chunk: CodeChunk) {
     return;
   }
   references.value = [...references.value, {
+    repositoryId: props.repositoryId,
     chunkId: chunk.id,
     snapshotId: chunk.snapshotId,
     filePath: chunk.filePath,

@@ -34,8 +34,6 @@ public class RepositoryDeletionService {
     @Transactional
     public void complete(UUID repositoryId) {
         mapper.deleteQaConversations(repositoryId);
-        mapper.deleteQaMessages(repositoryId);
-        mapper.deleteQaSessions(repositoryId);
         mapper.deleteKnowledgeCards(repositoryId);
         mapper.deleteCodeGraphEdges(repositoryId);
         mapper.deleteCodeGraphArtifacts(repositoryId);

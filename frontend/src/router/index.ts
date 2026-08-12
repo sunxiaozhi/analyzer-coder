@@ -19,7 +19,7 @@ export const router = createRouter({
       { path: 'repositories', name: 'repositories', component: RepositoriesView, meta: { title: '仓库管理' } },
       { path: 'indexing', name: 'indexing', component: IndexJobsView, meta: { title: '索引任务' } },
       { path: 'search', name: 'search', component: ChunksView, meta: { title: '源码检索' } },
-      { path: 'ask', name: 'ask', component: AskView, meta: { title: '代码问答' } },
+      { path: 'ask', name: 'ask', component: AskView, meta: { title: '知识问答' } },
       { path: 'graph', name: 'graph', component: GraphView, meta: { title: '调用图谱' } },
       { path: 'knowledge', name: 'knowledge', component: KnowledgeView, meta: { title: '知识卡片' } },
       { path: 'accounts', name: 'accounts', component: AccountsView, meta: { admin: true, title: '账号管理' } },

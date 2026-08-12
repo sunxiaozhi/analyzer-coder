@@ -106,10 +106,6 @@
         ) RETURNING repository_id
     </select>
     <delete id="deleteQaConversations">DELETE FROM qa_conversations WHERE repo_id=#{repositoryId}</delete>
-    <delete id="deleteQaMessages">DELETE FROM qa_messages WHERE session_id IN (SELECT id FROM qa_sessions WHERE
-        repo_id=#{repositoryId})
-    </delete>
-    <delete id="deleteQaSessions">DELETE FROM qa_sessions WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteKnowledgeCards">DELETE FROM knowledge_cards WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteCodeGraphEdges">DELETE FROM code_graph_edges WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteCodeGraphArtifacts">DELETE FROM codegraph_artifacts WHERE repo_id=#{repositoryId}</delete>

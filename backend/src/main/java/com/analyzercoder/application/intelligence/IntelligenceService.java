@@ -4,12 +4,13 @@ import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.infrastructure.persistence.mapper.GraphRetrievalMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
 import com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +41,7 @@ public class IntelligenceService {
     private final RetrievalQueryAnalyzer queryAnalyzer;
     private final RetrievalRanker ranker;
     private final AnswerCitationValidator citationValidator;
+    private final ObjectMapper json;
 
     public IntelligenceService(
             IntelligenceMapper mapper,
@@ -49,7 +51,8 @@ public class IntelligenceService {
             LlmSettingsService llm,
             RetrievalQueryAnalyzer queryAnalyzer,
             RetrievalRanker ranker,
-            AnswerCitationValidator citationValidator) {
+            AnswerCitationValidator citationValidator,
+            ObjectMapper json) {
         this.mapper = mapper;
         this.graphRetrievalMapper = graphRetrievalMapper;
         this.attachments = attachments;
@@ -58,6 +61,7 @@ public class IntelligenceService {
         this.queryAnalyzer = queryAnalyzer;
         this.ranker = ranker;
         this.citationValidator = citationValidator;
+        this.json = json;
     }
 
     @Transactional
@@ -85,28 +89,28 @@ public class IntelligenceService {
     }
 
     @Transactional
-    public Answer ask(UUID repositoryId, UUID accountId, String question) {
-        return answer(repositoryId, accountId, question, unifiedSearch(repositoryId, question, 10));
-    }
-
-    @Transactional
-    public Answer askMulti(List<UUID> repositoryIds, UUID accountId, String question) {
-        if (repositoryIds == null || repositoryIds.isEmpty()) {
-            throw new IllegalArgumentException("至少选择一个仓库");
+    public Answer ask(UUID repositoryId, UUID accountId, String question, UUID clientRequestId) {
+        if (clientRequestId != null) {
+            Map<String, Object> existing =
+                    mapper.findConversationByRequest(repositoryId, accountId, clientRequestId);
+            if (existing != null) {
+                return answerSnapshot(existing);
+            }
         }
-        List<Evidence> evidence =
-                repositoryIds.stream()
-                        .distinct()
-                        .limit(8)
-                        .flatMap(id -> unifiedSearch(id, question, 10).stream())
-                        .sorted(Comparator.comparingDouble(Evidence::score).reversed())
-                        .limit(10)
-                        .toList();
-        return answer(repositoryIds.get(0), accountId, question, evidence);
+        return answer(
+                repositoryId,
+                accountId,
+                question,
+                clientRequestId,
+                unifiedSearch(repositoryId, question, 10));
     }
 
     private Answer answer(
-            UUID repositoryId, UUID accountId, String question, List<Evidence> evidence) {
+            UUID repositoryId,
+            UUID accountId,
+            String question,
+            UUID clientRequestId,
+            List<Evidence> evidence) {
         UUID conversationId = UUID.randomUUID();
         UUID snapshotId =
                 evidence.stream()
@@ -118,11 +122,13 @@ public class IntelligenceService {
         String answer;
         String provider = "deterministic-local";
         String evidenceStatus;
+        String fallbackReason;
         List<IndexedEvidence> cited;
 
         if (evidence.isEmpty()) {
             answer = "当前仓库的代码索引和有效知识中没有找到达到相关度门槛的证据。" + "请先完成索引、发布相关知识，或使用更具体的模块名、符号名和业务术语。";
             evidenceStatus = "INSUFFICIENT";
+            fallbackReason = "NO_EVIDENCE";
             cited = List.of();
         } else {
             Optional<LlmSettingsService.GenerationResult> generated =
@@ -134,6 +140,7 @@ public class IntelligenceService {
                     answer = generated.get().answer();
                     provider = generated.get().provider();
                     evidenceStatus = "SUPPORTED";
+                    fallbackReason = null;
                     cited =
                             validation.citedEvidence().stream()
                                     .map(
@@ -148,26 +155,83 @@ public class IntelligenceService {
                                     + validation.reason()
                                     + "”未通过引用校验，已安全降级。";
                     evidenceStatus = "MODEL_OUTPUT_REJECTED";
+                    fallbackReason = "CITATION_VALIDATION_FAILED";
                     cited = indexed(evidence, Math.min(5, evidence.size()));
                 }
             } else {
                 answer = deterministicAnswer(evidence);
                 evidenceStatus = "DEGRADED";
+                fallbackReason = "MODEL_UNAVAILABLE";
                 cited = indexed(evidence, Math.min(5, evidence.size()));
             }
         }
 
+        Instant createdAt = Instant.now();
+        List<Citation> citations = citations(cited);
+        String title = title(question);
+        Answer result =
+                new Answer(
+                        conversationId,
+                        repositoryId,
+                        title,
+                        question,
+                        answer,
+                        snapshotId,
+                        citations,
+                        provider,
+                        evidenceStatus,
+                        fallbackReason,
+                        createdAt);
         mapper.insertConversation(
-                conversationId, repositoryId, accountId, question, answer, snapshotId);
-        List<Citation> citations = persistCitations(conversationId, cited);
-        return new Answer(
                 conversationId,
+                repositoryId,
+                accountId,
+                clientRequestId,
+                title,
+                question,
                 answer,
                 snapshotId,
-                citations,
                 provider,
                 evidenceStatus,
-                Instant.now());
+                fallbackReason,
+                writeJson(result));
+        persistCitations(conversationId, citations);
+        return result;
+    }
+
+    public List<HistoryRecord> history(UUID repositoryId, UUID accountId, int limit, int offset) {
+        int resolvedLimit = Math.max(1, Math.min(limit, 100));
+        int resolvedOffset = Math.max(0, offset);
+        return mapper
+                .listConversations(repositoryId, accountId, resolvedLimit, resolvedOffset)
+                .stream()
+                .map(this::historyRecord)
+                .toList();
+    }
+
+    public Answer historyDetail(UUID repositoryId, UUID accountId, UUID conversationId) {
+        Map<String, Object> row = mapper.findConversation(conversationId, repositoryId, accountId);
+        if (row == null) {
+            throw new IllegalArgumentException("问答记录不存在");
+        }
+        return answerSnapshot(row);
+    }
+
+    @Transactional
+    public HistoryRecord renameHistory(
+            UUID repositoryId, UUID accountId, UUID conversationId, String title) {
+        String cleaned = clean(title, 1, 80, "记录标题");
+        if (mapper.renameConversation(conversationId, repositoryId, accountId, cleaned) != 1) {
+            throw new IllegalArgumentException("问答记录不存在");
+        }
+        return historyRecord(mapper.findConversation(conversationId, repositoryId, accountId));
+    }
+
+    @Transactional
+    public void deleteHistory(UUID repositoryId, UUID accountId, UUID conversationId) {
+        if (mapper.deleteConversation(conversationId, repositoryId, accountId) != 1) {
+            throw new IllegalArgumentException("问答记录不存在");
+        }
     }
 
     public boolean prepareRepositoryEmbeddings(UUID repositoryId) {
@@ -348,25 +412,11 @@ public class IntelligenceService {
                 List.of());
     }
 
-    private List<Citation> persistCitations(UUID conversationId, List<IndexedEvidence> cited) {
+    private List<Citation> citations(List<IndexedEvidence> cited) {
         List<Citation> citations = new ArrayList<>();
         for (IndexedEvidence indexed : cited) {
             Evidence item = indexed.evidence();
             UUID citationId = UUID.randomUUID();
-            mapper.insertCitation(
-                    citationId,
-                    conversationId,
-                    item.repositoryId(),
-                    item.sourceType(),
-                    item.chunkId(),
-                    item.knowledgeCardId(),
-                    item.title(),
-                    item.filePath(),
-                    item.symbolName(),
-                    item.startLine(),
-                    item.endLine(),
-                    item.contentHash(),
-                    indexed.index());
             citations.add(
                     new Citation(
                             citationId,
@@ -389,6 +439,26 @@ public class IntelligenceService {
                             item.codeReferences()));
         }
         return citations;
+    }
+
+    private void persistCitations(UUID conversationId, List<Citation> citations) {
+        for (Citation citation : citations) {
+            mapper.insertCitation(
+                    citation.id(),
+                    conversationId,
+                    citation.repositoryId(),
+                    citation.sourceType(),
+                    citation.chunkId(),
+                    citation.knowledgeCardId(),
+                    citation.title(),
+                    citation.filePath(),
+                    citation.symbolName(),
+                    citation.startLine(),
+                    citation.endLine(),
+                    sha256(citation.content()),
+                    citation.rank(),
+                    writeJson(citation));
+        }
     }
 
     private static List<IndexedEvidence> indexed(List<Evidence> evidence, int limit) {
@@ -690,10 +760,15 @@ public class IntelligenceService {
                 .map(
                         row ->
                                 new CodeReference(
-                                        uuid(row, "chunk_id"), uuid(row, "snapshot_id"),
-                                        string(row, "file_path"), string(row, "symbol_name"),
-                                        integer(row, "start_line"), integer(row, "end_line"),
-                                        string(row, "content_hash"), bool(row, "stale")))
+                                        repositoryId,
+                                        uuid(row, "chunk_id"),
+                                        uuid(row, "snapshot_id"),
+                                        string(row, "file_path"),
+                                        string(row, "symbol_name"),
+                                        integer(row, "start_line"),
+                                        integer(row, "end_line"),
+                                        string(row, "content_hash"),
+                                        bool(row, "stale")))
                 .toList();
     }
 
@@ -809,6 +884,79 @@ public class IntelligenceService {
                 : Boolean.parseBoolean(String.valueOf(result));
     }
 
+    private Answer answerSnapshot(Map<String, Object> row) {
+        String payload = string(row, "answer_payload");
+        if (payload == null || payload.isBlank()) {
+            return new Answer(
+                    uuid(row, "id"),
+                    uuid(row, "repo_id"),
+                    string(row, "title"),
+                    string(row, "question"),
+                    string(row, "answer"),
+                    uuid(row, "snapshot_id"),
+                    List.of(),
+                    string(row, "provider"),
+                    string(row, "evidence_status"),
+                    string(row, "fallback_reason"),
+                    instant(row, "created_at"));
+        }
+        try {
+            return json.readValue(payload, Answer.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法恢复问答记录", exception);
+        }
+    }
+
+    private HistoryRecord historyRecord(Map<String, Object> row) {
+        return new HistoryRecord(
+                uuid(row, "id"),
+                uuid(row, "repo_id"),
+                string(row, "title"),
+                string(row, "question"),
+                string(row, "provider"),
+                string(row, "evidence_status"),
+                string(row, "fallback_reason"),
+                integer(row, "citation_count") == null ? 0 : integer(row, "citation_count"),
+                instant(row, "created_at"),
+                instant(row, "updated_at"));
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法保存问答记录", exception);
+        }
+    }
+
+    private static Instant instant(Map<String, Object> row, String key) {
+        Object result = value(row, key);
+        if (result == null) {
+            return null;
+        }
+        if (result instanceof Instant instant) {
+            return instant;
+        }
+        if (result instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toInstant();
+        }
+        if (result instanceof java.time.OffsetDateTime offsetDateTime) {
+            return offsetDateTime.toInstant();
+        }
+        return Instant.parse(result.toString());
+    }
+
+    private static String title(String question) {
+        String normalized = question == null ? "" : question.trim().replaceAll("\\s+", " ");
+        if (normalized.isBlank()) {
+            return "未命名问题";
+        }
+        int end =
+                normalized.offsetByCodePoints(
+                        0, Math.min(30, normalized.codePointCount(0, normalized.length())));
+        return normalized.substring(0, end);
+    }
+
     private static String localVector(String text) {
         float[] output = new float[DIMENSION];
         String normalized = text.toLowerCase(Locale.ROOT);
@@ -904,12 +1052,28 @@ public class IntelligenceService {
 
     public record Answer(
             UUID conversationId,
+            UUID repositoryId,
+            String title,
+            String question,
             String answer,
             UUID snapshotId,
             List<Citation> citations,
             String provider,
             String evidenceStatus,
+            String fallbackReason,
             Instant createdAt) {}
+
+    public record HistoryRecord(
+            UUID conversationId,
+            UUID repositoryId,
+            String title,
+            String question,
+            String provider,
+            String evidenceStatus,
+            String fallbackReason,
+            int citationCount,
+            Instant createdAt,
+            Instant updatedAt) {}
 
     public record GraphTarget(String symbol, String filePath, Integer startLine) {}
 
@@ -923,6 +1087,7 @@ public class IntelligenceService {
     public record CodeReferenceInput(UUID chunkId) {}
 
     public record CodeReference(
+            UUID repositoryId,
             UUID chunkId,
             UUID snapshotId,
             String filePath,

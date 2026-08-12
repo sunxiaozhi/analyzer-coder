@@ -16,6 +16,8 @@ const router = useRouter();
 const route = useRoute();
 const cards = shallowRef<KnowledgeCard[]>([]);
 const query = shallowRef('');
+const allCardTypes = '__ALL__';
+const selectedType = shallowRef(allCardTypes);
 const dialog = shallowRef(false);
 const detailDialog = shallowRef(false);
 const historyDialog = shallowRef(false);
@@ -24,10 +26,20 @@ const editing = shallowRef<KnowledgeCard | null>(null);
 const viewing = shallowRef<KnowledgeCard | null>(null);
 const historyCard = shallowRef<KnowledgeCard | null>(null);
 const revisions = shallowRef<CardRevision[]>([]);
+const cardTypes = computed(() => [...new Set(cards.value
+  .map(card => card.cardType?.trim())
+  .filter((value): value is string => Boolean(value)))]
+  .sort((left, right) => left.localeCompare(right, 'zh-CN')));
 const rows = computed(() => cards.value.filter(card => {
   const value = query.value.trim().toLowerCase();
-  return !value || card.title.toLowerCase().includes(value);
+  const matchesTitle = !value || card.title.toLowerCase().includes(value);
+  const matchesType = selectedType.value === allCardTypes || card.cardType === selectedType.value;
+  return matchesTitle && matchesType;
 }));
+const emptyDescription = computed(() => {
+  if (!cards.value.length) return '当前仓库暂无知识卡片';
+  return '没有符合筛选条件的知识卡片';
+});
 
 async function load() {
   cards.value = repositories.selectedRepositoryId
@@ -103,7 +115,10 @@ async function restore(revision: number) {
   historyCard.value = cards.value.find(item => item.id === card.id) ?? null;
   ElMessage.success('历史内容及附件已恢复为新草稿');
 }
-watch(() => repositories.selectedRepositoryId, () => void load());
+watch(() => repositories.selectedRepositoryId, () => {
+  selectedType.value = allCardTypes;
+  void load();
+});
 watch(() => route.query.cardId, syncRequestedCard);
 onMounted(() => void load());
 </script>
@@ -113,11 +128,22 @@ onMounted(() => void load());
     <div class="surface knowledge-surface">
       <div class="toolbar">
         <el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索标题" clearable />
+        <el-select
+          v-model="selectedType"
+          class="knowledge-type-filter"
+          placeholder="全部类型"
+          aria-label="按知识类型筛选"
+          clearable
+          @clear="selectedType = allCardTypes"
+        >
+          <el-option label="全部类型" :value="allCardTypes" />
+          <el-option v-for="type in cardTypes" :key="type" :label="type" :value="type" />
+        </el-select>
         <span class="spacer" />
         <el-button type="primary" :icon="Plus" :disabled="!repositories.selectedRepositoryId" @click="openCreate">新建卡片</el-button>
       </div>
       <div class="knowledge-scroll">
-        <el-empty v-if="!rows.length" description="当前仓库暂无知识卡片" />
+        <el-empty v-if="!rows.length" :description="emptyDescription" />
         <div v-else class="knowledge-grid">
           <KnowledgeCardListItem
             v-for="card in rows"
@@ -169,6 +195,9 @@ onMounted(() => void load());
 .knowledge-scroll .knowledge-grid {
   padding-top: 0;
 }
+.knowledge-type-filter {
+  width: 168px;
+}
 .history-markdown :deep(pre){overflow:auto;padding:10px;border-radius:8px;background:#18212f;color:#e6edf3}.history-markdown{line-height:1.7}
 @media (max-width: 760px) {
   .knowledge-page,
@@ -179,5 +208,6 @@ onMounted(() => void load());
   }
   .knowledge-scroll { overflow: visible; }
   .knowledge-surface { row-gap: 12px; }
+  .knowledge-type-filter { width: 100%; }
 }
 </style>

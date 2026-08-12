@@ -156,7 +156,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
   <section class="page repository-design">
     <div class="surface repository-list-surface">
       <div class="repository-list-header">
-        <div class="toolbar"><el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索名称、所有者、来源、路径或版本" clearable /><span class="spacer" /><el-button type="primary" :icon="Plus" :loading="importing" @click="dialogOpen=true">接入仓库</el-button></div>
+        <div class="toolbar"><el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索仓库名称、描述、所有者或分支" clearable /><span class="spacer" /><el-button type="primary" :icon="Plus" :loading="importing" @click="dialogOpen=true">接入仓库</el-button></div>
         <el-alert v-if="pageError || store.error" :title="pageError ?? store.error ?? ''" type="error" :closable="false" />
       </div>
       <div class="repository-table-region">

@@ -89,9 +89,42 @@ public interface IntelligenceMapper {
             @Param("id") UUID id,
             @Param("repositoryId") UUID repositoryId,
             @Param("accountId") UUID accountId,
+            @Param("clientRequestId") UUID clientRequestId,
+            @Param("title") String title,
             @Param("question") String question,
             @Param("answer") String answer,
-            @Param("snapshotId") UUID snapshotId);
+            @Param("snapshotId") UUID snapshotId,
+            @Param("provider") String provider,
+            @Param("evidenceStatus") String evidenceStatus,
+            @Param("fallbackReason") String fallbackReason,
+            @Param("answerPayload") String answerPayload);
+
+    Map<String, Object> findConversationByRequest(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId,
+            @Param("clientRequestId") UUID clientRequestId);
+
+    Map<String, Object> findConversation(
+            @Param("id") UUID id,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId);
+
+    List<Map<String, Object>> listConversations(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
+
+    int renameConversation(
+            @Param("id") UUID id,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId,
+            @Param("title") String title);
+
+    int deleteConversation(
+            @Param("id") UUID id,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId);
 
     /**
      * 创建并持久化一条新记录。
@@ -124,7 +157,8 @@ public interface IntelligenceMapper {
             @Param("startLine") Integer startLine,
             @Param("endLine") Integer endLine,
             @Param("evidenceHash") String evidenceHash,
-            @Param("rank") int rank);
+            @Param("rank") int rank,
+            @Param("citationPayload") String citationPayload);
 
     /**
      * 查询指定仓库和版本的代码图谱边。

@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router';
 
 const route = useRoute();
 const capability = computed(() => ({
-  ask: { name: '代码问答', milestone: 'M1' },
+  ask: { name: '知识问答', milestone: 'M1' },
   graph: { name: '调用图与影响分析', milestone: 'M2' },
   knowledge: { name: '知识卡片', milestone: 'M2' },
   accounts: { name: '账号与授权', milestone: '后续 M0' },

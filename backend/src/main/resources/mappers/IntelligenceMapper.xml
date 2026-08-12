@@ -126,12 +126,45 @@
     </select>
 
     <insert id="insertConversation">
-        INSERT INTO qa_conversations(id,repo_id,account_id,question,answer,snapshot_id)
-        VALUES(#{id},#{repositoryId},#{accountId},#{question},#{answer},#{snapshotId})
+        INSERT INTO qa_conversations(
+          id,repo_id,account_id,client_request_id,title,question,answer,snapshot_id,
+          provider,evidence_status,fallback_reason,answer_payload
+        ) VALUES(
+          #{id},#{repositoryId},#{accountId},#{clientRequestId},#{title},#{question},#{answer},#{snapshotId},
+          #{provider},#{evidenceStatus},#{fallbackReason},CAST(#{answerPayload} AS jsonb)
+        )
     </insert>
+    <select id="findConversationByRequest" resultType="map">
+        SELECT id,repo_id,account_id,title,question,answer,snapshot_id,provider,evidence_status,
+        fallback_reason,answer_payload,created_at,updated_at
+        FROM qa_conversations
+        WHERE repo_id=#{repositoryId} AND account_id=#{accountId} AND client_request_id=#{clientRequestId}
+    </select>
+    <select id="findConversation" resultType="map">
+        SELECT c.id,c.repo_id,c.account_id,c.title,c.question,c.answer,c.snapshot_id,c.provider,c.evidence_status,
+        c.fallback_reason,c.answer_payload,c.created_at,c.updated_at,
+        (SELECT COUNT(*) FROM qa_citations q WHERE q.conversation_id=c.id) citation_count
+        FROM qa_conversations c
+        WHERE c.id=#{id} AND c.repo_id=#{repositoryId} AND c.account_id=#{accountId}
+    </select>
+    <select id="listConversations" resultType="map">
+        SELECT c.id,c.repo_id,c.title,c.question,c.provider,c.evidence_status,c.fallback_reason,
+        c.created_at,c.updated_at,COUNT(q.id) citation_count
+        FROM qa_conversations c LEFT JOIN qa_citations q ON q.conversation_id=c.id
+        WHERE c.repo_id=#{repositoryId} AND c.account_id=#{accountId}
+        GROUP BY c.id ORDER BY c.created_at DESC,c.id DESC LIMIT #{limit} OFFSET #{offset}
+    </select>
+    <update id="renameConversation">
+        UPDATE qa_conversations SET title=#{title},updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND repo_id=#{repositoryId} AND account_id=#{accountId}
+    </update>
+    <delete id="deleteConversation">
+        DELETE FROM qa_conversations
+        WHERE id=#{id} AND repo_id=#{repositoryId} AND account_id=#{accountId}
+    </delete>
     <insert id="insertCitation">
-        INSERT INTO qa_citations(id,conversation_id,repository_id,source_type,chunk_id,knowledge_card_id,title,file_path,symbol_name,start_line,end_line,evidence_hash,rank)
-        VALUES(#{id},#{conversationId},#{repositoryId},#{sourceType},#{chunkId},#{knowledgeCardId},#{title},#{filePath},#{symbolName},#{startLine},#{endLine},#{evidenceHash},#{rank})
+        INSERT INTO qa_citations(id,conversation_id,repository_id,source_type,chunk_id,knowledge_card_id,title,file_path,symbol_name,start_line,end_line,evidence_hash,rank,citation_payload)
+        VALUES(#{id},#{conversationId},#{repositoryId},#{sourceType},#{chunkId},#{knowledgeCardId},#{title},#{filePath},#{symbolName},#{startLine},#{endLine},#{evidenceHash},#{rank},CAST(#{citationPayload} AS jsonb))
     </insert>
 
     <select id="graphEdges" resultType="map">

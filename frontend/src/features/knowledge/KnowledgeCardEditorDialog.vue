@@ -87,7 +87,7 @@ function save() {
         </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="form.cardType" class="full-width">
-            <el-option v-for="value in ['业务规则','技术决策','接口约定','模块说明']"
+            <el-option v-for="value in ['业务规则','技术决策','接口约定','模块说明','问题处置']"
               :key="value" :label="value" :value="value" />
           </el-select>
         </el-form-item>

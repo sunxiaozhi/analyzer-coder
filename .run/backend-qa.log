@@ -1,0 +1,121 @@
+Active code page: 65001
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------< com.analyzercoder:codebase-knowledge-backend >------------
+[INFO] Building codebase-knowledge-backend 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.5.16:run (default-cli) > test-compile @ codebase-knowledge-backend >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ codebase-knowledge-backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 16 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.14.1:compile (default-compile) @ codebase-knowledge-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ codebase-knowledge-backend ---
+[INFO] skip non existing resourceDirectory C:\Users\admin\Desktop\analyzer-coder\backend\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.14.1:testCompile (default-testCompile) @ codebase-knowledge-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] <<< spring-boot:3.5.16:run (default-cli) < test-compile @ codebase-knowledge-backend <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.5.16:run (default-cli) @ codebase-knowledge-backend ---
+[INFO] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::               (v3.5.16)
+
+2026-08-13T00:00:56.951+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] c.a.CodebaseKnowledgeApplication         : Starting CodebaseKnowledgeApplication using Java 17.0.13 with PID 24100 (C:\Users\admin\Desktop\analyzer-coder\backend\target\classes started by admin in C:\Users\admin\Desktop\analyzer-coder\backend)
+2026-08-13T00:00:56.954+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] c.a.CodebaseKnowledgeApplication         : No active profile set, falling back to 1 default profile: "default"
+2026-08-13T00:00:58.324+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-08-13T00:00:58.340+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-13T00:00:58.340+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.55]
+2026-08-13T00:00:58.402+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-08-13T00:00:58.403+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1410 ms
+2026-08-13T00:00:58.668+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-08-13T00:00:58.812+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@524f5ea5
+2026-08-13T00:00:58.818+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-08-13T00:00:58.846+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/codebase_kb_dev (PostgreSQL 17.10)
+2026-08-13T00:00:58.882+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table "public"."flyway_schema_history" does not exist yet
+2026-08-13T00:00:58.886+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 1 migration (execution time 00:00.018s)
+2026-08-13T00:00:58.897+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] org.flywaydb.core.Flyway                 : All configured schemas are empty; baseline operation skipped. A baseline or migration script with a lower version than the baseline version may execute if available. Check the Schemas parameter if this is not intended.
+2026-08-13T00:00:58.905+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table "public"."flyway_schema_history" ...
+2026-08-13T00:00:58.964+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema "public": << Empty Schema >>
+2026-08-13T00:00:59.001+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "1 - init schema"
+2026-08-13T00:00:59.445+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.f.core.internal.command.DbMigrate      : Successfully applied 1 migration to schema "public", now at version v1 (execution time 00:00.414s)
+2026-08-13T00:01:00.359+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-08-13T00:01:00.421+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2026-08-13T00:01:00.438+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] c.a.CodebaseKnowledgeApplication         : Started CodebaseKnowledgeApplication in 3.944 seconds (process running for 4.214)
+2026-08-13T00:01:00.999+08:00  INFO 24100 --- [codebase-knowledge-backend] [           main] com.analyzercoder.security.AuthService   : Initial super administrator created; password value was not logged
+2026-08-13T00:01:02.481+08:00  INFO 24100 --- [codebase-knowledge-backend] [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-08-13T00:01:02.482+08:00  INFO 24100 --- [codebase-knowledge-backend] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-08-13T00:01:02.483+08:00  INFO 24100 --- [codebase-knowledge-backend] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-08-13T00:20:16.878+08:00  WARN 24100 --- [codebase-knowledge-backend] [   scheduling-1] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Failed to validate connection org.postgresql.jdbc.PgConnection@5d079d9c (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-08-13T00:20:16.884+08:00 ERROR 24100 --- [codebase-knowledge-backend] [   scheduling-1] o.s.s.s.TaskUtils$LoggingErrorHandler    : Unexpected error occurred in scheduled task
+
+org.springframework.transaction.CannotCreateTransactionException: Could not open JDBC Connection for transaction
+	at org.springframework.jdbc.datasource.DataSourceTransactionManager.doBegin(DataSourceTransactionManager.java:320) ~[spring-jdbc-6.2.19.jar:6.2.19]
+	at org.springframework.transaction.support.AbstractPlatformTransactionManager.startTransaction(AbstractPlatformTransactionManager.java:532) ~[spring-tx-6.2.19.jar:6.2.19]
+	at org.springframework.transaction.support.AbstractPlatformTransactionManager.getTransaction(AbstractPlatformTransactionManager.java:405) ~[spring-tx-6.2.19.jar:6.2.19]
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.createTransactionIfNecessary(TransactionAspectSupport.java:639) ~[spring-tx-6.2.19.jar:6.2.19]
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:374) ~[spring-tx-6.2.19.jar:6.2.19]
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:119) ~[spring-tx-6.2.19.jar:6.2.19]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184) ~[spring-aop-6.2.19.jar:6.2.19]
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:728) ~[spring-aop-6.2.19.jar:6.2.19]
+	at com.analyzercoder.application.repository.RepositoryImportJobService$$SpringCGLIB$$0.processNext(<generated>) ~[classes/:na]
+	at com.analyzercoder.worker.RepositoryImportJobWorker.poll(RepositoryImportJobWorker.java:19) ~[classes/:na]
+	at jdk.internal.reflect.GeneratedMethodAccessor14.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568) ~[na:na]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130) ~[spring-context-6.2.19.jar:6.2.19]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.19.jar:6.2.19]
+	at io.micrometer.observation.Observation.observe(Observation.java:498) ~[micrometer-observation-1.15.12.jar:1.15.12]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.19.jar:6.2.19]
+	at org.springframework.scheduling.config.Task$OutcomeTrackingRunnable.run(Task.java:87) ~[spring-context-6.2.19.jar:6.2.19]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.19.jar:6.2.19]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:842) ~[na:na]
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 911043ms (total=9, active=0, idle=9, waiting=0)
+	at com.zaxxer.hikari.pool.HikariPool.createTimeoutException(HikariPool.java:714) ~[HikariCP-6.3.3.jar:na]
+	at com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:184) ~[HikariCP-6.3.3.jar:na]
+	at com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:142) ~[HikariCP-6.3.3.jar:na]
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:127) ~[HikariCP-6.3.3.jar:na]
+	at org.springframework.jdbc.datasource.DataSourceTransactionManager.doBegin(DataSourceTransactionManager.java:271) ~[spring-jdbc-6.2.19.jar:6.2.19]
+	... 24 common frames omitted
+Caused by: org.postgresql.util.PSQLException: This connection has been closed.
+	at org.postgresql.jdbc.PgConnection.checkClosed(PgConnection.java:1026) ~[postgresql-42.7.11.jar:42.7.11]
+	at org.postgresql.jdbc.PgConnection.setNetworkTimeout(PgConnection.java:1771) ~[postgresql-42.7.11.jar:42.7.11]
+	at com.zaxxer.hikari.pool.PoolBase.setNetworkTimeout(PoolBase.java:582) ~[HikariCP-6.3.3.jar:na]
+	at com.zaxxer.hikari.pool.PoolBase.isConnectionDead(PoolBase.java:174) ~[HikariCP-6.3.3.jar:na]
+	at com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:166) ~[HikariCP-6.3.3.jar:na]
+	... 27 common frames omitted
+
+2026-08-13T06:58:19.080+08:00  WARN 24100 --- [codebase-knowledge-backend] [l-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=6h53m26s849ms160?s500ns).
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  07:05 h
+[INFO] Finished at: 2026-08-13T07:06:06+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.springframework.boot:spring-boot-maven-plugin:3.5.16:run (default-cli) on project codebase-knowledge-backend: Process terminated with exit code: -1 -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException

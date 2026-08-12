@@ -70,9 +70,8 @@
         <if test="query != null">
             AND (LOWER(r.name) LIKE CONCAT('%',LOWER(#{query}),'%')
             OR LOWER(COALESCE(r.description,'')) LIKE CONCAT('%',LOWER(#{query}),'%')
-            OR LOWER(r.path) LIKE CONCAT('%',LOWER(#{query}),'%')
-            OR LOWER(r.source_type) LIKE CONCAT('%',LOWER(#{query}),'%')
             OR LOWER(COALESCE(r.default_branch,'')) LIKE CONCAT('%',LOWER(#{query}),'%')
+            OR LOWER(COALESCE(owner_account.username,'')) LIKE CONCAT('%',LOWER(#{query}),'%')
             OR LOWER(COALESCE(owner_account.display_name,'')) LIKE CONCAT('%',LOWER(#{query}),'%'))
         </if>
         ORDER BY r.created_at DESC,r.id DESC

@@ -207,15 +207,6 @@
   font-size: 11px;
 }
 
-.chat-column {
-  grid-template-rows: minmax(0, 1fr) auto;
-  border-radius: 7px 0 0 7px;
-}
-
-.chat-column .chat-head {
-  display: none;
-}
-
 .message.user {
   display: flex;
   justify-content: flex-end;

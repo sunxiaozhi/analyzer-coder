@@ -140,7 +140,7 @@ Browser
 | --- | --- |
 | `qa_conversations` | 每次问答的一问一答记录 |
 | `qa_citations` | 回答引用的代码/知识元数据 |
-| `qa_sessions`、`qa_messages` | 兼容旧模型；当前页面和 API 未使用 |
+| `qa_conversations`、`qa_citations` | 一问一答历史记录与完整证据快照 |
 | `knowledge_cards` | 当前卡片修订和状态 |
 | `knowledge_card_revisions` | 不可变修订历史 |
 | `knowledge_code_refs` | 卡片与 chunk 的代码引用 |
@@ -308,7 +308,7 @@ IndexJobWorker
 
 `RetrievalRanker` 对各通道赋权、去重并返回 score、lexicalScore、semanticScore 和 channels。向量补建或查询异常被捕获，关键词/结构通道继续工作。当前没有显式通道故障结构返回前端。
 
-## 10. 代码问答
+## 10. 知识问答
 
 ### 10.1 当前调用链
 
@@ -335,9 +335,9 @@ POST /repositories/{repoId}/ask
 
 Prompt 约束模型只能使用编号证据。总证据预算约 18000 字符，单项最多 2400 字符，要求中文回答并在事实句后标 `[S编号]`。敏感模式匹配 api key、secret、password、token 等赋值形式。
 
-### 10.3 当前会话边界
+### 10.3 当前历史边界
 
-每次请求生成新 conversationId；没有会话聚合和历史 API。前端 `useAskConversation` 只维护页面内消息、busy、当前引用和证据面板，刷新后丢失。当前 OpenAI 客户端具备流式探针解析能力，但产品问答使用非流式 `generate`，Controller 也未返回 SSE。
+每次请求生成或通过 clientRequestId 幂等复用一个 conversationId；历史记录按账号和当前仓库隔离，支持读取、重命名和删除。每条记录持久化完整回答与引用快照。当前记录不携带前文参与下一次生成，因此属于一问一答历史而非多轮会话；产品问答仍使用非流式 `generate`。
 
 ## 11. CodeGraph 与影响分析
 

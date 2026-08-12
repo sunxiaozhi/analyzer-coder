@@ -12,12 +12,12 @@ import ProductLogo from '@/components/ProductLogo.vue';
 const route = useRoute(); const router = useRouter(); const auth = useAuthStore(); const repositoryStore = useRepositoryStore();
 const workspaceTabs = useWorkspaceTabsStore();
 const navItems = computed(() => [
-  { to: '/ask', label: '代码问答', icon: BookOpen }, { to: '/knowledge', label: '知识卡片', icon: BookOpen },
+  { to: '/ask', label: '知识问答', icon: BookOpen }, { to: '/knowledge', label: '知识卡片', icon: BookOpen },
   { to: '/graph', label: '调用图谱', icon: Boxes }, { to: '/search', label: '源码检索', icon: Search },
   { to: '/repositories', label: '仓库管理', icon: GitBranch }, { to: '/indexing', label: '索引任务', icon: ListChecks },
   ...(auth.isAdmin ? [{ to: '/accounts', label: '账号管理', icon: Users }, { to: '/settings', label: '系统设置', icon: Settings }] : []),
 ]);
-const titles: Record<string, string> = { repositories: '仓库管理', indexing: '索引任务', search: '源码检索', ask: '代码问答', graph: '调用图谱', knowledge: '知识卡片', accounts: '账号管理', settings: '系统设置' };
+const titles: Record<string, string> = { repositories: '仓库管理', indexing: '索引任务', search: '源码检索', ask: '知识问答', graph: '调用图谱', knowledge: '知识卡片', accounts: '账号管理', settings: '系统设置' };
 const pageTitle = computed(() => titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
 async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }
@@ -54,7 +54,7 @@ function closeAllTabs() {
   if (route.path !== '/ask') {
     void router.push('/ask');
   } else {
-    workspaceTabs.open({ name: 'ask', title: '代码问答', fullPath: route.fullPath });
+    workspaceTabs.open({ name: 'ask', title: '知识问答', fullPath: route.fullPath });
   }
 }
 watch(() => route.fullPath, () => {

@@ -60,6 +60,7 @@ CREATE TABLE repositories (
     path TEXT NOT NULL,
     source_type TEXT NOT NULL DEFAULT 'LOCAL_GIT',
     default_branch TEXT,
+    remote_url TEXT,
     current_commit TEXT,
     worktree_digest TEXT,
     worktree_dirty BOOLEAN NOT NULL DEFAULT FALSE,
@@ -86,6 +87,7 @@ COMMENT ON COLUMN repositories.description IS '仓库说明';
 COMMENT ON COLUMN repositories.path IS '源代码目录或平台受管 Git 工作目录';
 COMMENT ON COLUMN repositories.source_type IS '来源类型：LOCAL_GIT、REMOTE_GIT、GITLAB 或 ZIP';
 COMMENT ON COLUMN repositories.default_branch IS '该仓库固定跟踪的分支';
+COMMENT ON COLUMN repositories.remote_url IS '远程 Git/GitLab HTTPS 克隆地址';
 COMMENT ON COLUMN repositories.current_commit IS '当前已发布代码版本的 Git 提交号';
 COMMENT ON COLUMN repositories.worktree_digest IS '当前代码文件清单及内容摘要';
 COMMENT ON COLUMN repositories.worktree_dirty IS '最近同步时源工作区是否包含未提交变化';
@@ -194,9 +196,9 @@ COMMENT ON COLUMN repository_governance_locks.repo_id IS '目标仓库';
 COMMENT ON COLUMN repository_governance_locks.lock_version IS '并发控制版本';
 COMMENT ON COLUMN repository_governance_locks.updated_at IS '最后更新时间';
 
-CREATE TABLE repository_credentials (
+CREATE TABLE git_credentials (
     id UUID PRIMARY KEY,
-    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    legacy_repo_id UUID REFERENCES repositories(id) ON DELETE CASCADE,
     credential_type TEXT NOT NULL,
     display_name TEXT NOT NULL,
     encrypted_secret TEXT NOT NULL,
@@ -204,27 +206,90 @@ CREATE TABLE repository_credentials (
     credential_version BIGINT NOT NULL DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'ACTIVE',
     last_validated_at TIMESTAMP,
+    server_url TEXT NOT NULL,
+    username TEXT,
+    secret_iv TEXT NOT NULL,
+    secret_digest TEXT NOT NULL,
+    encryption_algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM',
+    last_validation_error TEXT,
+    expires_at TIMESTAMPTZ,
+    disabled_at TIMESTAMPTZ,
     created_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    updated_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_git_credentials_type
+        CHECK (credential_type IN ('GIT_HTTP_TOKEN', 'GITLAB_PAT')),
+    CONSTRAINT chk_git_credentials_status
+        CHECK (status IN ('ACTIVE', 'DISABLED', 'INVALID'))
 );
 
-COMMENT ON TABLE repository_credentials IS '仓库专用加密凭据';
-COMMENT ON COLUMN repository_credentials.id IS '凭据唯一标识';
-COMMENT ON COLUMN repository_credentials.repo_id IS '所属仓库';
-COMMENT ON COLUMN repository_credentials.credential_type IS '凭据类型';
-COMMENT ON COLUMN repository_credentials.display_name IS '凭据显示名称';
-COMMENT ON COLUMN repository_credentials.encrypted_secret IS '加密后的敏感内容';
-COMMENT ON COLUMN repository_credentials.masked_value IS '用于界面显示的掩码';
-COMMENT ON COLUMN repository_credentials.credential_version IS '凭据版本';
-COMMENT ON COLUMN repository_credentials.status IS '凭据状态';
-COMMENT ON COLUMN repository_credentials.last_validated_at IS '最近验证时间';
-COMMENT ON COLUMN repository_credentials.created_by IS '创建账号';
-COMMENT ON COLUMN repository_credentials.created_at IS '创建时间';
-COMMENT ON COLUMN repository_credentials.updated_at IS '最后更新时间';
+COMMENT ON TABLE git_credentials IS '可复用的加密 Git/GitLab HTTPS 凭据';
+COMMENT ON COLUMN git_credentials.id IS '凭据唯一标识';
+COMMENT ON COLUMN git_credentials.legacy_repo_id IS '迁移前的仓库绑定，仅用于兼容旧数据';
+COMMENT ON COLUMN git_credentials.credential_type IS '凭据类型';
+COMMENT ON COLUMN git_credentials.display_name IS '凭据显示名称';
+COMMENT ON COLUMN git_credentials.encrypted_secret IS '加密后的敏感内容';
+COMMENT ON COLUMN git_credentials.masked_value IS '用于界面显示的掩码';
+COMMENT ON COLUMN git_credentials.credential_version IS '凭据版本';
+COMMENT ON COLUMN git_credentials.status IS '凭据状态';
+COMMENT ON COLUMN git_credentials.last_validated_at IS '最近验证时间';
+COMMENT ON COLUMN git_credentials.server_url IS '凭据适用的 Git 服务地址';
+COMMENT ON COLUMN git_credentials.expires_at IS '可选的凭据过期时间';
+COMMENT ON COLUMN git_credentials.last_validation_error IS '脱敏后的最近检测失败原因';
+COMMENT ON COLUMN git_credentials.created_by IS '创建账号';
+COMMENT ON COLUMN git_credentials.created_at IS '创建时间';
+COMMENT ON COLUMN git_credentials.updated_at IS '最后更新时间';
 
 CREATE INDEX idx_repository_credentials_repo
-    ON repository_credentials(repo_id, created_at DESC);
+    ON git_credentials(legacy_repo_id, created_at DESC);
+CREATE INDEX idx_git_credentials_owner
+    ON git_credentials(created_by, status, created_at DESC);
+CREATE INDEX idx_git_credentials_expiry
+    ON git_credentials(status, expires_at);
+
+CREATE TABLE repository_credential_bindings (
+    repository_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    credential_id UUID NOT NULL REFERENCES git_credentials(id) ON DELETE RESTRICT,
+    usage_type TEXT NOT NULL DEFAULT 'CLONE',
+    bound_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (repository_id, usage_type),
+    CONSTRAINT chk_repository_credential_usage CHECK (usage_type IN ('CLONE'))
+);
+
+COMMENT ON TABLE repository_credential_bindings IS '仓库与可复用凭据的用途绑定';
+
+CREATE INDEX idx_repository_credential_bindings_credential
+    ON repository_credential_bindings(credential_id, created_at DESC);
+
+CREATE TABLE repository_import_jobs (
+    id UUID PRIMARY KEY,
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    credential_id UUID REFERENCES git_credentials(id) ON DELETE RESTRICT,
+    source_type TEXT NOT NULL,
+    repository_name TEXT NOT NULL,
+    remote_url TEXT NOT NULL,
+    branch TEXT,
+    status TEXT NOT NULL DEFAULT 'QUEUED',
+    current_step TEXT NOT NULL DEFAULT 'queued',
+    error_message TEXT,
+    result_repository_id UUID REFERENCES repositories(id) ON DELETE SET NULL,
+    cancel_requested BOOLEAN NOT NULL DEFAULT FALSE,
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_repository_import_status
+        CHECK (status IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELED'))
+);
+
+COMMENT ON TABLE repository_import_jobs IS '远程仓库异步导入任务';
+
+CREATE INDEX idx_repository_import_jobs_queue
+    ON repository_import_jobs(status, created_at);
+CREATE INDEX idx_repository_import_jobs_actor
+    ON repository_import_jobs(account_id, created_at DESC);
 
 CREATE TABLE repository_deletion_tombstones (
     repository_id UUID PRIMARY KEY,
@@ -428,64 +493,52 @@ CREATE INDEX idx_codegraph_artifacts_repo_snapshot
 -- Questions, knowledge and settings
 -- ============================================================================
 
-CREATE TABLE qa_sessions (
-    id UUID PRIMARY KEY,
-    repo_id UUID REFERENCES repositories(id),
-    title TEXT,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
-);
-
-COMMENT ON TABLE qa_sessions IS '兼容旧问答模型的会话';
-COMMENT ON COLUMN qa_sessions.id IS '会话唯一标识';
-COMMENT ON COLUMN qa_sessions.repo_id IS '所属仓库';
-COMMENT ON COLUMN qa_sessions.title IS '会话标题';
-COMMENT ON COLUMN qa_sessions.created_at IS '创建时间';
-COMMENT ON COLUMN qa_sessions.updated_at IS '最后更新时间';
-
-CREATE INDEX idx_qa_sessions_repo_updated_at ON qa_sessions(repo_id, updated_at DESC);
-
-CREATE TABLE qa_messages (
-    id UUID PRIMARY KEY,
-    session_id UUID NOT NULL REFERENCES qa_sessions(id),
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    citations JSONB,
-    retrieval_trace JSONB,
-    created_at TIMESTAMP NOT NULL
-);
-
-COMMENT ON TABLE qa_messages IS '兼容旧问答模型的消息';
-COMMENT ON COLUMN qa_messages.id IS '消息唯一标识';
-COMMENT ON COLUMN qa_messages.session_id IS '所属会话';
-COMMENT ON COLUMN qa_messages.role IS '消息角色';
-COMMENT ON COLUMN qa_messages.content IS '消息正文';
-COMMENT ON COLUMN qa_messages.citations IS '引用快照';
-COMMENT ON COLUMN qa_messages.retrieval_trace IS '检索过程记录';
-COMMENT ON COLUMN qa_messages.created_at IS '创建时间';
-
 CREATE TABLE qa_conversations (
     id UUID PRIMARY KEY,
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    client_request_id UUID,
+    title VARCHAR(80) NOT NULL,
     question TEXT NOT NULL,
     answer TEXT NOT NULL,
     snapshot_id UUID,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    provider VARCHAR(160) NOT NULL,
+    evidence_status VARCHAR(32) NOT NULL,
+    fallback_reason VARCHAR(64),
+    answer_payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_qa_conversations_evidence_status CHECK (
+        evidence_status IN ('SUPPORTED','DEGRADED','MODEL_OUTPUT_REJECTED','INSUFFICIENT','UNKNOWN')
+    )
 );
 
-COMMENT ON TABLE qa_conversations IS '代码问答记录';
+COMMENT ON TABLE qa_conversations IS '知识问答的一问一答记录';
 COMMENT ON COLUMN qa_conversations.id IS '问答唯一标识';
 COMMENT ON COLUMN qa_conversations.repo_id IS '所属仓库';
 COMMENT ON COLUMN qa_conversations.account_id IS '提问账号';
+COMMENT ON COLUMN qa_conversations.client_request_id IS '客户端幂等请求标识';
+COMMENT ON COLUMN qa_conversations.title IS '历史记录标题';
 COMMENT ON COLUMN qa_conversations.question IS '用户问题';
 COMMENT ON COLUMN qa_conversations.answer IS '生成的回答';
 COMMENT ON COLUMN qa_conversations.snapshot_id IS '回答所依据的内容版本令牌';
+COMMENT ON COLUMN qa_conversations.provider IS '回答提供方';
+COMMENT ON COLUMN qa_conversations.evidence_status IS '回答证据状态';
+COMMENT ON COLUMN qa_conversations.fallback_reason IS '未使用模型回答或安全降级的原因';
+COMMENT ON COLUMN qa_conversations.answer_payload IS '可原样恢复的完整回答快照';
 COMMENT ON COLUMN qa_conversations.created_at IS '创建时间';
+COMMENT ON COLUMN qa_conversations.updated_at IS '标题或内容最后更新时间';
+
+CREATE UNIQUE INDEX uk_qa_conversations_client_request
+    ON qa_conversations(account_id, repo_id, client_request_id)
+    WHERE client_request_id IS NOT NULL;
+CREATE INDEX idx_qa_conversations_account_repo_created
+    ON qa_conversations(account_id, repo_id, created_at DESC);
 
 CREATE TABLE qa_citations (
     id UUID PRIMARY KEY,
     conversation_id UUID NOT NULL REFERENCES qa_conversations(id) ON DELETE CASCADE,
+    repository_id UUID REFERENCES repositories(id) ON DELETE SET NULL,
     source_type VARCHAR(20) NOT NULL DEFAULT 'CODE',
     chunk_id UUID REFERENCES code_chunks(id) ON DELETE SET NULL,
     knowledge_card_id UUID,
@@ -495,12 +548,14 @@ CREATE TABLE qa_citations (
     start_line INTEGER,
     end_line INTEGER,
     evidence_hash VARCHAR(64) NOT NULL,
-    rank INTEGER NOT NULL
+    rank INTEGER NOT NULL,
+    citation_payload JSONB NOT NULL
 );
 
 COMMENT ON TABLE qa_citations IS '问答引用的代码片段及位置';
 COMMENT ON COLUMN qa_citations.id IS '引用唯一标识';
 COMMENT ON COLUMN qa_citations.conversation_id IS '所属问答';
+COMMENT ON COLUMN qa_citations.repository_id IS '引用内容所属仓库';
 COMMENT ON COLUMN qa_citations.source_type IS '证据来源类型：代码或知识';
 COMMENT ON COLUMN qa_citations.chunk_id IS '对应代码片段';
 COMMENT ON COLUMN qa_citations.knowledge_card_id IS '对应知识卡片；代码证据时为空';
@@ -511,6 +566,7 @@ COMMENT ON COLUMN qa_citations.start_line IS '引用起始行';
 COMMENT ON COLUMN qa_citations.end_line IS '引用结束行';
 COMMENT ON COLUMN qa_citations.evidence_hash IS '引用内容摘要';
 COMMENT ON COLUMN qa_citations.rank IS '引用排序';
+COMMENT ON COLUMN qa_citations.citation_payload IS '可原样恢复的完整引用快照';
 
 CREATE TABLE knowledge_cards (
     id UUID PRIMARY KEY,

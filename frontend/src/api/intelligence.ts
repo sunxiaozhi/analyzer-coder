@@ -2,6 +2,7 @@ import type { IndexJob } from '@/types/api';
 import { request } from './http';
 
 export interface CodeReference {
+  repositoryId: string;
   chunkId: string | null;
   snapshotId: string | null;
   filePath: string;
@@ -35,15 +36,29 @@ export interface Citation {
 
 export interface Answer {
   conversationId: string;
+  repositoryId: string;
+  title: string;
+  question: string;
   answer: string;
   snapshotId: string | null;
   citations: Citation[];
   provider: string;
   evidenceStatus: 'SUPPORTED' | 'DEGRADED' | 'MODEL_OUTPUT_REJECTED' | 'INSUFFICIENT';
+  fallbackReason: string | null;
   createdAt: string;
 }
-export interface QaSession { id:string;title:string;repositoryIds:string[];createdAt:string;updatedAt:string }
-export interface QaMessage { id:string;role:'user'|'assistant';content:string;citations:string;conversationId:string|null;createdAt:string }
+export interface QaHistoryRecord {
+  conversationId: string;
+  repositoryId: string;
+  title: string;
+  question: string;
+  provider: string;
+  evidenceStatus: Answer['evidenceStatus'];
+  fallbackReason: string | null;
+  citationCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface GraphResult {
   nodes: { symbol: string; depth: number; focus: boolean }[];
@@ -113,16 +128,21 @@ export interface CardRevision {
 }
 
 export const intelligenceApi = {
-  ask: (repositoryId: string, question: string, options?:{sessionId?:string;repositoryIds?:string[]}) =>
+  ask: (repositoryId: string, question: string, clientRequestId: string) =>
     request<Answer>(`/api/repositories/${repositoryId}/ask`, {
       method: 'POST',
-      body: JSON.stringify({ question, ...options }),
+      body: JSON.stringify({ question, clientRequestId }),
     }),
-  sessions:()=>request<QaSession[]>('/api/qa/sessions'),
-  createSession:(repositoryIds:string[],title='新会话')=>request<QaSession>('/api/qa/sessions',{method:'POST',body:JSON.stringify({repositoryIds,title})}),
-  sessionMessages:(id:string)=>request<QaMessage[]>(`/api/qa/sessions/${id}/messages`),
-  renameSession:(id:string,title:string)=>request<QaSession>(`/api/qa/sessions/${id}`,{method:'PATCH',body:JSON.stringify({title})}),
-  deleteSession:(id:string)=>request<void>(`/api/qa/sessions/${id}`,{method:'DELETE'}),
+  history: (repositoryId: string, limit = 50, offset = 0) =>
+    request<QaHistoryRecord[]>(`/api/repositories/${repositoryId}/qa/records?limit=${limit}&offset=${offset}`),
+  historyDetail: (repositoryId: string, conversationId: string) =>
+    request<Answer>(`/api/repositories/${repositoryId}/qa/records/${conversationId}`),
+  renameHistory: (repositoryId: string, conversationId: string, title: string) =>
+    request<QaHistoryRecord>(`/api/repositories/${repositoryId}/qa/records/${conversationId}`, {
+      method: 'PATCH', body: JSON.stringify({ title }),
+    }),
+  deleteHistory: (repositoryId: string, conversationId: string) =>
+    request<void>(`/api/repositories/${repositoryId}/qa/records/${conversationId}`, { method: 'DELETE' }),
   graph: (repositoryId: string, symbol: string, depth: number, _direction: string) =>
     request<GraphResult>(
       `/api/repositories/${repositoryId}/codegraph/impact?symbol=${encodeURIComponent(symbol)}&depth=${depth}`

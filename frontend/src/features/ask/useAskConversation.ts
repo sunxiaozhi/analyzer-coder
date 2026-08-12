@@ -1,73 +1,85 @@
-import { computed, shallowRef } from 'vue';
+import { shallowRef } from 'vue';
 import { intelligenceApi, type Answer } from '@/api/intelligence';
 
-export interface AskMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  answer?: Answer;
-}
+export type AskRequestState = 'idle' | 'sending' | 'failed' | 'succeeded';
 
 export function useAskConversation() {
   const question = shallowRef('');
-  const busy = shallowRef(false);
-  const messages = shallowRef<AskMessage[]>([]);
+  const submittedQuestion = shallowRef('');
+  const answer = shallowRef<Answer | null>(null);
   const activeCitationId = shallowRef<string | null>(null);
+  const requestState = shallowRef<AskRequestState>('idle');
+  const error = shallowRef<string | null>(null);
+  let clientRequestId: string | null = null;
+  let requestVersion = 0;
 
-  const latestAnswer = computed(() =>
-    [...messages.value].reverse().find(message => message.answer)?.answer
-  );
-  const evidenceAnswer = computed(() => {
-    if (!activeCitationId.value) return latestAnswer.value;
-    return [...messages.value].reverse()
-      .find(message => message.answer?.citations.some(
-        citation => citation.id === activeCitationId.value
-      ))?.answer ?? latestAnswer.value;
-  });
-
-  async function send(repositoryId: string, options?:{sessionId?:string;repositoryIds?:string[]}) {
+  async function send(repositoryId: string, retrying = false) {
     const value = question.value.trim();
-    if (!value || busy.value) return;
-    messages.value = [...messages.value, message('user', value)];
-    question.value = '';
-    busy.value = true;
+    if (!value || requestState.value === 'sending') return null;
+    const version = ++requestVersion;
+    if (!retrying || !clientRequestId) clientRequestId = crypto.randomUUID();
+    submittedQuestion.value = value;
+    requestState.value = 'sending';
+    error.value = null;
     try {
-      const answer = await intelligenceApi.ask(repositoryId, value, options);
-      messages.value = [...messages.value, {
-        ...message('assistant', answer.answer),
-        answer,
-      }];
-      activeCitationId.value = answer.citations[0]?.id ?? null;
-    } finally {
-      busy.value = false;
+      const result = await intelligenceApi.ask(repositoryId, value, clientRequestId);
+      if (version !== requestVersion) return null;
+      answer.value = result;
+      if (question.value.trim() === value) question.value = '';
+      activeCitationId.value = result.citations[0]?.id ?? null;
+      requestState.value = 'succeeded';
+      return result;
+    } catch (exception) {
+      if (version !== requestVersion) return null;
+      error.value = exception instanceof Error ? exception.message : '问答失败';
+      requestState.value = 'failed';
+      throw exception;
     }
   }
 
-  function clear() {
-    messages.value = [];
-    activeCitationId.value = null;
+  async function retry(repositoryId: string) {
+    if (submittedQuestion.value) question.value = submittedQuestion.value;
+    return send(repositoryId, true);
   }
 
-  function selectCitation(id: string) {
-    activeCitationId.value = id;
+  function restore(result: Answer) {
+    requestVersion++;
+    answer.value = result;
+    submittedQuestion.value = result.question;
+    question.value = '';
+    error.value = null;
+    activeCitationId.value = result.citations[0]?.id ?? null;
+    clientRequestId = null;
+    requestState.value = 'succeeded';
   }
-  function restore(items:{id:string;role:'user'|'assistant';content:string;citations:string;conversationId:string|null;createdAt:string}[]){
-    messages.value=items.map(item=>{let answer:Answer|undefined;if(item.role==='assistant'&&item.conversationId){try{answer={conversationId:item.conversationId,answer:item.content,snapshotId:null,citations:JSON.parse(item.citations||'[]'),provider:'history',evidenceStatus:'SUPPORTED',createdAt:item.createdAt}}catch{answer=undefined}}return{id:item.id,role:item.role,text:item.content,answer}});activeCitationId.value=null;
+
+  function reset() {
+    requestVersion++;
+    question.value = '';
+    submittedQuestion.value = '';
+    answer.value = null;
+    activeCitationId.value = null;
+    requestState.value = 'idle';
+    error.value = null;
+    clientRequestId = null;
+  }
+
+  function invalidate() {
+    reset();
   }
 
   return {
     question,
-    busy,
-    messages,
+    submittedQuestion,
+    answer,
     activeCitationId,
-    evidenceAnswer,
+    requestState,
+    error,
     send,
-    clear,
-    selectCitation,
+    retry,
     restore,
+    reset,
+    invalidate,
+    selectCitation: (id: string) => { activeCitationId.value = id; },
   };
-}
-
-function message(role: AskMessage['role'], text: string): AskMessage {
-  return { id: crypto.randomUUID(), role, text };
 }

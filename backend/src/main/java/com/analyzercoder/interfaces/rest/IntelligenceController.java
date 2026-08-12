@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 提供智能分析相关 HTTP 接口，负责请求参数绑定并将已认证的调用委派给应用服务。 */
@@ -28,15 +30,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class IntelligenceController {
     private final IntelligenceService service;
     private final AccessControlService access;
-    private final com.analyzercoder.application.intelligence.QaSessionService sessions;
 
-    public IntelligenceController(
-            IntelligenceService service,
-            AccessControlService access,
-            com.analyzercoder.application.intelligence.QaSessionService sessions) {
+    public IntelligenceController(IntelligenceService service, AccessControlService access) {
         this.service = service;
         this.access = access;
-        this.sessions = sessions;
     }
 
     @GetMapping("/repositories/{repoId}/hybrid-search")
@@ -55,57 +52,46 @@ public class IntelligenceController {
             @Valid @RequestBody Question body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
-        List<UUID> repositories =
-                body.repositoryIds() == null || body.repositoryIds().isEmpty()
-                        ? List.of(repoId)
-                        : body.repositoryIds().stream().distinct().toList();
-        repositories.forEach(
-                id -> access.require(account, CodeRepositoryId.of(id), RepositoryPermission.READ));
-        IntelligenceService.Answer answer =
-                repositories.size() == 1
-                        ? service.ask(repoId, account.id(), body.question())
-                        : service.askMulti(repositories, account.id(), body.question());
-        if (body.sessionId() != null) {
-            sessions.append(account.id(), body.sessionId(), body.question(), answer);
-        }
-        return answer;
+        return service.ask(repoId, account.id(), body.question(), body.clientRequestId());
     }
 
-    @GetMapping("/qa/sessions")
-    public List<com.analyzercoder.application.intelligence.QaSessionService.Session> sessions(
+    @GetMapping("/repositories/{repoId}/qa/records")
+    public List<IntelligenceService.HistoryRecord> history(
+            @PathVariable UUID repoId,
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(defaultValue = "0") int offset,
             HttpServletRequest request) {
-        return sessions.list(SecurityContext.account(request).id());
+        var account = require(request, repoId, RepositoryPermission.READ);
+        return service.history(repoId, account.id(), limit, offset);
     }
 
-    @PostMapping("/qa/sessions")
-    public com.analyzercoder.application.intelligence.QaSessionService.Session createSession(
-            @RequestBody SessionInput body, HttpServletRequest request) {
-        var account = SecurityContext.account(request);
-        body.repositoryIds()
-                .forEach(
-                        id ->
-                                access.require(
-                                        account,
-                                        CodeRepositoryId.of(id),
-                                        RepositoryPermission.READ));
-        return sessions.create(account.id(), body.repositoryIds(), body.title());
+    @GetMapping("/repositories/{repoId}/qa/records/{conversationId}")
+    public IntelligenceService.Answer historyDetail(
+            @PathVariable UUID repoId,
+            @PathVariable UUID conversationId,
+            HttpServletRequest request) {
+        var account = require(request, repoId, RepositoryPermission.READ);
+        return service.historyDetail(repoId, account.id(), conversationId);
     }
 
-    @GetMapping("/qa/sessions/{id}/messages")
-    public List<com.analyzercoder.application.intelligence.QaSessionService.Message>
-            sessionMessages(@PathVariable UUID id, HttpServletRequest request) {
-        return sessions.messages(SecurityContext.account(request).id(), id);
+    @PatchMapping("/repositories/{repoId}/qa/records/{conversationId}")
+    public IntelligenceService.HistoryRecord renameHistory(
+            @PathVariable UUID repoId,
+            @PathVariable UUID conversationId,
+            @RequestBody HistoryTitle body,
+            HttpServletRequest request) {
+        var account = require(request, repoId, RepositoryPermission.READ);
+        return service.renameHistory(repoId, account.id(), conversationId, body.title());
     }
 
-    @PatchMapping("/qa/sessions/{id}")
-    public com.analyzercoder.application.intelligence.QaSessionService.Session renameSession(
-            @PathVariable UUID id, @RequestBody SessionTitle body, HttpServletRequest request) {
-        return sessions.rename(SecurityContext.account(request).id(), id, body.title());
-    }
-
-    @DeleteMapping("/qa/sessions/{id}")
-    public void deleteSession(@PathVariable UUID id, HttpServletRequest request) {
-        sessions.delete(SecurityContext.account(request).id(), id);
+    @DeleteMapping("/repositories/{repoId}/qa/records/{conversationId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteHistory(
+            @PathVariable UUID repoId,
+            @PathVariable UUID conversationId,
+            HttpServletRequest request) {
+        var account = require(request, repoId, RepositoryPermission.READ);
+        service.deleteHistory(repoId, account.id(), conversationId);
     }
 
     @GetMapping("/repositories/{repoId}/chunks/{chunkId}/graph-target")
@@ -172,9 +158,7 @@ public class IntelligenceController {
         return account;
     }
 
-    public record Question(@NotBlank String question, UUID sessionId, List<UUID> repositoryIds) {}
+    public record Question(@NotBlank String question, UUID clientRequestId) {}
 
-    public record SessionInput(String title, List<UUID> repositoryIds) {}
-
-    public record SessionTitle(String title) {}
+    public record HistoryTitle(String title) {}
 }

@@ -1,0 +1,35 @@
+Active code page: 65001
+
+> codebase-knowledge-frontend@1.0.0 dev
+> vite --host 127.0.0.1 --port 5173
+
+
+  [32m[1mVITE[22m v6.4.3[39m  [2mready in [0m[1m2152[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m22:25:09[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/KnowledgeView.vue, /src/views/KnowledgeView.vue?vue&type=style&index=0&scoped=8035530d&lang.css[22m
+[2m22:27:18[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/KnowledgeView.vue[22m
+[2m22:29:38[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/features/knowledge/KnowledgeCardEditorDialog.vue[22m
+[2m22:32:51[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/AskView.vue?vue&type=style&index=0&scoped=b31088a9&lang.css[22m
+[2m23:15:38[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/RepositoriesM0View.vue[22m
+[2m23:15:38[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/RepositoriesM0View.vue[22m
+[2m23:19:22[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/WorkspaceShell.vue[22m
+[2m23:19:24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/features/ask/AskConversationPanel.vue[22m
+[2m23:19:27[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/router/index.ts[22m
+[2m23:50:28[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/GraphView.vue, /src/views/AskView.vue, /src/views/RepositoriesM0View.vue, /src/views/KnowledgeView.vue, /src/views/SystemSettingsView.vue, /src/features/knowledge/KnowledgeCardEditorDialog.vue, /src/features/graph/CallGraphCanvas.vue, /src/features/knowledge/KnowledgeCardDetailDialog.vue, /src/features/knowledge/KnowledgeCardListItem.vue[22m
+[2m23:50:31[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/features/knowledge/KnowledgeCodeReferenceSelector.vue[22m
+[2m23:51:28[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/AskView.vue[22m
+[2m23:51:30[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/AskView.vue[22m
+[2m23:51:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/features/ask/AskConversationPanel.vue, /src/features/ask/AskConversationPanel.vue?vue&type=style&index=0&scoped=593ab6f1&lang.css[22m
+[2m23:51:35[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/features/ask/AskConversationPanel.vue, /src/features/ask/AskConversationPanel.vue?vue&type=style&index=0&scoped=593ab6f1&lang.css[22m
+[2m23:52:14[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/features/ask/AnswerEvidencePanel.vue, /src/features/ask/AnswerEvidencePanel.vue?vue&type=style&index=0&scoped=bf11a026&lang.css[22m
+[2m23:52:16[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/features/ask/AnswerEvidencePanel.vue, /src/features/ask/AnswerEvidencePanel.vue?vue&type=style&index=0&scoped=bf11a026&lang.css[22m
+[2m23:53:11[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/AskView.vue, /src/views/AskView.vue?vue&type=style&index=0&scoped=b31088a9&lang.css[22m
+[2m23:53:13[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/AskView.vue, /src/views/AskView.vue?vue&type=style&index=0&scoped=b31088a9&lang.css[22m
+[2m23:53:35[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/features/ask/AskConversationPanel.vue, /src/features/ask/AskConversationPanel.vue?vue&type=style&index=0&scoped=593ab6f1&lang.css[22m
+[2m23:58:23[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/AskView.vue, /src/features/ask/AskConversationPanel.vue[22m
+[2m23:58:25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/AskView.vue, /src/views/AskView.vue?vue&type=style&index=0&scoped=b31088a9&lang.css[22m
+[2m23:58:49[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/AskView.vue, /src/features/ask/AskConversationPanel.vue[22m
+[2m00:02:54[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/views/AskView.vue, /src/features/ask/AskConversationPanel.vue[22m
+[2m00:05:10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/design-alignment.css[22m

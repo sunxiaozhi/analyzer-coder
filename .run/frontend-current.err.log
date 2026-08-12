@@ -1,0 +1,43 @@
+[2m22:41:34[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m22:41:36[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m22:41:38[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m22:41:40[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m22:41:42[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m22:41:44[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m22:41:46[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m23:17:04[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m23:17:06[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m23:17:08[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m23:17:10[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m23:17:12[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m23:17:14[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
+[2m23:51:28[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to load url /src/features/ask/useAskConversation.ts (resolved id: C:/Users/admin/Desktop/analyzer-coder/frontend/src/features/ask/useAskConversation.ts) in C:/Users/admin/Desktop/analyzer-coder/frontend/src/views/AskView.vue. Does the file exist?
+[2m00:00:18[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/index-jobs/page?pageNum=1&pageSize=15[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1610:16)
