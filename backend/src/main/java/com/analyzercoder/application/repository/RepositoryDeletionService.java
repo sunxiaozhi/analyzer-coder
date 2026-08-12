@@ -9,13 +9,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** 提交仓库删除请求并协调关联数据清理；耗时的物理删除由后台任务异步完成。 */
 @Service
 public class RepositoryDeletionService {
     private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryDeletionService.class);
     private final RepositoryGovernanceMapper mapper;
     private final RepositorySnapshotPort managedFiles;
 
-    public RepositoryDeletionService(RepositoryGovernanceMapper mapper, RepositorySnapshotPort managedFiles) {
+    public RepositoryDeletionService(
+            RepositoryGovernanceMapper mapper, RepositorySnapshotPort managedFiles) {
         this.mapper = mapper;
         this.managedFiles = managedFiles;
     }
@@ -50,7 +52,11 @@ public class RepositoryDeletionService {
     @Transactional
     public void fail(UUID repositoryId, RuntimeException exception) {
         String errorCode = exception.getClass().getSimpleName();
-        mapper.failCleanup(repositoryId, errorCode.length() > 80 ? errorCode.substring(0, 80) : errorCode);
-        LOGGER.warn("Managed repository cleanup failed for {}; it will be retried", repositoryId, exception);
+        mapper.failCleanup(
+                repositoryId, errorCode.length() > 80 ? errorCode.substring(0, 80) : errorCode);
+        LOGGER.warn(
+                "Managed repository cleanup failed for {}; it will be retried",
+                repositoryId,
+                exception);
     }
 }

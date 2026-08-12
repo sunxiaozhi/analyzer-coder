@@ -12,13 +12,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 import javax.net.ssl.SSLException;
 import org.springframework.stereotype.Component;
 
+/** 调用 OpenAI 兼容的模型接口，统一构造请求并映射超时、协议及响应错误。 */
 @Component
 public class OpenAiCompatibleClient {
     private static final String PROBE_PROMPT = "Reply with exactly: CONNECTED";
@@ -31,12 +30,11 @@ public class OpenAiCompatibleClient {
     }
 
     public ProbeResult probe(
-        LlmProviderSpec spec,
-        String apiKey,
-        long deadlineNanos,
-        AtomicBoolean canceled,
-        StageSink sink
-    ) {
+            LlmProviderSpec spec,
+            String apiKey,
+            long deadlineNanos,
+            AtomicBoolean canceled,
+            StageSink sink) {
         long stageStarted = System.nanoTime();
         sink.accept(StageResult.success("VALIDATE_CONFIG", elapsed(stageStarted)));
 
@@ -46,23 +44,28 @@ public class OpenAiCompatibleClient {
             baseUri = endpointPolicy.validateAndResolve(spec.baseUrl());
             sink.accept(StageResult.success("RESOLVE_AND_AUTHORIZE_TARGET", elapsed(stageStarted)));
         } catch (LlmConnectionException exception) {
-            sink.accept(StageResult.failed("RESOLVE_AND_AUTHORIZE_TARGET", elapsed(stageStarted), exception.code()));
+            sink.accept(
+                    StageResult.failed(
+                            "RESOLVE_AND_AUTHORIZE_TARGET",
+                            elapsed(stageStarted),
+                            exception.code()));
             throw exception;
         }
 
-        HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(spec.connectTimeoutMs()))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+        HttpClient client =
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofMillis(spec.connectTimeoutMs()))
+                        .followRedirects(HttpClient.Redirect.NEVER)
+                        .build();
 
         Long connectDuration;
         stageStarted = System.nanoTime();
         HttpResponse<String> modelsResponse;
         try {
-            modelsResponse = client.send(
-                request(baseUri, "/models", apiKey, deadlineNanos).GET().build(),
-                HttpResponse.BodyHandlers.ofString()
-            );
+            modelsResponse =
+                    client.send(
+                            request(baseUri, "/models", apiKey, deadlineNanos).GET().build(),
+                            HttpResponse.BodyHandlers.ofString());
             connectDuration = elapsed(stageStarted);
             sink.accept(StageResult.success("CONNECT_TLS", connectDuration));
         } catch (Exception exception) {
@@ -79,7 +82,8 @@ public class OpenAiCompatibleClient {
             }
             sink.accept(StageResult.success("AUTHENTICATE", elapsed(stageStarted)));
         } catch (LlmConnectionException exception) {
-            sink.accept(StageResult.failed("AUTHENTICATE", elapsed(stageStarted), exception.code()));
+            sink.accept(
+                    StageResult.failed("AUTHENTICATE", elapsed(stageStarted), exception.code()));
             throw exception;
         }
 
@@ -89,13 +93,16 @@ public class OpenAiCompatibleClient {
 
         stageStarted = System.nanoTime();
         try {
-            String content = generate(client, baseUri, spec, apiKey, PROBE_PROMPT, deadlineNanos, canceled);
+            String content =
+                    generate(client, baseUri, spec, apiKey, PROBE_PROMPT, deadlineNanos, canceled);
             if (content == null || content.isBlank()) {
                 throw new LlmConnectionException("LLM_PROTOCOL_INVALID", "模型返回了空响应");
             }
             sink.accept(StageResult.success("GENERATE_MINIMAL", elapsed(stageStarted)));
         } catch (LlmConnectionException exception) {
-            sink.accept(StageResult.failed("GENERATE_MINIMAL", elapsed(stageStarted), exception.code()));
+            sink.accept(
+                    StageResult.failed(
+                            "GENERATE_MINIMAL", elapsed(stageStarted), exception.code()));
             throw exception;
         }
 
@@ -104,74 +111,81 @@ public class OpenAiCompatibleClient {
         if (spec.streamingEnabled()) {
             stageStarted = System.nanoTime();
             try {
-                firstTokenDuration = streamFirstToken(
-                    client, baseUri, spec, apiKey, PROBE_PROMPT, deadlineNanos, canceled
-                );
+                firstTokenDuration =
+                        streamFirstToken(
+                                client,
+                                baseUri,
+                                spec,
+                                apiKey,
+                                PROBE_PROMPT,
+                                deadlineNanos,
+                                canceled);
                 sink.accept(StageResult.success("STREAM_FIRST_TOKEN", elapsed(stageStarted)));
             } catch (LlmConnectionException exception) {
                 degradedCode = exception.code();
-                sink.accept(StageResult.failed("STREAM_FIRST_TOKEN", elapsed(stageStarted), exception.code()));
+                sink.accept(
+                        StageResult.failed(
+                                "STREAM_FIRST_TOKEN", elapsed(stageStarted), exception.code()));
             }
         }
         return new ProbeResult(
-            degradedCode == null ? "AVAILABLE" : "DEGRADED",
-            degradedCode,
-            degradedCode == null ? null : "基础生成可用，但流式输出检测失败",
-            connectDuration,
-            firstTokenDuration
-        );
+                degradedCode == null ? "AVAILABLE" : "DEGRADED",
+                degradedCode,
+                degradedCode == null ? null : "基础生成可用，但流式输出检测失败",
+                connectDuration,
+                firstTokenDuration);
     }
 
     public String generate(LlmProviderSpec spec, String apiKey, String prompt) {
         URI baseUri = endpointPolicy.validateAndResolve(spec.baseUrl());
-        HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(spec.connectTimeoutMs()))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+        HttpClient client =
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofMillis(spec.connectTimeoutMs()))
+                        .followRedirects(HttpClient.Redirect.NEVER)
+                        .build();
         return generate(
-            client,
-            baseUri,
-            spec,
-            apiKey,
-            prompt,
-            System.nanoTime() + Duration.ofMillis(spec.requestTimeoutMs()).toNanos(),
-            new AtomicBoolean(false)
-        );
+                client,
+                baseUri,
+                spec,
+                apiKey,
+                prompt,
+                System.nanoTime() + Duration.ofMillis(spec.requestTimeoutMs()).toNanos(),
+                new AtomicBoolean(false));
     }
 
     public String embed(
-        String baseUrl,
-        String model,
-        String apiKey,
-        String input,
-        int dimension,
-        int requestTimeoutMs
-    ) {
+            String baseUrl,
+            String model,
+            String apiKey,
+            String input,
+            int dimension,
+            int requestTimeoutMs) {
         URI baseUri = endpointPolicy.validateAndResolve(baseUrl);
-        HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(Math.min(requestTimeoutMs, 10000)))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+        HttpClient http =
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofMillis(Math.min(requestTimeoutMs, 10000)))
+                        .followRedirects(HttpClient.Redirect.NEVER)
+                        .build();
         ObjectNode payload = json.createObjectNode();
         payload.put("model", model);
         payload.put("input", input);
         payload.put("dimensions", dimension);
         long deadline = System.nanoTime() + Duration.ofMillis(requestTimeoutMs).toNanos();
         try {
-            HttpResponse<String> response = http.send(
-                request(baseUri, "/embeddings", apiKey, deadline)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)))
-                    .build(),
-                HttpResponse.BodyHandlers.ofString()
-            );
+            HttpResponse<String> response =
+                    http.send(
+                            request(baseUri, "/embeddings", apiKey, deadline)
+                                    .header("Content-Type", "application/json")
+                                    .POST(
+                                            HttpRequest.BodyPublishers.ofString(
+                                                    json.writeValueAsString(payload)))
+                                    .build(),
+                            HttpResponse.BodyHandlers.ofString());
             requireAllowedStatus(response.statusCode(), response.body());
             JsonNode values = json.readTree(response.body()).path("data").path(0).path("embedding");
             if (!values.isArray() || values.size() != dimension) {
                 throw new LlmConnectionException(
-                    "VECTOR_DIMENSION_INCOMPATIBLE",
-                    "向量模型返回维度与当前索引不兼容，要求 " + dimension + " 维"
-                );
+                        "VECTOR_DIMENSION_INCOMPATIBLE", "向量模型返回维度与当前索引不兼容，要求 " + dimension + " 维");
             }
             StringBuilder vector = new StringBuilder("[");
             for (int index = 0; index < values.size(); index++) {
@@ -179,7 +193,9 @@ public class OpenAiCompatibleClient {
                 if (!value.isNumber() || !Double.isFinite(value.asDouble())) {
                     throw new LlmConnectionException("LLM_PROTOCOL_INVALID", "向量模型返回了无效数值");
                 }
-                if (index > 0) vector.append(',');
+                if (index > 0) {
+                    vector.append(',');
+                }
                 vector.append(value.asDouble());
             }
             return vector.append(']').toString();
@@ -191,24 +207,25 @@ public class OpenAiCompatibleClient {
     }
 
     private String generate(
-        HttpClient client,
-        URI baseUri,
-        LlmProviderSpec spec,
-        String apiKey,
-        String prompt,
-        long deadlineNanos,
-        AtomicBoolean canceled
-    ) {
+            HttpClient client,
+            URI baseUri,
+            LlmProviderSpec spec,
+            String apiKey,
+            String prompt,
+            long deadlineNanos,
+            AtomicBoolean canceled) {
         checkCanceled(canceled);
         ObjectNode payload = completionPayload(spec, prompt, false);
         try {
-            HttpResponse<String> response = client.send(
-                request(baseUri, "/chat/completions", apiKey, deadlineNanos)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)))
-                    .build(),
-                HttpResponse.BodyHandlers.ofString()
-            );
+            HttpResponse<String> response =
+                    client.send(
+                            request(baseUri, "/chat/completions", apiKey, deadlineNanos)
+                                    .header("Content-Type", "application/json")
+                                    .POST(
+                                            HttpRequest.BodyPublishers.ofString(
+                                                    json.writeValueAsString(payload)))
+                                    .build(),
+                            HttpResponse.BodyHandlers.ofString());
             requireAllowedStatus(response.statusCode(), response.body());
             JsonNode root = json.readTree(response.body());
             JsonNode content = root.path("choices").path(0).path("message").path("content");
@@ -224,25 +241,26 @@ public class OpenAiCompatibleClient {
     }
 
     private long streamFirstToken(
-        HttpClient client,
-        URI baseUri,
-        LlmProviderSpec spec,
-        String apiKey,
-        String prompt,
-        long deadlineNanos,
-        AtomicBoolean canceled
-    ) {
+            HttpClient client,
+            URI baseUri,
+            LlmProviderSpec spec,
+            String apiKey,
+            String prompt,
+            long deadlineNanos,
+            AtomicBoolean canceled) {
         long started = System.nanoTime();
         ObjectNode payload = completionPayload(spec, prompt, true);
         try {
-            HttpResponse<Stream<String>> response = client.send(
-                request(baseUri, "/chat/completions", apiKey, deadlineNanos)
-                    .header("Accept", "text/event-stream")
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)))
-                    .build(),
-                HttpResponse.BodyHandlers.ofLines()
-            );
+            HttpResponse<Stream<String>> response =
+                    client.send(
+                            request(baseUri, "/chat/completions", apiKey, deadlineNanos)
+                                    .header("Accept", "text/event-stream")
+                                    .header("Content-Type", "application/json")
+                                    .POST(
+                                            HttpRequest.BodyPublishers.ofString(
+                                                    json.writeValueAsString(payload)))
+                                    .build(),
+                            HttpResponse.BodyHandlers.ofLines());
             requireAllowedStatus(response.statusCode(), "");
             String contentType = response.headers().firstValue("Content-Type").orElse("");
             if (!contentType.toLowerCase().contains("text/event-stream")) {
@@ -253,12 +271,18 @@ public class OpenAiCompatibleClient {
                 while (iterator.hasNext()) {
                     checkCanceled(canceled);
                     String line = iterator.next();
-                    if (!line.startsWith("data:")) continue;
+                    if (!line.startsWith("data:")) {
+                        continue;
+                    }
                     String data = line.substring(5).trim();
-                    if (data.isEmpty() || "[DONE]".equals(data)) continue;
+                    if (data.isEmpty() || "[DONE]".equals(data)) {
+                        continue;
+                    }
                     JsonNode root = json.readTree(data);
                     JsonNode content = root.path("choices").path(0).path("delta").path("content");
-                    if (content.isTextual() && !content.asText().isEmpty()) return elapsed(started);
+                    if (content.isTextual() && !content.asText().isEmpty()) {
+                        return elapsed(started);
+                    }
                 }
             }
             throw new LlmConnectionException("LLM_STREAM_UNSUPPORTED", "事件流中没有模型增量内容");
@@ -288,33 +312,45 @@ public class OpenAiCompatibleClient {
         return payload;
     }
 
-    private HttpRequest.Builder request(URI baseUri, String suffix, String apiKey, long deadlineNanos) {
-        long remainingMillis = Math.max(1, Duration.ofNanos(deadlineNanos - System.nanoTime()).toMillis());
-        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUri + suffix))
-            .timeout(Duration.ofMillis(remainingMillis))
-            .header("User-Agent", "analyzer-coder/0.1")
-            .header("Accept", "application/json");
-        if (apiKey != null && !apiKey.isBlank()) builder.header("Authorization", "Bearer " + apiKey);
+    private HttpRequest.Builder request(
+            URI baseUri, String suffix, String apiKey, long deadlineNanos) {
+        long remainingMillis =
+                Math.max(1, Duration.ofNanos(deadlineNanos - System.nanoTime()).toMillis());
+        HttpRequest.Builder builder =
+                HttpRequest.newBuilder(URI.create(baseUri + suffix))
+                        .timeout(Duration.ofMillis(remainingMillis))
+                        .header("User-Agent", "analyzer-coder/0.1")
+                        .header("Accept", "application/json");
+        if (apiKey != null && !apiKey.isBlank()) {
+            builder.header("Authorization", "Bearer " + apiKey);
+        }
         return builder;
     }
 
     private void requireModelIfListProvided(String body, String model) {
         try {
             JsonNode data = json.readTree(body).path("data");
-            if (!data.isArray()) return;
+            if (!data.isArray()) {
+                return;
+            }
             for (JsonNode item : data) {
-                if (model.equals(item.path("id").asText())) return;
+                if (model.equals(item.path("id").asText())) {
+                    return;
+                }
             }
             throw new LlmConnectionException("LLM_MODEL_NOT_FOUND", "模型服务未提供指定模型");
         } catch (LlmConnectionException exception) {
             throw exception;
         } catch (Exception ignored) {
-            // Some compatible providers do not implement a models list. Generation remains authoritative.
+            // Some compatible providers do not implement a models list. Generation remains
+            // authoritative.
         }
     }
 
     private static void requireAllowedStatus(int status, String body) {
-        if (status >= 200 && status < 300) return;
+        if (status >= 200 && status < 300) {
+            return;
+        }
         if (status == 401 || status == 403) {
             throw new LlmConnectionException("LLM_AUTH_FAILED", "模型服务拒绝了当前凭据");
         }
@@ -329,7 +365,9 @@ public class OpenAiCompatibleClient {
 
     private static LlmConnectionException mapTransport(Exception exception) {
         Throwable cause = exception;
-        while (cause.getCause() != null && cause != cause.getCause()) cause = cause.getCause();
+        while (cause.getCause() != null && cause != cause.getCause()) {
+            cause = cause.getCause();
+        }
         if (exception instanceof InterruptedException || cause instanceof InterruptedException) {
             Thread.currentThread().interrupt();
             return new LlmConnectionException("LLM_CHECK_CANCELED", "连接检测已取消", exception);
@@ -360,6 +398,11 @@ public class OpenAiCompatibleClient {
     }
 
     public interface StageSink {
+        /**
+         * 接受当前候选结果并推进后续处理。
+         *
+         * @param result 外部进程执行得到的退出状态与输出
+         */
         void accept(StageResult result);
     }
 
@@ -374,10 +417,9 @@ public class OpenAiCompatibleClient {
     }
 
     public record ProbeResult(
-        String availability,
-        String errorCode,
-        String errorSummary,
-        Long connectDurationMs,
-        Long firstTokenDurationMs
-    ) {}
+            String availability,
+            String errorCode,
+            String errorSummary,
+            Long connectDurationMs,
+            Long firstTokenDurationMs) {}
 }

@@ -24,13 +24,17 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+/** 提供当前模块相关 HTTP 接口，负责请求参数绑定并将已认证的调用委派给应用服务。 */
 @RestController
 public class IndexController {
     private final IndexJobUseCase useCase;
     private final AccessControlService accessControl;
     private final IndexJobPageService pageService;
 
-    public IndexController(IndexJobUseCase useCase, AccessControlService accessControl, IndexJobPageService pageService) {
+    public IndexController(
+            IndexJobUseCase useCase,
+            AccessControlService accessControl,
+            IndexJobPageService pageService) {
         this.useCase = useCase;
         this.accessControl = accessControl;
         this.pageService = pageService;
@@ -38,10 +42,9 @@ public class IndexController {
 
     @PostMapping("/api/repositories/{repositoryId}/index")
     public IndexJobResponse start(
-        @PathVariable UUID repositoryId,
-        @RequestBody(required = false) StartIndexRequest body,
-        HttpServletRequest request
-    ) {
+            @PathVariable UUID repositoryId,
+            @RequestBody(required = false) StartIndexRequest body,
+            HttpServletRequest request) {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.MAINTAIN);
         IndexJobType type = body == null || body.type() == null ? IndexJobType.FULL : body.type();
@@ -57,10 +60,9 @@ public class IndexController {
 
     @GetMapping("/api/index-jobs/page")
     public PageResult<IndexJobResponse> page(
-        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "1") int pageNum,
-        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20") int pageSize,
-        HttpServletRequest request
-    ) {
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "1") int pageNum,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20") int pageSize,
+            HttpServletRequest request) {
         var account = SecurityContext.account(request);
         return pageService.page(account, pageNum, pageSize).map(IndexJobResponse::from);
     }
@@ -68,19 +70,25 @@ public class IndexController {
     @GetMapping("/api/index-jobs/{jobId}")
     public IndexJobResponse get(@PathVariable UUID jobId, HttpServletRequest request) {
         IndexJob job = useCase.get(IndexJobId.of(jobId));
-        accessControl.require(SecurityContext.account(request), job.repositoryId(), RepositoryPermission.READ);
+        accessControl.require(
+                SecurityContext.account(request), job.repositoryId(), RepositoryPermission.READ);
         return IndexJobResponse.from(job);
     }
 
     @GetMapping("/api/index-jobs")
     public List<IndexJobResponse> list(HttpServletRequest request) {
-        Set<UUID> visible = accessControl.visibleRepositoryIds(SecurityContext.account(request)).stream().collect(Collectors.toSet());
-        return useCase.list(null).stream().filter(job -> visible.contains(job.repositoryId().value()))
-            .map(IndexJobResponse::from).toList();
+        Set<UUID> visible =
+                accessControl.visibleRepositoryIds(SecurityContext.account(request)).stream()
+                        .collect(Collectors.toSet());
+        return useCase.list(null).stream()
+                .filter(job -> visible.contains(job.repositoryId().value()))
+                .map(IndexJobResponse::from)
+                .toList();
     }
 
     @GetMapping("/api/repositories/{repositoryId}/index-jobs")
-    public List<IndexJobResponse> listForRepository(@PathVariable UUID repositoryId, HttpServletRequest request) {
+    public List<IndexJobResponse> listForRepository(
+            @PathVariable UUID repositoryId, HttpServletRequest request) {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
         return useCase.list(id).stream().map(IndexJobResponse::from).toList();
@@ -89,27 +97,46 @@ public class IndexController {
     @PostMapping("/api/index-jobs/{jobId}/cancel")
     public IndexJobResponse cancel(@PathVariable UUID jobId, HttpServletRequest request) {
         IndexJob job = useCase.get(IndexJobId.of(jobId));
-        accessControl.require(SecurityContext.account(request), job.repositoryId(), RepositoryPermission.MAINTAIN);
+        accessControl.require(
+                SecurityContext.account(request),
+                job.repositoryId(),
+                RepositoryPermission.MAINTAIN);
         return IndexJobResponse.from(useCase.cancel(job.id()));
     }
 
     @PostMapping("/api/index-jobs/{jobId}/retries")
     public IndexJobResponse retry(@PathVariable UUID jobId, HttpServletRequest request) {
         IndexJob job = useCase.get(IndexJobId.of(jobId));
-        accessControl.require(SecurityContext.account(request), job.repositoryId(), RepositoryPermission.MAINTAIN);
+        accessControl.require(
+                SecurityContext.account(request),
+                job.repositoryId(),
+                RepositoryPermission.MAINTAIN);
         return IndexJobResponse.from(useCase.retry(job.id()));
     }
 
     public record StartIndexRequest(IndexJobType type) {}
+
     public record IndexJobResponse(
-        UUID id, UUID repositoryId, IndexJobType type, IndexJobStatus status, String currentStep,
-        String errorMessage, Instant startedAt, Instant finishedAt, Instant createdAt
-    ) {
+            UUID id,
+            UUID repositoryId,
+            IndexJobType type,
+            IndexJobStatus status,
+            String currentStep,
+            String errorMessage,
+            Instant startedAt,
+            Instant finishedAt,
+            Instant createdAt) {
         public static IndexJobResponse from(IndexJob job) {
             return new IndexJobResponse(
-                job.id().value(), job.repositoryId().value(), job.type(), job.status(), job.currentStep(),
-                job.errorMessage(), job.startedAt(), job.finishedAt(), job.createdAt()
-            );
+                    job.id().value(),
+                    job.repositoryId().value(),
+                    job.type(),
+                    job.status(),
+                    job.currentStep(),
+                    job.errorMessage(),
+                    job.startedAt(),
+                    job.finishedAt(),
+                    job.createdAt());
         }
     }
 }

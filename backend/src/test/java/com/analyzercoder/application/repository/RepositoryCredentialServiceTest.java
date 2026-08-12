@@ -18,18 +18,22 @@ import org.junit.jupiter.api.Test;
 class RepositoryCredentialServiceTest {
     private final UUID actorId = UUID.randomUUID();
     private final UUID credentialId = UUID.randomUUID();
-    private final CredentialSecretCipher cipher = new CredentialSecretCipher("credential-master-key-for-tests-123456");
+    private final CredentialSecretCipher cipher =
+            new CredentialSecretCipher("credential-master-key-for-tests-123456");
     private final RepositoryCredentialMapper mapper = mock(RepositoryCredentialMapper.class);
-    private final RepositoryCredentialService service = new RepositoryCredentialService(
-        mapper, cipher, mock(GitCredentialExecutor.class), mock(AuthService.class));
-    private final AuthenticatedAccount actor = new AuthenticatedAccount(
-        actorId, "developer", "Developer", AccountRole.NORMAL, false, Instant.now());
+    private final RepositoryCredentialService service =
+            new RepositoryCredentialService(
+                    mapper, cipher, mock(GitCredentialExecutor.class), mock(AuthService.class));
+    private final AuthenticatedAccount actor =
+            new AuthenticatedAccount(
+                    actorId, "developer", "Developer", AccountRole.NORMAL, false, Instant.now());
 
     @Test
     void resolvesCredentialOnlyForMatchingHttpsHost() {
         when(mapper.find(credentialId)).thenReturn(row());
 
-        var resolved = service.resolve(actor, credentialId, "https://gitlab.example.com/team/project.git");
+        var resolved =
+                service.resolve(actor, credentialId, "https://gitlab.example.com/team/project.git");
 
         assertEquals("oauth2", resolved.value().username());
         assertEquals("glpat-secret-value", resolved.value().secret());
@@ -38,8 +42,11 @@ class RepositoryCredentialServiceTest {
     @Test
     void rejectsCredentialForDifferentHost() {
         when(mapper.find(credentialId)).thenReturn(row());
-        assertThrows(IllegalArgumentException.class,
-            () -> service.resolve(actor, credentialId, "https://evil.example.com/team/project.git"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        service.resolve(
+                                actor, credentialId, "https://evil.example.com/team/project.git"));
     }
 
     private Map<String, Object> row() {

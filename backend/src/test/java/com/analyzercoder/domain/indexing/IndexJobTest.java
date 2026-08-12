@@ -10,7 +10,8 @@ class IndexJobTest {
 
     @Test
     void queuedCancellationIsImmediate() {
-        IndexJob canceled = IndexJob.create(CodeRepositoryId.newId(), IndexJobType.FULL).requestCancel();
+        IndexJob canceled =
+                IndexJob.create(CodeRepositoryId.newId(), IndexJobType.FULL).requestCancel();
 
         assertThat(canceled.status()).isEqualTo(IndexJobStatus.CANCELED);
         assertThat(canceled.finishedAt()).isNotNull();
@@ -18,7 +19,9 @@ class IndexJobTest {
 
     @Test
     void runningCancellationUsesRequestedStateBeforeSafeStop() {
-        IndexJob running = IndexJob.create(CodeRepositoryId.newId(), IndexJobType.FULL).start("scan_repository");
+        IndexJob running =
+                IndexJob.create(CodeRepositoryId.newId(), IndexJobType.FULL)
+                        .start("scan_repository");
 
         IndexJob requested = running.requestCancel();
         assertThat(requested.status()).isEqualTo(IndexJobStatus.CANCEL_REQUESTED);
@@ -27,9 +30,10 @@ class IndexJobTest {
 
     @Test
     void retryCreatesNewQueuedJobAndKeepsOriginalTerminal() {
-        IndexJob failed = IndexJob.create(CodeRepositoryId.newId(), IndexJobType.FULL)
-            .start("scan_repository")
-            .fail("failed", "test");
+        IndexJob failed =
+                IndexJob.create(CodeRepositoryId.newId(), IndexJobType.FULL)
+                        .start("scan_repository")
+                        .fail("failed", "test");
 
         IndexJob retry = IndexJob.retry(failed);
 
@@ -40,9 +44,10 @@ class IndexJobTest {
 
     @Test
     void successfulJobCannotBeCanceled() {
-        IndexJob succeeded = IndexJob.create(CodeRepositoryId.newId(), IndexJobType.FULL)
-            .start("scan_repository")
-            .succeed("completed");
+        IndexJob succeeded =
+                IndexJob.create(CodeRepositoryId.newId(), IndexJobType.FULL)
+                        .start("scan_repository")
+                        .succeed("completed");
 
         assertThatThrownBy(succeeded::requestCancel).isInstanceOf(IllegalStateException.class);
     }

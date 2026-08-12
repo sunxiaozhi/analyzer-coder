@@ -8,9 +8,17 @@ import com.analyzercoder.security.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+/** 提供仓库源码导入相关 HTTP 接口，负责请求参数绑定并将已认证的调用委派给应用服务。 */
 @RestController
 @RequestMapping("/api/repository-imports")
 public class RepositorySourceImportController {
@@ -18,38 +26,78 @@ public class RepositorySourceImportController {
     private final AccessControlService accessControl;
     private final com.analyzercoder.application.repository.RepositoryImportJobService jobs;
 
-    public RepositorySourceImportController(RepositorySourceImportService service, AccessControlService accessControl,
-        com.analyzercoder.application.repository.RepositoryImportJobService jobs) {
+    public RepositorySourceImportController(
+            RepositorySourceImportService service,
+            AccessControlService accessControl,
+            com.analyzercoder.application.repository.RepositoryImportJobService jobs) {
         this.service = service;
         this.accessControl = accessControl;
-        this.jobs=jobs;
+        this.jobs = jobs;
     }
 
     @PostMapping("/remote-jobs")
     public com.analyzercoder.application.repository.RepositoryImportJobService.JobView remoteJob(
-        @Valid @RequestBody RemoteInput input,HttpServletRequest request){
-        return jobs.submit(SecurityContext.account(request),input.name(),input.url(),input.branch(),input.sourceType(),input.credentialId());
+            @Valid @RequestBody RemoteInput input, HttpServletRequest request) {
+        return jobs.submit(
+                SecurityContext.account(request),
+                input.name(),
+                input.url(),
+                input.branch(),
+                input.sourceType(),
+                input.credentialId());
     }
-    @GetMapping("/jobs") public java.util.List<com.analyzercoder.application.repository.RepositoryImportJobService.JobView> jobs(HttpServletRequest request){return jobs.list(SecurityContext.account(request));}
-    @GetMapping("/jobs/{id}") public com.analyzercoder.application.repository.RepositoryImportJobService.JobView job(@PathVariable java.util.UUID id,HttpServletRequest request){return jobs.get(SecurityContext.account(request),id);}
-    @PostMapping("/jobs/{id}/cancel") public com.analyzercoder.application.repository.RepositoryImportJobService.JobView cancel(@PathVariable java.util.UUID id,HttpServletRequest request){return jobs.cancel(SecurityContext.account(request),id);}
+
+    @GetMapping("/jobs")
+    public java.util.List<
+                    com.analyzercoder.application.repository.RepositoryImportJobService.JobView>
+            jobs(HttpServletRequest request) {
+        return jobs.list(SecurityContext.account(request));
+    }
+
+    @GetMapping("/jobs/{id}")
+    public com.analyzercoder.application.repository.RepositoryImportJobService.JobView job(
+            @PathVariable java.util.UUID id, HttpServletRequest request) {
+        return jobs.get(SecurityContext.account(request), id);
+    }
+
+    @PostMapping("/jobs/{id}/cancel")
+    public com.analyzercoder.application.repository.RepositoryImportJobService.JobView cancel(
+            @PathVariable java.util.UUID id, HttpServletRequest request) {
+        return jobs.cancel(SecurityContext.account(request), id);
+    }
 
     @PostMapping("/remote")
-    public RepositoryController.RepositoryResponse remote(@Valid @RequestBody RemoteInput input, HttpServletRequest request) {
+    public RepositoryController.RepositoryResponse remote(
+            @Valid @RequestBody RemoteInput input, HttpServletRequest request) {
         var account = SecurityContext.account(request);
         RemoteRepositoryTargetPolicy.requireAllowed(input.url());
-        var repository = service.importRemote(input.name(), input.url(), input.branch(), input.sourceType(),
-            input.credentialId(), account);
-        return RepositoryController.RepositoryResponse.from(repository, accessControl.describe(account, repository.id()));
+        var repository =
+                service.importRemote(
+                        input.name(),
+                        input.url(),
+                        input.branch(),
+                        input.sourceType(),
+                        input.credentialId(),
+                        account);
+        return RepositoryController.RepositoryResponse.from(
+                repository, accessControl.describe(account, repository.id()));
     }
 
     @PostMapping(value = "/zip", consumes = "multipart/form-data")
-    public RepositoryController.RepositoryResponse zip(@RequestParam String name, @RequestPart MultipartFile file, HttpServletRequest request) {
+    public RepositoryController.RepositoryResponse zip(
+            @RequestParam String name,
+            @RequestPart MultipartFile file,
+            HttpServletRequest request) {
         var account = SecurityContext.account(request);
         var repository = service.importZip(name, file, account.id());
-        return RepositoryController.RepositoryResponse.from(repository, accessControl.describe(account, repository.id()));
+        return RepositoryController.RepositoryResponse.from(
+                repository, accessControl.describe(account, repository.id()));
     }
 
-    public record RemoteInput(@NotBlank String name, @NotBlank String url, String branch,
-        RepositorySourceType sourceType, java.util.UUID credentialId) {}
+    public record RemoteInput(
+            @NotBlank String name,
+            @NotBlank String url,
+            String branch,
+            RepositorySourceType sourceType,
+            java.util.UUID credentialId) {}
 }

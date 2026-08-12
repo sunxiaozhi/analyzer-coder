@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+/** 负责大模型密钥敏感信息的加密与解密，明文仅在必要的调用边界短暂存在。 */
 @Component
 public class LlmSecretCipher {
     private static final Logger LOG = LoggerFactory.getLogger(LlmSecretCipher.class);
@@ -27,7 +28,9 @@ public class LlmSecretCipher {
             throw new IllegalStateException("APP_LLM_MASTER_KEY 必须至少包含 24 个字符");
         }
         if (DEVELOPMENT_KEY.equals(masterKey)) {
-            LOG.warn("LLM secrets use the local development key; set APP_LLM_MASTER_KEY before production use");
+            LOG.warn(
+                    "LLM secrets use the local development key; set APP_LLM_MASTER_KEY before"
+                            + " production use");
         }
         this.encryptionKey = new SecretKeySpec(sha256("encrypt:" + masterKey), "AES");
         this.digestKey = new SecretKeySpec(sha256("digest:" + masterKey), "HmacSHA256");
@@ -41,11 +44,10 @@ public class LlmSecretCipher {
             cipher.init(Cipher.ENCRYPT_MODE, encryptionKey, new GCMParameterSpec(128, iv));
             byte[] encrypted = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
             return new EncryptedSecret(
-                Base64.getEncoder().encodeToString(encrypted),
-                Base64.getEncoder().encodeToString(iv),
-                digest(value),
-                "AES-256-GCM"
-            );
+                    Base64.getEncoder().encodeToString(encrypted),
+                    Base64.getEncoder().encodeToString(iv),
+                    digest(value),
+                    "AES-256-GCM");
         } catch (Exception exception) {
             throw new IllegalStateException("模型密钥加密功能不可用", exception);
         }
@@ -55,14 +57,11 @@ public class LlmSecretCipher {
         try {
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(
-                Cipher.DECRYPT_MODE,
-                encryptionKey,
-                new GCMParameterSpec(128, Base64.getDecoder().decode(iv))
-            );
+                    Cipher.DECRYPT_MODE,
+                    encryptionKey,
+                    new GCMParameterSpec(128, Base64.getDecoder().decode(iv)));
             return new String(
-                cipher.doFinal(Base64.getDecoder().decode(cipherText)),
-                StandardCharsets.UTF_8
-            );
+                    cipher.doFinal(Base64.getDecoder().decode(cipherText)), StandardCharsets.UTF_8);
         } catch (Exception exception) {
             throw new IllegalStateException("无法解密模型密钥", exception);
         }
@@ -80,7 +79,8 @@ public class LlmSecretCipher {
 
     private static byte[] sha256(String value) {
         try {
-            return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            return MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
         } catch (Exception exception) {
             throw new IllegalStateException(exception);
         }

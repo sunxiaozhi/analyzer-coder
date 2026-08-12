@@ -1,11 +1,11 @@
 package com.analyzercoder.worker;
 
 import com.analyzercoder.application.repository.RepositoryDeletionService;
+import java.util.UUID;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.UUID;
-
+/** 定时推进仓库删除任务，负责清理托管文件并收敛删除状态。 */
 @Component
 public class RepositoryDeletionWorker {
     private final RepositoryDeletionService deletionService;
@@ -17,7 +17,9 @@ public class RepositoryDeletionWorker {
     @Scheduled(fixedDelayString = "${app.repository.deletion-poll-interval-ms:5000}")
     public void cleanNext() {
         UUID repositoryId = deletionService.claimNext();
-        if (repositoryId == null) return;
+        if (repositoryId == null) {
+            return;
+        }
         try {
             deletionService.deleteManagedFiles(repositoryId);
             deletionService.complete(repositoryId);

@@ -19,18 +19,19 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/** 执行单个索引任务的状态机，串联仓库扫描、代码分块、向量写入及失败回收。 */
 @Service
 public class IndexJobProcessor {
     private static final int MAX_CHUNK_LINES = 120;
     private static final int CHUNK_OVERLAP_LINES = 20;
-    private static final Pattern DECLARATION = Pattern.compile(
-        "(?m)^\\s*(?:(?:public|protected|private|static|final|abstract|async|export|default)\\s+)*"
-            + "(class|interface|record|enum|function|def|func|type)\\s+([A-Za-z_$][\\w$]*)"
-    );
-    private static final Pattern CALLABLE = Pattern.compile(
-        "(?m)^\\s*(?:(?:public|protected|private|static|final|abstract|synchronized|async|export)\\s+)+"
-            + "(?:[\\w<>\\[\\],.?]+\\s+)?([A-Za-z_$][\\w$]*)\\s*\\("
-    );
+    private static final Pattern DECLARATION =
+            Pattern.compile(
+                    "(?m)^\\s*(?:(?:public|protected|private|static|final|abstract|async|export|default)\\s+)*"
+                            + "(class|interface|record|enum|function|def|func|type)\\s+([A-Za-z_$][\\w$]*)");
+    private static final Pattern CALLABLE =
+            Pattern.compile(
+                    "(?m)^\\s*(?:(?:public|protected|private|static|final|abstract|synchronized|async|export)\\s+)+"
+                            + "(?:[\\w<>\\[\\],.?]+\\s+)?([A-Za-z_$][\\w$]*)\\s*\\(");
     private static final Pattern MARKDOWN_HEADING = Pattern.compile("(?m)^#{1,6}\\s+(.+?)\\s*$");
 
     private final IndexJobStore indexJobStore;
@@ -42,13 +43,12 @@ public class IndexJobProcessor {
 
     @Autowired
     public IndexJobProcessor(
-        IndexJobStore indexJobStore,
-        CodeRepositoryStore repositoryStore,
-        RepositoryScannerPort repositoryScannerPort,
-        CodeChunkStore codeChunkStore,
-        IntelligenceService intelligenceService,
-        GitDiffService gitDiffService
-    ) {
+            IndexJobStore indexJobStore,
+            CodeRepositoryStore repositoryStore,
+            RepositoryScannerPort repositoryScannerPort,
+            CodeChunkStore codeChunkStore,
+            IntelligenceService intelligenceService,
+            GitDiffService gitDiffService) {
         this.indexJobStore = indexJobStore;
         this.repositoryStore = repositoryStore;
         this.repositoryScannerPort = repositoryScannerPort;
@@ -58,12 +58,17 @@ public class IndexJobProcessor {
     }
 
     public IndexJobProcessor(
-        IndexJobStore indexJobStore,
-        CodeRepositoryStore repositoryStore,
-        RepositoryScannerPort repositoryScannerPort,
-        CodeChunkStore codeChunkStore
-    ) {
-        this(indexJobStore, repositoryStore, repositoryScannerPort, codeChunkStore, null, new GitDiffService());
+            IndexJobStore indexJobStore,
+            CodeRepositoryStore repositoryStore,
+            RepositoryScannerPort repositoryScannerPort,
+            CodeChunkStore codeChunkStore) {
+        this(
+                indexJobStore,
+                repositoryStore,
+                repositoryScannerPort,
+                codeChunkStore,
+                null,
+                new GitDiffService());
     }
 
     public boolean processNextQueuedJob() {
@@ -72,48 +77,75 @@ public class IndexJobProcessor {
 
     private boolean process(IndexJob runningJob) {
         try {
-            if (finishCancellation(runningJob.id())) return true;
-            CodeRepository repository = repositoryStore.findById(runningJob.repositoryId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                    "Repository not found: " + runningJob.repositoryId().value()
-                ));
+            if (finishCancellation(runningJob.id())) {
+                return true;
+            }
+            CodeRepository repository =
+                    repositoryStore
+                            .findById(runningJob.repositoryId())
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalArgumentException(
+                                                    "Repository not found: "
+                                                            + runningJob.repositoryId().value()));
             if (repository.currentSnapshotId() == null) {
                 throw new IllegalStateException("仓库尚未发布可用的代码版本");
             }
 
-            String indexedCommit=codeChunkStore.latestIndexedCommit(repository.id());
-            Set<String> changedPaths=runningJob.type()==com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL
-                ?gitDiffService.changedPaths(repository,indexedCommit):Set.of();
-            boolean incremental=runningJob.type()==com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL
-                && indexedCommit!=null&&!indexedCommit.isBlank();
-            List<CodeChunk> chunks = repositoryScannerPort.scan(repository).stream()
-                .filter(file->!incremental||changedPaths.contains(file.relativePath().replace('\\','/')))
-                .flatMap(file -> splitIntoChunks(repository, file).stream())
-                .toList();
-            if (finishCancellation(runningJob.id())) return true;
+            String indexedCommit = codeChunkStore.latestIndexedCommit(repository.id());
+            Set<String> changedPaths =
+                    runningJob.type() == com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL
+                            ? gitDiffService.changedPaths(repository, indexedCommit)
+                            : Set.of();
+            boolean incremental =
+                    runningJob.type() == com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL
+                            && indexedCommit != null
+                            && !indexedCommit.isBlank();
+            List<CodeChunk> chunks =
+                    repositoryScannerPort.scan(repository).stream()
+                            .filter(
+                                    file ->
+                                            !incremental
+                                                    || changedPaths.contains(
+                                                            file.relativePath().replace('\\', '/')))
+                            .flatMap(file -> splitIntoChunks(repository, file).stream())
+                            .toList();
+            if (finishCancellation(runningJob.id())) {
+                return true;
+            }
 
-            IndexJob writingJob = indexJobStore.findById(runningJob.id())
-                .orElseThrow()
-                .start("write_chunks");
+            IndexJob writingJob =
+                    indexJobStore.findById(runningJob.id()).orElseThrow().start("write_chunks");
             indexJobStore.save(writingJob);
-            if(incremental)codeChunkStore.replaceRepositoryPaths(repository.id(),changedPaths,chunks,
-                repository.currentSnapshotId(),repository.currentCommit());
-            else codeChunkStore.replaceRepositoryChunks(repository.id(), chunks);
+            if (incremental) {
+                codeChunkStore.replaceRepositoryPaths(
+                        repository.id(),
+                        changedPaths,
+                        chunks,
+                        repository.currentSnapshotId(),
+                        repository.currentCommit());
+            } else {
+                codeChunkStore.replaceRepositoryChunks(repository.id(), chunks);
+            }
 
             boolean vectorsReady = true;
             if (intelligenceService != null) {
-                IndexJob vectorJob = indexJobStore.findById(runningJob.id())
-                    .orElseThrow()
-                    .start("build_embeddings");
+                IndexJob vectorJob =
+                        indexJobStore
+                                .findById(runningJob.id())
+                                .orElseThrow()
+                                .start("build_embeddings");
                 indexJobStore.save(vectorJob);
-                vectorsReady = intelligenceService.prepareRepositoryEmbeddings(
-                    repository.id().value()
-                );
+                vectorsReady =
+                        intelligenceService.prepareRepositoryEmbeddings(repository.id().value());
             }
 
             IndexJob publishState = indexJobStore.findById(runningJob.id()).orElseThrow();
-            String completion = (incremental?"incremental":"full")+":completed:" + chunks.size()
-                + (vectorsReady ? ":vectors-ready" : ":vectors-degraded");
+            String completion =
+                    (incremental ? "incremental" : "full")
+                            + ":completed:"
+                            + chunks.size()
+                            + (vectorsReady ? ":vectors-ready" : ":vectors-degraded");
             indexJobStore.save(publishState.succeed(completion));
             return true;
         } catch (Exception exception) {
@@ -125,7 +157,9 @@ public class IndexJobProcessor {
 
     private boolean finishCancellation(IndexJobId indexJobId) {
         IndexJob current = indexJobStore.findById(indexJobId).orElseThrow();
-        if (!current.isCancellationRequested()) return false;
+        if (!current.isCancellationRequested()) {
+            return false;
+        }
         indexJobStore.save(current.cancel());
         return true;
     }
@@ -133,14 +167,12 @@ public class IndexJobProcessor {
     private String safeMessage(Exception exception) {
         String message = exception.getMessage();
         return message == null || message.isBlank()
-            ? exception.getClass().getSimpleName()
-            : message;
+                ? exception.getClass().getSimpleName()
+                : message;
     }
 
     private List<CodeChunk> splitIntoChunks(
-        CodeRepository repository,
-        ScannedRepositoryFile scannedFile
-    ) {
+            CodeRepository repository, ScannedRepositoryFile scannedFile) {
         String[] lines = scannedFile.content().split("\\R", -1);
         List<CodeChunk> chunks = new ArrayList<>();
         int step = MAX_CHUNK_LINES - CHUNK_OVERLAP_LINES;
@@ -148,22 +180,35 @@ public class IndexJobProcessor {
             int end = Math.min(start + MAX_CHUNK_LINES, lines.length);
             String content = String.join("\n", Arrays.copyOfRange(lines, start, end));
             if (!content.isBlank()) {
-                Symbol symbol = inferSymbol(content, scannedFile.relativePath(), scannedFile.language());
-                CodeChunk chunk = symbol == null
-                    ? CodeChunk.fileChunk(
-                        repository.id(), repository.currentSnapshotId(),
-                        repository.currentCommit(), scannedFile.relativePath(),
-                        scannedFile.language(), start + 1, end, content
-                    )
-                    : CodeChunk.symbolChunk(
-                        repository.id(), repository.currentSnapshotId(),
-                        repository.currentCommit(), scannedFile.relativePath(),
-                        scannedFile.language(), symbol.name(), symbol.kind(),
-                        start + 1, end, content
-                    );
+                Symbol symbol =
+                        inferSymbol(content, scannedFile.relativePath(), scannedFile.language());
+                CodeChunk chunk =
+                        symbol == null
+                                ? CodeChunk.fileChunk(
+                                        repository.id(),
+                                        repository.currentSnapshotId(),
+                                        repository.currentCommit(),
+                                        scannedFile.relativePath(),
+                                        scannedFile.language(),
+                                        start + 1,
+                                        end,
+                                        content)
+                                : CodeChunk.symbolChunk(
+                                        repository.id(),
+                                        repository.currentSnapshotId(),
+                                        repository.currentCommit(),
+                                        scannedFile.relativePath(),
+                                        scannedFile.language(),
+                                        symbol.name(),
+                                        symbol.kind(),
+                                        start + 1,
+                                        end,
+                                        content);
                 chunks.add(chunk);
             }
-            if (end == lines.length) break;
+            if (end == lines.length) {
+                break;
+            }
         }
         return chunks;
     }
@@ -174,10 +219,14 @@ public class IndexJobProcessor {
             return new Symbol(declaration.group(2), declaration.group(1).toUpperCase());
         }
         Matcher callable = CALLABLE.matcher(content);
-        if (callable.find()) return new Symbol(callable.group(1), "CALLABLE");
+        if (callable.find()) {
+            return new Symbol(callable.group(1), "CALLABLE");
+        }
         if ("markdown".equals(language)) {
             Matcher heading = MARKDOWN_HEADING.matcher(content);
-            if (heading.find()) return new Symbol(heading.group(1).trim(), "DOC_SECTION");
+            if (heading.find()) {
+                return new Symbol(heading.group(1).trim(), "DOC_SECTION");
+            }
         }
         String normalized = filePath.replace('\\', '/');
         String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);

@@ -7,6 +7,7 @@ import com.analyzercoder.domain.repository.CodeRepositoryStore;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
+/** 编排代码片段相关应用流程，协调领域对象、权限校验与基础设施端口。 */
 @Service
 public class CodeChunkQueryService {
 
@@ -16,36 +17,43 @@ public class CodeChunkQueryService {
     private final CodeRepositoryStore repositoryStore;
     private final CodeChunkStore codeChunkStore;
 
-    public CodeChunkQueryService(CodeRepositoryStore repositoryStore, CodeChunkStore codeChunkStore) {
+    public CodeChunkQueryService(
+            CodeRepositoryStore repositoryStore, CodeChunkStore codeChunkStore) {
         this.repositoryStore = repositoryStore;
         this.codeChunkStore = codeChunkStore;
     }
 
-    public CodeChunkQueryResult list(CodeRepositoryId repositoryId, String query, Integer limit, Integer offset) {
-        repositoryStore.findById(repositoryId)
-            .orElseThrow(() -> new IllegalArgumentException("Repository not found: " + repositoryId.value()));
+    public CodeChunkQueryResult list(
+            CodeRepositoryId repositoryId, String query, Integer limit, Integer offset) {
+        repositoryStore
+                .findById(repositoryId)
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "Repository not found: " + repositoryId.value()));
 
         int resolvedLimit = resolveLimit(limit);
         int resolvedOffset = resolveOffset(offset);
         String normalizedQuery = query == null ? "" : query.trim();
 
         if (normalizedQuery.isBlank()) {
-            List<CodeChunk> chunks = codeChunkStore.findByRepositoryId(repositoryId, resolvedLimit, resolvedOffset);
+            List<CodeChunk> chunks =
+                    codeChunkStore.findByRepositoryId(repositoryId, resolvedLimit, resolvedOffset);
             return new CodeChunkQueryResult(
-                codeChunkStore.countByRepositoryId(repositoryId),
-                resolvedLimit,
-                resolvedOffset,
-                chunks
-            );
+                    codeChunkStore.countByRepositoryId(repositoryId),
+                    resolvedLimit,
+                    resolvedOffset,
+                    chunks);
         }
 
-        List<CodeChunk> chunks = codeChunkStore.searchByRepositoryId(repositoryId, normalizedQuery, resolvedLimit, resolvedOffset);
+        List<CodeChunk> chunks =
+                codeChunkStore.searchByRepositoryId(
+                        repositoryId, normalizedQuery, resolvedLimit, resolvedOffset);
         return new CodeChunkQueryResult(
-            codeChunkStore.countSearchByRepositoryId(repositoryId, normalizedQuery),
-            resolvedLimit,
-            resolvedOffset,
-            chunks
-        );
+                codeChunkStore.countSearchByRepositoryId(repositoryId, normalizedQuery),
+                resolvedLimit,
+                resolvedOffset,
+                chunks);
     }
 
     private int resolveLimit(Integer limit) {

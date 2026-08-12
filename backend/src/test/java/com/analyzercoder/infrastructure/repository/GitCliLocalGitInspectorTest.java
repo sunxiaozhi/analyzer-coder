@@ -11,11 +11,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 class GitCliLocalGitInspectorTest {
 
-    @TempDir
-    Path repository;
+    @TempDir Path repository;
 
     @Test
-    void capturesCommitAndChangesDigestForTrackedAndUntrackedContent() throws IOException, InterruptedException {
+    void capturesCommitAndChangesDigestForTrackedAndUntrackedContent()
+            throws IOException, InterruptedException {
         run("init");
         run("config", "user.email", "test@example.com");
         run("config", "user.name", "Test User");

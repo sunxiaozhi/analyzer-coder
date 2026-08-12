@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Component;
 
+/** 通过受控 Git CLI 读取本地仓库元数据，统一限制命令参数、目录和执行时长。 */
 @Component
 public class GitCliLocalGitInspector implements LocalGitInspector {
 
@@ -35,8 +36,15 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
         String commit = text(run(root, false, "rev-parse", "--verify", "HEAD")).trim();
         CommandResult branchResult = run(root, true, "symbolic-ref", "--short", "-q", "HEAD");
         String branch = branchResult.exitCode() == 0 ? text(branchResult).trim() : null;
-        boolean dirty = run(root, false, "status", "--porcelain=v1", "-z", "--untracked-files=all").stdout().length > 0;
-        String digest = digestWorktree(root, run(root, false, "ls-files", "-co", "--exclude-standard", "-z").stdout());
+        boolean dirty =
+                run(root, false, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+                                .stdout()
+                                .length
+                        > 0;
+        String digest =
+                digestWorktree(
+                        root,
+                        run(root, false, "ls-files", "-co", "--exclude-standard", "-z").stdout());
         return new GitRepositorySnapshot(branch, commit, digest, dirty, Instant.now());
     }
 
@@ -51,12 +59,16 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
                 if (relative.isAbsolute() || !file.startsWith(root)) {
                     throw new IllegalArgumentException("Git 返回了仓库范围之外的文件路径");
                 }
-                byte[] name = relative.toString().replace('\\', '/').getBytes(StandardCharsets.UTF_8);
+                byte[] name =
+                        relative.toString().replace('\\', '/').getBytes(StandardCharsets.UTF_8);
                 digest.update(ByteBuffer.allocate(Integer.BYTES).putInt(name.length).array());
                 digest.update(name);
                 if (Files.isSymbolicLink(file)) {
                     digest.update((byte) 'L');
-                    digest.update(Files.readSymbolicLink(file).toString().getBytes(StandardCharsets.UTF_8));
+                    digest.update(
+                            Files.readSymbolicLink(file)
+                                    .toString()
+                                    .getBytes(StandardCharsets.UTF_8));
                 } else if (Files.isRegularFile(file)) {
                     digest.update((byte) 'F');
                     try (InputStream input = Files.newInputStream(file)) {
@@ -90,10 +102,18 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
     }
 
     private static CommandResult run(Path root, boolean allowExitOne, String... arguments) {
-        List<String> command = new ArrayList<>(List.of(
-            "git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + GitRuntimePolicy.disabledHooksPath(),
-            "-c", "protocol.ext.allow=never", "-C", root.toString()
-        ));
+        List<String> command =
+                new ArrayList<>(
+                        List.of(
+                                "git",
+                                "-c",
+                                "core.fsmonitor=false",
+                                "-c",
+                                "core.hooksPath=" + GitRuntimePolicy.disabledHooksPath(),
+                                "-c",
+                                "protocol.ext.allow=never",
+                                "-C",
+                                root.toString()));
         command.addAll(List.of(arguments));
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.environment().put("GIT_TERMINAL_PROMPT", "0");
@@ -101,13 +121,16 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
         builder.environment().put("GIT_LFS_SKIP_SMUDGE", "1");
         try {
             Process process = builder.start();
-            CompletableFuture<byte[]> stdout = CompletableFuture.supplyAsync(() -> read(process.getInputStream()));
-            CompletableFuture<byte[]> stderr = CompletableFuture.supplyAsync(() -> read(process.getErrorStream()));
+            CompletableFuture<byte[]> stdout =
+                    CompletableFuture.supplyAsync(() -> read(process.getInputStream()));
+            CompletableFuture<byte[]> stderr =
+                    CompletableFuture.supplyAsync(() -> read(process.getErrorStream()));
             if (!process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new IllegalStateException("读取 Git 元数据超时");
             }
-            CommandResult result = new CommandResult(process.exitValue(), stdout.join(), stderr.join());
+            CommandResult result =
+                    new CommandResult(process.exitValue(), stdout.join(), stderr.join());
             if (result.exitCode() != 0 && !(allowExitOne && result.exitCode() == 1)) {
                 throw new IllegalArgumentException("该路径不是可读取的 Git 仓库");
             }
@@ -140,6 +163,5 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
         }
     }
 
-    private record CommandResult(int exitCode, byte[] stdout, byte[] stderr) {
-    }
+    private record CommandResult(int exitCode, byte[] stdout, byte[] stderr) {}
 }

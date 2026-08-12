@@ -19,15 +19,15 @@ class ForwardedClientIpTest {
         AtomicReference<String> remoteAddress = new AtomicReference<>();
         AtomicReference<String> scheme = new AtomicReference<>();
 
-        new ForwardedHeaderFilter().doFilter(
-            request,
-            new MockHttpServletResponse(),
-            (filteredRequest, ignored) -> {
-                HttpServletRequest http = (HttpServletRequest) filteredRequest;
-                remoteAddress.set(http.getRemoteAddr());
-                scheme.set(http.getScheme());
-            }
-        );
+        new ForwardedHeaderFilter()
+                .doFilter(
+                        request,
+                        new MockHttpServletResponse(),
+                        (filteredRequest, ignored) -> {
+                            HttpServletRequest http = (HttpServletRequest) filteredRequest;
+                            remoteAddress.set(http.getRemoteAddr());
+                            scheme.set(http.getScheme());
+                        });
 
         assertThat(remoteAddress.get()).isEqualTo("203.0.113.7");
         assertThat(scheme.get()).isEqualTo("https");

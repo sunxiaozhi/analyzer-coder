@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
+/** 通过 SQLite 持久化和查询代码符号关系，为领域代码图谱端口提供实现。 */
 @Component
 public class SqliteCodeGraphAdapter implements CodeGraphPort {
 
@@ -33,18 +34,20 @@ public class SqliteCodeGraphAdapter implements CodeGraphPort {
     }
 
     @Override
-    public List<CodeGraphEdge> getCallers(CodeRepositoryId repositoryId, String symbolId, int depth) {
+    public List<CodeGraphEdge> getCallers(
+            CodeRepositoryId repositoryId, String symbolId, int depth) {
         return List.of();
     }
 
     @Override
-    public List<CodeGraphEdge> getCallees(CodeRepositoryId repositoryId, String symbolId, int depth) {
+    public List<CodeGraphEdge> getCallees(
+            CodeRepositoryId repositoryId, String symbolId, int depth) {
         return List.of();
     }
 
     @Override
-    public List<CodeSymbol> getRelatedSymbols(CodeRepositoryId repositoryId, String symbolId, int depth) {
+    public List<CodeSymbol> getRelatedSymbols(
+            CodeRepositoryId repositoryId, String symbolId, int depth) {
         return List.of();
     }
 }
-

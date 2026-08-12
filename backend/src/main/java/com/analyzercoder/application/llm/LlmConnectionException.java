@@ -1,5 +1,6 @@
 package com.analyzercoder.application.llm;
 
+/** 表示大模型连接处理过程中可识别的业务或基础设施异常。 */
 public class LlmConnectionException extends RuntimeException {
     private final String code;
 

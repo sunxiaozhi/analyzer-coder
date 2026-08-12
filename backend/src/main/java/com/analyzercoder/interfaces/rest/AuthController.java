@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/** 提供当前模块相关 HTTP 接口，负责请求参数绑定并将已认证的调用委派给应用服务。 */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -32,11 +33,10 @@ public class AuthController {
     private final Duration cookieMaxAge;
 
     public AuthController(
-        AuthService auth,
-        CaptchaService captcha,
-        @Value("${app.security.cookie-secure:false}") boolean secureCookie,
-        @Value("${app.security.session-max-hours:12}") long sessionMaxHours
-    ) {
+            AuthService auth,
+            CaptchaService captcha,
+            @Value("${app.security.cookie-secure:false}") boolean secureCookie,
+            @Value("${app.security.session-max-hours:12}") long sessionMaxHours) {
         this.auth = auth;
         this.captcha = captcha;
         this.secureCookie = secureCookie;
@@ -45,12 +45,12 @@ public class AuthController {
 
     ResponseCookie sessionCookie(String token, Duration maxAge) {
         return ResponseCookie.from(SessionInterceptor.COOKIE_NAME, token)
-            .httpOnly(true)
-            .secure(secureCookie)
-            .sameSite("Lax")
-            .path("/")
-            .maxAge(maxAge)
-            .build();
+                .httpOnly(true)
+                .secure(secureCookie)
+                .sameSite("Lax")
+                .path("/")
+                .maxAge(maxAge)
+                .build();
     }
 
     private void setSessionCookie(HttpServletResponse response, String token) {
@@ -68,13 +68,13 @@ public class AuthController {
 
     @PostMapping("/login")
     public SessionResponse login(
-        @Valid @RequestBody LoginRequest body,
-        HttpServletRequest request,
-        HttpServletResponse response
-    ) {
+            @Valid @RequestBody LoginRequest body,
+            HttpServletRequest request,
+            HttpServletResponse response) {
         captcha.verifyIfRequired(body.username(), body.captchaId(), body.captchaAnswer());
         try {
-            AuthService.LoginResult result = auth.login(body.username(), body.password(), ip(request));
+            AuthService.LoginResult result =
+                    auth.login(body.username(), body.password(), ip(request));
             captcha.clear(body.username());
             setSessionCookie(response, result.rawToken());
             return SessionResponse.from(result.account(), result.csrfToken());
@@ -97,13 +97,15 @@ public class AuthController {
 
     @PostMapping("/change-password")
     public SessionResponse change(
-        @Valid @RequestBody ChangePasswordRequest body,
-        HttpServletRequest request,
-        HttpServletResponse response
-    ) {
-        AuthService.LoginResult result = auth.changePassword(
-            SecurityContext.session(request), body.currentPassword(), body.newPassword(), ip(request)
-        );
+            @Valid @RequestBody ChangePasswordRequest body,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        AuthService.LoginResult result =
+                auth.changePassword(
+                        SecurityContext.session(request),
+                        body.currentPassword(),
+                        body.newPassword(),
+                        ip(request));
         setSessionCookie(response, result.rawToken());
         return SessionResponse.from(result.account(), result.csrfToken());
     }
@@ -115,28 +117,31 @@ public class AuthController {
     }
 
     public record LoginRequest(
-        @NotBlank String username,
-        @NotBlank String password,
-        UUID captchaId,
-        String captchaAnswer
-    ) {}
+            @NotBlank String username,
+            @NotBlank String password,
+            UUID captchaId,
+            String captchaAnswer) {}
 
-    public record ChangePasswordRequest(@NotBlank String currentPassword, @NotBlank String newPassword) {}
+    public record ChangePasswordRequest(
+            @NotBlank String currentPassword, @NotBlank String newPassword) {}
 
     public record SessionResponse(
-        UUID id,
-        String username,
-        String displayName,
-        String role,
-        boolean mustChangePassword,
-        java.time.Instant lastLoginAt,
-        String csrfToken
-    ) {
+            UUID id,
+            String username,
+            String displayName,
+            String role,
+            boolean mustChangePassword,
+            java.time.Instant lastLoginAt,
+            String csrfToken) {
         static SessionResponse from(AuthenticatedAccount account, String csrfToken) {
             return new SessionResponse(
-                account.id(), account.username(), account.displayName(), account.role().name(),
-                account.mustChangePassword(), account.lastLoginAt(), csrfToken
-            );
+                    account.id(),
+                    account.username(),
+                    account.displayName(),
+                    account.role().name(),
+                    account.mustChangePassword(),
+                    account.lastLoginAt(),
+                    csrfToken);
         }
     }
 }

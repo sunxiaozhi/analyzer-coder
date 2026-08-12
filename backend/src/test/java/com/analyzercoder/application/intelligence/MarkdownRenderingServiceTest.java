@@ -10,7 +10,9 @@ class MarkdownRenderingServiceTest {
 
     @Test
     void escapesRawHtmlAndRejectsJavascriptUrls() {
-        String html = service.render(UUID.randomUUID(), "<script>alert(1)</script>\n[x](javascript:alert(1))");
+        String html =
+                service.render(
+                        UUID.randomUUID(), "<script>alert(1)</script>\n[x](javascript:alert(1))");
 
         assertThat(html).doesNotContain("<script", "javascript:");
         assertThat(html).contains("&lt;script&gt;");
@@ -21,9 +23,15 @@ class MarkdownRenderingServiceTest {
         UUID repositoryId = UUID.randomUUID();
         UUID attachmentId = UUID.randomUUID();
 
-        String html = service.render(repositoryId, "![架构图](knowledge-attachment://" + attachmentId + ")");
+        String html =
+                service.render(repositoryId, "![架构图](knowledge-attachment://" + attachmentId + ")");
 
-        assertThat(html).contains("/api/repositories/" + repositoryId + "/knowledge/attachments/" + attachmentId);
+        assertThat(html)
+                .contains(
+                        "/api/repositories/"
+                                + repositoryId
+                                + "/knowledge/attachments/"
+                                + attachmentId);
         assertThat(html).contains("<img");
     }
 }

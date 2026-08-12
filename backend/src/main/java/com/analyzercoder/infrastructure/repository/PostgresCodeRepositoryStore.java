@@ -15,36 +15,78 @@ import java.util.UUID;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Repository;
 
+/** 提供代码仓库的存储实现，并负责领域对象与持久化数据之间的转换。 */
 @Primary
 @Repository
 public class PostgresCodeRepositoryStore implements CodeRepositoryStore {
     private final RepositoryMapper mapper;
-    public PostgresCodeRepositoryStore(RepositoryMapper mapper) { this.mapper = mapper; }
 
-    @Override public CodeRepository saveOwned(CodeRepository repository, UUID ownerAccountId) {
+    public PostgresCodeRepositoryStore(RepositoryMapper mapper) {
+        this.mapper = mapper;
+    }
+
+    @Override
+    public CodeRepository saveOwned(CodeRepository repository, UUID ownerAccountId) {
         mapper.insertOwned(RepositoryRow.forInsert(repository, ownerAccountId));
         return repository;
     }
-    @Override public CodeRepository save(CodeRepository repository) {
-        if (mapper.update(RepositoryRow.forUpdate(repository)) != 1) throw new IllegalArgumentException("仓库不存在");
+
+    @Override
+    public CodeRepository save(CodeRepository repository) {
+        if (mapper.update(RepositoryRow.forUpdate(repository)) != 1) {
+            throw new IllegalArgumentException("仓库不存在");
+        }
         return repository;
     }
-    @Override public Optional<CodeRepository> findById(CodeRepositoryId id) { return Optional.ofNullable(mapper.findById(id.value())).map(PostgresCodeRepositoryStore::toDomain); }
-    @Override public List<CodeRepository> findAll() { return mapper.findAll().stream().map(PostgresCodeRepositoryStore::toDomain).toList(); }
-    @Override public boolean existsByNormalizedName(UUID ownerId, String name) {
-        if (ownerId == null) return false;
-        return mapper.countByOwnerAndNormalizedName(ownerId, name.trim().toLowerCase(Locale.ROOT)) > 0;
+
+    @Override
+    public Optional<CodeRepository> findById(CodeRepositoryId id) {
+        return Optional.ofNullable(mapper.findById(id.value()))
+                .map(PostgresCodeRepositoryStore::toDomain);
     }
-    @Override public boolean existsByPath(Path path) { return mapper.countByPath(path.toAbsolutePath().normalize().toString()) > 0; }
-    @Override public void delete(CodeRepositoryId id) { mapper.delete(id.value()); }
+
+    @Override
+    public List<CodeRepository> findAll() {
+        return mapper.findAll().stream().map(PostgresCodeRepositoryStore::toDomain).toList();
+    }
+
+    @Override
+    public boolean existsByNormalizedName(UUID ownerId, String name) {
+        if (ownerId == null) {
+            return false;
+        }
+        return mapper.countByOwnerAndNormalizedName(ownerId, name.trim().toLowerCase(Locale.ROOT))
+                > 0;
+    }
+
+    @Override
+    public boolean existsByPath(Path path) {
+        return mapper.countByPath(path.toAbsolutePath().normalize().toString()) > 0;
+    }
+
+    @Override
+    public void delete(CodeRepositoryId id) {
+        mapper.delete(id.value());
+    }
 
     public static CodeRepository toDomain(RepositoryRow row) {
         return new CodeRepository(
-            CodeRepositoryId.of(row.id()), row.name(), Path.of(row.path()), RepositorySourceType.valueOf(row.sourceType()),
-            row.defaultBranch(), row.currentCommit(), row.worktreeDigest(), row.worktreeDirty(),
-            row.currentSnapshotId() == null ? null : RepositorySnapshotId.of(row.currentSnapshotId()),
-            row.currentSnapshotPath() == null ? null : Path.of(row.currentSnapshotPath()), Path.of(row.codegraphPath()),
-            row.snapshotCreatedAt(), row.lastScannedAt(), row.createdAt(), row.updatedAt()
-        );
+                CodeRepositoryId.of(row.id()),
+                row.name(),
+                Path.of(row.path()),
+                RepositorySourceType.valueOf(row.sourceType()),
+                row.defaultBranch(),
+                row.currentCommit(),
+                row.worktreeDigest(),
+                row.worktreeDirty(),
+                row.currentSnapshotId() == null
+                        ? null
+                        : RepositorySnapshotId.of(row.currentSnapshotId()),
+                row.currentSnapshotPath() == null ? null : Path.of(row.currentSnapshotPath()),
+                Path.of(row.codegraphPath()),
+                row.snapshotCreatedAt(),
+                row.lastScannedAt(),
+                row.createdAt(),
+                row.updatedAt());
     }
 }

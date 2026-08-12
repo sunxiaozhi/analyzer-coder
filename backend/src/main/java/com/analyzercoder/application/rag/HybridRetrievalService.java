@@ -4,6 +4,7 @@ import com.analyzercoder.domain.codegraph.CodeGraphPort;
 import com.analyzercoder.domain.rag.VectorSearchPort;
 import org.springframework.stereotype.Service;
 
+/** 融合向量召回、结构化过滤和代码图谱扩展，为问答流程提供可追溯证据。 */
 @Service
 public class HybridRetrievalService {
 
@@ -23,4 +24,3 @@ public class HybridRetrievalService {
         return codeGraphPort;
     }
 }
-

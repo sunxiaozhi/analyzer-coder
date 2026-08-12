@@ -21,21 +21,24 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+/** 提供知识附件相关 HTTP 接口，负责请求参数绑定并将已认证的调用委派给应用服务。 */
 @RestController
 @RequestMapping("/api/repositories/{repositoryId}/knowledge/attachments")
 public class KnowledgeAttachmentController {
     private final KnowledgeAttachmentService service;
     private final AccessControlService access;
 
-    public KnowledgeAttachmentController(KnowledgeAttachmentService service, AccessControlService access) {
+    public KnowledgeAttachmentController(
+            KnowledgeAttachmentService service, AccessControlService access) {
         this.service = service;
         this.access = access;
     }
 
     @PostMapping
     public KnowledgeAttachmentService.Attachment upload(
-        @PathVariable UUID repositoryId, @RequestPart("file") MultipartFile file, HttpServletRequest request
-    ) {
+            @PathVariable UUID repositoryId,
+            @RequestPart("file") MultipartFile file,
+            HttpServletRequest request) {
         var account = SecurityContext.account(request);
         access.require(account, CodeRepositoryId.of(repositoryId), RepositoryPermission.MAINTAIN);
         return service.upload(repositoryId, account.id(), file);
@@ -43,18 +46,21 @@ public class KnowledgeAttachmentController {
 
     @GetMapping("/{attachmentId}")
     public ResponseEntity<FileSystemResource> download(
-        @PathVariable UUID repositoryId, @PathVariable UUID attachmentId, HttpServletRequest request
-    ) {
+            @PathVariable UUID repositoryId,
+            @PathVariable UUID attachmentId,
+            HttpServletRequest request) {
         var account = SecurityContext.account(request);
         access.require(account, CodeRepositoryId.of(repositoryId), RepositoryPermission.READ);
         var download = service.download(repositoryId, attachmentId);
-        ContentDisposition disposition = ContentDisposition.attachment()
-            .filename(download.originalName(), StandardCharsets.UTF_8).build();
+        ContentDisposition disposition =
+                ContentDisposition.attachment()
+                        .filename(download.originalName(), StandardCharsets.UTF_8)
+                        .build();
         return ResponseEntity.ok()
-            .contentType(MediaType.parseMediaType(download.mediaType()))
-            .contentLength(download.sizeBytes())
-            .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
-            .header("X-Content-Type-Options", "nosniff")
-            .body(new FileSystemResource(download.path()));
+                .contentType(MediaType.parseMediaType(download.mediaType()))
+                .contentLength(download.sizeBytes())
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header("X-Content-Type-Options", "nosniff")
+                .body(new FileSystemResource(download.path()));
     }
 }

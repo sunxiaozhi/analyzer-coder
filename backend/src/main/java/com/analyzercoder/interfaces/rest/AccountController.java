@@ -10,13 +10,25 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
+/** 提供账户相关 HTTP 接口，负责请求参数绑定并将已认证的调用委派给应用服务。 */
 @RestController
 @RequestMapping("/api/accounts")
 public class AccountController {
     private final AuthService authService;
-    public AccountController(AuthService authService) { this.authService = authService; }
+
+    public AccountController(AuthService authService) {
+        this.authService = authService;
+    }
 
     @GetMapping
     public List<AuthService.AccountSummary> list(HttpServletRequest request) {
@@ -26,31 +38,49 @@ public class AccountController {
 
     @GetMapping("/page")
     public PageResult<AuthService.AccountSummary> page(
-        @RequestParam(required = false) String query,
-        @RequestParam(defaultValue = "1") int pageNum,
-        @RequestParam(defaultValue = "20") int pageSize,
-        HttpServletRequest request
-    ) {
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "20") int pageSize,
+            HttpServletRequest request) {
         SecurityContext.requireAdmin(request);
         return authService.pageAccounts(query, pageNum, pageSize);
     }
 
     @PostMapping
-    public AuthService.CreatedAccount create(@Valid @RequestBody CreateAccountRequest body, HttpServletRequest request) {
+    public AuthService.CreatedAccount create(
+            @Valid @RequestBody CreateAccountRequest body, HttpServletRequest request) {
         var actor = SecurityContext.requireAdmin(request);
-        return authService.createAccount(actor.id(), body.username(), body.displayName(), body.role(), body.temporaryPassword(), request.getRemoteAddr());
+        return authService.createAccount(
+                actor.id(),
+                body.username(),
+                body.displayName(),
+                body.role(),
+                body.temporaryPassword(),
+                request.getRemoteAddr());
     }
 
     @PatchMapping("/{accountId}")
-    public AuthService.AccountSummary update(@PathVariable UUID accountId, @RequestBody UpdateAccountRequest body, HttpServletRequest request) {
+    public AuthService.AccountSummary update(
+            @PathVariable UUID accountId,
+            @RequestBody UpdateAccountRequest body,
+            HttpServletRequest request) {
         var actor = SecurityContext.requireAdmin(request);
-        return authService.updateAccount(actor.id(), accountId, body.displayName(), body.role(), body.enabled(), body.version(), request.getRemoteAddr());
+        return authService.updateAccount(
+                actor.id(),
+                accountId,
+                body.displayName(),
+                body.role(),
+                body.enabled(),
+                body.version(),
+                request.getRemoteAddr());
     }
 
     @PostMapping("/{accountId}/reset-password")
-    public TemporaryPasswordResponse resetPassword(@PathVariable UUID accountId, HttpServletRequest request) {
+    public TemporaryPasswordResponse resetPassword(
+            @PathVariable UUID accountId, HttpServletRequest request) {
         var actor = SecurityContext.requireAdmin(request);
-        return new TemporaryPasswordResponse(authService.resetPassword(actor.id(), accountId, request.getRemoteAddr()));
+        return new TemporaryPasswordResponse(
+                authService.resetPassword(actor.id(), accountId, request.getRemoteAddr()));
     }
 
     @PostMapping("/{accountId}/unlock")
@@ -60,27 +90,48 @@ public class AccountController {
     }
 
     @GetMapping("/{accountId}/permissions")
-    public List<AuthService.PermissionView> permissions(@PathVariable UUID accountId, HttpServletRequest request) {
+    public List<AuthService.PermissionView> permissions(
+            @PathVariable UUID accountId, HttpServletRequest request) {
         SecurityContext.requireAdmin(request);
         return authService.permissions(accountId);
     }
 
     @PutMapping("/{accountId}/permissions/{repositoryId}")
-    public void setPermission(@PathVariable UUID accountId, @PathVariable UUID repositoryId, @RequestBody PermissionRequest body, HttpServletRequest request) {
+    public void setPermission(
+            @PathVariable UUID accountId,
+            @PathVariable UUID repositoryId,
+            @RequestBody PermissionRequest body,
+            HttpServletRequest request) {
         var actor = SecurityContext.requireAdmin(request);
-        authService.setPermission(actor.id(), accountId, repositoryId, body.permission(), request.getRemoteAddr());
+        authService.setPermission(
+                actor.id(), accountId, repositoryId, body.permission(), request.getRemoteAddr());
     }
 
     @GetMapping("/audit")
-    public List<AuthService.AuditView> audit(@RequestParam(defaultValue = "100") int limit, @RequestParam(defaultValue = "0") int offset, HttpServletRequest request) {
+    public List<AuthService.AuditView> audit(
+            @RequestParam(defaultValue = "100") int limit,
+            @RequestParam(defaultValue = "0") int offset,
+            HttpServletRequest request) {
         SecurityContext.requireAdmin(request);
         return authService.auditEvents(limit, offset);
     }
 
-    public record CreateAccountRequest(@NotBlank String username, @NotBlank String displayName, AccountRole role, String temporaryPassword) {
-        public CreateAccountRequest { if (role == null) role = AccountRole.NORMAL; }
+    public record CreateAccountRequest(
+            @NotBlank String username,
+            @NotBlank String displayName,
+            AccountRole role,
+            String temporaryPassword) {
+        public CreateAccountRequest {
+            if (role == null) {
+                role = AccountRole.NORMAL;
+            }
+        }
     }
-    public record UpdateAccountRequest(String displayName, AccountRole role, Boolean enabled, Long version) {}
+
+    public record UpdateAccountRequest(
+            String displayName, AccountRole role, Boolean enabled, Long version) {}
+
     public record TemporaryPasswordResponse(String temporaryPassword) {}
+
     public record PermissionRequest(RepositoryPermission permission) {}
 }

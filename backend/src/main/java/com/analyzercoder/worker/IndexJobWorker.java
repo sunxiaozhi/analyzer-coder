@@ -4,6 +4,7 @@ import com.analyzercoder.application.indexing.IndexJobProcessor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/** 周期性领取待执行索引任务并交由处理器运行，单次失败不会阻断后续调度。 */
 @Component
 public class IndexJobWorker {
 
@@ -18,4 +19,3 @@ public class IndexJobWorker {
         indexJobProcessor.processNextQueuedJob();
     }
 }
-

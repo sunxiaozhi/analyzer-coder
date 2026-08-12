@@ -38,7 +38,8 @@ class IndexJobServiceTest {
     @Test
     void duplicateStartReturnsExistingActiveJob() {
         IndexJob first = service.start(new StartIndexCommand(repository.id(), IndexJobType.FULL));
-        IndexJob duplicate = service.start(new StartIndexCommand(repository.id(), IndexJobType.FULL));
+        IndexJob duplicate =
+                service.start(new StartIndexCommand(repository.id(), IndexJobType.FULL));
 
         assertThat(duplicate.id()).isEqualTo(first.id());
         assertThat(service.list(repository.id())).hasSize(1);
@@ -53,9 +54,11 @@ class IndexJobServiceTest {
 
     @Test
     void retryCreatesNewJobWithoutChangingFailedHistory() {
-        IndexJob failed = jobStore.save(IndexJob.create(repository.id(), IndexJobType.FULL)
-            .start("scan_repository")
-            .fail("failed", "test"));
+        IndexJob failed =
+                jobStore.save(
+                        IndexJob.create(repository.id(), IndexJobType.FULL)
+                                .start("scan_repository")
+                                .fail("failed", "test"));
 
         IndexJob retry = service.retry(failed.id());
 

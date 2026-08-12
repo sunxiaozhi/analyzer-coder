@@ -13,31 +13,42 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Repository;
 
+/** 提供代码片段的存储实现，并负责领域对象与持久化数据之间的转换。 */
 @Repository
 public class InMemoryCodeChunkStore implements CodeChunkStore {
 
     private final Map<UUID, List<CodeChunk>> chunksByRepository = new ConcurrentHashMap<>();
 
     @Override
-    public void replaceRepositoryChunks(CodeRepositoryId repositoryId, Collection<CodeChunk> chunks) {
-        List<CodeChunk> sortedChunks = chunks.stream()
-            .sorted(Comparator.comparing(CodeChunk::filePath))
-            .toList();
+    public void replaceRepositoryChunks(
+            CodeRepositoryId repositoryId, Collection<CodeChunk> chunks) {
+        List<CodeChunk> sortedChunks =
+                chunks.stream().sorted(Comparator.comparing(CodeChunk::filePath)).toList();
         chunksByRepository.put(repositoryId.value(), new ArrayList<>(sortedChunks));
     }
 
     @Override
-    public void replaceRepositoryPaths(CodeRepositoryId repositoryId, Collection<String> paths,
-        Collection<CodeChunk> chunks, com.analyzercoder.domain.repository.RepositorySnapshotId snapshotId,
-        String commitSha) {
-        List<CodeChunk> merged=new ArrayList<>(findByRepositoryId(repositoryId).stream()
-            .filter(chunk->!paths.contains(chunk.filePath())).toList());
-        merged.addAll(chunks);replaceRepositoryChunks(repositoryId,merged);
+    public void replaceRepositoryPaths(
+            CodeRepositoryId repositoryId,
+            Collection<String> paths,
+            Collection<CodeChunk> chunks,
+            com.analyzercoder.domain.repository.RepositorySnapshotId snapshotId,
+            String commitSha) {
+        List<CodeChunk> merged =
+                new ArrayList<>(
+                        findByRepositoryId(repositoryId).stream()
+                                .filter(chunk -> !paths.contains(chunk.filePath()))
+                                .toList());
+        merged.addAll(chunks);
+        replaceRepositoryChunks(repositoryId, merged);
     }
 
     @Override
     public String latestIndexedCommit(CodeRepositoryId repositoryId) {
-        return findByRepositoryId(repositoryId).stream().findFirst().map(CodeChunk::commitSha).orElse(null);
+        return findByRepositoryId(repositoryId).stream()
+                .findFirst()
+                .map(CodeChunk::commitSha)
+                .orElse(null);
     }
 
     @Override
@@ -46,24 +57,24 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
     }
 
     @Override
-    public List<CodeChunk> findByRepositoryId(CodeRepositoryId repositoryId, int limit, int offset) {
-        return findByRepositoryId(repositoryId).stream()
-            .skip(offset)
-            .limit(limit)
-            .toList();
+    public List<CodeChunk> findByRepositoryId(
+            CodeRepositoryId repositoryId, int limit, int offset) {
+        return findByRepositoryId(repositoryId).stream().skip(offset).limit(limit).toList();
     }
 
     @Override
-    public List<CodeChunk> searchByRepositoryId(CodeRepositoryId repositoryId, String query, int limit, int offset) {
+    public List<CodeChunk> searchByRepositoryId(
+            CodeRepositoryId repositoryId, String query, int limit, int offset) {
         String normalizedQuery = normalize(query);
         return findByRepositoryId(repositoryId).stream()
-            .filter(chunk -> matches(chunk, normalizedQuery))
-            .sorted(Comparator
-                .comparingInt((CodeChunk chunk) -> score(chunk, normalizedQuery)).reversed()
-                .thenComparing(CodeChunk::filePath))
-            .skip(offset)
-            .limit(limit)
-            .toList();
+                .filter(chunk -> matches(chunk, normalizedQuery))
+                .sorted(
+                        Comparator.comparingInt((CodeChunk chunk) -> score(chunk, normalizedQuery))
+                                .reversed()
+                                .thenComparing(CodeChunk::filePath))
+                .skip(offset)
+                .limit(limit)
+                .toList();
     }
 
     @Override
@@ -75,8 +86,8 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
     public long countSearchByRepositoryId(CodeRepositoryId repositoryId, String query) {
         String normalizedQuery = normalize(query);
         return findByRepositoryId(repositoryId).stream()
-            .filter(chunk -> matches(chunk, normalizedQuery))
-            .count();
+                .filter(chunk -> matches(chunk, normalizedQuery))
+                .count();
     }
 
     @Override
@@ -86,10 +97,10 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
 
     private boolean matches(CodeChunk chunk, String normalizedQuery) {
         return contains(chunk.filePath(), normalizedQuery)
-            || contains(chunk.symbolName(), normalizedQuery)
-            || contains(chunk.symbolKind(), normalizedQuery)
-            || contains(chunk.language(), normalizedQuery)
-            || contains(chunk.content(), normalizedQuery);
+                || contains(chunk.symbolName(), normalizedQuery)
+                || contains(chunk.symbolKind(), normalizedQuery)
+                || contains(chunk.language(), normalizedQuery)
+                || contains(chunk.content(), normalizedQuery);
     }
 
     private int score(CodeChunk chunk, String normalizedQuery) {
@@ -100,7 +111,8 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
         if (contains(chunk.symbolName(), normalizedQuery)) {
             score += 3;
         }
-        if (contains(chunk.symbolKind(), normalizedQuery) || contains(chunk.language(), normalizedQuery)) {
+        if (contains(chunk.symbolKind(), normalizedQuery)
+                || contains(chunk.language(), normalizedQuery)) {
             score += 2;
         }
         if (contains(chunk.content(), normalizedQuery)) {

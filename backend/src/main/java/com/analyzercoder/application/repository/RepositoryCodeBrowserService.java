@@ -16,15 +16,15 @@ import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+/** 提供仓库目录浏览与文件读取能力，并在访问前执行成员权限及路径越界校验。 */
 @Service
 public class RepositoryCodeBrowserService {
     private final RegisterRepositoryUseCase repositories;
     private final long maxPreviewBytes;
 
     public RepositoryCodeBrowserService(
-        RegisterRepositoryUseCase repositories,
-        @Value("${app.repository.browser-max-file-bytes:2097152}") long maxPreviewBytes
-    ) {
+            RegisterRepositoryUseCase repositories,
+            @Value("${app.repository.browser-max-file-bytes:2097152}") long maxPreviewBytes) {
         this.repositories = repositories;
         this.maxPreviewBytes = maxPreviewBytes;
     }
@@ -33,17 +33,18 @@ public class RepositoryCodeBrowserService {
         CodeRepository repository = published(repositoryId);
         Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
         try (var paths = Files.walk(root)) {
-            List<FileEntry> files = paths
-                .filter(path -> !Files.isSymbolicLink(path) && Files.isRegularFile(path))
-                .map(path -> entry(root, path))
-                .sorted(Comparator.comparing(FileEntry::path, String.CASE_INSENSITIVE_ORDER))
-                .toList();
+            List<FileEntry> files =
+                    paths.filter(path -> !Files.isSymbolicLink(path) && Files.isRegularFile(path))
+                            .map(path -> entry(root, path))
+                            .sorted(
+                                    Comparator.comparing(
+                                            FileEntry::path, String.CASE_INSENSITIVE_ORDER))
+                            .toList();
             return new SnapshotFiles(
-                repository.currentSnapshotId().value().toString(),
-                repository.defaultBranch(),
-                repository.currentCommit(),
-                files
-            );
+                    repository.currentSnapshotId().value().toString(),
+                    repository.defaultBranch(),
+                    repository.currentCommit(),
+                    files);
         } catch (IOException exception) {
             throw new IllegalStateException("无法读取当前代码快照", exception);
         }
@@ -66,17 +67,18 @@ public class RepositoryCodeBrowserService {
                 throw new IllegalArgumentException("二进制文件不支持在线预览");
             }
             String content = decodeText(file, bytes);
-            if (content.startsWith("\uFEFF")) content = content.substring(1);
+            if (content.startsWith("\uFEFF")) {
+                content = content.substring(1);
+            }
             String path = portable(root.relativize(file));
             return new FileContent(
-                repository.currentSnapshotId().value().toString(),
-                path,
-                file.getFileName().toString(),
-                language(path),
-                size,
-                lineCount(content),
-                content
-            );
+                    repository.currentSnapshotId().value().toString(),
+                    path,
+                    file.getFileName().toString(),
+                    language(path),
+                    size,
+                    lineCount(content),
+                    content);
         } catch (IOException exception) {
             throw new IllegalStateException("无法读取快照文件", exception);
         }
@@ -93,7 +95,8 @@ public class RepositoryCodeBrowserService {
     private static FileEntry entry(Path root, Path file) {
         try {
             String path = portable(root.relativize(file));
-            return new FileEntry(path, file.getFileName().toString(), language(path), Files.size(file));
+            return new FileEntry(
+                    path, file.getFileName().toString(), language(path), Files.size(file));
         } catch (IOException exception) {
             throw new IllegalStateException("无法读取快照文件元数据", exception);
         }
@@ -141,22 +144,30 @@ public class RepositoryCodeBrowserService {
 
     private static String decode(byte[] bytes, Charset charset) throws CharacterCodingException {
         return charset.newDecoder()
-            .onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT)
-            .decode(ByteBuffer.wrap(bytes))
-            .toString();
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString();
     }
 
     private static boolean containsNullByte(byte[] bytes) {
-        for (byte value : bytes) if (value == 0) return true;
+        for (byte value : bytes) {
+            if (value == 0) {
+                return true;
+            }
+        }
         return false;
     }
 
     private static int lineCount(String content) {
-        if (content.isEmpty()) return 0;
+        if (content.isEmpty()) {
+            return 0;
+        }
         int lines = 1;
         for (int index = 0; index < content.length(); index++) {
-            if (content.charAt(index) == '\n') lines++;
+            if (content.charAt(index) == '\n') {
+                lines++;
+            }
         }
         return content.endsWith("\n") ? lines - 1 : lines;
     }
@@ -167,8 +178,12 @@ public class RepositoryCodeBrowserService {
 
     private static String language(String path) {
         String name = Path.of(path).getFileName().toString().toLowerCase(Locale.ROOT);
-        if (name.equals("dockerfile")) return "dockerfile";
-        if (name.equals("makefile")) return "makefile";
+        if (name.equals("dockerfile")) {
+            return "dockerfile";
+        }
+        if (name.equals("makefile")) {
+            return "makefile";
+        }
         int dot = name.lastIndexOf('.');
         String extension = dot < 0 ? "" : name.substring(dot + 1);
         return switch (extension) {
@@ -201,15 +216,17 @@ public class RepositoryCodeBrowserService {
         };
     }
 
-    public record SnapshotFiles(String snapshotId, String branch, String commit, List<FileEntry> files) {}
+    public record SnapshotFiles(
+            String snapshotId, String branch, String commit, List<FileEntry> files) {}
+
     public record FileEntry(String path, String name, String language, long sizeBytes) {}
+
     public record FileContent(
-        String snapshotId,
-        String path,
-        String name,
-        String language,
-        long sizeBytes,
-        int lineCount,
-        String content
-    ) {}
+            String snapshotId,
+            String path,
+            String name,
+            String language,
+            long sizeBytes,
+            int lineCount,
+            String content) {}
 }

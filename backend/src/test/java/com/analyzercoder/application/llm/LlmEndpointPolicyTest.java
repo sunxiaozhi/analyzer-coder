@@ -10,10 +10,10 @@ class LlmEndpointPolicyTest {
     void requiresHttpsByDefault() {
         LlmEndpointPolicy policy = new LlmEndpointPolicy(false);
 
-        LlmConnectionException exception = assertThrows(
-            LlmConnectionException.class,
-            () -> policy.normalize("http://localhost:11434/v1")
-        );
+        LlmConnectionException exception =
+                assertThrows(
+                        LlmConnectionException.class,
+                        () -> policy.normalize("http://localhost:11434/v1"));
 
         assertEquals("LLM_NETWORK_BLOCKED", exception.code());
     }
@@ -23,8 +23,7 @@ class LlmEndpointPolicyTest {
         LlmEndpointPolicy policy = new LlmEndpointPolicy(true);
 
         assertEquals(
-            "http://localhost:11434/v1",
-            policy.normalize("http://localhost:11434/v1/").toString()
-        );
+                "http://localhost:11434/v1",
+                policy.normalize("http://localhost:11434/v1/").toString());
     }
 }

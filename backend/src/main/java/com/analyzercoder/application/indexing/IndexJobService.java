@@ -9,6 +9,7 @@ import com.analyzercoder.domain.repository.CodeRepositoryStore;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
+/** 编排索引任务相关应用流程，协调领域对象、权限校验与基础设施端口。 */
 @Service
 public class IndexJobService implements IndexJobUseCase {
 
@@ -22,10 +23,12 @@ public class IndexJobService implements IndexJobUseCase {
 
     @Override
     public synchronized IndexJob start(StartIndexCommand command) {
-        repositoryStore.findById(command.repositoryId())
-            .orElseThrow(() -> new IllegalArgumentException(
-                "Repository not found: " + command.repositoryId().value()
-            ));
+        repositoryStore
+                .findById(command.repositoryId())
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "Repository not found: " + command.repositoryId().value()));
 
         IndexJob activeJob = findActiveJob(command.repositoryId());
         if (activeJob != null) {
@@ -36,18 +39,29 @@ public class IndexJobService implements IndexJobUseCase {
 
     @Override
     public IndexJob get(IndexJobId indexJobId) {
-        return indexJobStore.findById(indexJobId)
-            .orElseThrow(() -> new IllegalArgumentException("Index job not found: " + indexJobId.value()));
+        return indexJobStore
+                .findById(indexJobId)
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "Index job not found: " + indexJobId.value()));
     }
 
     @Override
     public IndexJob getLatestStatus(CodeRepositoryId repositoryId) {
-        repositoryStore.findById(repositoryId)
-            .orElseThrow(() -> new IllegalArgumentException("Repository not found: " + repositoryId.value()));
-        return indexJobStore.findLatestByRepositoryId(repositoryId)
-            .orElseThrow(() -> new IllegalArgumentException(
-                "Index job not found for repository: " + repositoryId.value()
-            ));
+        repositoryStore
+                .findById(repositoryId)
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "Repository not found: " + repositoryId.value()));
+        return indexJobStore
+                .findLatestByRepositoryId(repositoryId)
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "Index job not found for repository: "
+                                                + repositoryId.value()));
     }
 
     @Override
@@ -55,8 +69,12 @@ public class IndexJobService implements IndexJobUseCase {
         if (repositoryId == null) {
             return indexJobStore.findAll();
         }
-        repositoryStore.findById(repositoryId)
-            .orElseThrow(() -> new IllegalArgumentException("Repository not found: " + repositoryId.value()));
+        repositoryStore
+                .findById(repositoryId)
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "Repository not found: " + repositoryId.value()));
         return indexJobStore.findByRepositoryId(repositoryId);
     }
 
@@ -77,10 +95,12 @@ public class IndexJobService implements IndexJobUseCase {
 
     private IndexJob findActiveJob(CodeRepositoryId repositoryId) {
         return indexJobStore.findByRepositoryId(repositoryId).stream()
-            .filter(job -> job.status() == IndexJobStatus.QUEUED
-                || job.status() == IndexJobStatus.RUNNING
-                || job.status() == IndexJobStatus.CANCEL_REQUESTED)
-            .findFirst()
-            .orElse(null);
+                .filter(
+                        job ->
+                                job.status() == IndexJobStatus.QUEUED
+                                        || job.status() == IndexJobStatus.RUNNING
+                                        || job.status() == IndexJobStatus.CANCEL_REQUESTED)
+                .findFirst()
+                .orElse(null);
     }
 }

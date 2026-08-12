@@ -26,17 +26,21 @@ class FileSystemRepositorySnapshotAdapterTest {
         git(source, "commit", "-m", "initial");
 
         var version = new GitCliLocalGitInspector().inspect(source);
-        var adapter = new FileSystemRepositorySnapshotAdapter(temp.resolve("managed").toString(), 100, 1024 * 1024);
+        var adapter =
+                new FileSystemRepositorySnapshotAdapter(
+                        temp.resolve("managed").toString(), 100, 1024 * 1024);
         var snapshot = adapter.create(CodeRepositoryId.newId(), source, version);
 
         Files.writeString(source.resolve("sample.txt"), "changed-after-publication");
-        assertThat(Files.readString(snapshot.contentPath().resolve("sample.txt"))).isEqualTo("snapshot-value");
+        assertThat(Files.readString(snapshot.contentPath().resolve("sample.txt")))
+                .isEqualTo("snapshot-value");
         assertThat(snapshot.contentPath()).isNotEqualTo(source);
         adapter.delete(snapshot);
         assertThat(snapshot.contentPath()).doesNotExist();
     }
 
-    private static void git(Path root, String... arguments) throws IOException, InterruptedException {
+    private static void git(Path root, String... arguments)
+            throws IOException, InterruptedException {
         List<String> command = new ArrayList<>(List.of("git", "-C", root.toString()));
         command.addAll(List.of(arguments));
         Process process = new ProcessBuilder(command).redirectErrorStream(true).start();

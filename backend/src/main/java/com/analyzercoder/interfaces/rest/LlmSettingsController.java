@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/** 提供大模型设置相关 HTTP 接口，负责请求参数绑定并将已认证的调用委派给应用服务。 */
 @RestController
 @RequestMapping("/api/settings/llm")
 public class LlmSettingsController {
@@ -43,17 +44,16 @@ public class LlmSettingsController {
 
     @PostMapping("/providers")
     public LlmSettingsService.ProviderView createProvider(
-        @RequestBody LlmSettingsService.ProviderInput body, HttpServletRequest request
-    ) {
+            @RequestBody LlmSettingsService.ProviderInput body, HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.save(account.id(), body);
     }
 
     @PutMapping("/providers/{configId}")
     public LlmSettingsService.ProviderView updateProvider(
-        @PathVariable UUID configId, @RequestBody LlmSettingsService.ProviderInput body,
-        HttpServletRequest request
-    ) {
+            @PathVariable UUID configId,
+            @RequestBody LlmSettingsService.ProviderInput body,
+            HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.update(account.id(), configId, body);
     }
@@ -66,81 +66,70 @@ public class LlmSettingsController {
 
     @PostMapping("/vector-models")
     public LlmSettingsService.VectorModelView createVectorModel(
-        @RequestBody LlmSettingsService.VectorModelInput body, HttpServletRequest request
-    ) {
+            @RequestBody LlmSettingsService.VectorModelInput body, HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.saveVectorModel(account.id(), body);
     }
 
     @PutMapping("/vector-models/{id}")
     public LlmSettingsService.VectorModelView updateVectorModel(
-        @PathVariable UUID id, @RequestBody LlmSettingsService.VectorModelInput body,
-        HttpServletRequest request
-    ) {
+            @PathVariable UUID id,
+            @RequestBody LlmSettingsService.VectorModelInput body,
+            HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.updateVectorModel(account.id(), id, body);
     }
 
     @PostMapping("/vector-models/{id}/activate")
     public LlmSettingsService.VectorModelView activateVectorModel(
-        @PathVariable UUID id, @RequestParam long expectedActivationVersion,
-        HttpServletRequest request
-    ) {
+            @PathVariable UUID id,
+            @RequestParam long expectedActivationVersion,
+            HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.activateVectorModel(account.id(), id, expectedActivationVersion);
     }
 
     @PutMapping("/provider")
     public LlmSettingsService.ProviderView save(
-        @RequestBody LlmSettingsService.ProviderInput body,
-        HttpServletRequest request
-    ) {
+            @RequestBody LlmSettingsService.ProviderInput body, HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.save(account.id(), body);
     }
 
     @PostMapping("/connectivity-checks")
     public LlmSettingsService.CheckView startCheck(
-        @RequestBody LlmSettingsService.ConnectivityCheckRequest body,
-        HttpServletRequest request
-    ) {
+            @RequestBody LlmSettingsService.ConnectivityCheckRequest body,
+            HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.startCheck(account.id(), body);
     }
 
     @GetMapping("/connectivity-checks/{checkId}")
     public LlmSettingsService.CheckView check(
-        @PathVariable UUID checkId,
-        HttpServletRequest request
-    ) {
+            @PathVariable UUID checkId, HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.check(account.id(), checkId);
     }
 
     @PostMapping("/connectivity-checks/{checkId}/cancel")
     public LlmSettingsService.CheckView cancel(
-        @PathVariable UUID checkId,
-        HttpServletRequest request
-    ) {
+            @PathVariable UUID checkId, HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.cancelCheck(account.id(), checkId);
     }
 
     @PostMapping("/provider/{configId}/activate")
     public LlmSettingsService.ProviderView activate(
-        @PathVariable UUID configId,
-        @RequestBody LlmSettingsService.ActivationRequest body,
-        HttpServletRequest request
-    ) {
+            @PathVariable UUID configId,
+            @RequestBody LlmSettingsService.ActivationRequest body,
+            HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.activate(account.id(), configId, body);
     }
 
     @PostMapping("/provider/deactivate")
     public LlmSettingsService.ProviderView deactivate(
-        @RequestParam long expectedActivationVersion,
-        HttpServletRequest request
-    ) {
+            @RequestParam long expectedActivationVersion, HttpServletRequest request) {
         var account = SecurityContext.requireAdmin(request);
         return service.deactivate(account.id(), expectedActivationVersion);
     }

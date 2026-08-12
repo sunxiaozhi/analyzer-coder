@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+/** 在受控根目录内创建和读取不可变仓库快照，并校验路径、大小与内容摘要。 */
 @Component
 public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPort {
 
@@ -35,10 +36,10 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
     private final long maxTotalBytes;
 
     public FileSystemRepositorySnapshotAdapter(
-        @Value("${app.repository.snapshot-root:${java.io.tmpdir}/analyzer-coder/snapshots}") String snapshotRoot,
-        @Value("${app.repository.snapshot-max-files:20000}") int maxFiles,
-        @Value("${app.repository.snapshot-max-total-bytes:2147483648}") long maxTotalBytes
-    ) {
+            @Value("${app.repository.snapshot-root:${java.io.tmpdir}/analyzer-coder/snapshots}")
+                    String snapshotRoot,
+            @Value("${app.repository.snapshot-max-files:20000}") int maxFiles,
+            @Value("${app.repository.snapshot-max-total-bytes:2147483648}") long maxTotalBytes) {
         this.snapshotRoot = Path.of(snapshotRoot).toAbsolutePath().normalize();
         this.maxFiles = maxFiles;
         this.maxTotalBytes = maxTotalBytes;
@@ -51,10 +52,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
 
     @Override
     public ManagedRepositorySnapshot create(
-        CodeRepositoryId repositoryId,
-        Path sourceRoot,
-        GitRepositorySnapshot sourceVersion
-    ) {
+            CodeRepositoryId repositoryId, Path sourceRoot, GitRepositorySnapshot sourceVersion) {
         RepositorySnapshotId snapshotId = RepositorySnapshotId.newId();
         Path repositoryRoot = snapshotRoot.resolve(repositoryId.value().toString());
         Path temporary = repositoryRoot.resolve(".staging-" + snapshotId.value());
@@ -70,18 +68,18 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
             }
             makeReadOnly(target);
             return new ManagedRepositorySnapshot(
-                snapshotId,
-                repositoryId,
-                target.resolve("content"),
-                sourceVersion.commit(),
-                sourceVersion.worktreeDigest(),
-                Instant.now()
-            );
+                    snapshotId,
+                    repositoryId,
+                    target.resolve("content"),
+                    sourceVersion.commit(),
+                    sourceVersion.worktreeDigest(),
+                    Instant.now());
         } catch (RuntimeException | IOException exception) {
             deleteTree(temporary);
             throw exception instanceof RuntimeException runtime
-                ? runtime
-                : new IllegalStateException("Unable to create managed repository snapshot", exception);
+                    ? runtime
+                    : new IllegalStateException(
+                            "Unable to create managed repository snapshot", exception);
         }
     }
 
@@ -95,7 +93,8 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
         deleteTree(snapshotRoot.resolve(repositoryId.value().toString()));
     }
 
-    private void copyVersionedFiles(Path sourceRoot, Path content, String expectedDigest) throws IOException {
+    private void copyVersionedFiles(Path sourceRoot, Path content, String expectedDigest)
+            throws IOException {
         List<String> paths = gitPaths(sourceRoot).stream().sorted().toList();
         if (paths.size() > maxFiles) {
             throw new IllegalArgumentException("仓库文件数量超过系统限制");
@@ -132,7 +131,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
             }
             Files.createDirectories(destination.getParent());
             try (InputStream input = Files.newInputStream(source);
-                 OutputStream output = Files.newOutputStream(destination)) {
+                    OutputStream output = Files.newOutputStream(destination)) {
                 int read;
                 while ((read = input.read(buffer)) >= 0) {
                     digest.update(buffer, 0, read);
@@ -147,18 +146,31 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
     }
 
     private static List<String> gitPaths(Path root) {
-        List<String> command = new ArrayList<>(List.of(
-            "git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + GitRuntimePolicy.disabledHooksPath(),
-            "-c", "protocol.ext.allow=never", "-C", root.toString(),
-            "ls-files", "-co", "--exclude-standard", "-z"
-        ));
+        List<String> command =
+                new ArrayList<>(
+                        List.of(
+                                "git",
+                                "-c",
+                                "core.fsmonitor=false",
+                                "-c",
+                                "core.hooksPath=" + GitRuntimePolicy.disabledHooksPath(),
+                                "-c",
+                                "protocol.ext.allow=never",
+                                "-C",
+                                root.toString(),
+                                "ls-files",
+                                "-co",
+                                "--exclude-standard",
+                                "-z"));
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.environment().put("GIT_TERMINAL_PROMPT", "0");
         builder.environment().put("GIT_OPTIONAL_LOCKS", "0");
         try {
             Process process = builder.start();
-            CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> read(process.getInputStream()));
-            CompletableFuture<byte[]> error = CompletableFuture.supplyAsync(() -> read(process.getErrorStream()));
+            CompletableFuture<byte[]> output =
+                    CompletableFuture.supplyAsync(() -> read(process.getInputStream()));
+            CompletableFuture<byte[]> error =
+                    CompletableFuture.supplyAsync(() -> read(process.getErrorStream()));
             if (!process.waitFor(15, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new IllegalStateException("读取 Git 文件清单超时");
@@ -210,23 +222,32 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
 
     private static void makeReadOnly(Path root) throws IOException {
         try (var paths = Files.walk(root)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(path -> path.toFile().setWritable(false, false));
+            paths.sorted(Comparator.reverseOrder())
+                    .forEach(path -> path.toFile().setWritable(false, false));
         }
     }
 
     private void deleteTree(Path target) {
-        if (target == null) return;
+        if (target == null) {
+            return;
+        }
         Path normalized = target.toAbsolutePath().normalize();
-        if (!normalized.startsWith(snapshotRoot) || normalized.equals(snapshotRoot) || !Files.exists(normalized)) return;
+        if (!normalized.startsWith(snapshotRoot)
+                || normalized.equals(snapshotRoot)
+                || !Files.exists(normalized)) {
+            return;
+        }
         try (var paths = Files.walk(normalized)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
-                try {
-                    path.toFile().setWritable(true, false);
-                    Files.deleteIfExists(path);
-                } catch (IOException exception) {
-                    throw new IllegalStateException("无法删除旧代码版本", exception);
-                }
-            });
+            paths.sorted(Comparator.reverseOrder())
+                    .forEach(
+                            path -> {
+                                try {
+                                    path.toFile().setWritable(true, false);
+                                    Files.deleteIfExists(path);
+                                } catch (IOException exception) {
+                                    throw new IllegalStateException("无法删除旧代码版本", exception);
+                                }
+                            });
         } catch (IOException exception) {
             throw new IllegalStateException("无法删除旧代码版本", exception);
         }

@@ -4,30 +4,29 @@ import com.analyzercoder.domain.repository.CodeRepositoryId;
 import java.time.Instant;
 import java.util.Objects;
 
+/** 索引任务聚合，维护任务类型、处理进度和状态迁移等核心不变量。 */
 public record IndexJob(
-    IndexJobId id,
-    CodeRepositoryId repositoryId,
-    IndexJobType type,
-    IndexJobStatus status,
-    String currentStep,
-    String errorMessage,
-    Instant startedAt,
-    Instant finishedAt,
-    Instant createdAt
-) {
+        IndexJobId id,
+        CodeRepositoryId repositoryId,
+        IndexJobType type,
+        IndexJobStatus status,
+        String currentStep,
+        String errorMessage,
+        Instant startedAt,
+        Instant finishedAt,
+        Instant createdAt) {
 
     public static IndexJob create(CodeRepositoryId repositoryId, IndexJobType type) {
         return new IndexJob(
-            IndexJobId.newId(),
-            repositoryId,
-            type,
-            IndexJobStatus.QUEUED,
-            "queued",
-            null,
-            null,
-            null,
-            Instant.now()
-        );
+                IndexJobId.newId(),
+                repositoryId,
+                type,
+                IndexJobStatus.QUEUED,
+                "queued",
+                null,
+                null,
+                null,
+                Instant.now());
     }
 
     public static IndexJob retry(IndexJob failedJob) {
@@ -43,23 +42,41 @@ public record IndexJob(
         }
         Instant effectiveStartedAt = startedAt == null ? Instant.now() : startedAt;
         return new IndexJob(
-            id, repositoryId, type, IndexJobStatus.RUNNING, currentStep, null,
-            effectiveStartedAt, null, createdAt
-        );
+                id,
+                repositoryId,
+                type,
+                IndexJobStatus.RUNNING,
+                currentStep,
+                null,
+                effectiveStartedAt,
+                null,
+                createdAt);
     }
 
     public IndexJob requestCancel() {
         if (status == IndexJobStatus.QUEUED) {
             return new IndexJob(
-                id, repositoryId, type, IndexJobStatus.CANCELED, "canceled", null,
-                startedAt, Instant.now(), createdAt
-            );
+                    id,
+                    repositoryId,
+                    type,
+                    IndexJobStatus.CANCELED,
+                    "canceled",
+                    null,
+                    startedAt,
+                    Instant.now(),
+                    createdAt);
         }
         if (status == IndexJobStatus.RUNNING) {
             return new IndexJob(
-                id, repositoryId, type, IndexJobStatus.CANCEL_REQUESTED, "cancel_requested", null,
-                startedAt, null, createdAt
-            );
+                    id,
+                    repositoryId,
+                    type,
+                    IndexJobStatus.CANCEL_REQUESTED,
+                    "cancel_requested",
+                    null,
+                    startedAt,
+                    null,
+                    createdAt);
         }
         throw new IllegalStateException("只有排队中或运行中的任务可以取消");
     }
@@ -69,9 +86,15 @@ public record IndexJob(
             throw new IllegalStateException("任务当前状态为“" + status + "”，不能取消");
         }
         return new IndexJob(
-            id, repositoryId, type, IndexJobStatus.CANCELED, "canceled", null,
-            startedAt, Instant.now(), createdAt
-        );
+                id,
+                repositoryId,
+                type,
+                IndexJobStatus.CANCELED,
+                "canceled",
+                null,
+                startedAt,
+                Instant.now(),
+                createdAt);
     }
 
     public IndexJob succeed(String currentStep) {
@@ -79,9 +102,15 @@ public record IndexJob(
             throw new IllegalStateException("任务当前状态为“" + status + "”，不能标记为成功");
         }
         return new IndexJob(
-            id, repositoryId, type, IndexJobStatus.SUCCEEDED, currentStep, null,
-            startedAt, Instant.now(), createdAt
-        );
+                id,
+                repositoryId,
+                type,
+                IndexJobStatus.SUCCEEDED,
+                currentStep,
+                null,
+                startedAt,
+                Instant.now(),
+                createdAt);
     }
 
     public IndexJob fail(String currentStep, String errorMessage) {
@@ -89,9 +118,15 @@ public record IndexJob(
             throw new IllegalStateException("任务当前状态为“" + status + "”，不能标记为失败");
         }
         return new IndexJob(
-            id, repositoryId, type, IndexJobStatus.FAILED, currentStep, errorMessage,
-            startedAt, Instant.now(), createdAt
-        );
+                id,
+                repositoryId,
+                type,
+                IndexJobStatus.FAILED,
+                currentStep,
+                errorMessage,
+                startedAt,
+                Instant.now(),
+                createdAt);
     }
 
     public boolean isCancellationRequested() {

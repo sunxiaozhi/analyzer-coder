@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 class CredentialSecretCipherTest {
     @Test
     void encryptsWithRandomIvAndDecrypts() {
-        CredentialSecretCipher cipher = new CredentialSecretCipher("credential-master-key-for-tests-123456");
+        CredentialSecretCipher cipher =
+                new CredentialSecretCipher("credential-master-key-for-tests-123456");
         var first = cipher.encrypt("glpat-secret-value");
         var second = cipher.encrypt("glpat-secret-value");
 

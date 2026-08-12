@@ -9,60 +9,9 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Objects;
 
+/** 描述代码片段的领域数据及其不变量，不依赖接口层或基础设施实现。 */
 public record CodeChunk(
-    CodeChunkId id,
-    CodeRepositoryId repositoryId,
-    RepositorySnapshotId snapshotId,
-    String commitSha,
-    String filePath,
-    String symbolId,
-    String symbolName,
-    String symbolKind,
-    String language,
-    ChunkType chunkType,
-    Integer startLine,
-    Integer endLine,
-    String content,
-    String contentHash,
-    Instant createdAt
-) {
-    public static CodeChunk fileChunk(
-        CodeRepositoryId repositoryId,
-        RepositorySnapshotId snapshotId,
-        String commitSha,
-        String filePath,
-        String language,
-        int startLine,
-        int endLine,
-        String content
-    ) {
-        return create(
-            repositoryId, snapshotId, commitSha, filePath, null, null, null,
-            language, ChunkType.FILE, startLine, endLine, content
-        );
-    }
-
-    public static CodeChunk symbolChunk(
-        CodeRepositoryId repositoryId,
-        RepositorySnapshotId snapshotId,
-        String commitSha,
-        String filePath,
-        String language,
-        String symbolName,
-        String symbolKind,
-        int startLine,
-        int endLine,
-        String content
-    ) {
-        String symbolId = filePath + "#" + symbolName + ":" + startLine;
-        return create(
-            repositoryId, snapshotId, commitSha, filePath, symbolId,
-            symbolName, symbolKind, language, ChunkType.SYMBOL,
-            startLine, endLine, content
-        );
-    }
-
-    private static CodeChunk create(
+        CodeChunkId id,
         CodeRepositoryId repositoryId,
         RepositorySnapshotId snapshotId,
         String commitSha,
@@ -72,16 +21,91 @@ public record CodeChunk(
         String symbolKind,
         String language,
         ChunkType chunkType,
-        int startLine,
-        int endLine,
-        String content
-    ) {
+        Integer startLine,
+        Integer endLine,
+        String content,
+        String contentHash,
+        Instant createdAt) {
+    public static CodeChunk fileChunk(
+            CodeRepositoryId repositoryId,
+            RepositorySnapshotId snapshotId,
+            String commitSha,
+            String filePath,
+            String language,
+            int startLine,
+            int endLine,
+            String content) {
+        return create(
+                repositoryId,
+                snapshotId,
+                commitSha,
+                filePath,
+                null,
+                null,
+                null,
+                language,
+                ChunkType.FILE,
+                startLine,
+                endLine,
+                content);
+    }
+
+    public static CodeChunk symbolChunk(
+            CodeRepositoryId repositoryId,
+            RepositorySnapshotId snapshotId,
+            String commitSha,
+            String filePath,
+            String language,
+            String symbolName,
+            String symbolKind,
+            int startLine,
+            int endLine,
+            String content) {
+        String symbolId = filePath + "#" + symbolName + ":" + startLine;
+        return create(
+                repositoryId,
+                snapshotId,
+                commitSha,
+                filePath,
+                symbolId,
+                symbolName,
+                symbolKind,
+                language,
+                ChunkType.SYMBOL,
+                startLine,
+                endLine,
+                content);
+    }
+
+    private static CodeChunk create(
+            CodeRepositoryId repositoryId,
+            RepositorySnapshotId snapshotId,
+            String commitSha,
+            String filePath,
+            String symbolId,
+            String symbolName,
+            String symbolKind,
+            String language,
+            ChunkType chunkType,
+            int startLine,
+            int endLine,
+            String content) {
         return new CodeChunk(
-            CodeChunkId.newId(), repositoryId, snapshotId,
-            commitSha == null || commitSha.isBlank() ? "unknown" : commitSha,
-            filePath, symbolId, symbolName, symbolKind, language, chunkType,
-            startLine, endLine, content, sha256(content), Instant.now()
-        );
+                CodeChunkId.newId(),
+                repositoryId,
+                snapshotId,
+                commitSha == null || commitSha.isBlank() ? "unknown" : commitSha,
+                filePath,
+                symbolId,
+                symbolName,
+                symbolKind,
+                language,
+                chunkType,
+                startLine,
+                endLine,
+                content,
+                sha256(content),
+                Instant.now());
     }
 
     public CodeChunk {
@@ -98,10 +122,10 @@ public record CodeChunk(
 
     private static String sha256(String content) {
         try {
-            return HexFormat.of().formatHex(
-                MessageDigest.getInstance("SHA-256")
-                    .digest(content.getBytes(StandardCharsets.UTF_8))
-            );
+            return HexFormat.of()
+                    .formatHex(
+                            MessageDigest.getInstance("SHA-256")
+                                    .digest(content.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 摘要功能不可用", exception);
         }

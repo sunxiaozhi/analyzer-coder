@@ -22,14 +22,16 @@ class RepositoryCodeBrowserServiceTest {
     @Test
     void listsTheWholeSnapshotAndReadsUtf8Content() throws Exception {
         Files.createDirectories(root.resolve("src/components"));
-        Files.writeString(root.resolve("src/components/Panel.vue"), "<template>\n  <main />\n</template>\n");
+        Files.writeString(
+                root.resolve("src/components/Panel.vue"), "<template>\n  <main />\n</template>\n");
         Files.writeString(root.resolve("README.md"), "# 示例");
         RepositoryCodeBrowserService service = service(2_000_000);
 
         var snapshot = service.list(repositoryId());
         assertThat(snapshot.branch()).isEqualTo("main");
-        assertThat(snapshot.files()).extracting(RepositoryCodeBrowserService.FileEntry::path)
-            .containsExactly("README.md", "src/components/Panel.vue");
+        assertThat(snapshot.files())
+                .extracting(RepositoryCodeBrowserService.FileEntry::path)
+                .containsExactly("README.md", "src/components/Panel.vue");
 
         var content = service.read(repositoryId(), "src/components/Panel.vue");
         assertThat(content.language()).isEqualTo("vue");
@@ -58,14 +60,14 @@ class RepositoryCodeBrowserServiceTest {
         RepositoryCodeBrowserService service = service(5);
 
         assertThatThrownBy(() -> service.read(repositoryId(), "../outside.txt"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("超出");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("超出");
         assertThatThrownBy(() -> service.read(repositoryId(), "binary.dat"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("二进制");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("二进制");
         assertThatThrownBy(() -> service.read(repositoryId(), "large.txt"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("大小限制");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("大小限制");
     }
 
     private RepositoryCodeBrowserService service(long maxBytes) {
@@ -77,13 +79,26 @@ class RepositoryCodeBrowserServiceTest {
     private CodeRepository repository() {
         Instant now = Instant.parse("2026-07-25T00:00:00Z");
         return new CodeRepository(
-            repositoryId(), "sample", root, RepositorySourceType.LOCAL_GIT, "main", "a".repeat(40),
-            "b".repeat(64), false, RepositorySnapshotId.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000002")),
-            root, root.resolve(".codegraph"), now, now, now, now
-        );
+                repositoryId(),
+                "sample",
+                root,
+                RepositorySourceType.LOCAL_GIT,
+                "main",
+                "a".repeat(40),
+                "b".repeat(64),
+                false,
+                RepositorySnapshotId.of(
+                        java.util.UUID.fromString("00000000-0000-0000-0000-000000000002")),
+                root,
+                root.resolve(".codegraph"),
+                now,
+                now,
+                now,
+                now);
     }
 
     private static CodeRepositoryId repositoryId() {
-        return CodeRepositoryId.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        return CodeRepositoryId.of(
+                java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"));
     }
 }
