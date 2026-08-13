@@ -52,7 +52,12 @@ public class IntelligenceController {
             @Valid @RequestBody Question body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
-        return service.ask(repoId, account.id(), body.question(), body.clientRequestId());
+        return service.ask(
+                repoId,
+                account.id(),
+                body.question(),
+                body.clientRequestId(),
+                body.threadId());
     }
 
     @GetMapping("/repositories/{repoId}/qa/records")
@@ -66,7 +71,7 @@ public class IntelligenceController {
     }
 
     @GetMapping("/repositories/{repoId}/qa/records/{conversationId}")
-    public IntelligenceService.Answer historyDetail(
+    public IntelligenceService.ThreadDetail historyDetail(
             @PathVariable UUID repoId,
             @PathVariable UUID conversationId,
             HttpServletRequest request) {
@@ -158,7 +163,7 @@ public class IntelligenceController {
         return account;
     }
 
-    public record Question(@NotBlank String question, UUID clientRequestId) {}
+    public record Question(@NotBlank String question, UUID clientRequestId, UUID threadId) {}
 
     public record HistoryTitle(String title) {}
 }

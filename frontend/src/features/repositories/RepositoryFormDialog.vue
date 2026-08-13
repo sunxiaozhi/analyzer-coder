@@ -5,11 +5,20 @@ import { repositoryCredentialsApi } from '@/api/repositoryCredentials';
 import type { RepositoryCredential } from '@/api/repositoryCredentials';
 import RepositoryCredentialManagerDialog from './RepositoryCredentialManagerDialog.vue';
 
+const repositorySourceOptions = [
+  { value: 'GITLAB', label: 'GitLab' },
+  { value: 'REMOTE_GIT', label: 'Git' },
+  { value: 'ZIP', label: 'ZIP' },
+  { value: 'LOCAL_GIT', label: '本地 Git' },
+] as const;
+type RepositorySourceType = (typeof repositorySourceOptions)[number]['value'];
+const defaultRepositorySource = repositorySourceOptions[0].value;
+
 const open = defineModel<boolean>({ required: true });
 const props = withDefaults(defineProps<{ busy?: boolean }>(), { busy: false });
 const emit = defineEmits<{
   submit: [payload: {
-    sourceType: 'LOCAL_GIT' | 'REMOTE_GIT' | 'GITLAB' | 'ZIP';
+    sourceType: RepositorySourceType;
     name: string;
     path: string;
     url: string;
@@ -19,7 +28,7 @@ const emit = defineEmits<{
   }];
 }>();
 const form = reactive({
-  sourceType: 'LOCAL_GIT' as 'LOCAL_GIT' | 'REMOTE_GIT' | 'GITLAB' | 'ZIP',
+  sourceType: defaultRepositorySource as RepositorySourceType,
   name: '',
   path: '',
   url: '',
@@ -36,7 +45,7 @@ const submitLocked = computed(() => props.busy || submitted.value);
 
 watch(open, value => {
   if (value) {
-    Object.assign(form, { sourceType: 'LOCAL_GIT', name: '', path: '', url: '', branch: '', credentialId: '' });
+    Object.assign(form, { sourceType: defaultRepositorySource, name: '', path: '', url: '', branch: '', credentialId: '' });
     file.value = null;
     submitted.value = false;
     void loadCredentials();
@@ -92,10 +101,13 @@ function submit() {
     <el-form label-position="top" :disabled="submitLocked">
       <el-form-item label="来源类型">
         <el-radio-group v-model="form.sourceType">
-          <el-radio-button value="LOCAL_GIT">本地 Git</el-radio-button>
-          <el-radio-button value="REMOTE_GIT">远程 Git</el-radio-button>
-          <el-radio-button value="GITLAB">GitLab</el-radio-button>
-          <el-radio-button value="ZIP">ZIP</el-radio-button>
+          <el-radio-button
+            v-for="option in repositorySourceOptions"
+            :key="option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </el-radio-button>
         </el-radio-group>
       </el-form-item>
       <el-form-item label="仓库名称" required><el-input v-model="form.name" maxlength="100" /></el-form-item>

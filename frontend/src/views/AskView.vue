@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { Clock, Delete, EditPen, Plus, Refresh, Tickets } from '@element-plus/icons-vue';
+import { Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { intelligenceApi, type Citation, type CodeReference, type QaHistoryRecord } from '@/api/intelligence';
 import { getRepositoryProfile, type RepositoryPreparation } from '@/api/repositories';
 import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
-import AnswerEvidencePanel from '@/features/ask/AnswerEvidencePanel.vue';
+import AskHistorySidebar from '@/features/ask/AskHistorySidebar.vue';
 import { useAskConversation } from '@/features/ask/useAskConversation';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
@@ -14,9 +14,7 @@ const repositories = useRepositoryStore();
 const router = useRouter();
 const conversation = useAskConversation();
 const history = shallowRef<QaHistoryRecord[]>([]);
-const historyOpen = shallowRef(false);
 const historyLoading = shallowRef(false);
-const activeRecordId = shallowRef<string | null>(null);
 const readiness = shallowRef<RepositoryPreparation | null>(null);
 const readinessLoading = shallowRef(false);
 let contextVersion = 0;
@@ -41,7 +39,6 @@ async function loadContext(repositoryId: string | null) {
   const version = ++contextVersion;
   conversation.invalidate();
   history.value = [];
-  activeRecordId.value = null;
   readiness.value = null;
   if (!repositoryId) return;
   readinessLoading.value = true;
@@ -73,7 +70,6 @@ async function send() {
   try {
     const result = await conversation.send(repositoryId);
     if (!result || result.repositoryId !== repositories.selectedRepositoryId) return;
-    activeRecordId.value = result.conversationId;
     await reloadHistory();
   } catch { /* 错误保留在回答区，可直接重试。 */ }
 }
@@ -83,7 +79,7 @@ async function retry() {
   if (!repositoryId) return;
   try {
     const result = await conversation.retry(repositoryId);
-    if (result) { activeRecordId.value = result.conversationId; await reloadHistory(); }
+    if (result) await reloadHistory();
   } catch { /* 错误保留在回答区。 */ }
 }
 
@@ -91,11 +87,9 @@ async function openHistory(record: QaHistoryRecord) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId || record.repositoryId !== repositoryId) return;
   try {
-    const result = await intelligenceApi.historyDetail(repositoryId, record.conversationId);
+    const result = await intelligenceApi.historyDetail(repositoryId, record.threadId);
     if (repositoryId !== repositories.selectedRepositoryId) return;
     conversation.restore(result);
-    activeRecordId.value = record.conversationId;
-    historyOpen.value = false;
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法打开历史记录'); }
 }
 
@@ -104,7 +98,7 @@ async function renameHistory(record: QaHistoryRecord) {
     const { value } = await ElMessageBox.prompt('输入新的历史记录标题', '重命名记录', {
       inputValue: record.title, inputPattern: /^.{1,80}$/s, inputErrorMessage: '标题长度必须为 1–80 个字符',
     });
-    await intelligenceApi.renameHistory(record.repositoryId, record.conversationId, value.trim());
+    await intelligenceApi.renameHistory(record.repositoryId, record.threadId, value.trim());
     await reloadHistory();
     ElMessage.success('历史记录已重命名');
   } catch (error) {
@@ -115,8 +109,8 @@ async function renameHistory(record: QaHistoryRecord) {
 async function deleteHistory(record: QaHistoryRecord) {
   try {
     await ElMessageBox.confirm(`删除“${record.title}”及其引用证据？`, '删除历史记录', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' });
-    await intelligenceApi.deleteHistory(record.repositoryId, record.conversationId);
-    if (activeRecordId.value === record.conversationId) { conversation.reset(); activeRecordId.value = null; }
+    await intelligenceApi.deleteHistory(record.repositoryId, record.threadId);
+    if (conversation.threadId.value === record.threadId) conversation.reset();
     await reloadHistory();
     ElMessage.success('历史记录已删除');
   } catch (error) {
@@ -155,9 +149,6 @@ async function openGraph(reference: CodeReference) {
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法解析图谱目标'); }
 }
 
-function statusLabel(status: QaHistoryRecord['evidenceStatus']) {
-  return ({ SUPPORTED: '引用已校验', DEGRADED: '本地证据', MODEL_OUTPUT_REJECTED: '已安全降级', INSUFFICIENT: '证据不足' })[status];
-}
 
 watch(() => repositories.selectedRepositoryId, loadContext);
 onMounted(async () => {
@@ -177,57 +168,34 @@ onMounted(async () => {
       <el-tag :type="readinessCopy?.type" effect="plain" round>{{ readinessCopy?.label }}</el-tag>
       <p v-if="readiness && !canAsk">当前仓库还没有可检索的代码内容，请先完成索引。</p>
       <div class="command-actions">
-        <el-button :icon="Tickets" @click="historyOpen = true">历史记录 {{ history.length }}</el-button>
-        <el-button :icon="Plus" type="primary" plain @click="conversation.reset(); activeRecordId = null">新问题</el-button>
+        <el-button :icon="Plus" type="primary" plain @click="conversation.reset()">新会话</el-button>
       </div>
     </header>
 
+    <AskHistorySidebar :records="history" :active-thread-id="conversation.threadId.value" :loading="historyLoading"
+      @open="openHistory" @refresh="reloadHistory" @rename="renameHistory" @delete="deleteHistory" />
+
     <AskConversationPanel
       v-model="conversation.question.value"
-      :answer="conversation.answer.value"
-      :submitted-question="conversation.submittedQuestion.value"
+      :turns="conversation.turns.value"
+      :active-answer-id="conversation.activeAnswerId.value"
+      :restored-thread-id="conversation.threadId.value"
+      :pending-question="conversation.pendingQuestion.value"
       :request-state="conversation.requestState.value"
       :error="conversation.error.value"
-      :active-citation-id="conversation.activeCitationId.value"
       :disabled="!canAsk"
-      @send="send" @retry="retry" @select-citation="conversation.selectCitation"
-    />
-    <AnswerEvidencePanel
-      :citations="conversation.answer.value?.citations ?? []"
-      :active-citation-id="conversation.activeCitationId.value"
+      @send="send" @retry="retry" @select-answer="conversation.selectAnswer"
       @open-knowledge="openKnowledge" @open-code="openCode" @open-graph="openGraph"
     />
 
-    <el-drawer v-model="historyOpen" title="历史记录" size="420px" class="qa-history-drawer">
-      <div class="history-head">
-        <span>仅显示当前仓库的一问一答记录</span>
-        <el-button link :icon="Refresh" :loading="historyLoading" @click="reloadHistory">刷新</el-button>
-      </div>
-      <el-empty v-if="!historyLoading && !history.length" description="还没有历史记录，发送第一个问题后会出现在这里" />
-      <div v-loading="historyLoading" class="history-list">
-        <article v-for="record in history" :key="record.conversationId" :class="{ active: record.conversationId === activeRecordId }">
-          <button class="history-main" @click="openHistory(record)">
-            <b>{{ record.title }}</b>
-            <p>{{ record.question }}</p>
-            <span><Clock />{{ new Date(record.createdAt).toLocaleString() }} · {{ statusLabel(record.evidenceStatus) }} · {{ record.citationCount }} 条证据</span>
-          </button>
-          <div>
-            <el-button link :icon="EditPen" title="重命名" @click="renameHistory(record)" />
-            <el-button link type="danger" :icon="Delete" title="删除" @click="deleteHistory(record)" />
-          </div>
-        </article>
-      </div>
-    </el-drawer>
   </section>
 </template>
 
 <style scoped>
-.qa-page { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(280px,.8fr); grid-template-rows:auto minmax(0,1fr); gap:12px 0; min-height:0; height:100%; }
+.qa-page { display:grid; grid-template-columns:280px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:12px; min-height:0; height:100%; }
 .qa-command { grid-column:1/-1; display:flex; min-height:62px; align-items:center; gap:12px; padding:9px 14px; border:1px solid #dedee3; border-radius:7px; background:#fff; }
 .scope-copy { display:grid; grid-template-columns:auto auto; align-items:baseline; gap:2px 9px; min-width:0; }.scope-copy>span { grid-row:1/3; align-self:center; padding-right:10px; color:#0066cc; border-right:2px solid #90bde5; font-size:9px; font-weight:700; letter-spacing:.08em; }.scope-copy strong { overflow:hidden; color:#2d3035; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }.scope-copy small { color:#858a90; font-size:9px; }
 .qa-command>p { margin:0; color:#7b5a1b; font-size:10px; }.command-actions { display:flex; gap:8px; margin-left:auto; }
-.history-head { display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; color:#7a8087; border-bottom:1px solid #e7e8eb; font-size:10px; }.history-list { min-height:120px; }
-.history-list article { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; padding:12px 3px; border-bottom:1px solid #eceef0; }.history-list article.active { background:#f2f7fc; box-shadow:inset 3px 0 #0066cc; }.history-main { display:grid; min-width:0; gap:5px; padding:0 8px; text-align:left; border:0; background:transparent; }.history-main b,.history-main p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.history-main b { color:#2f3338; font-size:12px; }.history-main p { margin:0; color:#656c73; font-size:10px; }.history-main span { display:flex; align-items:center; gap:4px; color:#8a9096; font-size:9px; }.history-main svg { width:11px; }.history-list article>div { display:flex; }
-@media (max-width:900px) { .qa-page { grid-template-columns:1fr; grid-template-rows:auto minmax(620px,1fr) auto; gap:10px; overflow:auto; }.qa-command { grid-column:1; }.qa-command>p { display:none; } }
+@media (max-width:900px) { .qa-page { grid-template-columns:1fr; grid-template-rows:auto auto minmax(620px,1fr); gap:10px; overflow:auto; }.qa-command { grid-column:1; }.qa-command>p { display:none; } }
 @media (max-width:760px) { .qa-page { height:auto; }.qa-command { flex-wrap:wrap; }.scope-copy { flex:1; }.command-actions { width:100%; margin-left:0; }.command-actions .el-button { flex:1; } }
 </style>

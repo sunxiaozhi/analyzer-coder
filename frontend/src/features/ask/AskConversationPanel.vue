@@ -2,32 +2,48 @@
 import { Promotion, RefreshRight } from '@element-plus/icons-vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
-import { computed, nextTick, onActivated, watch, useTemplateRef } from 'vue';
-import type { Answer } from '@/api/intelligence';
+import { nextTick, onActivated, watch, useTemplateRef } from 'vue';
+import type { Answer, Citation, CodeReference } from '@/api/intelligence';
+import AnswerEvidencePanel from './AnswerEvidencePanel.vue';
 import type { AskRequestState } from './useAskConversation';
 
 const question = defineModel<string>({ required: true });
 const props = defineProps<{
-  answer: Answer | null;
-  submittedQuestion: string;
+  turns: readonly Answer[];
+  activeAnswerId: string | null;
+  pendingQuestion: string;
   requestState: AskRequestState;
   error: string | null;
-  activeCitationId: string | null;
   disabled?: boolean;
+  restoredThreadId?: string | null;
 }>();
-const emit = defineEmits<{ send: []; retry: []; selectCitation: [id: string] }>();
+const emit = defineEmits<{
+  send: [];
+  retry: [];
+  selectAnswer: [conversationId: string];
+  openKnowledge: [citation: Citation];
+  openCode: [reference: CodeReference];
+  openGraph: [reference: CodeReference];
+}>();
 const messagesElement = useTemplateRef<HTMLElement>('messages');
-const renderedAnswer = computed(() => DOMPurify.sanitize(
-  marked.parse(props.answer?.answer ?? '', { async: false, gfm: true }),
-  { USE_PROFILES: { html: true } },
-));
+
+function renderedAnswer(answer: string) {
+  return DOMPurify.sanitize(marked.parse(answer, { async: false, gfm: true }), {
+    USE_PROFILES: { html: true },
+  });
+}
 
 async function scrollToLatest() {
   await nextTick();
   if (messagesElement.value) messagesElement.value.scrollTop = messagesElement.value.scrollHeight;
 }
 
-watch(() => [props.answer?.conversationId, props.requestState], scrollToLatest);
+watch(() => props.restoredThreadId, async (threadId, previousThreadId) => {
+  if (!threadId || threadId === previousThreadId) return;
+  await nextTick();
+  if (messagesElement.value) messagesElement.value.scrollTop = 0;
+});
+watch(() => [props.turns.length, props.requestState], scrollToLatest);
 onActivated(scrollToLatest);
 
 function statusLabel(status: Answer['evidenceStatus']) {
@@ -51,53 +67,50 @@ function shortcut(event: KeyboardEvent) {
   <main class="chat-column">
     <div ref="messages" class="messages" aria-live="polite">
       <el-empty
-        v-if="!submittedQuestion && !answer && requestState === 'idle'"
+        v-if="!turns.length && !pendingQuestion && requestState === 'idle'"
         description="可以询问业务知识、实现位置或代码影响"
       />
 
-      <article v-if="submittedQuestion" class="message user">
-        <span>你</span>
-        <p>{{ submittedQuestion }}</p>
-      </article>
+      <template v-for="turn in turns" :key="turn.conversationId">
+        <article class="message user">
+          <span>你</span>
+          <p>{{ turn.question }}</p>
+        </article>
+        <article
+          :class="['message', 'assistant', { selected: turn.conversationId === activeAnswerId }]"
+          @click="emit('selectAnswer', turn.conversationId)"
+        >
+          <span>AI</span>
+          <div class="assistant-content">
+            <div class="answer-markdown" v-html="renderedAnswer(turn.answer)"></div>
+            <div class="answer-trust">
+              <strong :data-status="turn.evidenceStatus">{{ statusLabel(turn.evidenceStatus) }}</strong>
+              <em v-if="turn.conversationId === activeAnswerId" class="current-turn">当前轮次</em>
+              <small>第 {{ turn.turnNo }} 轮 · {{ turn.provider }} · {{ new Date(turn.createdAt).toLocaleString() }}</small>
+            </div>
+            <AnswerEvidencePanel v-if="turn.citations.length" :citations="turn.citations" @click.stop
+              @open-knowledge="emit('openKnowledge', $event)" @open-code="emit('openCode', $event)"
+              @open-graph="emit('openGraph', $event)" />
+          </div>
+        </article>
+      </template>
 
+      <article v-if="requestState === 'sending' && pendingQuestion" class="message user">
+        <span>你</span><p>{{ pendingQuestion }}</p>
+      </article>
       <article v-if="requestState === 'sending'" class="message assistant pending">
         <span>AI</span>
         <div class="answer-loading">
-          <i></i>
-          <div><b>正在检索当前仓库</b><small>正在核对代码和知识证据…</small></div>
+          <i></i><div><b>正在结合上下文检索当前仓库</b><small>正在核对代码和知识证据…</small></div>
         </div>
       </article>
-
       <article v-if="requestState === 'failed'" class="message assistant failed">
         <span>AI</span>
         <el-alert type="error" :closable="false" show-icon>
-          <template #title>本次提问未完成</template>
+          <template #title>本轮提问未完成</template>
           <p>{{ error }}</p>
           <el-button :icon="RefreshRight" @click="emit('retry')">重新发送</el-button>
         </el-alert>
-      </article>
-
-      <article v-if="answer" class="message assistant">
-        <span>AI</span>
-        <div class="assistant-content">
-          <div class="answer-markdown" v-html="renderedAnswer"></div>
-          <div class="answer-trust">
-            <strong :data-status="answer.evidenceStatus">{{ statusLabel(answer.evidenceStatus) }}</strong>
-            <small>{{ answer.provider }} · {{ new Date(answer.createdAt).toLocaleString() }}</small>
-          </div>
-          <div v-if="answer.citations.length" class="citations">
-            <button
-              v-for="citation in answer.citations"
-              :key="citation.id"
-              :class="{ active: citation.id === activeCitationId }"
-              @click="emit('selectCitation', citation.id)"
-            >
-              <span>[S{{ citation.rank }}] {{ citation.sourceType === 'KNOWLEDGE' ? '知识库' : '关联代码' }}</span>
-              <b>{{ citation.title }}</b>
-              <small>{{ citation.channels.join(' + ') }} · {{ citation.score.toFixed(2) }}</small>
-            </button>
-          </div>
-        </div>
       </article>
     </div>
 
@@ -107,7 +120,7 @@ function shortcut(event: KeyboardEvent) {
         type="textarea"
         :autosize="{ minRows: 4, maxRows: 8 }"
         :disabled="disabled"
-        placeholder="询问业务规则、实现位置、调用关系或影响范围…"
+        :placeholder="turns.length ? '继续追问当前会话…' : '询问业务规则、实现位置、调用关系或影响范围…'"
         @keydown="shortcut"
       />
       <el-button
@@ -124,108 +137,38 @@ function shortcut(event: KeyboardEvent) {
 </template>
 
 <style scoped>
-.chat-column {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid #dedee3;
-  border-radius: 7px 0 0 7px;
-  background: #fff;
-}
-.messages {
-  min-height: 0;
-  padding: 22px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-.message {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
-  gap: 10px;
-  margin-bottom: 22px;
-}
-.message > span {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  border-radius: 6px;
-  background: #eee;
-  font-size: 10px;
-  font-weight: 700;
-}
-.message.user {
-  display: flex;
-  justify-content: flex-end;
-}
-.message.user > span { display: none; }
-.message.user > p {
-  max-width: min(78%, 780px);
-  margin: 0;
-  padding: 11px 16px;
-  color: #fff;
-  border-radius: 18px 18px 3px 18px;
-  background: #0066cc;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-.message.assistant { grid-template-columns: minmax(0, 1fr); }
-.message.assistant > span { display: none; }
-.assistant-content { display: grid; min-width: 0; gap: 12px; }
-.answer-markdown { color: #34383e; font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
-.answer-markdown :deep(p) { margin: 3px 0 14px; }
-.answer-markdown :deep(p:last-child) { margin-bottom: 0; }
-.answer-markdown :deep(h1),
-.answer-markdown :deep(h2),
-.answer-markdown :deep(h3) { margin: 22px 0 9px; color: #25292e; line-height: 1.4; }
-.answer-markdown :deep(h1) { font-size: 20px; }
-.answer-markdown :deep(h2) { font-size: 17px; }
-.answer-markdown :deep(h3) { font-size: 15px; }
-.answer-markdown :deep(ul),
-.answer-markdown :deep(ol) { padding-left: 23px; }
-.answer-markdown :deep(code) { padding: 2px 5px; color: #a52d20; border: 1px solid #e1e4e8; border-radius: 4px; background: #f4f6f8; font: 12px Consolas, monospace; }
-.answer-markdown :deep(pre) { padding: 15px; overflow: auto; color: #e8edf3; border-radius: 6px; background: #20242a; }
-.answer-markdown :deep(pre code) { padding: 0; color: inherit; border: 0; background: transparent; }
-.answer-trust { display: flex; gap: 8px; align-items: center; color: #66717c; font-size: 9px; }
-.answer-trust strong { padding: 3px 7px; color: #1e6b44; border-radius: 4px; background: #e9f7ef; }
-.answer-trust strong[data-status="MODEL_OUTPUT_REJECTED"],
-.answer-trust strong[data-status="INSUFFICIENT"] { color: #9a4c22; background: #fff0e8; }
-.citations { display: grid; gap: 7px; width: min(100%, 680px); }
-.citations button {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 3px 10px;
-  align-items: baseline;
-  width: 100%;
-  padding: 9px 11px;
-  text-align: left;
-  border: 1px solid #dbe6f0;
-  background: #f7fafd;
-}
-.citations button:hover,
-.citations button.active { border-color: #9fc3e5; background: #eef6fd; box-shadow: inset 3px 0 #0066cc; }
-.citations button span { color: #0066cc; font-size: 9px; font-weight: 650; }
-.citations button b { overflow-wrap: anywhere; color: #34404b; font-size: 10px; }
-.citations button small { grid-column: 2; color: #78838d; font: 8px "SFMono-Regular", Consolas, monospace; }
-.answer-loading { display: flex; gap: 10px; align-items: center; padding: 4px 0; }
-.answer-loading i { width: 13px; height: 13px; border: 2px solid #b9d2e8; border-top-color: #0066cc; border-radius: 50%; animation: spin .8s linear infinite; }
-.answer-loading div { display: grid; gap: 3px; }
-.answer-loading b { font-size: 12px; }
-.answer-loading small { color: #77818a; font-size: 10px; }
-.message.failed :deep(.el-alert) { width: min(100%, 680px); }
-.composer { display: flex; align-items: flex-end; gap: 10px; padding: 12px; border-top: 1px solid #ececef; background: #fff; }
-.composer .el-button { flex: none; margin-bottom: 4px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .answer-loading i { animation: none; } }
-@media (max-width: 760px) {
-  .chat-column { min-height: 620px; border-radius: 7px; }
-  .messages { max-height: 65vh; padding: 16px; }
-  .message.user > p { max-width: 90%; }
-}
+.chat-column { display:grid; grid-template-rows:minmax(0,1fr) auto; min-width:0; min-height:0; overflow:hidden; border:1px solid #dedee3; border-radius:7px; background:#fff; }
+.messages { min-height:0; padding:22px; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.message { display:grid; grid-template-columns:26px minmax(0,1fr); gap:10px; margin-bottom:22px; }
+.message>span { display:grid; place-items:center; align-self:start; width:24px; height:24px; color:#fff; border-radius:50%; background:#34383d; font-size:9px; font-weight:700; }
+.message.user>span { color:#005eb8; background:#e8f2fc; }
+.message.user>p { justify-self:end; max-width:78%; margin:0; padding:9px 12px; color:#28313a; border-radius:10px 10px 2px 10px; background:#edf3f8; font-size:12px; line-height:1.55; white-space:pre-wrap; }
+.message.assistant { cursor:pointer; border:1px solid transparent; border-radius:7px; transition:background-color .16s ease,border-color .16s ease; }
+.message.assistant.selected { border-color:#dce8f3; background:#f7fafc; }
+.assistant-content { display:grid; gap:12px; min-width:0; padding:2px 8px 8px 0; }
+.answer-markdown { min-width:0; max-width:100%; color:#30363d; font-size:13px; line-height:1.72; overflow-wrap:anywhere; }
+.answer-markdown :deep(h1),.answer-markdown :deep(h2),.answer-markdown :deep(h3),.answer-markdown :deep(h4) { color:#1f2933; line-height:1.4; }
+.answer-markdown :deep(h1) { margin:0 0 18px; padding-bottom:9px; border-bottom:1px solid #dfe3e8; font-size:21px; }
+.answer-markdown :deep(h2) { margin:24px 0 11px; padding-bottom:6px; border-bottom:1px solid #eceff2; font-size:18px; }
+.answer-markdown :deep(h3) { margin:20px 0 8px; font-size:15px; }.answer-markdown :deep(h4) { margin:18px 0 7px; font-size:14px; }
+.answer-markdown :deep(p) { max-width:none; margin:0 0 13px; font-size:inherit; line-height:inherit; }.answer-markdown :deep(p:last-child) { margin-bottom:0; }
+.answer-markdown :deep(ul),.answer-markdown :deep(ol) { margin:0 0 14px; padding-left:24px; }.answer-markdown :deep(li) { margin:3px 0; }
+.answer-markdown :deep(a) { color:#0066cc; text-decoration:underline; text-underline-offset:3px; }
+.answer-markdown :deep(blockquote) { margin:14px 0; padding:9px 14px; color:#566573; border-left:3px solid #c5cbd1; background:#f6f7f8; }
+.answer-markdown :deep(code) { padding:2px 5px; color:#b42318; border:1px solid #dfe4e8; border-radius:4px; background:#f3f5f7; font:12px/1.5 "SFMono-Regular",Consolas,monospace; }
+.answer-markdown :deep(pre) { max-width:100%; margin:14px 0; padding:14px 16px; overflow:auto; color:#e6edf3; border:1px solid #34373d; border-radius:6px; background:#202124; white-space:pre; }
+.answer-markdown :deep(pre code) { padding:0; color:inherit; border:0; background:transparent; line-height:1.65; }
+.answer-markdown :deep(table) { display:block; width:max-content; max-width:100%; margin:14px 0; overflow-x:auto; border-spacing:0; border-collapse:collapse; font-size:11px; }
+.answer-markdown :deep(th),.answer-markdown :deep(td) { min-width:100px; padding:8px 10px; border:1px solid #dfe3e8; text-align:left; vertical-align:top; }.answer-markdown :deep(th) { background:#f5f7f9; font-weight:650; }
+.answer-markdown :deep(hr) { margin:22px 0; border:0; border-top:1px solid #dfe3e8; }.answer-markdown :deep(img) { display:block; max-width:100%; height:auto; border-radius:6px; }
+.answer-markdown :deep(input[type="checkbox"]) { margin-right:6px; }
+.answer-trust { display:flex; gap:8px; align-items:center; color:#66717c; font-size:9px; }
+.current-turn { margin-left:auto; padding:3px 7px; color:#4f6b82; border:1px solid #ccdce9; border-radius:4px; background:#f2f7fb; font-size:9px; font-style:normal; }
+.answer-trust strong { padding:3px 7px; color:#1e6b44; border-radius:4px; background:#e9f7ef; }
+.answer-trust strong[data-status="MODEL_OUTPUT_REJECTED"],.answer-trust strong[data-status="INSUFFICIENT"] { color:#9a4c22; background:#fff0e8; }
+.citations { display:grid; gap:7px; width:min(100%,680px); }.citations button { display:grid; grid-template-columns:auto minmax(0,1fr); gap:3px 10px; align-items:baseline; width:100%; padding:9px 11px; text-align:left; border:1px solid #dbe6f0; background:#f7fafd; }.citations button:hover,.citations button.active { border-color:#9fc3e5; background:#eef6fd; box-shadow:inset 3px 0 #0066cc; }.citations button span { color:#0066cc; font-size:9px; font-weight:650; }.citations button b { overflow-wrap:anywhere; color:#34404b; font-size:10px; }.citations button small { grid-column:2; color:#78838d; font:8px "SFMono-Regular",Consolas,monospace; }
+.answer-loading { display:flex; gap:10px; align-items:center; padding:4px 0; }.answer-loading i { width:13px; height:13px; border:2px solid #b9d2e8; border-top-color:#0066cc; border-radius:50%; animation:spin .8s linear infinite; }.answer-loading div { display:grid; gap:3px; }.answer-loading b { font-size:12px; }.answer-loading small { color:#77818a; font-size:10px; }.message.failed :deep(.el-alert) { width:min(100%,680px); }
+.composer { display:flex; align-items:flex-end; gap:10px; padding:12px; border-top:1px solid #ececef; background:#fff; }.composer .el-button { flex:none; margin-bottom:4px; }
+@keyframes spin { to { transform:rotate(360deg); } } @media (prefers-reduced-motion:reduce) { .answer-loading i { animation:none; } }
+@media (max-width:760px) { .chat-column { min-height:620px; border-radius:7px; }.messages { max-height:65vh; padding:16px; }.message.user>p { max-width:90%; } }
 </style>
