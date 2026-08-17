@@ -14,7 +14,7 @@ Java 17 + Spring Boot 3.5 后端，承载账号、仓库、索引、检索、问
 
 ## 一键启动
 
-Windows：`pwsh -File scripts/start.ps1`；Linux：`bash scripts/start.sh`。脚本自动生成安全配置、构建镜像并等待健康检查。
+Linux 在源码根目录执行 `bash scripts/start.sh`。脚本依次构建前端和后端、启动 PostgreSQL/pgvector 与 Nginx、生成安全配置、启动宿主机后端并等待健康检查。完整部署步骤见 `docs/08-linux-git-deployment.md`。
 
 ## 本地启动
 
@@ -52,7 +52,7 @@ mvn -pl backend -am test
 - 生产 Compose：`compose.prod.yaml`
 - 后端容器：`backend/Dockerfile`
 - systemd/Nginx/环境模板：`deploy/`
-- 完整安装与升级步骤：`docs/06-local-run.md`
+- 完整 Git 部署与升级步骤：`docs/08-linux-git-deployment.md`
 
 ## 安全约束
 

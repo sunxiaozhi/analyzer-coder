@@ -61,17 +61,11 @@ echo "Fetching Nginx image for $PLATFORM..."
 docker pull --platform "$PLATFORM" nginx:1.27-alpine
 docker tag nginx:1.27-alpine analyzer-coder/nginx:offline
 
-mkdir -p "$PACKAGE_DIR/scripts" "$PACKAGE_DIR/deploy"
-cp compose.offline.yaml "$PACKAGE_DIR/compose.components.yaml"
-cp deploy/nginx-components.conf "$PACKAGE_DIR/deploy/nginx-components.conf"
-cp deploy/analyzer-coder.service "$PACKAGE_DIR/deploy/analyzer-coder.service"
-cp deploy/analyzer-coder-components.env.example "$PACKAGE_DIR/deploy/analyzer-coder-components.env.example"
-cp scripts/start.sh "$PACKAGE_DIR/scripts/start.sh"
-cp scripts/start.ps1 "$PACKAGE_DIR/scripts/start.ps1"
+mkdir -p "$PACKAGE_DIR"
 cp scripts/offline-install.sh "$PACKAGE_DIR/install.sh"
 cp scripts/offline-install.ps1 "$PACKAGE_DIR/install.ps1"
 cp deploy/OFFLINE-README.md "$PACKAGE_DIR/README.md"
-cp docs/07-linux-component-quickstart.md "$PACKAGE_DIR/STARTUP-GUIDE.md"
+cp docs/08-linux-git-deployment.md "$PACKAGE_DIR/STARTUP-GUIDE.md"
 
 cat > "$PACKAGE_DIR/MANIFEST.txt" <<EOF
 Analyzer Coder offline package
@@ -97,7 +91,7 @@ else
   echo "Missing SHA-256 command: sha256sum or shasum" >&2
   exit 1
 fi
-chmod +x install.sh scripts/start.sh
+chmod +x install.sh
 
 cd "$OUTPUT_DIR"
 tar -czf "$ARCHIVE_PATH" "$PACKAGE_NAME"

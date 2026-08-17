@@ -103,7 +103,7 @@ sudo chown -R "$(id -un)":"$(id -gn)" \
 
 ```bash
 cd /opt/analyzer-coder-components
-bash install.sh --load-only
+bash install.sh
 ```
 
 检查镜像：
@@ -148,7 +148,7 @@ cd /opt/analyzer-coder
 ls pom.xml \
   backend/pom.xml \
   frontend/package.json \
-  scripts/start-on-site.sh \
+  scripts/start.sh \
   compose.offline.yaml
 ```
 
@@ -158,7 +158,7 @@ ls pom.xml \
 
 ```bash
 cd /opt/analyzer-coder
-bash scripts/start-on-site.sh
+bash scripts/start.sh
 ```
 
 脚本自动依次执行：
@@ -178,13 +178,13 @@ bash scripts/start-on-site.sh
 如果 `frontend/node_modules` 已经存在，并且 `package-lock.json` 没有变化，可以执行：
 
 ```bash
-bash scripts/start-on-site.sh --skip-npm-ci
+bash scripts/start.sh --skip-npm-ci
 ```
 
 配置好外部 HTTPS 代理后，可以启用 Secure Cookie：
 
 ```bash
-bash scripts/start-on-site.sh --skip-npm-ci --https
+bash scripts/start.sh --skip-npm-ci --https
 ```
 
 首次启动会显示：
@@ -272,6 +272,8 @@ cat /opt/analyzer-coder/runtime/backend.pid
 
 ## 9. 远程访问
 
+### 9.1 SSH 隧道访问（推荐）
+
 Nginx 默认只监听服务器的 `127.0.0.1:8088`。推荐从个人电脑建立 SSH 隧道：
 
 ```bash
@@ -286,7 +288,119 @@ ssh \
 http://127.0.0.1:8088
 ```
 
-正式外部访问应配置 HTTPS 边缘代理，不建议直接把 `8088`、后端 `8080` 或 PostgreSQL `5432` 暴露到公网。
+### 9.2 使用公网 IP 直接访问
+
+需要直接通过以下地址访问时：
+
+```text
+http://<服务器公网IP>:8088
+```
+
+修改组件监听地址：
+
+```bash
+cd /opt/analyzer-coder
+
+sed -i \
+  's/^APP_HTTP_BIND_ADDRESS=.*/APP_HTTP_BIND_ADDRESS=0.0.0.0/' \
+  .env.components
+```
+
+确认配置：
+
+```bash
+grep '^APP_HTTP_' .env.components
+```
+
+应显示：
+
+```text
+APP_HTTP_BIND_ADDRESS=0.0.0.0
+APP_HTTP_PORT=8088
+```
+
+因为公网 IP 直连使用普通 HTTP，应用不能启用 Secure Cookie：
+
+```bash
+sed -i \
+  's/^APP_SESSION_COOKIE_SECURE=.*/APP_SESSION_COOKIE_SECURE=false/' \
+  .env.application
+```
+
+重新创建 Nginx 端口映射：
+
+```bash
+docker compose \
+  --env-file .env.components \
+  -f compose.offline.yaml \
+  up -d --force-recreate nginx
+```
+
+如果修改了 `APP_SESSION_COOKIE_SECURE`，重新启动宿主机后端：
+
+```bash
+bash scripts/start.sh --skip-npm-ci
+```
+
+检查端口映射：
+
+```bash
+docker compose \
+  --env-file .env.components \
+  -f compose.offline.yaml \
+  ps
+```
+
+Nginx 应显示类似：
+
+```text
+0.0.0.0:8088->8080/tcp
+```
+
+开放主机防火墙：
+
+```bash
+sudo ufw allow 8088/tcp
+sudo ufw status
+```
+
+使用云服务器时，还需要在安全组中允许公网 TCP `8088`。安全组和主机防火墙不得向公网开放：
+
+```text
+5432  PostgreSQL
+8080  宿主机后端
+```
+
+Nginx 容器需要通过 Docker 网桥访问宿主机后端 `8080`。如果 UFW 默认拒绝入站连接，先查看组件网络子网：
+
+```bash
+docker network inspect \
+  analyzer-coder-components_default \
+  --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+```
+
+假设输出 `172.20.0.0/16`，仅允许该子网访问后端：
+
+```bash
+sudo ufw allow \
+  from 172.20.0.0/16 \
+  to any port 8080 \
+  proto tcp
+```
+
+从外部电脑验证：
+
+```bash
+curl -I http://<服务器公网IP>:8088/
+```
+
+浏览器访问：
+
+```text
+http://<服务器公网IP>:8088
+```
+
+公网 IP 直连采用明文 HTTP，登录密码和会话可能被网络中间方窃听，只适合临时验收或受控网络。正式外部访问应保留 `127.0.0.1:8088`，并在前面配置受信任的 HTTPS 边缘代理。
 
 ## 10. 后续 Git 更新
 
@@ -306,13 +420,13 @@ git pull --ff-only origin v2
 重新构建并启动：
 
 ```bash
-bash scripts/start-on-site.sh
+bash scripts/start.sh
 ```
 
 只有确认 `frontend/package-lock.json` 没有变化时，才建议使用：
 
 ```bash
-bash scripts/start-on-site.sh --skip-npm-ci
+bash scripts/start.sh --skip-npm-ci
 ```
 
 脚本会验证 `runtime/backend.pid`，只停止由当前源码目录上一次启动的后端进程，然后启动新的 JAR。
@@ -322,7 +436,7 @@ bash scripts/start-on-site.sh --skip-npm-ci
 ```bash
 cd /opt/analyzer-coder
 git pull --ff-only origin v2
-bash scripts/start-on-site.sh
+bash scripts/start.sh
 ```
 
 ## 11. 停止系统

@@ -1,12 +1,11 @@
 [CmdletBinding()]
 param(
-    [switch]$LoadOnly,
     [switch]$Help
 )
 
 if ($Help) {
-    Write-Host 'Usage: pwsh -File install.ps1 [-LoadOnly]'
-    Write-Host '  -LoadOnly Verify and import images without starting services.'
+    Write-Host 'Usage: pwsh -File install.ps1'
+    Write-Host 'Verify and import the PostgreSQL/pgvector and Nginx images.'
     exit 0
 }
 
@@ -33,12 +32,4 @@ Write-Host 'images.tar: checksum OK' -ForegroundColor Green
 Write-Host 'Importing offline Docker images...'
 & docker load --input (Join-Path $rootDir 'images.tar')
 if ($LASTEXITCODE -ne 0) { throw 'docker load failed.' }
-
-if ($LoadOnly) {
-    Write-Host 'Images imported. Start later with: pwsh -File scripts/start.ps1 -Components'
-    exit 0
-}
-
-$startArguments = @('-File', (Join-Path $rootDir 'scripts\start.ps1'), '-Components')
-& pwsh @startArguments
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host 'Images imported. Clone the application repository and run: bash scripts/start.sh' -ForegroundColor Green

@@ -66,18 +66,11 @@ try {
     Invoke-Docker @('pull', '--platform', $Platform, 'nginx:1.27-alpine')
     Invoke-Docker @('tag', 'nginx:1.27-alpine', 'analyzer-coder/nginx:offline')
 
-    New-Item -ItemType Directory -Path (Join-Path $packageDir 'scripts') -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $packageDir 'deploy') -Force | Out-Null
-    Copy-Item -LiteralPath 'compose.offline.yaml' -Destination (Join-Path $packageDir 'compose.components.yaml')
-    Copy-Item -LiteralPath 'deploy\nginx-components.conf' -Destination (Join-Path $packageDir 'deploy\nginx-components.conf')
-    Copy-Item -LiteralPath 'deploy\analyzer-coder.service' -Destination (Join-Path $packageDir 'deploy\analyzer-coder.service')
-    Copy-Item -LiteralPath 'deploy\analyzer-coder-components.env.example' -Destination (Join-Path $packageDir 'deploy\analyzer-coder-components.env.example')
-    Copy-Item -LiteralPath 'scripts\start.sh' -Destination (Join-Path $packageDir 'scripts\start.sh')
-    Copy-Item -LiteralPath 'scripts\start.ps1' -Destination (Join-Path $packageDir 'scripts\start.ps1')
+    New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
     Copy-Item -LiteralPath 'scripts\offline-install.sh' -Destination (Join-Path $packageDir 'install.sh')
     Copy-Item -LiteralPath 'scripts\offline-install.ps1' -Destination (Join-Path $packageDir 'install.ps1')
     Copy-Item -LiteralPath 'deploy\OFFLINE-README.md' -Destination (Join-Path $packageDir 'README.md')
-    Copy-Item -LiteralPath 'docs\07-linux-component-quickstart.md' -Destination (Join-Path $packageDir 'STARTUP-GUIDE.md')
+    Copy-Item -LiteralPath 'docs\08-linux-git-deployment.md' -Destination (Join-Path $packageDir 'STARTUP-GUIDE.md')
 
     $manifest = @"
 Analyzer Coder offline package

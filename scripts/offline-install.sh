@@ -2,14 +2,11 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-LOAD_ONLY=false
-
 for argument in "$@"; do
   case "$argument" in
-    --load-only) LOAD_ONLY=true ;;
     -h|--help)
-      echo "Usage: bash install.sh [--load-only]"
-      echo "  --load-only Verify and import images without starting services."
+      echo "Usage: bash install.sh"
+      echo "Verify and import the PostgreSQL/pgvector and Nginx images."
       exit 0
       ;;
     *) echo "Unknown option: $argument" >&2; exit 2 ;;
@@ -42,10 +39,4 @@ fi
 
 echo "Importing offline Docker images..."
 docker load --input images.tar
-
-if [[ "$LOAD_ONLY" == true ]]; then
-  echo "Images imported. Start later with: bash scripts/start.sh --components"
-  exit 0
-fi
-
-exec bash "$ROOT_DIR/scripts/start.sh" --components
+echo "Images imported. Clone the application repository and run: bash scripts/start.sh"

@@ -63,10 +63,29 @@ async function reloadHistory() {
   finally { historyLoading.value = false; }
 }
 
+async function refreshReadinessForAsk(repositoryId: string): Promise<boolean | null> {
+  readinessLoading.value = true;
+  try {
+    const latest = await getRepositoryProfile(repositoryId);
+    if (repositoryId !== repositories.selectedRepositoryId) return null;
+    readiness.value = latest;
+    return latest.profile.chunkCount > 0;
+  } catch (error) {
+    if (repositoryId === repositories.selectedRepositoryId) {
+      ElMessage.error(error instanceof Error ? error.message : '无法检查仓库状态');
+    }
+    return null;
+  } finally {
+    if (repositoryId === repositories.selectedRepositoryId) readinessLoading.value = false;
+  }
+}
+
 async function send() {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return ElMessage.warning('请先选择仓库');
-  if (!canAsk.value) return ElMessage.warning('当前仓库尚未完成问答准备');
+  const ready = canAsk.value || await refreshReadinessForAsk(repositoryId);
+  if (ready === null || repositoryId !== repositories.selectedRepositoryId) return;
+  if (!ready) return ElMessage.warning('当前仓库尚未完成问答准备，请先完成索引');
   try {
     const result = await conversation.send(repositoryId);
     if (!result || result.repositoryId !== repositories.selectedRepositoryId) return;
@@ -183,7 +202,7 @@ onMounted(async () => {
       :pending-question="conversation.pendingQuestion.value"
       :request-state="conversation.requestState.value"
       :error="conversation.error.value"
-      :disabled="!canAsk"
+      :disabled="!repository || readinessLoading"
       @send="send" @retry="retry" @select-answer="conversation.selectAnswer"
       @open-knowledge="openKnowledge" @open-code="openCode" @open-graph="openGraph"
     />
