@@ -89,20 +89,51 @@ public class IntelligenceService {
     }
 
     @Transactional
-    public Answer ask(UUID repositoryId, UUID accountId, String question, UUID clientRequestId) {
+    public Answer ask(
+            UUID repositoryId,
+            UUID accountId,
+            String question,
+            UUID clientRequestId,
+            UUID requestedThreadId) {
         if (clientRequestId != null) {
             Map<String, Object> existing =
                     mapper.findConversationByRequest(repositoryId, accountId, clientRequestId);
-            if (existing != null) {
+            if (existing != null && !existing.isEmpty()) {
                 return answerSnapshot(existing);
             }
         }
+
+        UUID conversationId = UUID.randomUUID();
+        UUID threadId = requestedThreadId == null ? conversationId : requestedThreadId;
+        List<Answer> history = List.of();
+        int turnNo = 1;
+        String threadTitle = title(question);
+        if (requestedThreadId != null) {
+            Map<String, Object> thread = mapper.findThread(threadId, repositoryId, accountId);
+            if (thread == null) {
+                throw new IllegalArgumentException("问答会话不存在");
+            }
+            mapper.lockThread(threadId);
+            history = mapper.listThreadTurns(threadId, repositoryId, accountId).stream()
+                    .map(this::answerSnapshot)
+                    .toList();
+            Integer next = mapper.nextTurnNo(threadId);
+            turnNo = next == null ? history.size() + 1 : next;
+            threadTitle = string(thread, "title");
+        }
+
+        String retrievalQuery = contextualQuery(question, history);
         return answer(
                 repositoryId,
                 accountId,
                 question,
                 clientRequestId,
-                unifiedSearch(repositoryId, question, 10));
+                conversationId,
+                threadId,
+                turnNo,
+                threadTitle,
+                history,
+                unifiedSearch(repositoryId, retrievalQuery, 10));
     }
 
     private Answer answer(
@@ -110,21 +141,23 @@ public class IntelligenceService {
             UUID accountId,
             String question,
             UUID clientRequestId,
+            UUID conversationId,
+            UUID threadId,
+            int turnNo,
+            String threadTitle,
+            List<Answer> history,
             List<Evidence> evidence) {
-        UUID conversationId = UUID.randomUUID();
         UUID snapshotId =
                 evidence.stream()
                         .map(Evidence::snapshotId)
                         .filter(Objects::nonNull)
                         .findFirst()
                         .orElse(null);
-
         String answer;
         String provider = "deterministic-local";
         String evidenceStatus;
         String fallbackReason;
         List<IndexedEvidence> cited;
-
         if (evidence.isEmpty()) {
             answer = "当前仓库的代码索引和有效知识中没有找到达到相关度门槛的证据。" + "请先完成索引、发布相关知识，或使用更具体的模块名、符号名和业务术语。";
             evidenceStatus = "INSUFFICIENT";
@@ -132,7 +165,7 @@ public class IntelligenceService {
             cited = List.of();
         } else {
             Optional<LlmSettingsService.GenerationResult> generated =
-                    llm.generate(llmPrompt(question, evidence));
+                    llm.generate(llmPrompt(question, history, evidence));
             if (generated.isPresent()) {
                 AnswerCitationValidator.Validation validation =
                         citationValidator.validate(generated.get().answer(), evidence.size());
@@ -141,19 +174,11 @@ public class IntelligenceService {
                     provider = generated.get().provider();
                     evidenceStatus = "SUPPORTED";
                     fallbackReason = null;
-                    cited =
-                            validation.citedEvidence().stream()
-                                    .map(
-                                            index ->
-                                                    new IndexedEvidence(
-                                                            index, evidence.get(index - 1)))
-                                    .toList();
+                    cited = validation.citedEvidence().stream()
+                            .map(index -> new IndexedEvidence(index, evidence.get(index - 1)))
+                            .toList();
                 } else {
-                    answer =
-                            deterministicAnswer(evidence)
-                                    + "\n\n外部模型回答因“"
-                                    + validation.reason()
-                                    + "”未通过引用校验，已安全降级。";
+                    answer = deterministicAnswer(evidence) + "\n\n外部模型回答因“" + validation.reason() + "”未通过引用校验，已安全降级。";
                     evidenceStatus = "MODEL_OUTPUT_REJECTED";
                     fallbackReason = "CITATION_VALIDATION_FAILED";
                     cited = indexed(evidence, Math.min(5, evidence.size()));
@@ -165,36 +190,13 @@ public class IntelligenceService {
                 cited = indexed(evidence, Math.min(5, evidence.size()));
             }
         }
-
         Instant createdAt = Instant.now();
         List<Citation> citations = citations(cited);
-        String title = title(question);
-        Answer result =
-                new Answer(
-                        conversationId,
-                        repositoryId,
-                        title,
-                        question,
-                        answer,
-                        snapshotId,
-                        citations,
-                        provider,
-                        evidenceStatus,
-                        fallbackReason,
-                        createdAt);
-        mapper.insertConversation(
-                conversationId,
-                repositoryId,
-                accountId,
-                clientRequestId,
-                title,
-                question,
-                answer,
-                snapshotId,
-                provider,
-                evidenceStatus,
-                fallbackReason,
-                writeJson(result));
+        Answer result = new Answer(conversationId, threadId, turnNo, repositoryId, threadTitle, question,
+                answer, snapshotId, citations, provider, evidenceStatus, fallbackReason, createdAt);
+        mapper.insertConversation(conversationId, threadId, turnNo, repositoryId, accountId,
+                clientRequestId, threadTitle, question, answer, snapshotId, provider, evidenceStatus,
+                fallbackReason, writeJson(result));
         persistCitations(conversationId, citations);
         return result;
     }
@@ -202,38 +204,43 @@ public class IntelligenceService {
     public List<HistoryRecord> history(UUID repositoryId, UUID accountId, int limit, int offset) {
         int resolvedLimit = Math.max(1, Math.min(limit, 100));
         int resolvedOffset = Math.max(0, offset);
-        return mapper
-                .listConversations(repositoryId, accountId, resolvedLimit, resolvedOffset)
-                .stream()
-                .map(this::historyRecord)
-                .toList();
+        return mapper.listConversations(repositoryId, accountId, resolvedLimit, resolvedOffset).stream()
+                .map(this::historyRecord).toList();
     }
 
-    public Answer historyDetail(UUID repositoryId, UUID accountId, UUID conversationId) {
-        Map<String, Object> row = mapper.findConversation(conversationId, repositoryId, accountId);
-        if (row == null) {
-            throw new IllegalArgumentException("问答记录不存在");
-        }
-        return answerSnapshot(row);
+    public ThreadDetail historyDetail(UUID repositoryId, UUID accountId, UUID threadId) {
+        Map<String, Object> thread = mapper.findThread(threadId, repositoryId, accountId);
+        if (thread == null) throw new IllegalArgumentException("问答会话不存在");
+        List<Answer> turns = mapper.listThreadTurns(threadId, repositoryId, accountId).stream()
+                .map(this::answerSnapshot).toList();
+        return new ThreadDetail(threadId, repositoryId, string(thread, "title"), turns);
     }
 
     @Transactional
-    public HistoryRecord renameHistory(
-            UUID repositoryId, UUID accountId, UUID conversationId, String title) {
+    public HistoryRecord renameHistory(UUID repositoryId, UUID accountId, UUID threadId, String title) {
         String cleaned = clean(title, 1, 80, "记录标题");
-        if (mapper.renameConversation(conversationId, repositoryId, accountId, cleaned) != 1) {
-            throw new IllegalArgumentException("问答记录不存在");
+        if (mapper.renameConversation(threadId, repositoryId, accountId, cleaned) < 1) {
+            throw new IllegalArgumentException("问答会话不存在");
         }
-        return historyRecord(mapper.findConversation(conversationId, repositoryId, accountId));
+        return historyRecord(mapper.findThread(threadId, repositoryId, accountId));
     }
 
     @Transactional
-    public void deleteHistory(UUID repositoryId, UUID accountId, UUID conversationId) {
-        if (mapper.deleteConversation(conversationId, repositoryId, accountId) != 1) {
-            throw new IllegalArgumentException("问答记录不存在");
+    public void deleteHistory(UUID repositoryId, UUID accountId, UUID threadId) {
+        if (mapper.deleteConversation(threadId, repositoryId, accountId) < 1) {
+            throw new IllegalArgumentException("问答会话不存在");
         }
     }
 
+    private static String contextualQuery(String question, List<Answer> history) {
+        if (history.isEmpty()) return question;
+        StringBuilder query = new StringBuilder();
+        int start = Math.max(0, history.size() - 3);
+        for (int index = start; index < history.size(); index++) {
+            query.append(limitText(history.get(index).question(), 600)).append(' ');
+        }
+        return query.append(question).toString();
+    }
     public boolean prepareRepositoryEmbeddings(UUID repositoryId) {
         try {
             rebuildGraph(repositoryId);
@@ -488,24 +495,24 @@ public class IntelligenceService {
         return answer.append("。\n\n当前未使用外部模型生成解释，请打开引用核对原文，并使用调用图谱验证结构关系。").toString();
     }
 
-    private static String llmPrompt(String question, List<Evidence> evidence) {
-        StringBuilder prompt =
-                new StringBuilder("你是仓库知识与代码问答助手。只能依据下面带编号的证据回答；" + "不能从证据推出的内容必须明确说不知道；不要编造调用关系。")
-                        .append("\n问题：")
-                        .append(question)
-                        .append("\n证据：");
+    private static String llmPrompt(String question, List<Answer> history, List<Evidence> evidence) {
+        StringBuilder prompt = new StringBuilder("你是仓库知识与代码问答助手。只能依据下面带编号的本轮证据回答；"
+                        + "历史对话只用于理解指代和用户意图，不能作为仓库事实证据；"
+                        + "不能从本轮证据推出的内容必须明确说不知道；不要编造调用关系。")
+                .append("\n历史对话：");
+        int historyStart = Math.max(0, history.size() - 6);
+        for (int index = historyStart; index < history.size(); index++) {
+            Answer turn = history.get(index);
+            prompt.append("\n用户：").append(limitText(turn.question(), 600));
+            prompt.append("\n助手：").append(limitText(turn.answer(), 1_200));
+        }
+        if (history.isEmpty()) prompt.append("无");
+        prompt.append("\n当前问题：").append(question).append("\n本轮证据：");
         int remaining = 18_000;
         for (int index = 0; index < evidence.size() && remaining > 0; index++) {
             Evidence item = evidence.get(index);
-            String header =
-                    "\n[S"
-                            + (index + 1)
-                            + "]["
-                            + item.sourceType()
-                            + "] "
-                            + item.title()
-                            + (item.startLine() == null ? "" : ":" + item.startLine())
-                            + "\n";
+            String header = "\n[S" + (index + 1) + "][" + item.sourceType() + "] " + item.title()
+                    + (item.startLine() == null ? "" : ":" + item.startLine()) + "\n";
             prompt.append(header);
             remaining -= header.length();
             int length = Math.min(Math.min(item.content().length(), 2_400), Math.max(0, remaining));
@@ -513,15 +520,19 @@ public class IntelligenceService {
             remaining -= length;
             for (CodeReference reference : item.codeReferences()) {
                 String link = "\n关联代码：" + reference.filePath() + ":" + reference.startLine();
-                if (link.length() > remaining) {
-                    break;
-                }
+                if (link.length() > remaining) break;
                 prompt.append(link);
                 remaining -= link.length();
             }
         }
-        return prompt.append("\n请用中文回答；每个事实句末必须标注一个或多个 [S编号]；" + "区分团队知识和源码事实；冲突时以当前快照源码为准。")
+        return prompt.append("\n请用中文回答当前问题；每个仓库事实句末必须标注一个或多个 [S编号]；"
+                        + "区分团队知识和源码事实；冲突时以当前快照源码为准。")
                 .toString();
+    }
+
+    private static String limitText(String value, int limit) {
+        if (value == null || value.length() <= limit) return value == null ? "" : value;
+        return value.substring(0, limit) + "…";
     }
 
     private void ensureCodeEmbeddings(UUID repositoryId) {
@@ -887,21 +898,24 @@ public class IntelligenceService {
     private Answer answerSnapshot(Map<String, Object> row) {
         String payload = string(row, "answer_payload");
         if (payload == null || payload.isBlank()) {
-            return new Answer(
-                    uuid(row, "id"),
-                    uuid(row, "repo_id"),
-                    string(row, "title"),
-                    string(row, "question"),
-                    string(row, "answer"),
-                    uuid(row, "snapshot_id"),
-                    List.of(),
-                    string(row, "provider"),
-                    string(row, "evidence_status"),
-                    string(row, "fallback_reason"),
-                    instant(row, "created_at"));
+            return new Answer(uuid(row, "id"),
+                    uuid(row, "thread_id") == null ? uuid(row, "id") : uuid(row, "thread_id"),
+                    integer(row, "turn_no") == null ? 1 : integer(row, "turn_no"),
+                    uuid(row, "repo_id"), string(row, "title"), string(row, "question"),
+                    string(row, "answer"), uuid(row, "snapshot_id"), List.of(), string(row, "provider"),
+                    string(row, "evidence_status"), string(row, "fallback_reason"), instant(row, "created_at"));
         }
         try {
-            return json.readValue(payload, Answer.class);
+            Answer restored = json.readValue(payload, Answer.class);
+            UUID restoredThreadId = restored.threadId() == null ? uuid(row, "thread_id") : restored.threadId();
+            int restoredTurnNo = restored.turnNo() < 1
+                    ? (integer(row, "turn_no") == null ? 1 : integer(row, "turn_no"))
+                    : restored.turnNo();
+            if (restoredThreadId == null) restoredThreadId = restored.conversationId();
+            return new Answer(restored.conversationId(), restoredThreadId, restoredTurnNo,
+                    restored.repositoryId(), restored.title(), restored.question(), restored.answer(),
+                    restored.snapshotId(), restored.citations(), restored.provider(), restored.evidenceStatus(),
+                    restored.fallbackReason(), restored.createdAt());
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("无法恢复问答记录", exception);
         }
@@ -909,18 +923,13 @@ public class IntelligenceService {
 
     private HistoryRecord historyRecord(Map<String, Object> row) {
         return new HistoryRecord(
-                uuid(row, "id"),
-                uuid(row, "repo_id"),
-                string(row, "title"),
-                string(row, "question"),
-                string(row, "provider"),
-                string(row, "evidence_status"),
-                string(row, "fallback_reason"),
+                uuid(row, "thread_id") == null ? uuid(row, "id") : uuid(row, "thread_id"),
+                uuid(row, "repo_id"), string(row, "title"), string(row, "question"),
+                string(row, "provider"), string(row, "evidence_status"), string(row, "fallback_reason"),
                 integer(row, "citation_count") == null ? 0 : integer(row, "citation_count"),
-                instant(row, "created_at"),
-                instant(row, "updated_at"));
+                integer(row, "turn_count") == null ? 1 : integer(row, "turn_count"),
+                instant(row, "created_at"), instant(row, "updated_at"));
     }
-
     private String writeJson(Object value) {
         try {
             return json.writeValueAsString(value);
@@ -1052,6 +1061,8 @@ public class IntelligenceService {
 
     public record Answer(
             UUID conversationId,
+            UUID threadId,
+            int turnNo,
             UUID repositoryId,
             String title,
             String question,
@@ -1063,8 +1074,11 @@ public class IntelligenceService {
             String fallbackReason,
             Instant createdAt) {}
 
+    public record ThreadDetail(
+            UUID threadId, UUID repositoryId, String title, List<Answer> turns) {}
+
     public record HistoryRecord(
-            UUID conversationId,
+            UUID threadId,
             UUID repositoryId,
             String title,
             String question,
@@ -1072,6 +1086,7 @@ public class IntelligenceService {
             String evidenceStatus,
             String fallbackReason,
             int citationCount,
+            int turnCount,
             Instant createdAt,
             Instant updatedAt) {}
 

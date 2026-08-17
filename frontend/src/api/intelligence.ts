@@ -36,6 +36,8 @@ export interface Citation {
 
 export interface Answer {
   conversationId: string;
+  threadId: string;
+  turnNo: number;
   repositoryId: string;
   title: string;
   question: string;
@@ -47,8 +49,14 @@ export interface Answer {
   fallbackReason: string | null;
   createdAt: string;
 }
+export interface QaThreadDetail {
+  threadId: string;
+  repositoryId: string;
+  title: string;
+  turns: Answer[];
+}
 export interface QaHistoryRecord {
-  conversationId: string;
+  threadId: string;
   repositoryId: string;
   title: string;
   question: string;
@@ -56,6 +64,7 @@ export interface QaHistoryRecord {
   evidenceStatus: Answer['evidenceStatus'];
   fallbackReason: string | null;
   citationCount: number;
+  turnCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -128,21 +137,21 @@ export interface CardRevision {
 }
 
 export const intelligenceApi = {
-  ask: (repositoryId: string, question: string, clientRequestId: string) =>
+  ask: (repositoryId: string, question: string, clientRequestId: string, threadId: string | null) =>
     request<Answer>(`/api/repositories/${repositoryId}/ask`, {
       method: 'POST',
-      body: JSON.stringify({ question, clientRequestId }),
+      body: JSON.stringify({ question, clientRequestId, threadId }),
     }),
   history: (repositoryId: string, limit = 50, offset = 0) =>
     request<QaHistoryRecord[]>(`/api/repositories/${repositoryId}/qa/records?limit=${limit}&offset=${offset}`),
-  historyDetail: (repositoryId: string, conversationId: string) =>
-    request<Answer>(`/api/repositories/${repositoryId}/qa/records/${conversationId}`),
-  renameHistory: (repositoryId: string, conversationId: string, title: string) =>
-    request<QaHistoryRecord>(`/api/repositories/${repositoryId}/qa/records/${conversationId}`, {
+  historyDetail: (repositoryId: string, threadId: string) =>
+    request<QaThreadDetail>(`/api/repositories/${repositoryId}/qa/records/${threadId}`),
+  renameHistory: (repositoryId: string, threadId: string, title: string) =>
+    request<QaHistoryRecord>(`/api/repositories/${repositoryId}/qa/records/${threadId}`, {
       method: 'PATCH', body: JSON.stringify({ title }),
     }),
-  deleteHistory: (repositoryId: string, conversationId: string) =>
-    request<void>(`/api/repositories/${repositoryId}/qa/records/${conversationId}`, { method: 'DELETE' }),
+  deleteHistory: (repositoryId: string, threadId: string) =>
+    request<void>(`/api/repositories/${repositoryId}/qa/records/${threadId}`, { method: 'DELETE' }),
   graph: (repositoryId: string, symbol: string, depth: number, _direction: string) =>
     request<GraphResult>(
       `/api/repositories/${repositoryId}/codegraph/impact?symbol=${encodeURIComponent(symbol)}&depth=${depth}`

@@ -87,6 +87,8 @@ public interface IntelligenceMapper {
      */
     int insertConversation(
             @Param("id") UUID id,
+            @Param("threadId") UUID threadId,
+            @Param("turnNo") int turnNo,
             @Param("repositoryId") UUID repositoryId,
             @Param("accountId") UUID accountId,
             @Param("clientRequestId") UUID clientRequestId,
@@ -108,6 +110,20 @@ public interface IntelligenceMapper {
             @Param("id") UUID id,
             @Param("repositoryId") UUID repositoryId,
             @Param("accountId") UUID accountId);
+
+    Map<String, Object> findThread(
+            @Param("threadId") UUID threadId,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId);
+
+    List<Map<String, Object>> listThreadTurns(
+            @Param("threadId") UUID threadId,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId);
+
+    Integer nextTurnNo(@Param("threadId") UUID threadId);
+
+    Map<String, Object> lockThread(@Param("threadId") UUID threadId);
 
     List<Map<String, Object>> listConversations(
             @Param("repositoryId") UUID repositoryId,

@@ -48,13 +48,14 @@ class IntelligenceControllerTest {
     void asksOnlyRepositoryFromPath() {
         UUID repositoryId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
-        var question = new IntelligenceController.Question("如何完成库存回滚？", requestId);
+        UUID threadId = UUID.randomUUID();
+        var question = new IntelligenceController.Question("如何完成库存回滚？", requestId, threadId);
 
         controller.ask(repositoryId, question, request);
 
         verify(access)
                 .require(account, CodeRepositoryId.of(repositoryId), RepositoryPermission.READ);
-        verify(service).ask(repositoryId, account.id(), question.question(), requestId);
+        verify(service).ask(repositoryId, account.id(), question.question(), requestId, threadId);
     }
 
     @Test

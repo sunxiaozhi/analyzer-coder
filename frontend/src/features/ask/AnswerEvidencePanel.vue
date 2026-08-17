@@ -1,22 +1,13 @@
 <script setup lang="ts">
 import { Connection, Document, Reading, View } from '@element-plus/icons-vue';
-import { nextTick, shallowRef, watch } from 'vue';
 import type { Citation, CodeReference } from '@/api/intelligence';
 
-const props = defineProps<{ citations: Citation[]; activeCitationId?: string | null }>();
+defineProps<{ citations: Citation[] }>();
 const emit = defineEmits<{
   openKnowledge: [citation: Citation];
   openCode: [reference: CodeReference];
   openGraph: [reference: CodeReference];
 }>();
-const panelElement = shallowRef<HTMLElement | null>(null);
-
-watch(() => props.activeCitationId, async citationId => {
-  if (!citationId) return;
-  await nextTick();
-  const card = panelElement.value?.querySelector<HTMLElement>(`[data-citation-id="${citationId}"]`);
-  card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-});
 
 function citationReference(citation: Citation): CodeReference | null {
   if (citation.sourceType !== 'CODE' || !citation.chunkId) return null;
@@ -35,18 +26,12 @@ function citationReference(citation: Citation): CodeReference | null {
 </script>
 
 <template>
-  <aside ref="panelElement" class="answer-evidence">
-    <header>
-      <b>回答证据</b>
-      <span>{{ citations.length }} 条 · 知识与代码联合检索</span>
-    </header>
-
-    <el-empty v-if="!citations.length" description="本次回答没有可引用证据" />
+  <details class="answer-evidence">
+    <summary><b>引用证据 {{ citations.length }} 条</b><span>展开查看知识与代码来源</span></summary>
     <article
       v-for="citation in citations"
       :key="citation.id"
-      :data-citation-id="citation.id"
-      :class="['evidence-card', { active: citation.id === activeCitationId }]"
+      class="evidence-card"
     >
       <div class="evidence-heading">
         <span :class="['source-badge', citation.sourceType.toLowerCase()]">
@@ -98,37 +83,34 @@ function citationReference(citation: Citation): CodeReference | null {
         </button>
       </div>
     </article>
-  </aside>
+  </details>
 </template>
 
 <style scoped>
 .answer-evidence {
+  width: min(100%, 760px);
   min-width: 0;
-  overflow: auto;
   border: 1px solid #dedee3;
-  border-left: 0;
-  border-radius: 0 7px 7px 0;
-  background: #fff;
+  border-radius: 6px;
+  background: #f8fbfe;
 }
-.answer-evidence > header {
+.answer-evidence > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 49px;
-  padding: 0 13px;
-  border-bottom: 1px solid #ececef;
+  padding: 10px 12px;
+  color: #005eb8;
+  cursor: pointer;
+  list-style-position: inside;
 }
-.answer-evidence > header b { font-size: 13px; }
-.answer-evidence > header span { color: #777; font-size: 9px; }
+.answer-evidence > summary b { font-size: 10px; }
 .evidence-card {
   display: grid;
   gap: 10px;
   padding: 16px;
   border-bottom: 1px solid #ededf0;
-  box-shadow: inset 3px 0 transparent;
-  transition: background-color .18s ease, box-shadow .18s ease;
+  transition: background-color .18s ease;
 }
-.evidence-card.active { background: #f6faff; box-shadow: inset 3px 0 #0066cc; }
 .evidence-heading,
 .evidence-actions { display: flex; align-items: center; }
 .evidence-heading { justify-content: space-between; }
@@ -154,12 +136,13 @@ function citationReference(citation: Citation): CodeReference | null {
   gap: 10px;
   align-items: start;
   padding: 8px 10px;
-  border-left: 2px solid #8cb9e4;
+  border: 1px solid #dce7f1;
+  border-radius: 4px;
   background: #f6f9fc;
 }
 .code-location span { overflow-wrap: anywhere; color: #4f5e6c; font-size: 9px; line-height: 1.55; }
 .code-location small { color: #005eb8; font-size: 9px; font-weight: 650; white-space: nowrap; }
-.evidence-excerpt { max-height: 84px; padding-left: 10px; overflow: hidden; border-left: 1px solid #e4e5e8; white-space: pre-wrap; }
+.evidence-excerpt { max-height:84px; padding:9px 10px; overflow:hidden; border:1px solid #e4e7ea; border-radius:4px; background:#fafbfc; white-space:pre-wrap; }
 .evidence-actions { gap: 6px; }
 .knowledge-code-links { display: grid; gap: 7px; padding-top: 10px; border-top: 1px dashed #dde3e9; }
 .linked-code-heading { display: flex; align-items: center; justify-content: space-between; }
@@ -187,5 +170,5 @@ function citationReference(citation: Citation): CodeReference | null {
 .code-reference-meta { display: grid; justify-items: end; gap: 3px; color: #718090; white-space: nowrap; }
 .code-reference-meta small { font-size: 9px; }
 .code-reference-meta em { padding: 2px 5px; color: #a44b20; border-radius: 3px; background: #fff0e8; font-size: 8px; font-style: normal; }
-@media (max-width: 900px) { .answer-evidence { border-left: 1px solid #dedee3; border-radius: 7px; } }
+@media (max-width:760px) { .answer-evidence>summary span { display:none; } }
 </style>

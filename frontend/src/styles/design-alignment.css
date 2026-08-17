@@ -630,7 +630,7 @@
 }
 
 .qa-page {
-  grid-template-columns: minmax(0, 1fr) 390px;
+  grid-template-columns: 280px minmax(0, 1fr);
 }
 
 .graph-page {

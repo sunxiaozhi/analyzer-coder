@@ -138,9 +138,9 @@ Browser
 
 | 表 | 当前用途 |
 | --- | --- |
-| `qa_conversations` | 每次问答的一问一答记录 |
+| `qa_conversations` | 多轮会话中的问答轮次记录 |
 | `qa_citations` | 回答引用的代码/知识元数据 |
-| `qa_conversations`、`qa_citations` | 一问一答历史记录与完整证据快照 |
+| `qa_conversations`、`qa_citations` | 多轮会话、轮次记录与完整证据快照 |
 | `knowledge_cards` | 当前卡片修订和状态 |
 | `knowledge_card_revisions` | 不可变修订历史 |
 | `knowledge_code_refs` | 卡片与 chunk 的代码引用 |
@@ -337,7 +337,7 @@ Prompt 约束模型只能使用编号证据。总证据预算约 18000 字符，
 
 ### 10.3 当前历史边界
 
-每次请求生成或通过 clientRequestId 幂等复用一个 conversationId；历史记录按账号和当前仓库隔离，支持读取、重命名和删除。每条记录持久化完整回答与引用快照。当前记录不携带前文参与下一次生成，因此属于一问一答历史而非多轮会话；产品问答仍使用非流式 `generate`。
+每次请求生成或通过 clientRequestId 幂等复用一个 conversationId，并通过 threadId/turnNo 组织为多轮会话；历史按账号和当前仓库隔离，支持整段读取、重命名和删除。最近问题参与检索消歧，最近问答参与模型 Prompt，每轮仍持久化完整回答与引用快照；产品问答继续使用非流式 `generate`。
 
 ## 11. CodeGraph 与影响分析
 
@@ -495,7 +495,7 @@ LOCAL_HASH 不需要端点或密钥；OPENAI_COMPATIBLE 需要 Base URL、模型
 
 1. QuickStartApplicationService 和 `/quick-start` API。
 2. OnboardingApplicationService、路径、进度、笔记和投影表。
-3. 问答 SSE 事件流、message 状态机和会话 CRUD。
+3. 问答 SSE 事件流、停止/断线恢复和流式 message 状态机。
 4. 多仓检索、真实增量索引和版本化内容索引指针。
 5. 仓库级外发策略、SSH 凭据和 GitLab 项目 API/Webhook。
 6. 备份、恢复、维护模式、RPO/RTO。
