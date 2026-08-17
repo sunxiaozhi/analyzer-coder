@@ -33,6 +33,7 @@ public interface IntelligenceMapper {
      * @param repositoryId 目标对象的唯一标识
      * @param vector 模型生成并经过维度校验的向量值
      * @param model 模型供应商使用的模型标识
+     * @param dimension 向量模型输出的维度
      * @param limit 允许返回的最大记录数
      * @return 匹配结果列表；无匹配数据时返回空列表
      */
@@ -40,6 +41,7 @@ public interface IntelligenceMapper {
             @Param("repositoryId") UUID repositoryId,
             @Param("vector") String vector,
             @Param("model") String model,
+            @Param("dimension") int dimension,
             @Param("limit") int limit);
 
     /**
@@ -65,6 +67,7 @@ public interface IntelligenceMapper {
      * @param repositoryId 目标对象的唯一标识
      * @param vector 模型生成并经过维度校验的向量值
      * @param model 模型供应商使用的模型标识
+     * @param dimension 向量模型输出的维度
      * @param limit 允许返回的最大记录数
      * @return 匹配结果列表；无匹配数据时返回空列表
      */
@@ -72,6 +75,7 @@ public interface IntelligenceMapper {
             @Param("repositoryId") UUID repositoryId,
             @Param("vector") String vector,
             @Param("model") String model,
+            @Param("dimension") int dimension,
             @Param("limit") int limit);
 
     /**
@@ -355,7 +359,9 @@ public interface IntelligenceMapper {
      * @return 匹配结果列表；无匹配数据时返回空列表
      */
     List<Map<String, Object>> missingEmbeddings(
-            @Param("repositoryId") UUID repositoryId, @Param("model") String model);
+            @Param("repositoryId") UUID repositoryId,
+            @Param("model") String model,
+            @Param("dimension") int dimension);
 
     /**
      * 新增或更新代码片段的向量数据。
@@ -371,6 +377,7 @@ public interface IntelligenceMapper {
             @Param("chunkId") UUID chunkId,
             @Param("repositoryId") UUID repositoryId,
             @Param("model") String model,
+            @Param("dimension") int dimension,
             @Param("vector") String vector,
             @Param("contentHash") String contentHash);
 
@@ -382,7 +389,9 @@ public interface IntelligenceMapper {
      * @return 匹配结果列表；无匹配数据时返回空列表
      */
     List<Map<String, Object>> missingKnowledgeEmbeddings(
-            @Param("repositoryId") UUID repositoryId, @Param("model") String model);
+            @Param("repositoryId") UUID repositoryId,
+            @Param("model") String model,
+            @Param("dimension") int dimension);
 
     /**
      * 新增或更新知识内容的向量数据。
@@ -400,6 +409,7 @@ public interface IntelligenceMapper {
             @Param("repositoryId") UUID repositoryId,
             @Param("revision") int revision,
             @Param("model") String model,
+            @Param("dimension") int dimension,
             @Param("vector") String vector,
             @Param("contentHash") String contentHash);
 }

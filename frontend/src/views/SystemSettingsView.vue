@@ -20,6 +20,7 @@ const vectorModels = shallowRef<VectorModel[]>([]);
 const loading = shallowRef(false);
 const saving = shallowRef(false);
 const checkingId = shallowRef<string | null>(null);
+const checkingVectorId = shallowRef<string | null>(null);
 const providerDialog = shallowRef(false);
 const vectorDialog = shallowRef(false);
 const editingProviderId = shallowRef<string | null>(null);
@@ -179,6 +180,10 @@ function openEditVector(item: VectorModel) {
   vectorDialog.value = true;
 }
 
+function changeVectorProvider(providerType: VectorModelInput['providerType']) {
+  if (providerType === 'LOCAL_HASH') vectorForm.dimension = 64;
+}
+
 async function saveVector() {
   if (!vectorForm.name.trim() || !vectorForm.model.trim()) {
     return ElMessage.warning('请填写名称和模型标识');
@@ -215,6 +220,22 @@ async function activateVector(item: VectorModel) {
     ElMessage.success(`已切换到 ${item.name}，后续检索会重建不匹配的向量`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '切换失败');
+  }
+}
+
+async function testVector(item: VectorModel) {
+  checkingVectorId.value = item.id;
+  try {
+    const result = await llmSettingsApi.checkVectorModel(item.id);
+    if (result.available) {
+      ElMessage.success(`${item.name} 检测通过：${result.dimension} 维，${result.durationMs} ms`);
+    } else {
+      ElMessage.warning(result.errorSummary ?? '向量模型检测未通过');
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '向量模型检测失败');
+  } finally {
+    checkingVectorId.value = null;
   }
 }
 
@@ -300,6 +321,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
             <div><dt>备案时间</dt><dd>{{ formatTime(item.createdAt) }}</dd></div>
           </dl>
           <footer class="card-actions">
+            <el-button link :loading="checkingVectorId === item.id" @click="testVector(item)"><Activity :size="14" />检测</el-button>
             <el-button v-if="!item.active" link type="primary" @click="activateVector(item)"><ArrowRightLeft :size="14" />切换使用</el-button>
             <el-button link :disabled="item.active" @click="openEditVector(item)"><Pencil :size="14" />编辑</el-button>
           </footer>
@@ -339,8 +361,8 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
         <el-form-item label="备案名称"><el-input v-model="vectorForm.name" placeholder="例如：默认代码向量" /></el-form-item>
         <el-form-item label="模型标识"><el-input v-model="vectorForm.model" :placeholder="vectorForm.providerType === 'LOCAL_HASH' ? 'local-hash-64' : 'text-embedding-model'" /></el-form-item>
         <div class="form-pair">
-          <el-form-item label="运行方式"><el-select v-model="vectorForm.providerType"><el-option label="本地哈希" value="LOCAL_HASH" /><el-option label="OpenAI-compatible" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
-          <el-form-item label="向量维度"><el-input-number v-model="vectorForm.dimension" :min="64" :max="64" /></el-form-item>
+          <el-form-item label="运行方式"><el-select v-model="vectorForm.providerType" @change="changeVectorProvider"><el-option label="本地哈希" value="LOCAL_HASH" /><el-option label="OpenAI-compatible" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
+          <el-form-item label="向量维度"><el-input-number v-model="vectorForm.dimension" :min="vectorForm.providerType === 'LOCAL_HASH' ? 64 : 1" :max="vectorForm.providerType === 'LOCAL_HASH' ? 64 : 4096" :disabled="vectorForm.providerType === 'LOCAL_HASH'" /></el-form-item>
         </div>
         <template v-if="vectorForm.providerType === 'OPENAI_COMPATIBLE'">
           <el-form-item label="服务地址"><el-input v-model="vectorForm.baseUrl" placeholder="https://api.example.com/v1"><template #prefix><Server :size="14" /></template></el-input></el-form-item>
@@ -349,7 +371,13 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
             <el-form-item label="请求超时(ms)"><el-input-number v-model="vectorForm.requestTimeoutMs" :min="3000" :max="120000" /></el-form-item>
           </div>
         </template>
-        <el-alert type="info" :closable="false" title="外部模型必须支持 dimensions=64，并返回 64 维 OpenAI-compatible embedding。" />
+        <el-alert
+          type="info"
+          :closable="false"
+          :title="vectorForm.providerType === 'LOCAL_HASH'
+            ? '本地哈希固定为 64 维。'
+            : '请填写模型实际支持的维度；检测会调用 OpenAI-compatible /embeddings 并校验返回长度。'"
+        />
       </el-form>
       <template #footer><el-button @click="vectorDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveVector"><Save :size="14" />保存备案</el-button></template>
     </el-dialog>

@@ -70,6 +70,15 @@ export interface VectorModelInput {
   apiKey?: string;
 }
 
+export interface VectorModelCheck {
+  configId: string;
+  available: boolean;
+  dimension: number;
+  durationMs: number;
+  errorCode: string | null;
+  errorSummary: string | null;
+}
+
 export interface LlmCheckStage {
   stage: string;
   status: 'SUCCEEDED' | 'FAILED' | 'CANCELED';
@@ -138,6 +147,10 @@ export const llmSettingsApi = {
     request<VectorModel>(`/api/settings/llm/vector-models/${id}`, {
       method: 'PUT',
       body: JSON.stringify(input),
+    }),
+  checkVectorModel: (id: string) =>
+    request<VectorModelCheck>(`/api/settings/llm/vector-models/${id}/check`, {
+      method: 'POST',
     }),
   activateVectorModel: (id: string, expectedActivationVersion: number) =>
     request<VectorModel>(

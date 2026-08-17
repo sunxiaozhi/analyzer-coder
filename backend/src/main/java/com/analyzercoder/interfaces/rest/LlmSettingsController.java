@@ -89,6 +89,13 @@ public class LlmSettingsController {
         return service.activateVectorModel(account.id(), id, expectedActivationVersion);
     }
 
+    @PostMapping("/vector-models/{id}/check")
+    public LlmSettingsService.VectorModelCheckView checkVectorModel(
+            @PathVariable UUID id, HttpServletRequest request) {
+        SecurityContext.requireAdmin(request);
+        return service.checkVectorModel(id);
+    }
+
     @PutMapping("/provider")
     public LlmSettingsService.ProviderView save(
             @RequestBody LlmSettingsService.ProviderInput body, HttpServletRequest request) {

@@ -78,7 +78,8 @@
         SELECT <include refid="codeColumns"/>,0.0 lexical_score,
         GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
         FROM chunk_embeddings e JOIN code_chunks c ON c.id=e.chunk_id
-        WHERE c.repo_id=#{repositoryId} AND e.model=#{model} AND e.content_hash=c.content_hash
+        WHERE c.repo_id=#{repositoryId} AND e.model=#{model} AND e.dimension=#{dimension}
+        AND e.content_hash=c.content_hash
         ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.file_path,c.start_line NULLS FIRST
         LIMIT #{limit}
     </select>
@@ -120,7 +121,7 @@
         GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
         FROM knowledge_card_embeddings e
         JOIN knowledge_cards c ON c.id=e.card_id AND c.revision=e.revision
-        WHERE <include refid="validKnowledge"/> AND e.model=#{model}
+        WHERE <include refid="validKnowledge"/> AND e.model=#{model} AND e.dimension=#{dimension}
         ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.updated_at DESC
         LIMIT #{limit}
     </select>
@@ -269,25 +270,28 @@
         SELECT c.id,c.revision,CONCAT(c.title,E'\n',c.content,E'\n',ARRAY_TO_STRING(c.tags,' ')) content
         FROM knowledge_cards c LEFT JOIN knowledge_card_embeddings e ON e.card_id=c.id
         WHERE <include refid="validKnowledge"/>
-        AND(e.card_id IS NULL OR e.revision&lt;&gt;c.revision OR e.model&lt;&gt;#{model})
+        AND(e.card_id IS NULL OR e.revision&lt;&gt;c.revision OR e.model&lt;&gt;#{model}
+        OR e.dimension&lt;&gt;#{dimension})
     </select>
     <insert id="upsertKnowledgeEmbedding">
-        INSERT INTO knowledge_card_embeddings(card_id,repo_id,revision,model,embedding,content_hash)
-        VALUES(#{cardId},#{repositoryId},#{revision},#{model},CAST(#{vector} AS vector),#{contentHash})
+        INSERT INTO knowledge_card_embeddings(card_id,repo_id,revision,model,dimension,embedding,content_hash)
+        VALUES(#{cardId},#{repositoryId},#{revision},#{model},#{dimension},CAST(#{vector} AS vector),#{contentHash})
         ON CONFLICT(card_id) DO UPDATE SET revision=EXCLUDED.revision,embedding=EXCLUDED.embedding,
-        model=EXCLUDED.model,content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
+        model=EXCLUDED.model,dimension=EXCLUDED.dimension,content_hash=EXCLUDED.content_hash,
+        created_at=CURRENT_TIMESTAMP
     </insert>
 
     <select id="missingEmbeddings" resultType="map">
         SELECT c.id,c.content,c.content_hash FROM code_chunks c
         LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
         WHERE c.repo_id=#{repositoryId}
-        AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash OR e.model&lt;&gt;#{model})
+        AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash OR e.model&lt;&gt;#{model}
+        OR e.dimension&lt;&gt;#{dimension})
     </select>
     <insert id="upsertEmbedding">
         INSERT INTO chunk_embeddings(chunk_id,repo_id,model,dimension,embedding,content_hash)
-        VALUES(#{chunkId},#{repositoryId},#{model},64,CAST(#{vector} AS vector),#{contentHash})
+        VALUES(#{chunkId},#{repositoryId},#{model},#{dimension},CAST(#{vector} AS vector),#{contentHash})
         ON CONFLICT(chunk_id) DO UPDATE SET model=EXCLUDED.model,embedding=EXCLUDED.embedding,
-        content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
+        dimension=EXCLUDED.dimension,content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
     </insert>
 </mapper>

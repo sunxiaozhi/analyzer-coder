@@ -92,7 +92,7 @@
 
 ```text
 登录 → 选择或接入仓库 → 发布当前快照
-→ 创建内容索引任务 → 生成 chunk 与 64 维向量
+→ 创建内容索引任务 → 生成 chunk 与当前模型维度的向量
 → 源码检索 / 混合检索 / 知识问答
 → 查看引用源码或调用图 → 保存知识卡片
 ```
@@ -189,9 +189,9 @@
 1. 内容索引扫描当前发布快照，跳过二进制、敏感文件、依赖和构建目录等过滤项。
 2. chunk 保存仓库、快照、commit、文件、符号、语言、类型、行号、正文、摘要和创建时间。
 3. 当前发布通过 `replaceRepositoryChunks` 替换仓库 chunk；没有独立内容索引版本指针。
-4. 代码和已发布知识向量保存在 PostgreSQL pgvector，固定维度为 64。
+4. 代码和已发布知识向量保存在 PostgreSQL pgvector；本地哈希固定 64 维，外部模型支持 1–4096 维。
 5. 向量模型支持 `LOCAL_HASH` 和 OpenAI-compatible embeddings；同一时间只有一个激活向量模型。
-6. 外部向量模型切换前发送固定探针并要求返回 64 维结果。
+6. 向量模型卡片提供独立检测；外部模型检测调用 `/embeddings`，并要求返回长度与备案维度一致。
 7. 检索或索引发现当前模型缺失向量时按需补建，使用 `content_hash + model` 判断缺失。
 8. 当前向量索引页面仅展示所选全局仓库的当前数据，不提供页面内仓库切换，也不展示历史任务产物。
 9. 页面汇总代码 chunk、已向量化/缺失数量、知识卡片数量、模型、维度和更新时间；明细支持代码/知识、关键词、向量状态和 chunk 类型过滤。
@@ -265,8 +265,8 @@
 
 ## 6. 数据与存储要求
 
-1. PostgreSQL 为唯一运行期业务数据库，启动时由 Flyway 执行 `V1__init_schema.sql`。
-2. pgvector 扩展必须可用，代码和知识向量字段固定 `vector(64)`，使用 HNSW cosine 索引。
+1. PostgreSQL 为唯一运行期业务数据库，启动时由 Flyway 按版本执行 `V1`、`V3`、`V4` 迁移。
+2. pgvector 扩展必须可用，代码和知识使用可变维度 `vector` 字段；查询按当前模型和维度隔离。
 3. 当前核心表包括账号/会话/验证码、仓库/权限/治理/墓碑、任务、chunk/向量、CodeGraph、问答、知识/附件、系统设置和模型配置。
 4. `git_credentials/repository_credential_bindings` 提供 Git/GitLab HTTPS 凭据与仓库绑定；问答记录由 `qa_conversations/qa_citations` 唯一持久化。
 5. 仓库工作副本、快照、CodeGraph 产物和知识附件保存在 `APP_MANAGED_DATA_ROOT` 下。
@@ -299,7 +299,7 @@
 | CUR-REPO | 四类来源入口、快照、准备轨道、项目画像、重扫、治理、删除 |
 | CUR-PREVIEW | 路径保护、大小、编码、Markdown、BAT/CMD |
 | CUR-TASK | 创建、互斥、取消、重试、重启恢复 |
-| CUR-INDEX | chunk、64 维向量、模型切换、产物浏览 |
+| CUR-INDEX | chunk、可变维度向量、模型检测与切换、产物浏览 |
 | CUR-SEARCH | 单仓多通道召回、排序、降级 |
 | CUR-QA | 无证据、本地降级、外部调用、引用拦截、持久化 |
 | CUR-GRAPH | 构建产物、影响深度、风险和限制 |

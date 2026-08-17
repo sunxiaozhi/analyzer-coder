@@ -10,7 +10,7 @@
 ## 1. 设计目标与约束
 
 1. 代码快照是源码浏览、索引、检索、问答和图分析的事实边界。
-2. PostgreSQL/pgvector 保存业务数据和 64 维向量；受管文件系统保存仓库副本、快照、CodeGraph 产物和附件。
+2. PostgreSQL/pgvector 保存业务数据和可变维度向量；受管文件系统保存仓库副本、快照、CodeGraph 产物和附件。
 3. CodeGraph 提供静态结构关系；LLM 只处理检索证据，不生成结构事实。
 4. 普通账号只能访问 OWNER 或被授权仓库；超级管理员拥有全局管理入口。
 5. 当前系统是单实例、单数据库、后台轮询 Worker 架构。
@@ -22,7 +22,7 @@
 
 - Java 17、Spring Boot 3.5。
 - Spring MVC Controller + 应用服务 + 领域端口 + MyBatis Mapper。
-- PostgreSQL 17 与 pgvector；Flyway 单迁移 `V1__init_schema.sql`。
+- PostgreSQL 17 与 pgvector；Flyway 按版本执行初始化、多轮问答和可变向量维度迁移。
 - PageHelper 提供分页。
 - `HttpClient` 调用 OpenAI-compatible completion/embedding。
 - `ProcessBuilder` 调用 Git 和 CodeGraph CLI。
@@ -127,12 +127,12 @@ Browser
 | 表 | 当前用途 |
 | --- | --- |
 | `code_chunks` | 当前仓库 chunk，绑定 snapshot、commit、文件、符号和行号 |
-| `chunk_embeddings` | 代码 chunk 的 `vector(64)`、模型和摘要 |
+| `chunk_embeddings` | 代码 chunk 的可变维度 `vector`、维度、模型和摘要 |
 | `code_graph_edges` | CodeGraph 导入的 source/target/relation |
 | `codegraph_artifacts` | 仓库快照的 CLI 产物记录 |
-| `knowledge_card_embeddings` | 已发布知识当前修订的 `vector(64)` |
+| `knowledge_card_embeddings` | 已发布知识当前修订的可变维度 `vector` |
 
-代码和知识向量均建立 HNSW cosine 索引。
+不同模型维度可同时存储；距离查询按当前模型和维度过滤，避免跨维度运算。
 
 ### 4.4 问答与知识表
 
@@ -282,7 +282,7 @@ IndexJobWorker
 
 ### 8.3 向量准备
 
-`IntelligenceService` 根据激活模型查找缺失向量。LOCAL_HASH 生成确定性 64 维向量；外部模型调用 `/embeddings` 并要求返回 64 维。外部失败时检索使用本地向量或退回关键词通道。
+`IntelligenceService` 根据激活模型及维度查找缺失向量。LOCAL_HASH 生成确定性 64 维向量；外部模型调用 `/embeddings` 并校验返回长度等于备案维度。外部失败时退回关键词和结构通道。
 
 ### 8.4 当前向量索引查询
 
@@ -399,7 +399,7 @@ POST connectivity-checks
 
 ### 13.4 向量模型
 
-LOCAL_HASH 不需要端点或密钥；OPENAI_COMPATIBLE 需要 Base URL、模型、Key 和 64 维。激活外部向量模型前直接调用固定 embedding 探针。向量模型与问答模型使用不同激活表。
+LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需要 Base URL、模型、Key 和 1–4096 的备案维度。模型卡片可独立执行 embedding 检测，切换前服务端再次检测。向量模型与问答模型使用不同选择机制。
 
 ## 14. REST API 基线
 

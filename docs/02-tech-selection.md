@@ -14,7 +14,7 @@
 | 后端运行时 | Java 17、Spring Boot 3.5 | 单体服务，REST API 与后台任务同进程 |
 | Web | Spring MVC、Bean Validation、Actuator | Cookie 会话，自定义权限校验 |
 | 数据访问 | MyBatis、Mapper XML、PageHelper | PostgreSQL 方言，复杂查询使用显式 SQL |
-| 数据库 | PostgreSQL 17、pgvector | 业务数据、任务、图谱投影、64 维向量统一存储 |
+| 数据库 | PostgreSQL 17、pgvector | 业务数据、任务、图谱投影和可变维度向量统一存储 |
 | 迁移 | Flyway | 当前迁移基线为 `V1__baseline.sql` |
 | 后台任务 | Spring Scheduler + 数据库任务表 | 无 Redis、MQ、Spring Batch 运行依赖 |
 | Git/图谱 | Git CLI、CodeGraph CLI、`ProcessBuilder` | CodeGraph 为可选外部命令，产物登记后再发布 |
@@ -51,7 +51,7 @@
 
 ### 2.3 Flyway
 
-Flyway 默认启用。当前仓库仅有一个合并后的 `V1__baseline.sql`，负责扩展、表、索引与初始结构。文档、运维和测试不得引用不存在的 V15 等迁移版本。
+Flyway 默认启用。`V1__init_schema.sql` 负责扩展、表、索引与初始结构，`V3__qa_multi_turn_streaming.sql` 补充多轮问答结构，`V4__flexible_vector_dimensions.sql` 将向量存储升级为可变维度。
 
 ### 2.4 知识正文与附件
 
@@ -79,7 +79,7 @@ CodeGraph CLI 是可选依赖。后端为当前仓库版本创建独立分析副
 
 ### 3.3 内容切片与 pgvector
 
-代码切片、元数据和向量均存入 PostgreSQL。当前数据库向量列为 64 维，支持：
+代码切片、元数据和向量均存入 PostgreSQL。向量列支持按模型保存不同维度，检索时同时匹配模型标识和维度：
 
 - 路径、符号和正文关键词召回；
 - 余弦/向量相似度召回；
@@ -93,7 +93,7 @@ CodeGraph CLI 是可选依赖。后端为当前仓库版本创建独立分析副
 当前支持：
 
 - `LOCAL_HASH`：本地确定性 64 维向量；
-- OpenAI-compatible `/embeddings`：连接检测必须确认可返回 64 维。
+- OpenAI-compatible `/embeddings`：支持 1–4096 维，检测必须确认返回长度等于备案维度。
 
 向量记录保存模型标识和版本关联。切换模型后不能把旧模型向量冒充为新模型结果；系统按当前实现触发重建/按需刷新。
 

@@ -226,14 +226,12 @@ public class LlmSettingsService {
         if (candidate == null) {
             throw new ApiSecurityException(404, "VECTOR_MODEL_NOT_FOUND", "向量模型不存在");
         }
-        if ("OPENAI_COMPATIBLE".equals(string(candidate, "provider_type"))) {
-            client.embed(
-                    string(candidate, "base_url"),
-                    string(candidate, "model"),
-                    readSecret(uuid(candidate, "secret_version_id")),
-                    "connection probe",
-                    integer(candidate, "dimension", 64),
-                    integer(candidate, "request_timeout_ms", 30000));
+        VectorModelCheckView check = probeVectorModel(candidate);
+        if (!check.available()) {
+            throw new ApiSecurityException(
+                    409,
+                    check.errorCode() == null ? "VECTOR_MODEL_UNAVAILABLE" : check.errorCode(),
+                    check.errorSummary() == null ? "向量模型检测失败" : check.errorSummary());
         }
         if (mapper.activateVectorModel(id, actorId, expectedVersion) == 0) {
             throw new ApiSecurityException(
@@ -242,25 +240,67 @@ public class LlmSettingsService {
         return vectorModelView(mapper.vectorModel(id));
     }
 
+    public VectorModelCheckView checkVectorModel(UUID id) {
+        Map<String, Object> candidate = mapper.vectorModel(id);
+        if (candidate == null) {
+            throw new ApiSecurityException(404, "VECTOR_MODEL_NOT_FOUND", "向量模型不存在");
+        }
+        return probeVectorModel(candidate);
+    }
+
+    private VectorModelCheckView probeVectorModel(Map<String, Object> candidate) {
+        long started = System.nanoTime();
+        int dimension = integer(candidate, "dimension", 64);
+        if ("LOCAL_HASH".equals(string(candidate, "provider_type"))) {
+            return new VectorModelCheckView(
+                    uuid(candidate, "id"), true, dimension, elapsed(started), null, null);
+        }
+        try {
+            client.embed(
+                    string(candidate, "base_url"),
+                    string(candidate, "model"),
+                    readSecret(uuid(candidate, "secret_version_id")),
+                    "connection probe",
+                    dimension,
+                    integer(candidate, "request_timeout_ms", 30000));
+            return new VectorModelCheckView(
+                    uuid(candidate, "id"), true, dimension, elapsed(started), null, null);
+        } catch (LlmConnectionException exception) {
+            return new VectorModelCheckView(
+                    uuid(candidate, "id"),
+                    false,
+                    dimension,
+                    elapsed(started),
+                    exception.code(),
+                    safeSummary(exception.getMessage()));
+        }
+    }
+
     public String activeVectorModelName() {
         Map<String, Object> row = mapper.activeVectorModel();
         return row == null ? "local-hash-64" : string(row, "model");
     }
 
+    public int activeVectorModelDimension() {
+        Map<String, Object> row = mapper.activeVectorModel();
+        return row == null ? 64 : integer(row, "dimension", 64);
+    }
+
     public VectorEmbedding vectorize(String input) {
         Map<String, Object> row = mapper.activeVectorModel();
         if (row == null || "LOCAL_HASH".equals(string(row, "provider_type"))) {
-            return new VectorEmbedding(activeVectorModelName(), null);
+            return new VectorEmbedding(activeVectorModelName(), 64, null);
         }
+        int dimension = integer(row, "dimension", 64);
         String vector =
                 client.embed(
                         string(row, "base_url"),
                         string(row, "model"),
                         readSecret(uuid(row, "secret_version_id")),
                         input,
-                        integer(row, "dimension", 64),
+                        dimension,
                         integer(row, "request_timeout_ms", 30000));
-        return new VectorEmbedding(string(row, "model"), vector);
+        return new VectorEmbedding(string(row, "model"), dimension, vector);
     }
 
     public CheckView startCheck(UUID actorId, ConnectivityCheckRequest request) {
@@ -622,9 +662,14 @@ public class LlmSettingsService {
         }
         String model = clean(input.model(), 1, 200, "模型标识");
         int dimension = input.dimension() == null ? 64 : input.dimension();
-        if (dimension != 64) {
+        if ("LOCAL_HASH".equals(providerType) && dimension != 64) {
             throw new ApiSecurityException(
-                    400, "VECTOR_DIMENSION_INCOMPATIBLE", "当前索引只兼容 64 维向量模型");
+                    400, "VECTOR_DIMENSION_INCOMPATIBLE", "本地哈希模型固定使用 64 维");
+        }
+        if ("OPENAI_COMPATIBLE".equals(providerType)
+                && (dimension < 1 || dimension > 4096)) {
+            throw new ApiSecurityException(
+                    400, "VECTOR_DIMENSION_INCOMPATIBLE", "外部向量模型维度必须在 1 到 4096 之间");
         }
         String baseUrl = null;
         if ("OPENAI_COMPATIBLE".equals(providerType)) {
@@ -992,7 +1037,15 @@ public class LlmSettingsService {
             Instant createdAt,
             Instant activatedAt) {}
 
-    public record VectorEmbedding(String model, String vector) {}
+    public record VectorEmbedding(String model, int dimension, String vector) {}
+
+    public record VectorModelCheckView(
+            UUID configId,
+            boolean available,
+            int dimension,
+            long durationMs,
+            String errorCode,
+            String errorSummary) {}
 
     public record ConnectivityCheckRequest(UUID configId, ProviderInput candidate) {}
 

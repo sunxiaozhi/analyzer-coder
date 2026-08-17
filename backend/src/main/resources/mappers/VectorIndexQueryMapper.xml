@@ -86,7 +86,7 @@
             k.id,k.title,k.card_type,k.revision,
             LEFT(REGEXP_REPLACE(k.content,E'\\s+',' ','g'),260) content_excerpt,
             ke.content_hash,ke.model vector_model,
-            CASE WHEN ke.card_id IS NULL THEN NULL ELSE 64 END dimension,
+            ke.dimension,
             ke.created_at vectorized_at,
             CASE WHEN ke.card_id IS NULL THEN 'MISSING' ELSE 'EMBEDDED' END vector_status
         FROM knowledge_cards k

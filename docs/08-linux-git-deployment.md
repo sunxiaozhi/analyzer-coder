@@ -434,6 +434,8 @@ git pull --ff-only origin v2
 bash scripts/start.sh
 ```
 
+升级到支持可变向量维度的版本时，后端首次启动会自动执行 Flyway V4，将已有 64 维向量列改为可变维度并保留原数据。生产环境应先备份 PostgreSQL；切换新的外部向量模型后，需要对仓库执行一次完整索引，才能生成新模型维度的向量。
+
 只有确认 `frontend/package-lock.json` 没有变化时，才建议使用：
 
 ```bash

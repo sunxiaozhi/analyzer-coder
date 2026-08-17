@@ -322,7 +322,12 @@ public class IntelligenceService {
                             "CODE_SEMANTIC",
                             1.0,
                             "CODE",
-                            mapper.searchCodeVector(repositoryId, vector, model, candidateLimit),
+                            mapper.searchCodeVector(
+                                    repositoryId,
+                                    vector,
+                                    model,
+                                    embedding.dimension(),
+                                    candidateLimit),
                             false));
             if (includeKnowledge) {
                 channels.add(
@@ -331,7 +336,11 @@ public class IntelligenceService {
                                 1.05,
                                 "KNOWLEDGE",
                                 mapper.searchKnowledgeVector(
-                                        repositoryId, vector, model, candidateLimit),
+                                        repositoryId,
+                                        vector,
+                                        model,
+                                        embedding.dimension(),
+                                        candidateLimit),
                                 false));
             }
         } catch (RuntimeException ignored) {
@@ -544,7 +553,8 @@ public class IntelligenceService {
 
     private void ensureCodeEmbeddings(UUID repositoryId) {
         String model = llm.activeVectorModelName();
-        for (Map<String, Object> row : mapper.missingEmbeddings(repositoryId, model)) {
+        int dimension = llm.activeVectorModelDimension();
+        for (Map<String, Object> row : mapper.missingEmbeddings(repositoryId, model, dimension)) {
             LlmSettingsService.VectorEmbedding embedding = llm.vectorize(string(row, "content"));
             String vector =
                     embedding.vector() == null
@@ -554,6 +564,7 @@ public class IntelligenceService {
                     uuid(row, "id"),
                     repositoryId,
                     embedding.model(),
+                    embedding.dimension(),
                     vector,
                     string(row, "content_hash"));
         }
@@ -561,7 +572,9 @@ public class IntelligenceService {
 
     private void ensureKnowledgeEmbeddings(UUID repositoryId) {
         String model = llm.activeVectorModelName();
-        for (Map<String, Object> row : mapper.missingKnowledgeEmbeddings(repositoryId, model)) {
+        int dimension = llm.activeVectorModelDimension();
+        for (Map<String, Object> row :
+                mapper.missingKnowledgeEmbeddings(repositoryId, model, dimension)) {
             String content = string(row, "content");
             LlmSettingsService.VectorEmbedding embedding = llm.vectorize(content);
             String vector = embedding.vector() == null ? localVector(content) : embedding.vector();
@@ -570,6 +583,7 @@ public class IntelligenceService {
                     repositoryId,
                     integer(row, "revision"),
                     embedding.model(),
+                    embedding.dimension(),
                     vector,
                     sha256(content));
         }
