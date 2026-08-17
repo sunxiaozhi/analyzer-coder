@@ -2,13 +2,15 @@
 param(
     [switch]$Https,
     [switch]$NoBuild,
+    [switch]$Components,
     [switch]$Help
 )
 
 if ($Help) {
-    Write-Host 'Usage: pwsh -File scripts/start.ps1 [-Https] [-NoBuild]'
+    Write-Host 'Usage: pwsh -File scripts/start.ps1 [-Https] [-NoBuild] [-Components]'
     Write-Host '  -Https   Enable Secure cookies; use only behind the HTTPS proxy.'
     Write-Host '  -NoBuild Start existing images without rebuilding.'
+    Write-Host '  -Components Start only PostgreSQL/pgvector and Nginx; application code stays on the host.'
     exit 0
 }
 
@@ -51,6 +53,71 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Set-Location $rootDir
+
+if ($Components) {
+    if ($Https) { throw '-Https is not supported in component mode; configure HTTPS in an external proxy.' }
+
+    $componentEnvFile = Join-Path $rootDir '.env.components'
+    $componentComposeFile = Join-Path $rootDir 'compose.components.yaml'
+    $frontendDist = Join-Path $rootDir 'frontend\dist'
+    New-Item -ItemType Directory -Force -Path $frontendDist | Out-Null
+
+    if (-not (Test-Path -LiteralPath $componentEnvFile)) {
+        $postgresPassword = 'Db' + (New-HexToken 24)
+        $frontendDistPath = $frontendDist.Replace('\', '/')
+        $componentConfiguration = @"
+POSTGRES_DB=codebase_kb
+POSTGRES_USER=codebase_kb
+POSTGRES_PASSWORD=$postgresPassword
+POSTGRES_PORT=5432
+APP_HTTP_BIND_ADDRESS=127.0.0.1
+APP_HTTP_PORT=8088
+APP_FRONTEND_DIST_HOST_ROOT="$frontendDistPath"
+TZ=Asia/Shanghai
+"@
+        [System.IO.File]::WriteAllText($componentEnvFile, $componentConfiguration, [System.Text.UTF8Encoding]::new($false))
+        Write-Host "Created $componentEnvFile"
+        Write-Host "PostgreSQL password: $postgresPassword"
+        Write-Host 'Save this password for the host backend configuration.' -ForegroundColor Yellow
+    }
+
+    if (Select-String -LiteralPath $componentEnvFile -SimpleMatch 'replace-with' -Quiet) {
+        throw "$componentEnvFile still contains placeholder secrets; replace them before starting."
+    }
+
+    $componentCompose = @('compose', '--env-file', $componentEnvFile, '-f', $componentComposeFile)
+    Invoke-Docker ($componentCompose + @('config', '--quiet'))
+    Invoke-Docker ($componentCompose + @('up', '-d'))
+
+    $postgresHealthy = $false
+    $nginxHealthy = $false
+    for ($attempt = 0; $attempt -lt 60; $attempt++) {
+        & docker @($componentCompose + @('exec', '-T', 'postgres', 'sh', '-c', 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"')) *> $null
+        if ($LASTEXITCODE -eq 0) { $postgresHealthy = $true }
+        & docker @($componentCompose + @('exec', '-T', 'nginx', 'wget', '--quiet', '--output-document=-', 'http://127.0.0.1:8080/component-health')) *> $null
+        if ($LASTEXITCODE -eq 0) { $nginxHealthy = $true }
+        if ($postgresHealthy -and $nginxHealthy) { break }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $postgresHealthy -or -not $nginxHealthy) {
+        & docker @($componentCompose + @('logs', '--tail=120'))
+        throw 'Component services did not become healthy in time.'
+    }
+
+    & docker @($componentCompose + @('ps'))
+    $componentLines = Get-Content -LiteralPath $componentEnvFile
+    $httpPortLine = $componentLines | Where-Object { $_ -like 'APP_HTTP_PORT=*' } | Select-Object -Last 1
+    $postgresPortLine = $componentLines | Where-Object { $_ -like 'POSTGRES_PORT=*' } | Select-Object -Last 1
+    $httpPort = if ($httpPortLine) { $httpPortLine.Substring('APP_HTTP_PORT='.Length) } else { '8088' }
+    $postgresPort = if ($postgresPortLine) { $postgresPortLine.Substring('POSTGRES_PORT='.Length) } else { '5432' }
+    Write-Host "Components are ready: Nginx http://127.0.0.1:$httpPort, PostgreSQL 127.0.0.1:$postgresPort" -ForegroundColor Green
+    Write-Host "Frontend assets: $frontendDist (run npm build on the host)"
+    Write-Host 'Backend API: Nginx expects the host backend at http://host.docker.internal:8080'
+    Write-Host 'Logs: docker compose --env-file .env.components -f compose.components.yaml logs -f'
+    Write-Host 'Stop: docker compose --env-file .env.components -f compose.components.yaml down'
+    exit 0
+}
+
 $repositoryDir = Join-Path $rootDir 'runtime\repositories'
 $dataDir = Join-Path $rootDir 'runtime\data'
 New-Item -ItemType Directory -Force -Path $repositoryDir, $dataDir | Out-Null

@@ -68,6 +68,18 @@ bash scripts/start.sh --https
 已有镜像且不需要重新构建时可使用 `-NoBuild` 或 `--no-build`。脚本结束时会输出查看日志和停止服务的命令。Secure Cookie 开启后必须通过 HTTPS 域名访问，不能继续使用普通 HTTP。
 ## 3. 本地开发
 
+如果只希望容器化基础组件、业务代码继续在宿主机运行，可启动 PostgreSQL/pgvector 和 Nginx 组件模式：
+
+```powershell
+pwsh -File scripts/start.ps1 -Components
+```
+
+```bash
+bash scripts/start.sh --components
+```
+
+组件模式使用 `.env.components`：PostgreSQL 监听 `127.0.0.1:5432`，Nginx 监听 `127.0.0.1:8088`。Nginx 挂载宿主机的 `frontend/dist`，并将 `/api/` 转发到宿主机后端 `8080`，应用代码不会进入组件镜像。前端代码更新后在宿主机重新执行 `npm run build` 即可。
+
 ### 3.1 PostgreSQL
 
 复制开发环境模板，必须修改数据库密码：

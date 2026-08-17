@@ -15,6 +15,9 @@ runtime-logs
 
 .env
 .env.production
+.env.components
+.env.application
 deploy/.env.production
 
 /runtime/
+/release/

@@ -1,0 +1,48 @@
+name: analyzer-coder-components
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: analyzer-coder-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-codebase_kb}
+      POSTGRES_USER: ${POSTGRES_USER:-codebase_kb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: analyzer-coder-nginx
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${APP_HTTP_BIND_ADDRESS:-127.0.0.1}:${APP_HTTP_PORT:-8088}:8080"
+    volumes:
+      - type: bind
+        source: ${APP_FRONTEND_DIST_HOST_ROOT:?APP_FRONTEND_DIST_HOST_ROOT is required}
+        target: /usr/share/nginx/html
+        read_only: true
+      - type: bind
+        source: ./deploy/nginx-components.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8080/component-health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  postgres-data:
