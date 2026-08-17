@@ -49,13 +49,23 @@ class IntelligenceControllerTest {
         UUID repositoryId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
         UUID threadId = UUID.randomUUID();
-        var question = new IntelligenceController.Question("如何完成库存回滚？", requestId, threadId);
+        UUID modelConfigId = UUID.randomUUID();
+        var question =
+                new IntelligenceController.Question(
+                        "如何完成库存回滚？", requestId, threadId, modelConfigId);
 
         controller.ask(repositoryId, question, request);
 
         verify(access)
                 .require(account, CodeRepositoryId.of(repositoryId), RepositoryPermission.READ);
-        verify(service).ask(repositoryId, account.id(), question.question(), requestId, threadId);
+        verify(service)
+                .ask(
+                        repositoryId,
+                        account.id(),
+                        question.question(),
+                        requestId,
+                        threadId,
+                        modelConfigId);
     }
 
     @Test

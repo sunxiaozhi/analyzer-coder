@@ -149,11 +149,11 @@ Browser
 
 ### 4.5 模型配置表
 
-- `system_settings`：键值设置，当前主要保存 `externalModelEnabled`。
+- `system_settings`：兼容保留的系统键值设置；问答模型选择不再读取 `externalModelEnabled`。
 - `encrypted_secret_versions`：问答/向量 API Key 密文、IV、摘要和算法。
 - `llm_provider_configs`：多个问答模型备案。
 - `llm_provider_runtime_states`：可用性、最后成功/失败和熔断状态。
-- `llm_provider_activation`：唯一激活问答模型与激活版本。
+- `llm_provider_activation`：旧版全局问答模型激活记录，数据库兼容保留，当前问答链路不再读取。
 - `llm_connectivity_checks`：异步连接检测及阶段结果。
 - `vector_model_configs/vector_model_activation`：向量模型备案和唯一激活项。
 
@@ -315,13 +315,14 @@ IndexJobWorker
 ```text
 POST /repositories/{repoId}/ask
   → READ 鉴权
+  → 校验请求携带的 modelConfigId
   → unifiedSearch(limit=10)
   → 无证据：INSUFFICIENT，不调用模型
-  → 有证据：LlmSettingsService.generate(prompt)
-      → externalModelEnabled
-      → prompt 长度/敏感模式
-      → active config AVAILABLE
+  → 有证据：LlmSettingsService.generate(modelConfigId, prompt)
+      → selected config AVAILABLE
       → breaker CLOSED
+      → 凭据与私钥内容脱敏
+      → Prompt 长度保护
       → OpenAI-compatible 非流式 completion
   → AnswerCitationValidator
       → 合法：SUPPORTED
@@ -333,7 +334,7 @@ POST /repositories/{repoId}/ask
 
 ### 10.2 证据 Prompt
 
-Prompt 约束模型只能使用编号证据。总证据预算约 18000 字符，单项最多 2400 字符，要求中文回答并在事实句后标 `[S编号]`。敏感模式匹配 api key、secret、password、token 等赋值形式。
+Prompt 约束模型只能使用编号证据。总证据预算约 14000 字符，单项最多 2400 字符，要求中文回答并在事实句后标 `[S编号]`。api key、secret、password、token、访问密钥和私钥内容会被替换为脱敏占位符，而不是直接取消整次模型调用。
 
 ### 10.3 当前历史边界
 
@@ -373,7 +374,7 @@ Controller 创建/更新统一要求 MAINTAIN，服务层直接接受 CardInput.
 
 备案记录包含名称、OpenAI-compatible Base URL、模型、超时、最大 Token、Temperature、流式检测开关和密钥版本。密钥使用主密钥派生的加密服务保存；DTO 只暴露 `secretConfigured`。
 
-保存或编辑后 runtime state 回到 UNTESTED。激活配置不可编辑。
+保存或编辑后 runtime state 回到 UNTESTED。检测为 AVAILABLE 后即可在知识问答页面选择；问答模型不再需要全局激活。
 
 ### 13.2 连接检测
 
@@ -390,11 +391,11 @@ POST connectivity-checks
   → CLASSIFY_AND_PERSIST
 ```
 
-检测可取消，应用重启把中断检测置为失败。AVAILABLE 配置的 checkId、fingerprint 和 10 分钟时限是激活前置。
+检测可取消，应用重启把中断检测置为失败。只有 runtime state 为 AVAILABLE 且熔断器为 CLOSED 的配置会在知识问答页面作为可用项。
 
 ### 13.3 运行期门控
 
-`generate` 依次检查全局 `externalModelEnabled`、Prompt 安全、激活配置、AVAILABLE 和 breaker CLOSED。失败返回 Optional.empty，让问答层明确降级。连续连接失败达到阈值后更新熔断状态。
+`generate` 按请求中的模型配置 ID 查询配置，检查 AVAILABLE 和 breaker CLOSED，脱敏 Prompt 后调用模型。连续连接失败达到阈值后更新熔断状态；全局 `externalModelEnabled` 和问答模型激活记录不再参与运行期选择。
 
 ### 13.4 向量模型
 

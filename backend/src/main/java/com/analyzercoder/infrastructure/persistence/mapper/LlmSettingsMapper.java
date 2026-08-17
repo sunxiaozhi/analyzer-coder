@@ -151,42 +151,6 @@ public interface LlmSettingsMapper {
     int resetRuntimeState(@Param("configId") UUID configId);
 
     /**
-     * 查询当前配置的激活状态。
-     *
-     * @return 接口约定的操作结果
-     */
-    Map<String, Object> activation();
-
-    /**
-     * 激活指定配置，并使其成为运行时生效版本。
-     *
-     * @param configId 目标对象的唯一标识
-     * @param actorId 目标对象的唯一标识
-     * @param expectedVersion 执行乐观锁更新时预期的当前版本号
-     * @return 本次操作影响的记录数
-     */
-    int activate(
-            @Param("configId") UUID configId,
-            @Param("actorId") UUID actorId,
-            @Param("expectedVersion") long expectedVersion);
-
-    /**
-     * 停用当前生效的大模型配置。
-     *
-     * @param actorId 目标对象的唯一标识
-     * @param expectedVersion 执行乐观锁更新时预期的当前版本号
-     * @return 本次操作影响的记录数
-     */
-    int deactivate(@Param("actorId") UUID actorId, @Param("expectedVersion") long expectedVersion);
-
-    /**
-     * 查询当前运行时生效的大模型配置。
-     *
-     * @return 接口约定的操作结果
-     */
-    Map<String, Object> activeConfig();
-
-    /**
      * 创建并持久化一条新记录。
      *
      * @param id 目标对象的唯一标识
@@ -285,21 +249,6 @@ public interface LlmSettingsMapper {
     Map<String, Object> check(@Param("id") UUID id);
 
     /**
-     * 查询最近一次通过且仍在有效期内的连通性检查。
-     *
-     * @param configId 目标对象的唯一标识
-     * @param fingerprint 识别密钥或配置且不暴露原值的指纹
-     * @param checkId 目标对象的唯一标识
-     * @param notBefore 记录允许被领取或重试的最早时间
-     * @return 本次操作影响的记录数
-     */
-    int recentAvailableCheck(
-            @Param("configId") UUID configId,
-            @Param("fingerprint") String fingerprint,
-            @Param("checkId") UUID checkId,
-            @Param("notBefore") Instant notBefore);
-
-    /**
      * 将已通过的连通性检查结果应用到运行时状态。
      *
      * @param configId 目标对象的唯一标识
@@ -334,13 +283,6 @@ public interface LlmSettingsMapper {
             @Param("configId") UUID configId,
             @Param("errorCode") String errorCode,
             @Param("threshold") int threshold);
-
-    /**
-     * 判断外部大模型能力是否已启用。
-     *
-     * @return 满足接口条件时返回 {@code true}，否则返回 {@code false}
-     */
-    boolean externalModelEnabled();
 
     /**
      * 查询可用的向量模型配置列表。

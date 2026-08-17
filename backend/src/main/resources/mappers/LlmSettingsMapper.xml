@@ -5,8 +5,7 @@
         c.id,c.config_version,c.name,c.provider_type,c.base_url,c.model,c.connect_timeout_ms,c.request_timeout_ms,
         c.max_output_tokens,c.temperature,c.streaming_enabled,c.secret_version_id,c.fingerprint,c.created_at,
         s.availability,s.latest_check_id,s.last_success_at,s.last_failure_at,s.consecutive_failures,
-        s.breaker_state,s.last_error_code,
-        a.active_config_id,a.activation_version,a.activated_at
+        s.breaker_state,s.last_error_code
     </sql>
 
     <select id="latestConfig" resultType="map">
@@ -14,7 +13,6 @@
         <include refid="configView"/>
         FROM llm_provider_configs c
         JOIN llm_provider_runtime_states s ON s.config_id=c.id
-        CROSS JOIN llm_provider_activation a
         ORDER BY c.config_version DESC LIMIT 1
     </select>
     <select id="config" resultType="map">
@@ -22,7 +20,6 @@
         <include refid="configView"/>
         FROM llm_provider_configs c
         JOIN llm_provider_runtime_states s ON s.config_id=c.id
-        CROSS JOIN llm_provider_activation a
         WHERE c.id=#{id}
     </select>
     <select id="configVersions" resultType="map">
@@ -30,7 +27,6 @@
         <include refid="configView"/>
         FROM llm_provider_configs c
         JOIN llm_provider_runtime_states s ON s.config_id=c.id
-        CROSS JOIN llm_provider_activation a
         ORDER BY c.config_version DESC
     </select>
     <select id="nextConfigVersion" resultType="long">
@@ -71,30 +67,6 @@
         consecutive_failures=0,breaker_state='CLOSED',breaker_opened_at=NULL,last_error_code=NULL,
         updated_at=CURRENT_TIMESTAMP WHERE config_id=#{configId}
     </update>
-
-    <select id="activation" resultType="map">
-        SELECT active_config_id,activation_version,activated_at FROM llm_provider_activation WHERE singleton_id=1
-    </select>
-    <update id="activate">
-        UPDATE llm_provider_activation
-        SET
-        active_config_id=#{configId},activation_version=activation_version+1,activated_by=#{actorId},activated_at=CURRENT_TIMESTAMP
-        WHERE singleton_id=1 AND activation_version=#{expectedVersion}
-    </update>
-    <update id="deactivate">
-        UPDATE llm_provider_activation
-        SET
-        active_config_id=NULL,activation_version=activation_version+1,activated_by=#{actorId},activated_at=CURRENT_TIMESTAMP
-        WHERE singleton_id=1 AND activation_version=#{expectedVersion}
-    </update>
-    <select id="activeConfig" resultType="map">
-        SELECT
-        <include refid="configView"/>
-        FROM llm_provider_activation a
-        JOIN llm_provider_configs c ON c.id=a.active_config_id
-        JOIN llm_provider_runtime_states s ON s.config_id=c.id
-        WHERE a.singleton_id=1
-    </select>
 
     <insert id="insertCheck">
         INSERT INTO llm_connectivity_checks(
@@ -142,12 +114,6 @@
         connect_duration_ms,first_token_duration_ms,request_id,started_at,finished_at,created_at
         FROM llm_connectivity_checks WHERE id=#{id}
     </select>
-    <select id="recentAvailableCheck" resultType="int">
-        SELECT COUNT(*) FROM llm_connectivity_checks
-        WHERE id=#{checkId} AND config_id=#{configId} AND fingerprint=#{fingerprint}
-        AND status='SUCCEEDED' AND availability='AVAILABLE' AND finished_at&gt;=#{notBefore}
-    </select>
-
     <update id="applyCheckToRuntime">
         UPDATE llm_provider_runtime_states
         SET availability=#{availability},latest_check_id=#{checkId},
@@ -175,11 +141,6 @@
         updated_at=CURRENT_TIMESTAMP
         WHERE config_id=#{configId}
     </update>
-    <select id="externalModelEnabled" resultType="boolean">
-        SELECT COALESCE((SELECT LOWER(setting_value)='true' FROM system_settings WHERE
-        setting_key='externalModelEnabled'),FALSE)
-    </select>
-
     <select id="vectorModels" resultType="map">
         SELECT c.id,c.name,c.provider_type,c.base_url,c.model,c.dimension,c.request_timeout_ms,
         c.secret_version_id,c.created_at,

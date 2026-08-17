@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
+import { ElMessage } from 'element-plus';
 import {
   Activity, ArrowRightLeft, Box, CirclePlus, Cpu, Database, KeyRound,
-  Pencil, Power, Save, Server, ShieldCheck,
+  Pencil, Save, Server,
 } from 'lucide-vue-next';
-import { intelligenceApi } from '@/api/intelligence';
 import {
   llmSettingsApi,
   type LlmConnectivityCheck,
@@ -18,8 +17,6 @@ import {
 const section = shallowRef<'generation' | 'vector'>('generation');
 const providers = shallowRef<LlmProvider[]>([]);
 const vectorModels = shallowRef<VectorModel[]>([]);
-const settings = reactive<Record<string, string>>({});
-const settingsReady = shallowRef(false);
 const loading = shallowRef(false);
 const saving = shallowRef(false);
 const checkingId = shallowRef<string | null>(null);
@@ -54,8 +51,6 @@ const vectorForm = reactive<VectorModelInput>({
   secretAction: 'CLEAR',
 });
 
-const activeProvider = computed(() => providers.value.find(item => item.active) ?? null);
-
 const availabilityCopy = {
   UNCONFIGURED: ['未配置', 'neutral'],
   UNTESTED: ['待检测', 'pending'],
@@ -67,17 +62,12 @@ const availabilityCopy = {
 async function load() {
   loading.value = true;
   try {
-    const [loadedSettings, loadedProviders, loadedVectors] = await Promise.all([
-      intelligenceApi.settings(),
+    const [loadedProviders, loadedVectors] = await Promise.all([
       llmSettingsApi.providers(),
       llmSettingsApi.vectorModels(),
     ]);
-    Object.assign(settings, loadedSettings, {
-      externalModelEnabled: loadedSettings.externalModelEnabled === 'true' ? 'true' : 'false',
-    });
     providers.value = loadedProviders;
     vectorModels.value = loadedVectors;
-    settingsReady.value = true;
   } finally {
     loading.value = false;
   }
@@ -168,44 +158,6 @@ async function testProvider(item: LlmProvider) {
   }
 }
 
-async function activateProvider(item: LlmProvider) {
-  if (!item.id || !item.latestCheckId || !item.fingerprint) {
-    return ElMessage.warning('请先完成连接检测');
-  }
-  try {
-    await llmSettingsApi.activate(item.id, {
-      latestCheckId: item.latestCheckId,
-      fingerprint: item.fingerprint,
-      expectedActivationVersion: item.activationVersion,
-    });
-    await load();
-    ElMessage.success(`已切换到 ${item.name}`);
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '切换失败');
-  }
-}
-
-async function deactivateProvider() {
-  const item = activeProvider.value;
-  if (!item) return;
-  await ElMessageBox.confirm('停用后问答将立即回退到本地模式。', '停用问答模型', {
-    type: 'warning', confirmButtonText: '停用', cancelButtonText: '取消',
-  });
-  await llmSettingsApi.deactivate(item.activationVersion);
-  await load();
-  ElMessage.success('问答模型已停用');
-}
-
-async function toggleOutbound() {
-  if (!settingsReady.value) return;
-  try {
-    Object.assign(settings, await intelligenceApi.saveSettings({ ...settings }));
-    ElMessage.success('代码外发策略已更新');
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '策略更新失败');
-  }
-}
-
 function openCreateVector() {
   editingVectorId.value = null;
   Object.assign(vectorForm, {
@@ -291,33 +243,18 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
     </nav>
 
     <main v-if="section === 'generation'" class="registry-body">
-      <div class="section-toolbar generation-toolbar">
-        <div class="policy-inline">
-          <span class="policy-icon"><ShieldCheck :size="16" /></span>
-          <span class="policy-copy">
-            <b>数据外发策略</b>
-            <small>允许发送检索命中的代码片段</small>
-          </span>
-          <el-switch
-            v-if="settingsReady"
-            v-model="settings.externalModelEnabled"
-            active-value="true"
-            inactive-value="false"
-            aria-label="允许发送检索命中的代码片段"
-            @change="toggleOutbound"
-          />
-        </div>
+      <div class="section-toolbar">
         <el-button type="primary" @click="openCreateProvider"><CirclePlus :size="15" />新增模型</el-button>
       </div>
       <div v-if="providers.length" class="model-grid">
-        <article v-for="item in providers" :key="item.id ?? item.version" class="model-card" :class="{ active: item.active }">
+        <article v-for="item in providers" :key="item.id ?? item.version" class="model-card">
           <header class="card-header">
             <el-tag effect="plain" size="small">OpenAI-compatible</el-tag>
             <el-tag
-              :type="item.active ? 'success' : item.availability === 'UNAVAILABLE' ? 'danger' : item.availability === 'DEGRADED' ? 'warning' : 'info'"
+              :type="item.availability === 'AVAILABLE' ? 'success' : item.availability === 'UNAVAILABLE' ? 'danger' : item.availability === 'DEGRADED' ? 'warning' : 'info'"
               size="small"
             >
-              {{ item.active ? '当前启用' : status(item)[0] }}
+              {{ status(item)[0] }}
             </el-tag>
           </header>
           <div class="model-title">
@@ -331,23 +268,17 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
             <div><dt>输出上限</dt><dd>{{ item.maxOutputTokens }} tokens</dd></div>
           </dl>
           <footer class="card-actions">
-            <el-button v-if="!item.active" link type="primary" :disabled="item.availability !== 'AVAILABLE'" @click="activateProvider(item)">
-              <ArrowRightLeft :size="14" />切换使用
-            </el-button>
             <el-button link :loading="checkingId === item.id" @click="testProvider(item)">
               <Activity :size="14" />检测
             </el-button>
-            <el-button link :disabled="item.active" @click="openEditProvider(item)">
+            <el-button link @click="openEditProvider(item)">
               <Pencil :size="14" />编辑
-            </el-button>
-            <el-button v-if="item.active" link type="danger" @click="deactivateProvider">
-              <Power :size="14" />停用
             </el-button>
           </footer>
         </article>
       </div>
       <div v-else class="empty-registry">
-        <Box :size="28" /><b>尚未备案问答模型</b><p>新增配置后先检测连接，再切换为系统模型。</p>
+        <Box :size="28" /><b>尚未备案问答模型</b><p>新增配置并通过连接检测后，即可在知识问答页面选择使用。</p>
       </div>
     </main>
 
@@ -583,51 +514,6 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
   margin-left: 0;
 }
 
-.generation-toolbar {
-  min-height: 36px;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.policy-inline {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 9px;
-}
-
-.policy-copy {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-}
-
-.policy-copy b {
-  font-size: 12px;
-}
-
-.policy-copy small {
-  overflow: hidden;
-  color: #77777e;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.policy-icon {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border-radius: 6px;
-  background: #f1f3f5;
-  color: #0066cc;
-}
-
-.policy-inline > .el-switch {
-  margin-left: 3px;
-}
 .empty-registry {
   display: grid;
   place-items: center;
@@ -688,19 +574,6 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
 
   .registry-tabs {
     padding: 0 8px;
-  }
-
-  .generation-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .policy-copy {
-    flex: 1;
-  }
-
-  .generation-toolbar > .el-button {
-    align-self: flex-end;
   }
 
   .form-pair,

@@ -67,8 +67,6 @@ class PostgresMyBatisContextIT {
                     captcha.failureCount("__mapper_smoke__");
                     intelligence.settings();
                     llmSettings.latestConfig();
-                    llmSettings.activation();
-                    llmSettings.externalModelEnabled();
                     llmSettings.vectorModels();
                     llmSettings.activeVectorModel();
                     var visible = repositories.findAll();
@@ -135,7 +133,6 @@ class PostgresMyBatisContextIT {
         assertNotNull(saved.id());
         assertEquals("UNTESTED", saved.availability());
         assertFalse(saved.secretConfigured());
-        assertFalse(saved.active());
         assertEquals(64, saved.fingerprint().length());
     }
 

@@ -3,7 +3,13 @@ import { Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { intelligenceApi, type Citation, type CodeReference, type QaHistoryRecord } from '@/api/intelligence';
+import {
+  intelligenceApi,
+  type AskModel,
+  type Citation,
+  type CodeReference,
+  type QaHistoryRecord,
+} from '@/api/intelligence';
 import { getRepositoryProfile, type RepositoryPreparation } from '@/api/repositories';
 import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
 import AskHistorySidebar from '@/features/ask/AskHistorySidebar.vue';
@@ -17,12 +23,18 @@ const history = shallowRef<QaHistoryRecord[]>([]);
 const historyLoading = shallowRef(false);
 const readiness = shallowRef<RepositoryPreparation | null>(null);
 const readinessLoading = shallowRef(false);
+const askModels = shallowRef<AskModel[]>([]);
+const selectedModelId = shallowRef<string | null>(null);
+const modelsLoading = shallowRef(false);
 let contextVersion = 0;
 
 const repository = computed(() => repositories.selectedRepository);
 const canAsk = computed(() => Boolean(
   repository.value && readiness.value?.profile.chunkCount,
 ));
+const selectedModel = computed(() =>
+  askModels.value.find(item => item.id === selectedModelId.value) ?? null
+);
 const readinessCopy = computed(() => {
   if (!repository.value) return { label: '未选择仓库', type: 'info' as const };
   if (readinessLoading.value) return { label: '检查中', type: 'info' as const };
@@ -40,9 +52,14 @@ async function loadContext(repositoryId: string | null) {
   conversation.invalidate();
   history.value = [];
   readiness.value = null;
+  askModels.value = [];
+  readinessLoading.value = false;
+  historyLoading.value = false;
+  modelsLoading.value = false;
   if (!repositoryId) return;
   readinessLoading.value = true;
   historyLoading.value = true;
+  modelsLoading.value = true;
   const isCurrent = () => version === contextVersion
     && repositoryId === repositories.selectedRepositoryId;
   const profileTask = getRepositoryProfile(repositoryId)
@@ -57,7 +74,18 @@ async function loadContext(repositoryId: string | null) {
       if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法加载历史记录');
     })
     .finally(() => { if (isCurrent()) historyLoading.value = false; });
-  await Promise.allSettled([profileTask, historyTask]);
+  const modelsTask = intelligenceApi.askModels(repositoryId)
+    .then((result) => {
+      if (!isCurrent()) return;
+      askModels.value = result;
+      const current = result.find(item => item.id === selectedModelId.value && item.available);
+      selectedModelId.value = current?.id ?? result.find(item => item.available)?.id ?? null;
+    })
+    .catch((error) => {
+      if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法加载问答模型');
+    })
+    .finally(() => { if (isCurrent()) modelsLoading.value = false; });
+  await Promise.allSettled([profileTask, historyTask, modelsTask]);
 }
 
 async function reloadHistory() {
@@ -88,11 +116,12 @@ async function refreshReadinessForAsk(repositoryId: string): Promise<boolean | n
 async function send() {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return ElMessage.warning('请先选择仓库');
+  if (!selectedModelId.value) return ElMessage.warning('请先选择一个已检测可用的问答模型');
   const ready = canAsk.value || await refreshReadinessForAsk(repositoryId);
   if (ready === null || repositoryId !== repositories.selectedRepositoryId) return;
   if (!ready) return ElMessage.warning('当前仓库尚未完成问答准备，请先完成索引');
   try {
-    const result = await conversation.send(repositoryId);
+    const result = await conversation.send(repositoryId, selectedModelId.value);
     if (!result || result.repositoryId !== repositories.selectedRepositoryId) return;
     await reloadHistory();
   } catch { /* 错误保留在回答区，可直接重试。 */ }
@@ -100,9 +129,9 @@ async function send() {
 
 async function retry() {
   const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId) return;
+  if (!repositoryId || !selectedModelId.value) return;
   try {
-    const result = await conversation.retry(repositoryId);
+    const result = await conversation.retry(repositoryId, selectedModelId.value);
     if (result) await reloadHistory();
   } catch { /* 错误保留在回答区。 */ }
 }
@@ -191,7 +220,28 @@ onMounted(async () => {
       </div>
       <el-tag :type="readinessCopy?.type" effect="plain" round>{{ readinessCopy?.label }}</el-tag>
       <p v-if="readiness && !canAsk">当前仓库还没有可检索的代码内容，请先完成索引。</p>
+      <p v-else-if="!modelsLoading && !selectedModel">暂无可用问答模型，请让管理员先完成模型检测。</p>
       <div class="command-actions">
+        <div class="model-selector">
+          <span>问答模型</span>
+          <el-select
+            v-model="selectedModelId"
+            :loading="modelsLoading"
+            placeholder="选择已检测模型"
+            aria-label="问答模型"
+          >
+            <el-option
+              v-for="item in askModels"
+              :key="item.id"
+              :label="`${item.name} · ${item.model}`"
+              :value="item.id"
+              :disabled="!item.available"
+            >
+              <span>{{ item.name }} · {{ item.model }}</span>
+              <small>{{ item.available ? '可用' : item.availability }}</small>
+            </el-option>
+          </el-select>
+        </div>
         <el-button :icon="Plus" type="primary" plain @click="conversation.reset()">新会话</el-button>
       </div>
     </header>
@@ -207,7 +257,7 @@ onMounted(async () => {
       :pending-question="conversation.pendingQuestion.value"
       :request-state="conversation.requestState.value"
       :error="conversation.error.value"
-      :disabled="!repository"
+      :disabled="!repository || !selectedModel"
       @send="send" @retry="retry" @select-answer="conversation.selectAnswer"
       @open-knowledge="openKnowledge" @open-code="openCode" @open-graph="openGraph"
     />
@@ -220,6 +270,7 @@ onMounted(async () => {
 .qa-command { grid-column:1/-1; display:flex; min-height:62px; align-items:center; gap:12px; padding:9px 14px; border:1px solid #dedee3; border-radius:7px; background:#fff; }
 .scope-copy { display:grid; grid-template-columns:auto auto; align-items:baseline; gap:2px 9px; min-width:0; }.scope-copy>span { grid-row:1/3; align-self:center; padding-right:10px; color:#0066cc; border-right:2px solid #90bde5; font-size:9px; font-weight:700; letter-spacing:.08em; }.scope-copy strong { overflow:hidden; color:#2d3035; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }.scope-copy small { color:#858a90; font-size:9px; }
 .qa-command>p { margin:0; color:#7b5a1b; font-size:10px; }.command-actions { display:flex; gap:8px; margin-left:auto; }
+.model-selector { display:flex; align-items:center; gap:7px; }.model-selector>span { color:#737980; font-size:10px; white-space:nowrap; }.model-selector :deep(.el-select) { width:240px; }.model-selector :deep(.el-select-dropdown__item) { display:flex; justify-content:space-between; gap:12px; }.model-selector small { color:#8a9097; }
 @media (max-width:900px) { .qa-page { grid-template-columns:1fr; grid-template-rows:auto auto minmax(620px,1fr); gap:10px; overflow:auto; }.qa-command { grid-column:1; }.qa-command>p { display:none; } }
-@media (max-width:760px) { .qa-page { height:auto; }.qa-command { flex-wrap:wrap; }.scope-copy { flex:1; }.command-actions { width:100%; margin-left:0; }.command-actions .el-button { flex:1; } }
+@media (max-width:760px) { .qa-page { height:auto; }.qa-command { flex-wrap:wrap; }.scope-copy { flex:1; }.command-actions { width:100%; margin-left:0; }.model-selector { flex:1; }.model-selector :deep(.el-select) { width:100%; }.command-actions .el-button { flex:0 0 auto; } }
 </style>

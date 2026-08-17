@@ -118,19 +118,4 @@ public class LlmSettingsController {
         return service.cancelCheck(account.id(), checkId);
     }
 
-    @PostMapping("/provider/{configId}/activate")
-    public LlmSettingsService.ProviderView activate(
-            @PathVariable UUID configId,
-            @RequestBody LlmSettingsService.ActivationRequest body,
-            HttpServletRequest request) {
-        var account = SecurityContext.requireAdmin(request);
-        return service.activate(account.id(), configId, body);
-    }
-
-    @PostMapping("/provider/deactivate")
-    public LlmSettingsService.ProviderView deactivate(
-            @RequestParam long expectedActivationVersion, HttpServletRequest request) {
-        var account = SecurityContext.requireAdmin(request);
-        return service.deactivate(account.id(), expectedActivationVersion);
-    }
 }

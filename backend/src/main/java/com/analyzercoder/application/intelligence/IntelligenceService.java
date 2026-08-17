@@ -88,13 +88,18 @@ public class IntelligenceService {
                 .toList();
     }
 
+    public List<LlmSettingsService.AskModelView> askModels() {
+        return llm.askModels();
+    }
+
     @Transactional
     public Answer ask(
             UUID repositoryId,
             UUID accountId,
             String question,
             UUID clientRequestId,
-            UUID requestedThreadId) {
+            UUID requestedThreadId,
+            UUID modelConfigId) {
         if (clientRequestId != null) {
             Map<String, Object> existing =
                     mapper.findConversationByRequest(repositoryId, accountId, clientRequestId);
@@ -133,7 +138,8 @@ public class IntelligenceService {
                 turnNo,
                 threadTitle,
                 history,
-                unifiedSearch(repositoryId, retrievalQuery, 10));
+                unifiedSearch(repositoryId, retrievalQuery, 10),
+                modelConfigId);
     }
 
     private Answer answer(
@@ -146,7 +152,8 @@ public class IntelligenceService {
             int turnNo,
             String threadTitle,
             List<Answer> history,
-            List<Evidence> evidence) {
+            List<Evidence> evidence,
+            UUID modelConfigId) {
         UUID snapshotId =
                 evidence.stream()
                         .map(Evidence::snapshotId)
@@ -165,7 +172,7 @@ public class IntelligenceService {
             cited = List.of();
         } else {
             Optional<LlmSettingsService.GenerationResult> generated =
-                    llm.generate(llmPrompt(question, history, evidence));
+                    llm.generate(modelConfigId, llmPrompt(question, history, evidence));
             if (generated.isPresent()) {
                 AnswerCitationValidator.Validation validation =
                         citationValidator.validate(generated.get().answer(), evidence.size());
@@ -500,15 +507,15 @@ public class IntelligenceService {
                         + "历史对话只用于理解指代和用户意图，不能作为仓库事实证据；"
                         + "不能从本轮证据推出的内容必须明确说不知道；不要编造调用关系。")
                 .append("\n历史对话：");
-        int historyStart = Math.max(0, history.size() - 6);
+        int historyStart = Math.max(0, history.size() - 4);
         for (int index = historyStart; index < history.size(); index++) {
             Answer turn = history.get(index);
-            prompt.append("\n用户：").append(limitText(turn.question(), 600));
-            prompt.append("\n助手：").append(limitText(turn.answer(), 1_200));
+            prompt.append("\n用户：").append(limitText(turn.question(), 500));
+            prompt.append("\n助手：").append(limitText(turn.answer(), 900));
         }
         if (history.isEmpty()) prompt.append("无");
-        prompt.append("\n当前问题：").append(question).append("\n本轮证据：");
-        int remaining = 18_000;
+        prompt.append("\n当前问题：").append(limitText(question, 1_200)).append("\n本轮证据：");
+        int remaining = 14_000;
         for (int index = 0; index < evidence.size() && remaining > 0; index++) {
             Evidence item = evidence.get(index);
             String header = "\n[S" + (index + 1) + "][" + item.sourceType() + "] " + item.title()

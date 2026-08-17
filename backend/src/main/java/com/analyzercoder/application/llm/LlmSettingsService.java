@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -35,14 +36,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class LlmSettingsService {
     private static final TypeReference<List<StageView>> STAGE_LIST = new TypeReference<>() {};
-    private static final List<Pattern> SENSITIVE_PATTERNS =
-            List.of(
-                    Pattern.compile(
-                            "-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
-                            Pattern.CASE_INSENSITIVE),
-                    Pattern.compile("AKIA[0-9A-Z]{16}"),
-                    Pattern.compile(
-                            "(?i)(?:api[_-]?key|secret|password|token)\\s*[:=]\\s*['\\\"]?[^\\s'\\\"]{8,}"));
+    private static final Pattern PRIVATE_KEY_PATTERN =
+            Pattern.compile(
+                    "-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\\s\\S]*?"
+                            + "-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
+                    Pattern.CASE_INSENSITIVE);
+    private static final Pattern AWS_ACCESS_KEY_PATTERN = Pattern.compile("AKIA[0-9A-Z]{16}");
+    private static final Pattern CREDENTIAL_PATTERN =
+            Pattern.compile(
+                    "(?i)((?:api[_-]?key|secret|password|token)\\s*[:=]\\s*['\\\"]?)"
+                            + "[^\\s'\\\"]{8,}");
     private final LlmSettingsMapper mapper;
     private final LlmSecretCipher secretCipher;
     private final LlmEndpointPolicy endpointPolicy;
@@ -105,6 +108,22 @@ public class LlmSettingsService {
         return versions();
     }
 
+    public List<AskModelView> askModels() {
+        return mapper.configVersions().stream()
+                .map(
+                        row ->
+                                new AskModelView(
+                                        uuid(row, "id"),
+                                        string(row, "name"),
+                                        string(row, "model"),
+                                        string(row, "availability"),
+                                        string(row, "breaker_state"),
+                                        "AVAILABLE".equals(string(row, "availability"))
+                                                && "CLOSED".equals(
+                                                        string(row, "breaker_state"))))
+                .toList();
+    }
+
     @Transactional
     public ProviderView save(UUID actorId, ProviderInput input) {
         ValidatedInput validated = validate(input);
@@ -134,9 +153,6 @@ public class LlmSettingsService {
     @Transactional
     public ProviderView update(UUID actorId, UUID configId, ProviderInput input) {
         Map<String, Object> current = requireConfig(configId);
-        if (Objects.equals(configId, uuid(current, "active_config_id"))) {
-            throw new ApiSecurityException(409, "LLM_ACTIVE_CONFIG_IMMUTABLE", "请先切换或停用当前模型再编辑");
-        }
         ValidatedInput validated = validate(input);
         SecretMaterial secret = resolveSecretForSave(actorId, input, current);
         String fingerprint = fingerprint(validated, secret.digest());
@@ -321,57 +337,24 @@ public class LlmSettingsService {
         return checkView(requireCheck(checkId));
     }
 
-    @Transactional
-    public ProviderView activate(UUID actorId, UUID configId, ActivationRequest request) {
-        Map<String, Object> config = requireConfig(configId);
-        String availability = string(config, "availability");
-        if (!"AVAILABLE".equals(availability)) {
-            throw new ApiSecurityException(409, "LLM_CHECK_REQUIRED", "仅通过连接检测的配置可以启用");
+    public Optional<GenerationResult> generate(UUID configId, String prompt) {
+        if (configId == null) {
+            throw new ApiSecurityException(400, "LLM_MODEL_REQUIRED", "请选择问答模型");
         }
-        UUID checkId = request.latestCheckId();
-        if (checkId == null
-                || mapper.recentAvailableCheck(
-                                configId,
-                                string(config, "fingerprint"),
-                                checkId,
-                                Instant.now().minus(Duration.ofMinutes(10)))
-                        == 0) {
-            throw new ApiSecurityException(409, "LLM_CHECK_EXPIRED", "连接检测已过期或配置已变化，请重新检测");
+        Map<String, Object> row = mapper.config(configId);
+        if (row == null) {
+            throw new ApiSecurityException(404, "LLM_MODEL_NOT_FOUND", "选择的问答模型不存在");
         }
-        if (!Objects.equals(request.fingerprint(), string(config, "fingerprint"))) {
-            throw new ApiSecurityException(409, "LLM_FINGERPRINT_MISMATCH", "配置已变化，请重新检测");
+        if (!"AVAILABLE".equals(string(row, "availability"))) {
+            throw new ApiSecurityException(409, "LLM_MODEL_UNAVAILABLE", "选择的问答模型尚未通过连接检测");
         }
-        if (mapper.activate(configId, actorId, request.expectedActivationVersion()) == 0) {
-            throw new ApiSecurityException(409, "LLM_ACTIVATION_CONFLICT", "模型启用状态已变化，请刷新后重试");
-        }
-        return providerView(requireConfig(configId));
-    }
-
-    @Transactional
-    public ProviderView deactivate(UUID actorId, long expectedActivationVersion) {
-        if (mapper.deactivate(actorId, expectedActivationVersion) == 0) {
-            throw new ApiSecurityException(409, "LLM_ACTIVATION_CONFLICT", "模型启用状态已变化，请刷新后重试");
-        }
-        return latest();
-    }
-
-    public Optional<GenerationResult> generate(String prompt) {
-        if (!mapper.externalModelEnabled()) {
-            return Optional.empty();
-        }
-        if (prompt == null || prompt.length() > 24000 || containsSensitiveContent(prompt)) {
-            return Optional.empty();
-        }
-        Map<String, Object> row = mapper.activeConfig();
-        if (row == null
-                || !"AVAILABLE".equals(string(row, "availability"))
-                || !"CLOSED".equals(string(row, "breaker_state"))) {
-            return Optional.empty();
+        if (!"CLOSED".equals(string(row, "breaker_state"))) {
+            throw new ApiSecurityException(409, "LLM_BREAKER_OPEN", "选择的问答模型已熔断，请重新检测后再试");
         }
         LlmProviderSpec spec = spec(row);
         String key = readSecret(spec.secretVersionId());
         try {
-            String answer = client.generate(spec, key, prompt);
+            String answer = client.generate(spec, key, safePrompt(prompt));
             mapper.recordRuntimeSuccess(spec.id());
             return Optional.of(new GenerationResult(answer, spec.name() + "/" + spec.model()));
         } catch (LlmConnectionException exception) {
@@ -578,10 +561,8 @@ public class LlmSettingsService {
     }
 
     private ProviderView providerView(Map<String, Object> row) {
-        UUID id = uuid(row, "id");
-        UUID activeId = uuid(row, "active_config_id");
         return new ProviderView(
-                id,
+                uuid(row, "id"),
                 number(row, "config_version", 0),
                 string(row, "name"),
                 string(row, "provider_type"),
@@ -595,20 +576,15 @@ public class LlmSettingsService {
                 uuid(row, "secret_version_id") != null,
                 string(row, "fingerprint"),
                 string(row, "availability"),
-                id != null && id.equals(activeId),
-                activeId,
-                number(row, "activation_version", 0),
                 uuid(row, "latest_check_id"),
                 instant(row, "last_success_at"),
                 instant(row, "last_failure_at"),
                 string(row, "last_error_code"),
                 string(row, "breaker_state"),
-                instant(row, "created_at"),
-                instant(row, "activated_at"));
+                instant(row, "created_at"));
     }
 
     private ProviderView emptyProviderView() {
-        Map<String, Object> activation = mapper.activation();
         return new ProviderView(
                 null,
                 0,
@@ -624,15 +600,11 @@ public class LlmSettingsService {
                 false,
                 null,
                 "UNCONFIGURED",
-                false,
-                uuid(activation, "active_config_id"),
-                number(activation, "activation_version", 0),
                 null,
                 null,
                 null,
                 null,
                 "CLOSED",
-                null,
                 null);
     }
 
@@ -855,8 +827,23 @@ public class LlmSettingsService {
         return value.length() > 500 ? value.substring(0, 500) : value;
     }
 
-    private static boolean containsSensitiveContent(String value) {
-        return SENSITIVE_PATTERNS.stream().anyMatch(pattern -> pattern.matcher(value).find());
+    private static String safePrompt(String value) {
+        if (value == null || value.isBlank()) {
+            throw new ApiSecurityException(400, "LLM_PROMPT_REQUIRED", "问答内容不能为空");
+        }
+        String redacted = PRIVATE_KEY_PATTERN.matcher(value).replaceAll("[已脱敏：私钥]");
+        redacted = AWS_ACCESS_KEY_PATTERN.matcher(redacted).replaceAll("[已脱敏：访问密钥]");
+        Matcher matcher = CREDENTIAL_PATTERN.matcher(redacted);
+        StringBuffer result = new StringBuffer(redacted.length());
+        while (matcher.find()) {
+            matcher.appendReplacement(
+                    result, Matcher.quoteReplacement(matcher.group(1) + "[已脱敏]"));
+        }
+        matcher.appendTail(result);
+        if (result.length() <= 24_000) {
+            return result.toString();
+        }
+        return result.substring(0, 23_900) + "\n[内容过长，后续部分已截断]";
     }
 
     private static boolean isNonTerminal(String status) {
@@ -1009,9 +996,6 @@ public class LlmSettingsService {
 
     public record ConnectivityCheckRequest(UUID configId, ProviderInput candidate) {}
 
-    public record ActivationRequest(
-            UUID latestCheckId, String fingerprint, long expectedActivationVersion) {}
-
     public record ProviderView(
             UUID id,
             long version,
@@ -1027,16 +1011,12 @@ public class LlmSettingsService {
             boolean secretConfigured,
             String fingerprint,
             String availability,
-            boolean active,
-            UUID activeConfigId,
-            long activationVersion,
             UUID latestCheckId,
             Instant lastSuccessAt,
             Instant lastFailureAt,
             String lastErrorCode,
             String breakerState,
-            Instant createdAt,
-            Instant activatedAt) {}
+            Instant createdAt) {}
 
     public record StageView(String stage, String status, long durationMs, String errorCode) {}
 
@@ -1061,4 +1041,12 @@ public class LlmSettingsService {
             Instant createdAt) {}
 
     public record GenerationResult(String answer, String provider) {}
+
+    public record AskModelView(
+            UUID id,
+            String name,
+            String model,
+            String availability,
+            String breakerState,
+            boolean available) {}
 }

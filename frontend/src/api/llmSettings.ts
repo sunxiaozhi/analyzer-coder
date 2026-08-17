@@ -22,16 +22,12 @@ export interface LlmProvider {
   secretConfigured: boolean;
   fingerprint: string | null;
   availability: LlmAvailability;
-  active: boolean;
-  activeConfigId: string | null;
-  activationVersion: number;
   latestCheckId: string | null;
   lastSuccessAt: string | null;
   lastFailureAt: string | null;
   lastErrorCode: string | null;
   breakerState: 'CLOSED' | 'OPEN';
   createdAt: string | null;
-  activatedAt: string | null;
 }
 
 export interface LlmProviderInput {
@@ -132,19 +128,6 @@ export const llmSettingsApi = {
     request<LlmConnectivityCheck>(`/api/settings/llm/connectivity-checks/${checkId}/cancel`, {
       method: 'POST',
     }),
-  activate: (
-    configId: string,
-    input: { latestCheckId: string; fingerprint: string; expectedActivationVersion: number },
-  ) =>
-    request<LlmProvider>(`/api/settings/llm/provider/${configId}/activate`, {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
-  deactivate: (expectedActivationVersion: number) =>
-    request<LlmProvider>(
-      `/api/settings/llm/provider/deactivate?expectedActivationVersion=${expectedActivationVersion}`,
-      { method: 'POST' },
-    ),
   vectorModels: () => request<VectorModel[]>('/api/settings/llm/vector-models'),
   createVectorModel: (input: VectorModelInput) =>
     request<VectorModel>('/api/settings/llm/vector-models', {

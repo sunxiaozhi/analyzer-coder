@@ -8,6 +8,7 @@ import com.analyzercoder.security.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,7 +58,15 @@ public class IntelligenceController {
                 account.id(),
                 body.question(),
                 body.clientRequestId(),
-                body.threadId());
+                body.threadId(),
+                body.modelConfigId());
+    }
+
+    @GetMapping("/repositories/{repoId}/ask/models")
+    public List<com.analyzercoder.application.llm.LlmSettingsService.AskModelView> askModels(
+            @PathVariable UUID repoId, HttpServletRequest request) {
+        require(request, repoId, RepositoryPermission.READ);
+        return service.askModels();
     }
 
     @GetMapping("/repositories/{repoId}/qa/records")
@@ -163,7 +172,11 @@ public class IntelligenceController {
         return account;
     }
 
-    public record Question(@NotBlank String question, UUID clientRequestId, UUID threadId) {}
+    public record Question(
+            @NotBlank String question,
+            UUID clientRequestId,
+            UUID threadId,
+            @NotNull UUID modelConfigId) {}
 
     public record HistoryTitle(String title) {}
 }

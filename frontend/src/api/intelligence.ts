@@ -49,6 +49,14 @@ export interface Answer {
   fallbackReason: string | null;
   createdAt: string;
 }
+export interface AskModel {
+  id: string;
+  name: string;
+  model: string;
+  availability: string;
+  breakerState: string;
+  available: boolean;
+}
 export interface QaThreadDetail {
   threadId: string;
   repositoryId: string;
@@ -137,11 +145,19 @@ export interface CardRevision {
 }
 
 export const intelligenceApi = {
-  ask: (repositoryId: string, question: string, clientRequestId: string, threadId: string | null) =>
+  ask: (
+    repositoryId: string,
+    question: string,
+    clientRequestId: string,
+    threadId: string | null,
+    modelConfigId: string,
+  ) =>
     request<Answer>(`/api/repositories/${repositoryId}/ask`, {
       method: 'POST',
-      body: JSON.stringify({ question, clientRequestId, threadId }),
+      body: JSON.stringify({ question, clientRequestId, threadId, modelConfigId }),
     }),
+  askModels: (repositoryId: string) =>
+    request<AskModel[]>(`/api/repositories/${repositoryId}/ask/models`),
   history: (repositoryId: string, limit = 50, offset = 0) =>
     request<QaHistoryRecord[]>(`/api/repositories/${repositoryId}/qa/records?limit=${limit}&offset=${offset}`),
   historyDetail: (repositoryId: string, threadId: string) =>

@@ -46,7 +46,14 @@ class IntelligenceServiceMultiTurnTest {
         when(mapper.findThread(threadId, repositoryId, accountId)).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class,
-                () -> service.ask(repositoryId, accountId, "继续追问", UUID.randomUUID(), threadId));
+                () ->
+                        service.ask(
+                                repositoryId,
+                                accountId,
+                                "继续追问",
+                                UUID.randomUUID(),
+                                threadId,
+                                UUID.randomUUID()));
 
         verify(mapper, never()).lockThread(any());
     }

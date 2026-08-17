@@ -230,6 +230,17 @@ docker compose \
   wget -qO- http://host.docker.internal:8080/actuator/health
 ```
 
+### 7.1 配置并使用问答模型
+
+使用管理员账号登录后：
+
+1. 进入“系统设置 → 问答模型”。
+2. 新增 OpenAI-compatible 模型，填写 Base URL、模型标识和 API Key。
+3. 点击“检测”，等待状态变为“可用”。
+4. 进入“知识问答”，在页面顶部选择该模型后发送问题。
+
+问答模型不再需要“切换使用”“停用”或 `externalModelEnabled` 开关。每次问答直接使用页面当前选择的模型；检索证据中的密码、Token、API Key 和私钥会先脱敏再发送。
+
 ## 8. 日志和运行文件
 
 后端日志：
