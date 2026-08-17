@@ -43,16 +43,21 @@ async function loadContext(repositoryId: string | null) {
   if (!repositoryId) return;
   readinessLoading.value = true;
   historyLoading.value = true;
-  const [profileResult, historyResult] = await Promise.allSettled([
-    getRepositoryProfile(repositoryId), intelligenceApi.history(repositoryId),
-  ]);
-  if (version !== contextVersion || repositoryId !== repositories.selectedRepositoryId) return;
-  if (profileResult.status === 'fulfilled') readiness.value = profileResult.value;
-  else ElMessage.error(profileResult.reason instanceof Error ? profileResult.reason.message : '无法检查仓库状态');
-  if (historyResult.status === 'fulfilled') history.value = historyResult.value;
-  else ElMessage.error(historyResult.reason instanceof Error ? historyResult.reason.message : '无法加载历史记录');
-  readinessLoading.value = false;
-  historyLoading.value = false;
+  const isCurrent = () => version === contextVersion
+    && repositoryId === repositories.selectedRepositoryId;
+  const profileTask = getRepositoryProfile(repositoryId)
+    .then((result) => { if (isCurrent()) readiness.value = result; })
+    .catch((error) => {
+      if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法检查仓库状态');
+    })
+    .finally(() => { if (isCurrent()) readinessLoading.value = false; });
+  const historyTask = intelligenceApi.history(repositoryId)
+    .then((result) => { if (isCurrent()) history.value = result; })
+    .catch((error) => {
+      if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法加载历史记录');
+    })
+    .finally(() => { if (isCurrent()) historyLoading.value = false; });
+  await Promise.allSettled([profileTask, historyTask]);
 }
 
 async function reloadHistory() {
@@ -202,7 +207,7 @@ onMounted(async () => {
       :pending-question="conversation.pendingQuestion.value"
       :request-state="conversation.requestState.value"
       :error="conversation.error.value"
-      :disabled="!repository || readinessLoading"
+      :disabled="!repository"
       @send="send" @retry="retry" @select-answer="conversation.selectAnswer"
       @open-knowledge="openKnowledge" @open-code="openCode" @open-graph="openGraph"
     />
