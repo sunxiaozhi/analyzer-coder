@@ -33,3 +33,5 @@ pwsh -File scripts/build-offline-package.ps1 -Version 1.0.0
 详细的目标机安装步骤包含在离线包内的 `README.md` 中。
 
 完整的 Linux 组件启动、宿主机代码部署、systemd 配置和验收步骤见 `../docs/07-linux-component-quickstart.md`；离线包内同时包含同内容的 `STARTUP-GUIDE.md`。
+
+采用“组件离线镜像 + Git 拉取源码 + Linux 现场构建启动”时，执行 `../docs/08-linux-git-deployment.md`。
