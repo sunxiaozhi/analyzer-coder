@@ -143,9 +143,9 @@ function shortcut(event: KeyboardEvent) {
 .message>span { display:grid; place-items:center; align-self:start; width:24px; height:24px; color:#fff; border-radius:50%; background:#34383d; font-size:9px; font-weight:700; }
 .message.user>span { color:#005eb8; background:#e8f2fc; }
 .message.user>p { justify-self:end; max-width:78%; margin:0; padding:9px 12px; color:#28313a; border-radius:10px 10px 2px 10px; background:#edf3f8; font-size:12px; line-height:1.55; white-space:pre-wrap; }
-.message.assistant { cursor:pointer; border:1px solid transparent; border-radius:7px; transition:background-color .16s ease,border-color .16s ease; }
+.message.assistant { padding:12px 14px; cursor:pointer; border:1px solid transparent; border-radius:8px; transition:background-color .16s ease,border-color .16s ease; }
 .message.assistant.selected { border-color:#dce8f3; background:#f7fafc; }
-.assistant-content { display:grid; gap:12px; min-width:0; padding:2px 8px 8px 0; }
+.assistant-content { display:grid; gap:12px; min-width:0; padding:2px 4px 4px 0; }
 .answer-markdown { min-width:0; max-width:100%; color:#30363d; font-size:13px; line-height:1.72; overflow-wrap:anywhere; }
 .answer-markdown :deep(h1),.answer-markdown :deep(h2),.answer-markdown :deep(h3),.answer-markdown :deep(h4) { color:#1f2933; line-height:1.4; }
 .answer-markdown :deep(h1) { margin:0 0 18px; padding-bottom:9px; border-bottom:1px solid #dfe3e8; font-size:21px; }
