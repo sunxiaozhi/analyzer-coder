@@ -1,5 +1,6 @@
 package com.analyzercoder.domain.chunk;
 
+import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.RepositorySnapshotId;
 import java.nio.charset.StandardCharsets;
@@ -20,6 +21,7 @@ public record CodeChunk(
         String symbolName,
         String symbolKind,
         String language,
+        RepositoryAssetType assetType,
         ChunkType chunkType,
         Integer startLine,
         Integer endLine,
@@ -32,6 +34,7 @@ public record CodeChunk(
             String commitSha,
             String filePath,
             String language,
+            RepositoryAssetType assetType,
             int startLine,
             int endLine,
             String content) {
@@ -44,7 +47,10 @@ public record CodeChunk(
                 null,
                 null,
                 language,
-                ChunkType.FILE,
+                assetType,
+                assetType == RepositoryAssetType.CONFIG
+                        ? ChunkType.CONFIG
+                        : ChunkType.FILE,
                 startLine,
                 endLine,
                 content);
@@ -56,6 +62,7 @@ public record CodeChunk(
             String commitSha,
             String filePath,
             String language,
+            RepositoryAssetType assetType,
             String symbolName,
             String symbolKind,
             int startLine,
@@ -71,7 +78,12 @@ public record CodeChunk(
                 symbolName,
                 symbolKind,
                 language,
-                ChunkType.SYMBOL,
+                assetType,
+                assetType == RepositoryAssetType.CODE
+                        ? ChunkType.SYMBOL
+                        : assetType == RepositoryAssetType.CONFIG
+                                ? ChunkType.CONFIG
+                                : ChunkType.DOC_SECTION,
                 startLine,
                 endLine,
                 content);
@@ -86,6 +98,7 @@ public record CodeChunk(
             String symbolName,
             String symbolKind,
             String language,
+            RepositoryAssetType assetType,
             ChunkType chunkType,
             int startLine,
             int endLine,
@@ -100,6 +113,7 @@ public record CodeChunk(
                 symbolName,
                 symbolKind,
                 language,
+                assetType,
                 chunkType,
                 startLine,
                 endLine,
@@ -118,6 +132,7 @@ public record CodeChunk(
         Objects.requireNonNull(content, "content must not be null");
         Objects.requireNonNull(contentHash, "contentHash must not be null");
         Objects.requireNonNull(createdAt, "createdAt must not be null");
+        Objects.requireNonNull(assetType, "assetType must not be null");
     }
 
     private static String sha256(String content) {

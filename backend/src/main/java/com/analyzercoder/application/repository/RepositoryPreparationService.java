@@ -8,6 +8,8 @@ import com.analyzercoder.domain.indexing.IndexJob;
 import com.analyzercoder.domain.indexing.IndexJobStatus;
 import com.analyzercoder.domain.indexing.IndexJobStore;
 import com.analyzercoder.domain.indexing.IndexJobType;
+import com.analyzercoder.domain.indexing.RepositoryAssetClassifier;
+import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.RepositorySourceType;
@@ -125,8 +127,8 @@ public class RepositoryPreparationService {
                                 "内容索引",
                                 stage(contentReady, jobActive, jobFailed, latestJob, false),
                                 contentReady
-                                        ? summary.totalChunks() + " 个代码片段"
-                                        : jobDetail(latestJob, "等待生成代码片段")),
+                                        ? summary.totalChunks() + " 个项目资产片段"
+                                        : jobDetail(latestJob, "等待生成项目资产片段")),
                         new PreparationStage(
                                 "vectors",
                                 "向量索引",
@@ -210,6 +212,8 @@ public class RepositoryPreparationService {
             CodeGraphArtifactRow graph) {
         Map<String, Long> languages = new LinkedHashMap<>();
         Map<String, Long> modules = new LinkedHashMap<>();
+        Map<String, Long> assets = new LinkedHashMap<>();
+        List<KeyAsset> keyAssets = new ArrayList<>();
         List<String> entryPoints = new ArrayList<>();
         long totalBytes = 0;
         for (RepositoryCodeBrowserService.FileEntry file : files) {
@@ -217,6 +221,11 @@ public class RepositoryPreparationService {
             String language = normalizedLabel(file.language(), "其他");
             languages.merge(language, 1L, Long::sum);
             String path = file.path().replace('\\', '/');
+            RepositoryAssetType assetType =
+                    RepositoryAssetClassifier.classify(path, file.language());
+            assets.merge(assetType.name(), 1L, Long::sum);
+            if (RepositoryAssetClassifier.isKeyAsset(path, assetType))
+                keyAssets.add(new KeyAsset(path, assetType.name()));
             int slash = path.indexOf('/');
             if (slash > 0) {
                 modules.merge(path.substring(0, slash), 1L, Long::sum);
@@ -227,6 +236,11 @@ public class RepositoryPreparationService {
         }
         List<ProfileCount> languageCounts = topCounts(languages, 6);
         List<ProfileCount> moduleCounts = topCounts(modules, 8);
+        List<ProfileCount> assetCounts = topCounts(assets, RepositoryAssetType.values().length);
+        keyAssets.sort(Comparator.comparing(KeyAsset::path, String.CASE_INSENSITIVE_ORDER));
+        if (keyAssets.size() > 12) {
+            keyAssets = new ArrayList<>(keyAssets.subList(0, 12));
+        }
         entryPoints.sort(
                 Comparator.comparingInt(RepositoryPreparationService::pathDepth)
                         .thenComparing(String::compareToIgnoreCase));
@@ -244,7 +258,9 @@ public class RepositoryPreparationService {
                 graph == null ? 0 : graph.edgeCount(),
                 languageCounts,
                 moduleCounts,
-                List.copyOf(entryPoints));
+                List.copyOf(entryPoints),
+                assetCounts,
+                List.copyOf(keyAssets));
     }
 
     private static List<ProfileCount> topCounts(Map<String, Long> values, int limit) {
@@ -347,7 +363,11 @@ public class RepositoryPreparationService {
             int graphEdges,
             List<ProfileCount> languages,
             List<ProfileCount> modules,
-            List<String> entryPoints) {}
+            List<String> entryPoints,
+            List<ProfileCount> assets,
+            List<KeyAsset> keyAssets) {}
 
     public record ProfileCount(String name, long count) {}
+
+    public record KeyAsset(String path, String assetType) {}
 }

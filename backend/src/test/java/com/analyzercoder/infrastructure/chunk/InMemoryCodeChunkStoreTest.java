@@ -3,6 +3,7 @@ package com.analyzercoder.infrastructure.chunk;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.analyzercoder.domain.chunk.CodeChunk;
+import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.RepositorySnapshotId;
 import java.util.List;
@@ -63,6 +64,7 @@ class InMemoryCodeChunkStoreTest {
                 "test-commit",
                 filePath,
                 language,
+                RepositoryAssetType.CODE,
                 1,
                 1,
                 content);

@@ -1,6 +1,7 @@
 package com.analyzercoder.infrastructure.persistence.mapper;
 
 import com.analyzercoder.infrastructure.persistence.model.CodeChunkRow;
+import com.analyzercoder.infrastructure.persistence.model.ModuleSymbolRow;
 import java.util.List;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;
@@ -73,6 +74,14 @@ public interface CodeChunkMapper {
             @Param("query") String query,
             @Param("limit") Integer limit,
             @Param("offset") Integer offset);
+
+    List<ModuleSymbolRow> findModuleSymbols(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("snapshotId") UUID snapshotId,
+            @Param("modulePrefix") String modulePrefix,
+            @Param("layerSegment") String layerSegment,
+            @Param("rootOnly") boolean rootOnly,
+            @Param("limit") int limit);
 
     /**
      * 统计符合给定条件的记录数。

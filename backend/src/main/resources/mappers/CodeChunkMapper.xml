@@ -12,6 +12,7 @@
             <arg column="symbol_name" javaType="java.lang.String"/>
             <arg column="symbol_kind" javaType="java.lang.String"/>
             <arg column="language" javaType="java.lang.String"/>
+            <arg column="asset_type" javaType="java.lang.String"/>
             <arg column="chunk_type" javaType="java.lang.String"/>
             <arg column="start_line" javaType="java.lang.Integer"/>
             <arg column="end_line" javaType="java.lang.Integer"/>
@@ -20,8 +21,18 @@
             <arg column="created_at" javaType="java.time.Instant"/>
         </constructor>
     </resultMap>
+    <resultMap id="moduleSymbol" type="com.analyzercoder.infrastructure.persistence.model.ModuleSymbolRow">
+        <constructor>
+            <arg column="symbol_name" javaType="java.lang.String"/>
+            <arg column="symbol_kind" javaType="java.lang.String"/>
+            <arg column="file_path" javaType="java.lang.String"/>
+            <arg column="start_line" javaType="java.lang.Integer"/>
+            <arg column="end_line" javaType="java.lang.Integer"/>
+            <arg column="language" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
     <sql id="columns">
-        id,repo_id,snapshot_id,commit_sha,file_path,symbol_id,symbol_name,symbol_kind,language,chunk_type,start_line,end_line,content,content_hash,created_at
+        id,repo_id,snapshot_id,commit_sha,file_path,symbol_id,symbol_name,symbol_kind,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at
     </sql>
     <delete id="deleteByRepositoryId">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteByPaths">DELETE FROM code_chunks WHERE repo_id=#{repositoryId} AND file_path IN
@@ -38,11 +49,12 @@
     </select>
     <insert id="insertBatch">INSERT INTO code_chunks(<include refid="columns"/>) VALUES
         <foreach collection="rows" item="row" separator=",">
-            (#{row.id},#{row.repositoryId},#{row.snapshotId},#{row.commitSha},#{row.filePath},#{row.symbolId},#{row.symbolName},#{row.symbolKind},#{row.language},#{row.chunkType},#{row.startLine},#{row.endLine},#{row.content},#{row.contentHash},#{row.createdAt})
+            (#{row.id},#{row.repositoryId},#{row.snapshotId},#{row.commitSha},#{row.filePath},#{row.symbolId},#{row.symbolName},#{row.symbolKind},#{row.language},#{row.assetType},#{row.chunkType},#{row.startLine},#{row.endLine},#{row.content},#{row.contentHash},#{row.createdAt})
         </foreach>
     </insert>
     <sql id="filter">
         <if test="query != null and query != ''">AND(POSITION(LOWER(#{query}) IN LOWER(file_path))&gt;0 OR
+            POSITION(LOWER(#{query}) IN LOWER(asset_type))&gt;0 OR
             POSITION(LOWER(#{query}) IN LOWER(COALESCE(symbol_name,'')))&gt;0 OR POSITION(LOWER(#{query}) IN
             LOWER(COALESCE(symbol_kind,'')))&gt;0 OR POSITION(LOWER(#{query}) IN LOWER(COALESCE(language,'')))&gt;0 OR
             POSITION(LOWER(#{query}) IN LOWER(content))&gt;0)
@@ -58,6 +70,30 @@
             POSITION(LOWER(#{query}) IN LOWER(COALESCE(language,'')))&gt;0 THEN 2 ELSE 0 END+CASE WHEN
             POSITION(LOWER(#{query}) IN LOWER(content))&gt;0 THEN 1 ELSE 0 END DESC,</if>file_path,start_line,id
         <if test="limit != null">LIMIT #{limit} OFFSET #{offset}</if>
+    </select>
+    <select id="findModuleSymbols" resultMap="moduleSymbol">
+        SELECT DISTINCT ON (symbol_name,file_path)
+            symbol_name,symbol_kind,file_path,start_line,end_line,language
+        FROM code_chunks
+        WHERE repo_id=#{repositoryId}
+          AND snapshot_id=#{snapshotId}
+          AND asset_type='CODE'
+          AND symbol_name IS NOT NULL
+          AND BTRIM(symbol_name)&lt;&gt;''
+        <choose>
+            <when test="rootOnly">
+                AND POSITION('/' IN file_path)=0
+            </when>
+            <when test="layerSegment != null and layerSegment != ''">
+                AND file_path LIKE CONCAT(#{modulePrefix},'/%')
+                AND file_path LIKE CONCAT('%/',#{layerSegment},'/%')
+            </when>
+            <otherwise>
+                AND (file_path=#{modulePrefix} OR file_path LIKE CONCAT(#{modulePrefix},'/%'))
+            </otherwise>
+        </choose>
+        ORDER BY symbol_name,file_path,start_line
+        LIMIT #{limit}
     </select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM code_chunks WHERE repo_id=#{repositoryId}
         <include refid="filter"/>

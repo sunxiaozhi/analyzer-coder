@@ -4,6 +4,7 @@ import com.analyzercoder.domain.chunk.ChunkType;
 import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.chunk.CodeChunkId;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
+import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.RepositorySnapshotId;
 import com.analyzercoder.infrastructure.persistence.mapper.CodeChunkMapper;
@@ -106,6 +107,7 @@ public class PostgresCodeChunkStore implements CodeChunkStore {
                 chunk.symbolName(),
                 chunk.symbolKind(),
                 chunk.language(),
+                chunk.assetType().name(),
                 chunk.chunkType().name(),
                 chunk.startLine(),
                 chunk.endLine(),
@@ -128,6 +130,7 @@ public class PostgresCodeChunkStore implements CodeChunkStore {
                 row.symbolName(),
                 row.symbolKind(),
                 row.language(),
+                RepositoryAssetType.valueOf(row.assetType()),
                 ChunkType.valueOf(row.chunkType()),
                 row.startLine(),
                 row.endLine(),

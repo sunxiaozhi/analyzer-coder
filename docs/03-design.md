@@ -241,6 +241,36 @@ LOCAL_GIT 原始目录不在清理范围。
 - 项目画像由 `RepositoryPreparationService` 聚合当前快照文件、`VectorIndexQueryService` 汇总和当前 `codegraph_artifacts`，不调用模型，不生成推测性架构结论。
 - 当前尚无独立 preparation job 表；CodeGraph 阶段仍沿用同步执行的 `CodeGraphTaskService`。
 
+### 6.7 项目资产与 Context Pack
+
+`RepositoryAssetClassifier` 在扫描阶段按稳定路径和文件名将内容标为：
+
+- `CODE`：可执行源码；
+- `DOCUMENT`：README、设计、架构和一般说明；
+- `RULE`：AGENTS/CLAUDE/CODEX 指令、贡献规范和 rules 目录；
+- `TASK`：task、todo、roadmap、checklist 和 gate；
+- `CONFIG`：构建、部署和运行配置。
+
+`code_chunks.asset_type` 保存分类，V5 对已有数据回填。项目画像按类型聚合并返回关键资产。
+
+`ProjectContextPackService` 接收任务描述，优先召回规则和任务，再组合代码、文档与配置；结果受条目数和字符预算约束。每个条目携带当前 repository/snapshot/commit、路径、行号、chunkId 和 contentHash，供人或 Agent 校验来源。该服务只读，不包含自动执行和知识写回。
+
+### 6.8 项目级架构地图
+
+`ProjectArchitectureMapService` 从当前发布快照提取模块级架构，不依赖模型或尚未发布的工作区内容：
+
+1. 以一级目录、monorepo 分组目录以及 `src` 下的常见分层目录归并模块。
+2. 解析 Java package/import、TypeScript/JavaScript/Vue 的相对 import/require，以及 Python import。
+3. 输出 `CONTAINS` 和 `DEPENDS_ON` 关系，并为依赖边保存有限来源样例。
+4. 在受限数量和大小的代码、配置文件中识别 JDBC、Redis、MongoDB、Kafka、RabbitMQ、Elasticsearch、对象存储和 HTTP 客户端/端点，形成 `RESOURCE` 节点及 `CONNECTS_TO` 关系。
+5. 资源定位信息只保留协议、类型或主机标识，统一去除凭据、路径、查询参数、片段和占位符，避免配置秘密进入架构响应。
+6. 检测模块依赖环、domain/application 向外层实现的可疑依赖、领域模块直接连接运行资源，以及外部明文 HTTP。
+7. 返回分析文件数、总代码文件数、大小/数量/编码跳过数和局限说明。动态生成的端点、依赖注入装配和真实运行调用仍需后续运行时数据补充。
+
+接口保持只读并要求 READ。前端 `ProjectArchitectureMap` 在项目总览展示模块与运行资源画布、静态及运行连接方向、选中节点连接和风险详情；节点可切换为一跳聚焦视图，连接来源样例可直接打开当前快照文件。选中节点详情拆分为独立展示组件，路由导航仍由总览视图处理。
+`ProjectArchitectureSymbolService` 先用架构地图校验模块，再以仓库、当前快照和模块范围查询轻量符号记录。分层模块复用架构层名规则，查询结果不携带代码正文，按符号与文件去重并受 200 条上限约束。前端请求状态封装在 `useModuleSymbols`，`ModuleSymbolDrawer` 只负责筛选、源码定位和发出调用图导航事件。
+
+
 ## 7. 源码浏览与预览
 
 1. 列表从 `currentSnapshotPath` 递归读取普通文件，忽略符号链接。
@@ -411,6 +441,7 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 | Repositories | `/api/repositories`、page、detail、rescan、edit、delete |
 | Imports | `/api/repository-imports/remote|zip` |
 | Governance | `/api/repositories/{id}/governance/*` |
+| Project memory | `/api/repositories/{id}/profile|prepare|context-pack|architecture-map` |
 | Files/chunks | `/files`、`/files/content`、`/chunks` |
 | Tasks | `/api/index-jobs/*`、`/repositories/{id}/index` |
 | Vector index | `/repositories/{id}/vector-index/summary|chunks|knowledge` |
@@ -431,10 +462,11 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 
 ### 15.1 路由与壳层
 
-`WorkspaceShell` 负责导航、全局仓库、账号信息、工作区页签和 KeepAlive。管理员菜单由 `auth.isAdmin` 追加；路由守卫再次限制 admin 页面。
+`WorkspaceShell` 负责导航、全局仓库、账号信息、工作区页签和 KeepAlive。登录后默认进入 `/overview`；管理员菜单由 `auth.isAdmin` 追加，路由守卫再次限制 admin 页面。
 
 当前路由组件：
 
+- 项目总览：`ProjectOverviewView`，组合结构、资产和 Context Pack 三个 feature 组件
 - 仓库：`RepositoriesM0View`
 - 索引：`UnifiedIndexJobsView`
 - 源码检索：`ChunksM0View`

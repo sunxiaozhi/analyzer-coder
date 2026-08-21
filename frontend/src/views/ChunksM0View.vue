@@ -47,7 +47,7 @@ const shortCommit = computed(() => snapshot.value?.commit?.slice(0, 8) ?? '无�
 const resultSummary = computed(() => {
   if (!searchPerformed.value) return '输入关键词检索当前代码快照';
   if (staleHits.value) return `当前快照 ${hits.value.length} 条，忽略旧快照 ${staleHits.value} 条`;
-  return `当前快照命中 ${totalHits.value} 个代码片段`;
+  return `当前快照命中 ${totalHits.value} 个项目资产片段`;
 });
 
 async function loadSnapshot(repositoryId: string | null) {
@@ -61,6 +61,7 @@ async function loadSnapshot(repositoryId: string | null) {
   staleHits.value = 0;
   searchPerformed.value = false;
   resultsVisible.value = false;
+  query.value = '';
   fileCache.clear();
   if (!repositoryId) return;
   filesLoading.value = true;
@@ -75,6 +76,11 @@ async function loadSnapshot(repositoryId: string | null) {
     const startLine = routePath ? routeNumber(route.query.startLine) : null;
     const endLine = routePath ? routeNumber(route.query.endLine) : null;
     if (preferred) await openFile(preferred.path, startLine, endLine, Boolean(routePath));
+    const routeQuery = typeof route.query.q === 'string' ? route.query.q : null;
+    if (routeQuery) {
+      query.value = routeQuery;
+      await search();
+    }
   } catch (error) {
     if (requestId === snapshotRequest) {
       ElMessage.error(error instanceof Error ? error.message : '代码快照加载失败');
@@ -166,6 +172,16 @@ function fileName(path: string) {
   return path.split('/').pop() ?? path;
 }
 
+function assetLabel(type: CodeChunk['assetType']) {
+  return ({
+    CODE: '代码',
+    DOCUMENT: '文档',
+    RULE: '规则',
+    TASK: '任务',
+    CONFIG: '配置',
+  } as const)[type];
+}
+
 function excerpt(content: string) {
   return content.replace(/\s+/g, ' ').trim().slice(0, 150);
 }
@@ -180,10 +196,15 @@ onMounted(async () => {
   if (!repositories.repositories.length) await repositories.loadRepositories();
 });
 watch(
-  () => [route.query.path, route.query.startLine, route.query.endLine] as const,
-  ([path, startLine, endLine]) => {
-    if (typeof path !== 'string' || !snapshot.value?.files.some(file => file.path === path)) return;
-    void openFile(path, routeNumber(startLine), routeNumber(endLine));
+  () => [route.query.path, route.query.startLine, route.query.endLine, route.query.q] as const,
+  ([path, startLine, endLine, routeQuery]) => {
+    if (typeof routeQuery === 'string' && routeQuery !== query.value) {
+      query.value = routeQuery;
+      void search();
+    }
+    if (typeof path === 'string' && snapshot.value?.files.some(file => file.path === path)) {
+      void openFile(path, routeNumber(startLine), routeNumber(endLine));
+    }
   },
 );
 </script>
@@ -202,7 +223,7 @@ watch(
           v-model="query"
           :prefix-icon="Search"
           clearable
-          placeholder="搜索代码、文件路径或符号"
+          placeholder="搜索源码、文档、规则、任务或文件路径"
           @clear="clearSearch"
           @keyup.enter="search"
         />
@@ -274,6 +295,7 @@ watch(
           >
             <span class="hit-title">
               <b>{{ fileName(hit.filePath) }}</b>
+              <i :data-type="hit.assetType">{{ assetLabel(hit.assetType) }}</i>
               <em>第 {{ hit.startLine ?? 1 }} 行</em>
             </span>
             <small class="mono">{{ hit.filePath }}</small>
@@ -433,6 +455,15 @@ watch(
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.hit-title i {
+  margin-left: auto;
+  padding: 2px 5px;
+  color: #5c6d78;
+  border-radius: 3px;
+  background: #e8edf0;
+  font: 8px Consolas, monospace;
 }
 
 .hit-title em {

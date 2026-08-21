@@ -134,6 +134,12 @@ class RepositoryPreparationServiceTest {
         assertThat(profile.entryPoints())
                 .containsExactly(
                         "package.json", "backend/server.py", "src/App.vue", "src/Main.java");
+        assertThat(profile.assets())
+                .extracting(RepositoryPreparationService.ProfileCount::name)
+                .contains("CODE", "DOCUMENT", "CONFIG");
+        assertThat(profile.keyAssets())
+                .extracting(RepositoryPreparationService.KeyAsset::path)
+                .containsExactly("README.md");
     }
 
     private static CodeRepository repository() {

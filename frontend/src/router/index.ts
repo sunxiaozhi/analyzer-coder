@@ -5,6 +5,7 @@ import AskView from '@/views/AskView.vue';
 import ChunksView from '@/views/ChunksM0View.vue';
 import GraphView from '@/views/GraphView.vue';
 import IndexJobsView from '@/views/UnifiedIndexJobsView.vue';
+import ProjectOverviewView from '@/views/ProjectOverviewView.vue';
 import KnowledgeView from '@/views/KnowledgeView.vue';
 import LoginView from '@/views/LoginView.vue';
 import RepositoriesView from '@/views/RepositoriesM0View.vue';
@@ -15,7 +16,8 @@ export const router = createRouter({
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
     { path: '/', component: WorkspaceShell, children: [
-      { path: '', redirect: '/ask' },
+      { path: '', redirect: '/overview' },
+      { path: 'overview', name: 'overview', component: ProjectOverviewView, meta: { title: '项目总览' } },
       { path: 'repositories', name: 'repositories', component: RepositoriesView, meta: { title: '仓库管理' } },
       { path: 'indexing', name: 'indexing', component: IndexJobsView, meta: { title: '索引任务' } },
       { path: 'search', name: 'search', component: ChunksView, meta: { title: '源码检索' } },
@@ -33,11 +35,11 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore();
   await auth.restore();
   if (to.meta.public) {
-    if (auth.authenticated && !auth.account?.mustChangePassword) return '/ask';
+    if (auth.authenticated && !auth.account?.mustChangePassword) return '/overview';
     return true;
   }
   if (!auth.authenticated) return { path: '/login', query: { redirect: to.fullPath } };
   if (auth.account?.mustChangePassword) return '/login';
-  if (to.meta.admin && !auth.isAdmin) return '/ask';
+  if (to.meta.admin && !auth.isAdmin) return '/overview';
   return true;
 });

@@ -97,6 +97,7 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
 
     private boolean matches(CodeChunk chunk, String normalizedQuery) {
         return contains(chunk.filePath(), normalizedQuery)
+                || contains(chunk.assetType().name(), normalizedQuery)
                 || contains(chunk.symbolName(), normalizedQuery)
                 || contains(chunk.symbolKind(), normalizedQuery)
                 || contains(chunk.language(), normalizedQuery)
@@ -110,6 +111,9 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
         }
         if (contains(chunk.symbolName(), normalizedQuery)) {
             score += 3;
+        if (contains(chunk.assetType().name(), normalizedQuery)) {
+            score += 2;
+        }
         }
         if (contains(chunk.symbolKind(), normalizedQuery)
                 || contains(chunk.language(), normalizedQuery)) {

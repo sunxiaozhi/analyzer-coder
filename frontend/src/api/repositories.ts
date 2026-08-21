@@ -6,6 +6,7 @@ import type {
   IndexJobType,
   RegisterRepositoryPayload,
   Repository,
+  RepositoryAssetType,
   RepositoryFileContent,
   RepositorySnapshotFiles,
   RescanRepositoryResponse,
@@ -25,6 +26,11 @@ export interface ProjectProfileCount {
   count: number;
 }
 
+export interface ProjectKeyAsset {
+  path: string;
+  assetType: RepositoryAssetType;
+}
+
 export interface ProjectProfile {
   fileCount: number;
   totalBytes: number;
@@ -37,7 +43,76 @@ export interface ProjectProfile {
   languages: ProjectProfileCount[];
   modules: ProjectProfileCount[];
   entryPoints: string[];
+  assets: ProjectProfileCount[];
+  keyAssets: ProjectKeyAsset[];
 }
+
+export interface ProjectArchitectureNode {
+  id: string;
+  label: string;
+  path: string;
+  kind: 'PROJECT' | 'MODULE' | 'RESOURCE';
+  fileCount: number;
+  codeFileCount: number;
+  primaryLanguage: string;
+  resourceType: string | null;
+}
+
+export interface ProjectArchitectureEdge {
+  source: string;
+  target: string;
+  relation: 'CONTAINS' | 'DEPENDS_ON' | 'CONNECTS_TO';
+  weight: number;
+  samples: string[];
+}
+
+export interface ProjectArchitectureRisk {
+  id: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+  type: 'CYCLE' | 'BOUNDARY' | 'INSECURE_TRANSPORT';
+  title: string;
+  detail: string;
+  modules: string[];
+}
+
+export interface ProjectArchitectureCoverage {
+  analyzedFiles: number;
+  totalCodeFiles: number;
+  skippedLargeFiles: number;
+  skippedByLimit: number;
+  unreadableFiles: number;
+  partial: boolean;
+  notes: string[];
+}
+
+export interface ProjectArchitectureMap {
+  repositoryId: string;
+  snapshotId: string;
+  commitSha: string | null;
+  generatedAt: string;
+  nodes: ProjectArchitectureNode[];
+  edges: ProjectArchitectureEdge[];
+  risks: ProjectArchitectureRisk[];
+  coverage: ProjectArchitectureCoverage;
+}
+export interface ProjectArchitectureSymbol {
+  symbolName: string;
+  symbolKind: string | null;
+  filePath: string;
+  startLine: number | null;
+  endLine: number | null;
+  language: string | null;
+}
+
+export interface ProjectArchitectureModuleSymbols {
+  repositoryId: string;
+  snapshotId: string;
+  module: string;
+  symbols: ProjectArchitectureSymbol[];
+  truncated: boolean;
+}
+
+
 
 export interface RepositoryPreparation {
   repositoryId: string;
@@ -49,6 +124,28 @@ export interface RepositoryPreparation {
   activeJobId: string | null;
   activeJobType: IndexJobType | 'CODEGRAPH' | null;
   activeJobStatus: IndexJob['status'] | null;
+}
+
+export interface ProjectContextItem {
+  chunkId: string;
+  assetType: RepositoryAssetType;
+  filePath: string;
+  symbolName: string | null;
+  startLine: number | null;
+  endLine: number | null;
+  excerpt: string;
+  content: string;
+  contentHash: string;
+}
+
+export interface ProjectContextPack {
+  repositoryId: string;
+  repositoryName: string;
+  snapshotId: string;
+  commitSha: string | null;
+  task: string;
+  items: ProjectContextItem[];
+  markdown: string;
 }
 
 export function listRepositories(): Promise<Repository[]> {
@@ -120,6 +217,22 @@ export function syncRemoteRepository(repositoryId: string): Promise<RescanReposi
 export function getRepositoryProfile(repositoryId: string): Promise<RepositoryPreparation> {
   return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/profile`);
 }
+export function getProjectArchitectureMap(repositoryId: string): Promise<ProjectArchitectureMap> {
+  return request<ProjectArchitectureMap>(`/api/repositories/${repositoryId}/architecture-map`);
+}
+export function getProjectArchitectureModuleSymbols(
+  repositoryId: string,
+  module: string,
+  limit = 80,
+): Promise<ProjectArchitectureModuleSymbols> {
+  const query = new URLSearchParams({ module, limit: String(limit) });
+  return request<ProjectArchitectureModuleSymbols>(
+    `/api/repositories/${repositoryId}/architecture-map/modules/symbols?${query}`,
+  );
+}
+
+
+
 
 export function prepareRepository(repositoryId: string): Promise<RepositoryPreparation> {
   return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/prepare`, { method: 'POST' });
@@ -133,4 +246,13 @@ export function getRepositoryFile(repositoryId: string, path: string): Promise<R
   return request<RepositoryFileContent>(
     `/api/repositories/${repositoryId}/files/content?path=${encodeURIComponent(path)}`,
   );
+}
+
+export function generateProjectContextPack(
+  repositoryId: string,
+  payload: { task: string; maxItems?: number; maxChars?: number },
+): Promise<ProjectContextPack> {
+  return request<ProjectContextPack>(`/api/repositories/${repositoryId}/context-pack`, {
+    method: 'POST', body: JSON.stringify(payload),
+  });
 }

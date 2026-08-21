@@ -4,6 +4,7 @@ import com.analyzercoder.application.chunk.CodeChunkQueryResult;
 import com.analyzercoder.application.chunk.CodeChunkQueryService;
 import com.analyzercoder.domain.chunk.ChunkType;
 import com.analyzercoder.domain.chunk.CodeChunk;
+import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.RepositoryPermission;
@@ -63,6 +64,7 @@ public class ChunkController {
             String symbolName,
             String symbolKind,
             String language,
+            RepositoryAssetType assetType,
             ChunkType chunkType,
             Integer startLine,
             Integer endLine,
@@ -80,6 +82,7 @@ public class ChunkController {
                     chunk.symbolName(),
                     chunk.symbolKind(),
                     chunk.language(),
+                    chunk.assetType(),
                     chunk.chunkType(),
                     chunk.startLine(),
                     chunk.endLine(),

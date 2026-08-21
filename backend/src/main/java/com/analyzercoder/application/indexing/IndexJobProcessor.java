@@ -190,6 +190,7 @@ public class IndexJobProcessor {
                                         repository.currentCommit(),
                                         scannedFile.relativePath(),
                                         scannedFile.language(),
+                                        scannedFile.assetType(),
                                         start + 1,
                                         end,
                                         content)
@@ -199,6 +200,7 @@ public class IndexJobProcessor {
                                         repository.currentCommit(),
                                         scannedFile.relativePath(),
                                         scannedFile.language(),
+                                        scannedFile.assetType(),
                                         symbol.name(),
                                         symbol.kind(),
                                         start + 1,

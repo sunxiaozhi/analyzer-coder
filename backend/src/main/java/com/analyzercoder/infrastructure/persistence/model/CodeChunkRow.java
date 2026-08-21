@@ -14,6 +14,7 @@ public record CodeChunkRow(
         String symbolName,
         String symbolKind,
         String language,
+        String assetType,
         String chunkType,
         Integer startLine,
         Integer endLine,

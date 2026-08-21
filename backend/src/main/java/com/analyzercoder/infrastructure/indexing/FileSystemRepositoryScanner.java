@@ -1,5 +1,6 @@
 package com.analyzercoder.infrastructure.indexing;
 
+import com.analyzercoder.domain.indexing.RepositoryAssetClassifier;
 import com.analyzercoder.domain.indexing.RepositoryScannerPort;
 import com.analyzercoder.domain.indexing.ScannedRepositoryFile;
 import com.analyzercoder.domain.repository.CodeRepository;
@@ -29,6 +30,14 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
                     "dist",
                     "build",
                     "target");
+    private static final Map<String, String> LANGUAGE_BY_FILE_NAME =
+            Map.ofEntries(
+                    Map.entry("dockerfile", "dockerfile"),
+                    Map.entry("makefile", "makefile"),
+                    Map.entry("gradlew", "shell"),
+                    Map.entry("mvnw", "shell"),
+                    Map.entry(".cursorrules", "text"),
+                    Map.entry(".env", "env"));
     private static final Map<String, String> LANGUAGE_BY_EXTENSION =
             Map.ofEntries(
                     Map.entry("java", "java"),
@@ -39,13 +48,35 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
                     Map.entry("jsx", "javascript"),
                     Map.entry("py", "python"),
                     Map.entry("go", "go"),
+                    Map.entry("rs", "rust"),
+                    Map.entry("cs", "csharp"),
+                    Map.entry("c", "c"),
+                    Map.entry("h", "c"),
+                    Map.entry("cpp", "cpp"),
+                    Map.entry("hpp", "cpp"),
+                    Map.entry("php", "php"),
+                    Map.entry("rb", "ruby"),
+                    Map.entry("sh", "shell"),
+                    Map.entry("bat", "batch"),
+                    Map.entry("cmd", "batch"),
                     Map.entry("md", "markdown"),
+                    Map.entry("mdx", "markdown"),
+                    Map.entry("rst", "text"),
+                    Map.entry("txt", "text"),
                     Map.entry("yml", "yaml"),
                     Map.entry("yaml", "yaml"),
                     Map.entry("json", "json"),
                     Map.entry("xml", "xml"),
                     Map.entry("sql", "sql"),
-                    Map.entry("properties", "properties"));
+                    Map.entry("properties", "properties"),
+                    Map.entry("toml", "toml"),
+                    Map.entry("ini", "ini"),
+                    Map.entry("conf", "conf"),
+                    Map.entry("env", "env"),
+                    Map.entry("html", "html"),
+                    Map.entry("css", "css"),
+                    Map.entry("scss", "scss"),
+                    Map.entry("vue", "vue"));
 
     private final long maxFileBytes;
 
@@ -83,7 +114,8 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
     }
 
     private boolean isSupportedFile(Path path) {
-        return LANGUAGE_BY_EXTENSION.containsKey(extension(path));
+        return LANGUAGE_BY_EXTENSION.containsKey(extension(path))
+                || LANGUAGE_BY_FILE_NAME.containsKey(fileName(path));
     }
 
     private boolean isWithinSizeLimit(Path path) {
@@ -101,16 +133,28 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
                 return List.of();
             }
             String relativePath = root.relativize(path).toString().replace('\\', '/');
+            String language = language(path);
             return List.of(
                     new ScannedRepositoryFile(
                             relativePath,
-                            LANGUAGE_BY_EXTENSION.get(extension(path)),
+                            language,
+                            RepositoryAssetClassifier.classify(relativePath, language),
                             content,
                             content.split("\\R", -1).length));
         } catch (IOException | RuntimeException exception) {
             return List.of();
         }
     }
+
+    private String language(Path path) {
+        return LANGUAGE_BY_FILE_NAME.getOrDefault(
+                fileName(path), LANGUAGE_BY_EXTENSION.get(extension(path)));
+    }
+
+    private String fileName(Path path) {
+        return path.getFileName().toString().toLowerCase(Locale.ROOT);
+    }
+
 
     private String extension(Path path) {
         String fileName = path.getFileName().toString();

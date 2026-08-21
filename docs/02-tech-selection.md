@@ -51,7 +51,7 @@
 
 ### 2.3 Flyway
 
-Flyway 默认启用。`V1__init_schema.sql` 负责扩展、表、索引与初始结构，`V3__qa_multi_turn_streaming.sql` 补充多轮问答结构，`V4__flexible_vector_dimensions.sql` 将向量存储升级为可变维度。
+Flyway 默认启用。`V1__init_schema.sql` 负责扩展、表、索引与初始结构，`V3__qa_multi_turn_streaming.sql` 补充多轮问答结构，`V4__flexible_vector_dimensions.sql` 将向量存储升级为可变维度，`V5__repository_asset_types.sql` 为内容片段增加项目资产类型、存量回填、约束和查询索引。
 
 ### 2.4 知识正文与附件
 
