@@ -43,7 +43,7 @@ function stageClass(state: PreparationStage['state']) {
   <section class="assets-panel">
     <header class="panel-head">
       <div>
-        <span class="eyebrow">PROJECT ASSETS</span>
+        <span class="eyebrow">资产视图</span>
         <h2>项目资产</h2>
       </div>
       <span>代码不是唯一事实来源</span>
@@ -80,29 +80,29 @@ function stageClass(state: PreparationStage['state']) {
 
 <style scoped>
 .assets-panel { min-width: 0; overflow: hidden; border: 1px solid #d9e1e8; border-radius: 8px; background: #fff; }
-.panel-head { display: flex; min-height: 70px; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #e5eaef; }
-.eyebrow { color: #8a5b23; font: 700 9px/1.2 Consolas, monospace; letter-spacing: .13em; }
+.panel-head { display: flex; min-height: 56px; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; border-bottom: 1px solid #ececef; }
+.eyebrow { color: var(--app-text-muted); font-size: 11px; font-weight: 650; letter-spacing: .04em; }
 .panel-head h2 { margin: 5px 0 0; color: #23313d; font-size: 15px; }
-.panel-head > span { color: #7b8792; font-size: 10px; }
+.panel-head > span { color: var(--app-text-muted); font-size: 11px; }
 .asset-ledger { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-bottom: 1px solid #e5eaef; }
 .asset-ledger article { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 7px; min-height: 68px; padding: 10px; border-right: 1px solid #edf0f3; }
 .asset-ledger article:last-child { border-right: 0; }
 .asset-ledger svg { color: #617482; }
 .asset-ledger div { display: grid; gap: 2px; }
-.asset-ledger strong { color: #344653; font-size: 11px; }
-.asset-ledger small { color: #89939b; font-size: 8px; }
+.asset-ledger strong { color: #344653; font-size: 12px; }
+.asset-ledger small { color: var(--app-text-muted); font-size: 11px; }
 .asset-ledger b { color: #263846; font: 700 16px Consolas, monospace; }
 .asset-ledger article[data-type='RULE'] { box-shadow: inset 0 -2px #8a5b23; }
 .asset-ledger article[data-type='TASK'] { box-shadow: inset 0 -2px #7c6398; }
 .key-assets { min-height: 190px; padding: 15px 16px; }
-.key-assets h3 { margin: 0 0 10px; color: #40515d; font-size: 11px; }
+.key-assets h3 { margin: 0 0 10px; color: #40515d; font-size: 12px; }
 .key-asset-list { display: grid; gap: 6px; }
 .key-asset-list button { display: grid; grid-template-columns: 46px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 34px; padding: 6px 8px; text-align: left; border: 1px solid transparent; border-radius: 4px; background: #f7f9fa; }
-.key-asset-list button:hover { border-color: #bfd4e4; background: #f1f7fb; }
-.key-asset-list span { padding: 3px 4px; color: #536571; text-align: center; border-radius: 3px; background: #e8edf0; font-size: 8px; }
+.key-asset-list button:hover, .key-asset-list button:focus-visible { border-color: #90bde5; outline: none; background: #f1f7fb; }
+.key-asset-list span { padding: 3px 4px; color: #536571; text-align: center; border-radius: 3px; background: #e8edf0; font-size: 11px; }
 .key-asset-list span[data-type='RULE'] { color: #79501f; background: #f4e9d9; }
 .key-asset-list span[data-type='TASK'] { color: #654e7c; background: #eee8f4; }
-.key-asset-list strong { overflow: hidden; color: #40515d; font: 500 10px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.key-asset-list strong { overflow: hidden; color: #40515d; font: 500 11px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .readiness { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #e5eaef; background: #fafbfc; }
 .readiness div { display: grid; grid-template-columns: 8px 1fr; gap: 2px 6px; padding: 10px; border-right: 1px solid #edf0f3; }
 .readiness div:last-child { border-right: 0; }
@@ -110,8 +110,8 @@ function stageClass(state: PreparationStage['state']) {
 .readiness i.ready { background: #16855b; }
 .readiness i.running { background: #2a74b8; box-shadow: 0 0 0 3px rgb(42 116 184 / 12%); }
 .readiness i.failed { background: #c23e3e; }
-.readiness span { color: #53616c; font-size: 9px; }
-.readiness small { grid-column: 2; color: #9099a0; font-size: 8px; }
+.readiness span { color: #53616c; font-size: 12px; }
+.readiness small { grid-column: 2; color: var(--app-text-muted); font-size: 11px; }
 @media (max-width: 860px) {
   .asset-ledger { grid-template-columns: repeat(2, 1fr); }
   .asset-ledger article { border-bottom: 1px solid #edf0f3; }

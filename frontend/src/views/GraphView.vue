@@ -174,7 +174,7 @@ watch(
   border: 1px solid #eceef1;
   border-radius: 6px;
   background: #fafbfc;
-  font-size: 10px;
+  font-size: 11px;
 }
 .relation-symbol {
   overflow: hidden;
@@ -185,8 +185,8 @@ watch(
 .relation-arrow { color: #0066cc; text-align: center; }
 .impact-relations em {
   grid-column: 1 / -1;
-  color: #718090;
-  font-size: 9px;
+  color: var(--app-text-muted);
+  font-size: 11px;
   font-style: normal;
   letter-spacing: 0.05em;
 }

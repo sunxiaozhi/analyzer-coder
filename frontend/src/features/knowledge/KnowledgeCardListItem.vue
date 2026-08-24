@@ -109,11 +109,11 @@ function formatDate(value: string) {
   border-radius: 4px;
   background: #f1f3f5;
   color: #5e6670;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .card-tags .tag-placeholder {
-  color: #9a9aa0;
+  color: var(--app-text-muted);
   background: #f7f7f8;
 }
 
@@ -133,8 +133,8 @@ function formatDate(value: string) {
 
 .card-meta dt {
   margin-bottom: 4px;
-  color: #8a8a91;
-  font-size: 10px;
+  color: var(--app-text-muted);
+  font-size: 11px;
 }
 
 .card-meta dd {

@@ -197,7 +197,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 .workspace-tab > span { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-tab i { display: grid; flex: none; width: 20px; height: 20px; place-items: center; color: #969ba1; border-radius: 4px; font-style: normal; }
+.workspace-tab i { display: grid; flex: none; width: 20px; height: 20px; place-items: center; color: var(--app-text-muted); border-radius: 4px; font-style: normal; }
 .workspace-tab:hover { color: #263746; border-color: #dbe5ef; background: #f6f9fc; }
 .workspace-tab i:hover,
 .workspace-tab i:focus-visible { color: #263746; background: #e7eaed; outline: none; }

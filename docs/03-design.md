@@ -251,7 +251,7 @@ LOCAL_GIT 原始目录不在清理范围。
 - `TASK`：task、todo、roadmap、checklist 和 gate；
 - `CONFIG`：构建、部署和运行配置。
 
-`code_chunks.asset_type` 保存分类，V5 对已有数据回填。项目画像按类型聚合并返回关键资产。
+`code_chunks.asset_type` 保存分类，V1 基线直接定义字段、约束和查询索引。项目画像按类型聚合并返回关键资产。
 
 `ProjectContextPackService` 接收任务描述，优先召回规则和任务，再组合代码、文档与配置；结果受条目数和字符预算约束。每个条目携带当前 repository/snapshot/commit、路径、行号、chunkId 和 contentHash，供人或 Agent 校验来源。该服务只读，不包含自动执行和知识写回。
 

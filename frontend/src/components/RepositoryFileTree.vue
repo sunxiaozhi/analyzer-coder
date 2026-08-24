@@ -164,8 +164,8 @@ watch(treeData, () => revealSelected(props.selectedPath));
 }
 
 .tree-pane-head span {
-  color: #85858c;
-  font-size: 10px;
+  color: var(--app-text-muted);
+  font-size: 11px;
 }
 
 .repository-tree-scroll {
@@ -204,6 +204,6 @@ watch(treeData, () => revealSelected(props.selectedPath));
 
 .tree-node-icon {
   flex: none;
-  color: #7a8795;
+  color: var(--app-text-muted);
 }
 </style>

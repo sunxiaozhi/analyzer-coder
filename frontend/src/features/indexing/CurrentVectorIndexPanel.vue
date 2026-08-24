@@ -159,7 +159,7 @@ function openCode(item: VectorIndexChunk) {
   border-radius: 4px;
   background: #f1f3f5;
   color: #71717a;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .vector-filters {

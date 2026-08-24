@@ -412,8 +412,8 @@ watch(
 }
 
 .results-head span {
-  color: #85858c;
-  font-size: 10px;
+  color: var(--app-text-muted);
+  font-size: 11px;
 }
 
 .search-hit-list {
@@ -463,20 +463,20 @@ watch(
   color: #5c6d78;
   border-radius: 3px;
   background: #e8edf0;
-  font: 8px Consolas, monospace;
+  font: 11px Consolas, monospace;
 }
 
 .hit-title em {
   flex: none;
   color: #16855b;
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
 }
 
 .search-hit-list small {
   overflow: hidden;
-  color: #7a7a81;
-  font-size: 9px;
+  color: var(--app-text-muted);
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -24,7 +24,7 @@
 - [x] 为 chunk 增加 `asset_type`，统一为 `CODE`、`DOCUMENT`、`RULE`、`TASK`、`CONFIG`。
 - [x] 扫描器覆盖常见源码、Markdown/MDX/RST/TXT、Agent 指令、规则、任务清单和配置文件。
 - [x] 按稳定路径规则识别 `AGENTS.md`、`CLAUDE.md`、README、架构/设计文档、roadmap、gate、task 等关键资产。
-- [x] Flyway V5 完成存量回填、约束和查询索引。
+- [x] Flyway V1 基线包含资产类型字段、约束和查询索引。
 - [x] 项目画像返回各类资产数量与关键资产列表。
 - [x] 资产检索结果展示资产类型，不再把所有内容都称为代码。
 

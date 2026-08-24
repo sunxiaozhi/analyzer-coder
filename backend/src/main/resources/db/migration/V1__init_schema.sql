@@ -383,14 +383,17 @@ CREATE TABLE code_chunks (
     symbol_kind TEXT,
     language TEXT,
     chunk_type TEXT NOT NULL,
+    asset_type VARCHAR(24) NOT NULL DEFAULT 'CODE',
     start_line INTEGER,
     end_line INTEGER,
     content TEXT NOT NULL,
     content_hash TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL
+    created_at TIMESTAMP NOT NULL,
+    CONSTRAINT chk_code_chunks_asset_type
+        CHECK (asset_type IN ('CODE','DOCUMENT','RULE','TASK','CONFIG'))
 );
 
-COMMENT ON TABLE code_chunks IS '当前代码版本切分得到的可检索代码片段';
+COMMENT ON TABLE code_chunks IS '当前仓库版本切分得到的可检索项目资产片段';
 COMMENT ON COLUMN code_chunks.id IS '代码片段唯一标识';
 COMMENT ON COLUMN code_chunks.repo_id IS '所属仓库';
 COMMENT ON COLUMN code_chunks.snapshot_id IS '生成该片段的内容版本令牌';
@@ -401,10 +404,11 @@ COMMENT ON COLUMN code_chunks.symbol_name IS '类、方法、函数等符号名�
 COMMENT ON COLUMN code_chunks.symbol_kind IS '符号类型';
 COMMENT ON COLUMN code_chunks.language IS '编程语言';
 COMMENT ON COLUMN code_chunks.chunk_type IS '片段类型';
+COMMENT ON COLUMN code_chunks.asset_type IS '仓库资产类型：代码、文档、规则、任务或配置';
 COMMENT ON COLUMN code_chunks.start_line IS '起始行号';
 COMMENT ON COLUMN code_chunks.end_line IS '结束行号';
-COMMENT ON COLUMN code_chunks.content IS '用于检索和引用的代码正文';
-COMMENT ON COLUMN code_chunks.content_hash IS '代码正文摘要';
+COMMENT ON COLUMN code_chunks.content IS '用于检索、引用和 Agent 上下文的资产正文';
+COMMENT ON COLUMN code_chunks.content_hash IS '资产正文摘要';
 COMMENT ON COLUMN code_chunks.created_at IS '生成时间';
 
 CREATE INDEX idx_code_chunks_repo_file ON code_chunks(repo_id, file_path);
@@ -412,19 +416,22 @@ CREATE INDEX idx_code_chunks_repo_symbol ON code_chunks(repo_id, symbol_id);
 CREATE INDEX idx_code_chunks_repo_created_at ON code_chunks(repo_id, created_at DESC);
 CREATE INDEX idx_code_chunks_repo_language ON code_chunks(repo_id, language);
 CREATE INDEX idx_code_chunks_repo_snapshot ON code_chunks(repo_id, snapshot_id);
+CREATE INDEX idx_code_chunks_repo_asset_type ON code_chunks(repo_id, asset_type, file_path);
 
 CREATE TABLE chunk_embeddings (
     chunk_id UUID PRIMARY KEY REFERENCES code_chunks(id) ON DELETE CASCADE,
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    model VARCHAR(100) NOT NULL,
+    model VARCHAR(200) NOT NULL,
     dimension INTEGER NOT NULL,
-    embedding vector(64) NOT NULL,
+    embedding vector NOT NULL,
     content_hash VARCHAR(64) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chunk_embeddings_dimension_check CHECK (dimension BETWEEN 1 AND 4096),
+    CONSTRAINT chunk_embeddings_vector_dimension_check CHECK (vector_dims(embedding) = dimension)
 );
 
-COMMENT ON TABLE chunk_embeddings IS '当前代码片段的向量表示';
-COMMENT ON COLUMN chunk_embeddings.chunk_id IS '对应代码片段';
+COMMENT ON TABLE chunk_embeddings IS '当前项目资产片段的向量表示';
+COMMENT ON COLUMN chunk_embeddings.chunk_id IS '对应项目资产片段';
 COMMENT ON COLUMN chunk_embeddings.repo_id IS '所属仓库';
 COMMENT ON COLUMN chunk_embeddings.model IS '向量模型标识';
 COMMENT ON COLUMN chunk_embeddings.dimension IS '向量维度';
@@ -506,14 +513,24 @@ CREATE TABLE qa_conversations (
     evidence_status VARCHAR(32) NOT NULL,
     fallback_reason VARCHAR(64),
     answer_payload JSONB NOT NULL,
+    thread_id UUID NOT NULL DEFAULT gen_random_uuid(),
+    turn_no INTEGER NOT NULL DEFAULT 1,
+    status VARCHAR(20) NOT NULL DEFAULT 'COMPLETED',
+    stop_requested BOOLEAN NOT NULL DEFAULT FALSE,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_qa_conversations_evidence_status CHECK (
         evidence_status IN ('SUPPORTED','DEGRADED','MODEL_OUTPUT_REJECTED','INSUFFICIENT','UNKNOWN')
+    ),
+    CONSTRAINT chk_qa_conversations_turn_no CHECK (turn_no > 0),
+    CONSTRAINT chk_qa_conversations_status CHECK (
+        status IN ('RUNNING', 'COMPLETED', 'STOPPED', 'FAILED')
     )
 );
 
-COMMENT ON TABLE qa_conversations IS '知识问答的一问一答记录';
+COMMENT ON TABLE qa_conversations IS '多轮知识问答线程中的单轮记录';
 COMMENT ON COLUMN qa_conversations.id IS '问答唯一标识';
 COMMENT ON COLUMN qa_conversations.repo_id IS '所属仓库';
 COMMENT ON COLUMN qa_conversations.account_id IS '提问账号';
@@ -526,6 +543,12 @@ COMMENT ON COLUMN qa_conversations.provider IS '回答提供方';
 COMMENT ON COLUMN qa_conversations.evidence_status IS '回答证据状态';
 COMMENT ON COLUMN qa_conversations.fallback_reason IS '未使用模型回答或安全降级的原因';
 COMMENT ON COLUMN qa_conversations.answer_payload IS '可原样恢复的完整回答快照';
+COMMENT ON COLUMN qa_conversations.thread_id IS '多轮问答线程标识；首轮记录通常以自身 ID 作为线程标识';
+COMMENT ON COLUMN qa_conversations.turn_no IS '当前记录在线程内的轮次，从 1 开始';
+COMMENT ON COLUMN qa_conversations.status IS '生成状态：RUNNING、COMPLETED、STOPPED 或 FAILED';
+COMMENT ON COLUMN qa_conversations.stop_requested IS '用户是否已请求停止当前轮次的生成';
+COMMENT ON COLUMN qa_conversations.started_at IS '当前轮次开始生成的时间';
+COMMENT ON COLUMN qa_conversations.finished_at IS '当前轮次完成、停止或失败的时间';
 COMMENT ON COLUMN qa_conversations.created_at IS '创建时间';
 COMMENT ON COLUMN qa_conversations.updated_at IS '标题或内容最后更新时间';
 
@@ -534,6 +557,12 @@ CREATE UNIQUE INDEX uk_qa_conversations_client_request
     WHERE client_request_id IS NOT NULL;
 CREATE INDEX idx_qa_conversations_account_repo_created
     ON qa_conversations(account_id, repo_id, created_at DESC);
+CREATE UNIQUE INDEX uk_qa_conversations_thread_turn
+    ON qa_conversations(thread_id, turn_no);
+CREATE INDEX idx_qa_conversations_thread_created
+    ON qa_conversations(thread_id, turn_no, created_at);
+CREATE INDEX idx_qa_conversations_account_repo_thread
+    ON qa_conversations(account_id, repo_id, thread_id, updated_at DESC);
 
 CREATE TABLE qa_citations (
     id UUID PRIMARY KEY,
@@ -648,9 +677,12 @@ CREATE TABLE knowledge_card_embeddings (
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
     revision INTEGER NOT NULL,
     model VARCHAR(200) NOT NULL DEFAULT 'local-hash-64',
-    embedding vector(64) NOT NULL,
+    dimension INTEGER NOT NULL,
+    embedding vector NOT NULL,
     content_hash VARCHAR(64) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT knowledge_embeddings_dimension_check CHECK (dimension BETWEEN 1 AND 4096),
+    CONSTRAINT knowledge_embeddings_vector_dimension_check CHECK (vector_dims(embedding) = dimension)
 );
 
 COMMENT ON TABLE knowledge_card_embeddings IS '知识卡片当前修订的检索向量';
@@ -658,6 +690,7 @@ COMMENT ON COLUMN knowledge_card_embeddings.card_id IS '知识卡片标识';
 COMMENT ON COLUMN knowledge_card_embeddings.repo_id IS '所属仓库';
 COMMENT ON COLUMN knowledge_card_embeddings.revision IS '向量对应的知识修订号';
 COMMENT ON COLUMN knowledge_card_embeddings.model IS '生成向量的模型标识';
+COMMENT ON COLUMN knowledge_card_embeddings.dimension IS '向量维度';
 COMMENT ON COLUMN knowledge_card_embeddings.embedding IS '语义检索向量';
 COMMENT ON COLUMN knowledge_card_embeddings.content_hash IS '参与向量计算的内容摘要';
 COMMENT ON COLUMN knowledge_card_embeddings.created_at IS '向量生成时间';
@@ -790,14 +823,16 @@ CREATE TABLE vector_model_configs (
         CHECK (provider_type IN ('LOCAL_HASH', 'OPENAI_COMPATIBLE')),
     base_url TEXT,
     model VARCHAR(200) NOT NULL UNIQUE,
-    dimension INTEGER NOT NULL CHECK (dimension = 64),
+    dimension INTEGER NOT NULL,
     request_timeout_ms INTEGER NOT NULL DEFAULT 30000
         CHECK (request_timeout_ms BETWEEN 3000 AND 120000),
     secret_version_id UUID REFERENCES encrypted_secret_versions(id),
     created_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
     updated_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT vector_model_configs_dimension_check
+        CHECK (dimension BETWEEN 1 AND 4096)
 );
 
 COMMENT ON TABLE vector_model_configs IS '本地及外部向量模型备案';
@@ -1046,14 +1081,10 @@ INSERT INTO vector_model_activation(singleton_id,active_config_id)
 VALUES(1,'00000000-0000-0000-0000-000000000064');
 
 -- ============================================================================
--- Retrieval accuracy indexes merged from V2
+-- Retrieval lookup indexes merged into the baseline. Flexible-dimension vectors
+-- deliberately use exact cosine scans because pgvector HNSW indexes require a
+-- fixed expression dimension.
 -- ============================================================================
-CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_cosine
-    ON chunk_embeddings USING hnsw (embedding vector_cosine_ops);
-
-CREATE INDEX IF NOT EXISTS idx_knowledge_embeddings_cosine
-    ON knowledge_card_embeddings USING hnsw (embedding vector_cosine_ops);
-
 CREATE INDEX IF NOT EXISTS idx_code_chunks_repo_path_line
     ON code_chunks(repo_id, file_path, start_line);
 

@@ -3,10 +3,21 @@ import { Plus, Search } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { intelligenceApi, type CardInput, type CardRevision, type CodeReference, type KnowledgeCard } from '@/api/intelligence';
+import { ApiError } from '@/api/http';
+import {
+  intelligenceApi,
+  type CardInput,
+  type CardRevision,
+  type CodeReference,
+  type KnowledgeCard,
+  type MarkdownKnowledgeSource,
+  type MarkdownKnowledgeSourceList as MarkdownKnowledgeSourceOverview,
+  type MarkdownKnowledgeSourceStatus,
+} from '@/api/intelligence';
 import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
+import MarkdownKnowledgeSourceList from '@/features/knowledge/MarkdownKnowledgeSourceList.vue';
 import { renderMarkdown } from '@/features/knowledge/markdown';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { statusLabel } from '@/utils/displayLabels';
@@ -14,37 +25,103 @@ import { statusLabel } from '@/utils/displayLabels';
 const repositories = useRepositoryStore();
 const router = useRouter();
 const route = useRoute();
+type KnowledgeMode = 'cards' | 'markdown';
+const activeMode = shallowRef<KnowledgeMode>('cards');
 const cards = shallowRef<KnowledgeCard[]>([]);
-const query = shallowRef('');
+const markdownSources = shallowRef<MarkdownKnowledgeSourceOverview | null>(null);
+const cardQuery = shallowRef('');
+const sourceQuery = shallowRef('');
 const allCardTypes = '__ALL__';
+const allSourceStatuses = '__ALL__';
 const selectedType = shallowRef(allCardTypes);
+const selectedSourceStatus = shallowRef<MarkdownKnowledgeSourceStatus | typeof allSourceStatuses>(allSourceStatuses);
 const dialog = shallowRef(false);
 const detailDialog = shallowRef(false);
 const historyDialog = shallowRef(false);
 const busy = shallowRef(false);
+const cardsLoading = shallowRef(false);
+const sourcesLoading = shallowRef(false);
+const sourceBusyPath = shallowRef<string | null>(null);
+const bulkGenerating = shallowRef(false);
+const sourceLoadError = shallowRef<string | null>(null);
 const editing = shallowRef<KnowledgeCard | null>(null);
 const viewing = shallowRef<KnowledgeCard | null>(null);
 const historyCard = shallowRef<KnowledgeCard | null>(null);
 const revisions = shallowRef<CardRevision[]>([]);
+const emptySourceCounts = { total: 0, pending: 0, current: 0, stale: 0 };
+const canMaintain = computed(() => repositories.selectedRepository?.capabilities.canUpdate ?? false);
 const cardTypes = computed(() => [...new Set(cards.value
   .map(card => card.cardType?.trim())
   .filter((value): value is string => Boolean(value)))]
   .sort((left, right) => left.localeCompare(right, 'zh-CN')));
-const rows = computed(() => cards.value.filter(card => {
-  const value = query.value.trim().toLowerCase();
+const cardRows = computed(() => cards.value.filter(card => {
+  const value = cardQuery.value.trim().toLowerCase();
   const matchesTitle = !value || card.title.toLowerCase().includes(value);
   const matchesType = selectedType.value === allCardTypes || card.cardType === selectedType.value;
   return matchesTitle && matchesType;
 }));
-const emptyDescription = computed(() => {
+const sourceRows = computed(() => (markdownSources.value?.items ?? []).filter(source => {
+  const value = sourceQuery.value.trim().toLowerCase();
+  const matchesQuery = !value
+    || source.title.toLowerCase().includes(value)
+    || source.sourcePath.toLowerCase().includes(value);
+  const matchesStatus = selectedSourceStatus.value === allSourceStatuses
+    || source.status === selectedSourceStatus.value;
+  return matchesQuery && matchesStatus;
+}));
+const cardEmptyDescription = computed(() => {
+  if (!repositories.selectedRepositoryId) return '请先选择仓库';
   if (!cards.value.length) return '当前仓库暂无知识卡片';
   return '没有符合筛选条件的知识卡片';
 });
+const sourceEmptyDescription = computed(() => {
+  if (!repositories.selectedRepositoryId) return '请先选择仓库';
+  if (sourceLoadError.value) return sourceLoadError.value;
+  if (!markdownSources.value?.items.length) return '当前快照未发现 Markdown 文件，仓库重新扫描后会自动更新';
+  return '没有符合筛选条件的 Markdown';
+});
+
+async function loadCards() {
+  const repositoryId = repositories.selectedRepositoryId;
+  if (!repositoryId) {
+    cards.value = [];
+    return;
+  }
+  cardsLoading.value = true;
+  try {
+    cards.value = await intelligenceApi.cards(repositoryId);
+    syncRequestedCard();
+  } catch (error) {
+    cards.value = [];
+    ElMessage.error(error instanceof Error ? error.message : '知识卡片加载失败');
+  } finally {
+    cardsLoading.value = false;
+  }
+}
+
+async function loadMarkdownSources() {
+  const repositoryId = repositories.selectedRepositoryId;
+  if (!repositoryId) {
+    markdownSources.value = null;
+    sourceLoadError.value = null;
+    return;
+  }
+  sourcesLoading.value = true;
+  sourceLoadError.value = null;
+  try {
+    markdownSources.value = await intelligenceApi.markdownSources(repositoryId);
+  } catch (error) {
+    markdownSources.value = null;
+    sourceLoadError.value = error instanceof ApiError && error.status === 409
+      ? '仓库尚无可用快照，请先完成仓库扫描'
+      : error instanceof Error ? error.message : 'Markdown 预备知识加载失败';
+  } finally {
+    sourcesLoading.value = false;
+  }
+}
 
 async function load() {
-  cards.value = repositories.selectedRepositoryId
-    ? await intelligenceApi.cards(repositories.selectedRepositoryId) : [];
-  syncRequestedCard();
+  await Promise.all([loadCards(), loadMarkdownSources()]);
 }
 
 function syncRequestedCard() {
@@ -52,6 +129,7 @@ function syncRequestedCard() {
   if (!cardId) return;
   const card = cards.value.find(item => item.id === cardId);
   if (!card) return;
+  activeMode.value = 'cards';
   viewing.value = card;
   detailDialog.value = true;
 }
@@ -69,6 +147,99 @@ function openCode(reference: CodeReference) {
       endLine: String(reference.endLine ?? reference.startLine ?? 1),
     },
   });
+}
+
+function openMarkdown(source: MarkdownKnowledgeSource) {
+  void router.push({ name: 'search', query: { path: source.sourcePath } });
+}
+
+async function openGeneratedCard(source: MarkdownKnowledgeSource) {
+  if (!source.cardId) return;
+  let card = cards.value.find(item => item.id === source.cardId);
+  if (!card) {
+    await loadCards();
+    card = cards.value.find(item => item.id === source.cardId);
+  }
+  if (!card) {
+    ElMessage.error('关联知识卡片不存在或当前账号无权查看');
+    return;
+  }
+  openDetail(card);
+}
+
+async function confirmStaleSync(source: MarkdownKnowledgeSource) {
+  if (source.status !== 'STALE') return true;
+  try {
+    await ElMessageBox.confirm(
+      `“${source.title}”的 Markdown 已变化。同步会为原知识卡片创建新修订，历史内容仍会保留。`,
+      '同步 Markdown 变更',
+      { type: 'warning', confirmButtonText: '同步为新修订' },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function generateMarkdownCard(source: MarkdownKnowledgeSource) {
+  const repositoryId = repositories.selectedRepositoryId;
+  if (!repositoryId || source.status === 'CURRENT' || !(await confirmStaleSync(source))) return;
+  sourceBusyPath.value = source.sourcePath;
+  try {
+    const card = await intelligenceApi.generateMarkdownSource(repositoryId, {
+      sourcePath: source.sourcePath,
+      expectedSnapshotId: source.sourceSnapshotId,
+      expectedContentHash: source.sourceContentHash,
+    });
+    await Promise.all([loadCards(), loadMarkdownSources()]);
+    ElMessage.success(source.status === 'STALE'
+      ? `已同步为知识卡片 v${card.revision}`
+      : '已生成知识卡片草稿');
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 409 || error.code === 'MARKDOWN_SOURCE_CHANGED')) {
+      await loadMarkdownSources();
+      ElMessage.warning('Markdown 已发生变化，列表已刷新，请确认最新内容后重试');
+    } else {
+      ElMessage.error(error instanceof Error ? error.message : '知识卡片生成失败');
+    }
+  } finally {
+    sourceBusyPath.value = null;
+  }
+}
+
+async function generateAllPending() {
+  const repositoryId = repositories.selectedRepositoryId;
+  const expectedSnapshotId = markdownSources.value?.snapshotId;
+  const pending = markdownSources.value?.counts.pending ?? 0;
+  if (!repositoryId || !expectedSnapshotId || pending <= 0) return;
+  try {
+    await ElMessageBox.confirm(
+      `将 ${pending} 个待处理 Markdown 生成知识卡片草稿。已生成和已过期内容不会被修改。`,
+      '批量生成知识卡片',
+      { type: 'info', confirmButtonText: `生成 ${pending} 个草稿` },
+    );
+  } catch {
+    return;
+  }
+  bulkGenerating.value = true;
+  try {
+    const result = await intelligenceApi.generatePendingMarkdownSources(repositoryId, expectedSnapshotId);
+    await Promise.all([loadCards(), loadMarkdownSources()]);
+    ElMessage.success(result.generated > 0
+      ? result.remaining > 0
+        ? `已生成 ${result.generated} 个草稿，剩余 ${result.remaining} 个可继续分批生成`
+        : `已生成 ${result.generated} 个知识卡片草稿`
+      : '没有新的 Markdown 需要生成');
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      await loadMarkdownSources();
+      ElMessage.warning('仓库快照已变化，列表已刷新，请确认最新待处理内容后重试');
+    } else {
+      ElMessage.error(error instanceof Error ? error.message : '批量生成失败');
+    }
+  } finally {
+    bulkGenerating.value = false;
+  }
 }
 
 async function openGraph(reference: CodeReference) {
@@ -117,6 +288,9 @@ async function restore(revision: number) {
 }
 watch(() => repositories.selectedRepositoryId, () => {
   selectedType.value = allCardTypes;
+  selectedSourceStatus.value = allSourceStatuses;
+  cardQuery.value = '';
+  sourceQuery.value = '';
   void load();
 });
 watch(() => route.query.cardId, syncRequestedCard);
@@ -127,8 +301,45 @@ onMounted(() => void load());
   <section class="page knowledge-page">
     <div class="surface knowledge-surface">
       <div class="toolbar">
-        <el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索标题" clearable />
+        <div class="knowledge-mode-switch" role="tablist" aria-label="知识内容类型">
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="activeMode === 'cards'"
+            :class="{ active: activeMode === 'cards' }"
+            @click="activeMode = 'cards'"
+          >
+            知识卡片 <span>{{ cards.length }}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="activeMode === 'markdown'"
+            :class="{ active: activeMode === 'markdown' }"
+            @click="activeMode = 'markdown'"
+          >
+            Markdown 预备知识 <span>{{ markdownSources?.counts.total ?? 0 }}</span>
+          </button>
+        </div>
+
+        <el-input
+          v-if="activeMode === 'cards'"
+          v-model="cardQuery"
+          class="app-search-input knowledge-search"
+          :prefix-icon="Search"
+          placeholder="搜索卡片标题"
+          clearable
+        />
+        <el-input
+          v-else
+          v-model="sourceQuery"
+          class="app-search-input knowledge-search"
+          :prefix-icon="Search"
+          placeholder="搜索 Markdown 标题或路径"
+          clearable
+        />
         <el-select
+          v-if="activeMode === 'cards'"
           v-model="selectedType"
           class="knowledge-type-filter"
           placeholder="全部类型"
@@ -139,14 +350,51 @@ onMounted(() => void load());
           <el-option label="全部类型" :value="allCardTypes" />
           <el-option v-for="type in cardTypes" :key="type" :label="type" :value="type" />
         </el-select>
+        <el-select
+          v-else
+          v-model="selectedSourceStatus"
+          class="knowledge-status-filter"
+          aria-label="按 Markdown 处理状态筛选"
+        >
+          <el-option label="全部状态" :value="allSourceStatuses" />
+          <el-option label="待生成" value="PENDING" />
+          <el-option label="已生成" value="CURRENT" />
+          <el-option label="已过期" value="STALE" />
+        </el-select>
         <span class="spacer" />
-        <el-button type="primary" :icon="Plus" :disabled="!repositories.selectedRepositoryId" @click="openCreate">新建卡片</el-button>
+        <el-button
+          v-if="activeMode === 'cards'"
+          type="primary"
+          :icon="Plus"
+          :disabled="!repositories.selectedRepositoryId || !canMaintain"
+          @click="openCreate"
+        >
+          新建卡片
+        </el-button>
+        <el-button
+          v-else
+          type="primary"
+          :loading="bulkGenerating"
+          :disabled="!repositories.selectedRepositoryId
+            || !canMaintain
+            || (markdownSources?.counts.pending ?? 0) === 0
+            || sourceBusyPath !== null"
+          @click="generateAllPending"
+        >
+          生成待处理（{{ markdownSources?.counts.pending ?? 0 }}）
+        </el-button>
       </div>
-      <div class="knowledge-scroll">
-        <el-empty v-if="!rows.length" :description="emptyDescription" />
+
+      <div
+        v-if="activeMode === 'cards'"
+        class="knowledge-scroll"
+        role="tabpanel"
+        v-loading="cardsLoading"
+      >
+        <el-empty v-if="!cardRows.length" :description="cardEmptyDescription" />
         <div v-else class="knowledge-grid">
           <KnowledgeCardListItem
-            v-for="card in rows"
+            v-for="card in cardRows"
             :key="card.id"
             :card="card"
             @view="openDetail"
@@ -154,6 +402,25 @@ onMounted(() => void load());
             @history="showHistory"
           />
         </div>
+      </div>
+      <div
+        v-else
+        class="knowledge-scroll markdown-source-pane"
+        role="tabpanel"
+        v-loading="sourcesLoading"
+      >
+        <MarkdownKnowledgeSourceList
+          :items="sourceRows"
+          :counts="markdownSources?.counts ?? emptySourceCounts"
+          :snapshot-id="markdownSources?.snapshotId ?? null"
+          :busy-path="sourceBusyPath"
+          :bulk-busy="bulkGenerating"
+          :can-generate="canMaintain"
+          :empty-description="sourceEmptyDescription"
+          @generate="generateMarkdownCard"
+          @view-card="openGeneratedCard"
+          @view-markdown="openMarkdown"
+        />
       </div>
     </div>
     <KnowledgeCardDetailDialog v-model="detailDialog" :card="viewing"
@@ -192,12 +459,64 @@ onMounted(() => void load());
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
+.knowledge-surface > .toolbar {
+  flex-wrap: wrap;
+}
+.knowledge-mode-switch {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #dde1e5;
+  border-radius: 6px;
+  background: #f3f5f7;
+}
+.knowledge-mode-switch button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  color: #59636d;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 550;
+}
+.knowledge-mode-switch button:hover { color: #1d1d1f; }
+.knowledge-mode-switch button:focus-visible {
+  outline: 2px solid #80b8eb;
+  outline-offset: 1px;
+}
+.knowledge-mode-switch button.active {
+  color: #005eb8;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(26 39 54 / 12%);
+}
+.knowledge-mode-switch button span {
+  display: inline-grid;
+  min-width: 20px;
+  height: 18px;
+  place-items: center;
+  padding: 0 5px;
+  color: #66717c;
+  border-radius: 9px;
+  background: #e7eaed;
+  font-size: 11px;
+}
+.knowledge-mode-switch button.active span {
+  color: #005eb8;
+  background: #eaf3fd;
+}
 .knowledge-scroll .knowledge-grid {
   padding-top: 0;
 }
-.knowledge-type-filter {
+.knowledge-type-filter,
+.knowledge-status-filter {
   width: 168px;
 }
+.markdown-source-pane { padding-bottom: 12px; }
 .history-markdown :deep(pre){overflow:auto;padding:10px;border-radius:8px;background:#18212f;color:#e6edf3}.history-markdown{line-height:1.7}
 @media (max-width: 760px) {
   .knowledge-page,
@@ -208,6 +527,14 @@ onMounted(() => void load());
   }
   .knowledge-scroll { overflow: visible; }
   .knowledge-surface { row-gap: 12px; }
-  .knowledge-type-filter { width: 100%; }
+  .knowledge-surface > .toolbar { align-items: stretch; }
+  .knowledge-mode-switch { width: 100%; }
+  .knowledge-mode-switch button { flex: 1; justify-content: center; }
+  .knowledge-search,
+  .knowledge-type-filter,
+  .knowledge-status-filter { width: 100% !important; }
+  .knowledge-surface > .toolbar .spacer { display: none; }
+  .knowledge-surface > .toolbar > .el-button { width: 100%; margin-left: 0; }
+  .markdown-source-pane { padding-bottom: 0; }
 }
 </style>

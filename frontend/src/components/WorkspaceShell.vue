@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BookOpen, Boxes, GitBranch, LayoutDashboard, ListChecks, LogOut, Search, Settings, Users } from 'lucide-vue-next';
+import { BookOpen, Boxes, GitBranch, LayoutDashboard, ListChecks, LogOut, Search, Settings, Users, Workflow } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, reactive, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
@@ -14,12 +14,13 @@ const workspaceTabs = useWorkspaceTabsStore();
 const refreshVersions = reactive<Record<string, number>>({});
 const navItems = computed(() => [
   { to: '/overview', label: '项目总览', icon: LayoutDashboard },
+  { to: '/change-impact', label: '变更分析', icon: Workflow },
   { to: '/ask', label: '知识问答', icon: BookOpen }, { to: '/knowledge', label: '知识卡片', icon: BookOpen },
   { to: '/graph', label: '调用图谱', icon: Boxes }, { to: '/search', label: '源码检索', icon: Search },
   { to: '/repositories', label: '仓库管理', icon: GitBranch }, { to: '/indexing', label: '索引任务', icon: ListChecks },
   ...(auth.isAdmin ? [{ to: '/accounts', label: '账号管理', icon: Users }, { to: '/settings', label: '系统设置', icon: Settings }] : []),
 ]);
-const titles: Record<string, string> = { overview: '项目总览', repositories: '仓库管理', indexing: '索引任务', search: '源码检索', ask: '知识问答', graph: '调用图谱', knowledge: '知识卡片', accounts: '账号管理', settings: '系统设置' };
+const titles: Record<string, string> = { overview: '项目总览', 'change-impact': '变更分析', repositories: '仓库管理', indexing: '索引任务', search: '源码检索', ask: '知识问答', graph: '调用图谱', knowledge: '知识卡片', accounts: '账号管理', settings: '系统设置' };
 const pageTitle = computed(() => titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
 async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }

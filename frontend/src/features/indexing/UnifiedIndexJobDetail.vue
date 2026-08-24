@@ -47,7 +47,7 @@ function repositoryName(repositoryId: string) {
 <style scoped>
 .terminal-note {
   margin: 12px 16px 0;
-  color: #8a8a91;
+  color: var(--app-text-muted);
   font-size: 11px;
   line-height: 1.55;
 }

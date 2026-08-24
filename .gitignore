@@ -21,3 +21,6 @@ deploy/.env.production
 
 /runtime/
 /release/
+/.run
+/.runtime
+/release/*.gz
