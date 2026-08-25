@@ -130,7 +130,9 @@ public class IntelligenceController {
     public List<IntelligenceService.KnowledgeCard> cards(
             @PathVariable UUID repoId, HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
-        return service.cards(repoId, account.isSuperAdmin());
+        boolean includeDraft =
+                access.canAccess(account, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
+        return service.cards(repoId, includeDraft);
     }
 
     @PostMapping("/repositories/{repoId}/knowledge")

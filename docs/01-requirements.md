@@ -281,7 +281,7 @@
 
 ## 6. 数据与存储要求
 
-1. PostgreSQL 为唯一运行期业务数据库，启动时由 Flyway 按版本执行 `V1`、`V3`、`V4`、`V5` 迁移。
+1. PostgreSQL 为唯一运行期业务数据库，当前基线已压缩为单一 `V1__init_schema.sql`，新环境启动时由 Flyway 一次创建完整结构。
 2. pgvector 扩展必须可用，代码和知识使用可变维度 `vector` 字段；查询按当前模型和维度隔离。
 3. 当前核心表包括账号/会话/验证码、仓库/权限/治理/墓碑、任务、chunk/向量、CodeGraph、问答、知识/附件、系统设置和模型配置。
 4. `git_credentials/repository_credential_bindings` 提供 Git/GitLab HTTPS 凭据与仓库绑定；问答记录由 `qa_conversations/qa_citations` 唯一持久化。

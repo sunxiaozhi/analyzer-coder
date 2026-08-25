@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.MarkdownKnowledgeSourceMapper">
+    <insert id="upsertSource">
+        INSERT INTO repository_markdown_sources(
+            id,repo_id,snapshot_id,file_path,content_hash,title,asset_type,content,line_count,byte_size
+        ) VALUES(
+            #{id},#{repositoryId},#{snapshotId},#{filePath},#{contentHash},#{title},#{assetType},
+            #{content},#{lineCount},#{byteSize}
+        )
+        ON CONFLICT(repo_id,file_path) DO UPDATE SET
+            snapshot_id=EXCLUDED.snapshot_id,
+            content_hash=EXCLUDED.content_hash,
+            title=EXCLUDED.title,
+            asset_type=EXCLUDED.asset_type,
+            content=EXCLUDED.content,
+            line_count=EXCLUDED.line_count,
+            byte_size=EXCLUDED.byte_size,
+            updated_at=CURRENT_TIMESTAMP
+    </insert>
+
+    <delete id="deleteMissingSources">
+        DELETE FROM repository_markdown_sources WHERE repo_id=#{repositoryId}
+        <if test="filePaths != null and !filePaths.isEmpty()">
+            AND file_path NOT IN
+            <foreach collection="filePaths" item="path" open="(" close=")" separator=",">
+                #{path}
+            </foreach>
+        </if>
+    </delete>
+
+    <sql id="sourceViewColumns">
+        s.id source_id,
+        s.snapshot_id source_snapshot_id,
+        s.file_path source_path,
+        s.content_hash source_content_hash,
+        s.title,
+        s.asset_type,
+        s.line_count,
+        s.byte_size,
+        CASE
+            WHEN latest.card_id IS NULL THEN 'PENDING'
+            WHEN latest.source_content_hash=s.content_hash THEN 'CURRENT'
+            ELSE 'STALE'
+        END source_status,
+        latest.card_id,
+        latest.card_revision,
+        latest.source_snapshot_id generated_snapshot_id,
+        latest.source_content_hash generated_content_hash
+    </sql>
+
+    <sql id="latestProvenanceJoin">
+        LEFT JOIN LATERAL (
+            SELECT l.card_id,c.revision card_revision,l.source_snapshot_id,l.source_content_hash
+            FROM knowledge_card_markdown_source_links l
+            JOIN knowledge_cards c ON c.id=l.card_id AND c.repo_id=l.repo_id
+            WHERE l.repo_id=s.repo_id AND l.source_path=s.file_path
+            ORDER BY l.generated_at DESC,l.revision DESC
+            LIMIT 1
+        ) latest ON TRUE
+    </sql>
+
+    <select id="listSources" resultType="map">
+        SELECT <include refid="sourceViewColumns"/>
+        FROM repository_markdown_sources s
+        <include refid="latestProvenanceJoin"/>
+        WHERE s.repo_id=#{repositoryId} AND s.snapshot_id=#{snapshotId}
+        ORDER BY
+            CASE
+                WHEN latest.card_id IS NULL THEN 0
+                WHEN latest.source_content_hash&lt;&gt;s.content_hash THEN 1
+                ELSE 2
+            END,
+            s.file_path
+    </select>
+
+    <select id="findSource" resultType="map">
+        SELECT <include refid="sourceViewColumns"/>,s.content
+        FROM repository_markdown_sources s
+        <include refid="latestProvenanceJoin"/>
+        WHERE s.repo_id=#{repositoryId} AND s.snapshot_id=#{snapshotId} AND s.file_path=#{filePath}
+    </select>
+
+    <select id="lockSource" resultType="map">
+        SELECT s.id source_id,s.snapshot_id source_snapshot_id,s.file_path source_path,
+               s.content_hash source_content_hash,s.title,s.asset_type,s.content,s.line_count,s.byte_size,
+               r.current_snapshot_id repository_snapshot_id
+        FROM repository_markdown_sources s
+        JOIN repositories r ON r.id=s.repo_id
+        WHERE s.repo_id=#{repositoryId} AND s.file_path=#{filePath}
+        FOR UPDATE OF s,r
+    </select>
+
+    <select id="findChunkIds" resultType="java.util.UUID">
+        SELECT id FROM code_chunks
+        WHERE repo_id=#{repositoryId} AND snapshot_id=#{snapshotId} AND file_path=#{filePath}
+        ORDER BY start_line NULLS FIRST,id
+        LIMIT #{limit}
+    </select>
+
+    <insert id="insertProvenance">
+        INSERT INTO knowledge_card_markdown_source_links(
+            card_id,revision,source_id,repo_id,source_snapshot_id,source_path,source_content_hash
+        ) VALUES(
+            #{cardId},#{revision},#{sourceId},#{repositoryId},#{sourceSnapshotId},#{sourcePath},
+            #{sourceContentHash}
+        )
+    </insert>
+
+    <update id="reconcileLinkedCards">
+        UPDATE knowledge_cards c SET
+            verified_commit=CASE
+                WHEN EXISTS(
+                    SELECT 1
+                    FROM knowledge_card_markdown_source_links l
+                    JOIN repository_markdown_sources s
+                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                    WHERE l.card_id=c.id
+                      AND l.revision=(
+                          SELECT MAX(newer.revision)
+                          FROM knowledge_card_markdown_source_links newer
+                          WHERE newer.card_id=c.id
+                      )
+                      AND s.content_hash=l.source_content_hash
+                ) THEN #{commitSha,jdbcType=VARCHAR}
+                ELSE c.verified_commit
+            END,
+            code_review_status=CASE
+                WHEN EXISTS(
+                    SELECT 1
+                    FROM knowledge_card_markdown_source_links l
+                    JOIN repository_markdown_sources s
+                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                    WHERE l.card_id=c.id
+                      AND l.revision=(
+                          SELECT MAX(newer.revision)
+                          FROM knowledge_card_markdown_source_links newer
+                          WHERE newer.card_id=c.id
+                      )
+                      AND s.content_hash=l.source_content_hash
+                ) THEN CASE WHEN #{commitAvailable} THEN 'CURRENT' ELSE 'UNVERIFIED' END
+                ELSE 'REVIEW_REQUIRED'
+            END,
+            code_reviewed_at=CASE
+                WHEN #{commitAvailable} AND EXISTS(
+                    SELECT 1
+                    FROM knowledge_card_markdown_source_links l
+                    JOIN repository_markdown_sources s
+                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                    WHERE l.card_id=c.id
+                      AND l.revision=(
+                          SELECT MAX(newer.revision)
+                          FROM knowledge_card_markdown_source_links newer
+                          WHERE newer.card_id=c.id
+                      )
+                      AND s.content_hash=l.source_content_hash
+                ) THEN CURRENT_TIMESTAMP
+                ELSE NULL
+            END
+        WHERE c.repo_id=#{repositoryId}
+          AND EXISTS(
+              SELECT 1 FROM knowledge_card_markdown_source_links linked
+              WHERE linked.card_id=c.id AND linked.repo_id=#{repositoryId}
+          )
+    </update>
+</mapper>

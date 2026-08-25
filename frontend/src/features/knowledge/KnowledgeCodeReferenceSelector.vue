@@ -236,7 +236,7 @@ function excerpt(content: string) {
 
 .search-guide p { margin: 0; color: #5f5a50; font-size: 11px; line-height: 1.55; }
 .search-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.search-examples span { color: #8b8171; font-size: 10px; }
+.search-examples span { color: #6b604f; font-size: 11px; }
 .search-examples code,
 .reference-empty code {
   padding: 2px 5px;
@@ -244,7 +244,7 @@ function excerpt(content: string) {
   border: 1px solid #e6dac1;
   border-radius: 3px;
   background: #fff;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .reference-search {
@@ -271,7 +271,7 @@ function excerpt(content: string) {
 }
 
 .group-heading b { font-size: 11px; }
-.group-heading span { color: #777f87; font-size: 10px; }
+.group-heading span { color: var(--app-text-muted); font-size: 11px; }
 
 .selected-references,
 .reference-results {
@@ -306,8 +306,8 @@ function excerpt(content: string) {
 .reference-copy b,
 .reference-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reference-copy b { font-size: 12px; }
-.reference-copy span { color: #59636e; font-size: 10px; }
-.reference-copy small { color: #8a9198; font-size: 9px; }
+.reference-copy span { color: #59636e; font-size: 11px; }
+.reference-copy small { color: var(--app-text-muted); font-size: 11px; }
 .reference-actions { display: flex; align-items: center; }
 
 .reference-results {
@@ -333,21 +333,21 @@ function excerpt(content: string) {
   color: #65717d;
   border-radius: 3px;
   background: #eef1f4;
-  font-size: 9px;
+  font-size: 11px;
   white-space: nowrap;
 }
 .result-main p {
   overflow: hidden;
   margin: 0;
   color: #576574;
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .result-main small {
   overflow: hidden;
-  color: #7a8087;
-  font-size: 10px;
+  color: var(--app-text-muted);
+  font-size: 11px;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -358,11 +358,11 @@ function excerpt(content: string) {
   align-items: center;
   gap: 12px;
   padding: 20px;
-  color: #77818b;
+  color: var(--app-text-muted);
 }
 .reference-empty > svg { width: 24px; color: #a8b0b8; }
 .reference-empty b { color: #454c54; font-size: 12px; }
-.reference-empty p { margin: 4px 0 0; font-size: 10px; }
+.reference-empty p { margin: 4px 0 0; font-size: 11px; }
 
 @media (max-width: 760px) {
   .reference-intro { grid-template-columns: 36px minmax(0, 1fr); }

@@ -1,120 +1,176 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue';
-import { Bot, Clipboard, Download, Sparkles } from 'lucide-vue-next';
+import {
+  ArrowRight,
+  Clipboard,
+  Code2,
+  Download,
+  Search,
+  SearchCheck,
+  Sparkles,
+} from 'lucide-vue-next';
 import type { ProjectContextPack } from '@/api/repositories';
 
 interface Props {
   pack: ProjectContextPack | null;
   busy: boolean;
   disabled: boolean;
+  suggestions: string[];
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
+  analyze: [task: string];
+  search: [task: string];
   generate: [task: string];
   copy: [];
   download: [];
   openFile: [path: string];
 }>();
 const task = shallowRef('');
-const canGenerate = computed(() => !props.disabled && !props.busy && task.value.trim().length > 1);
+const taskValue = computed(() => task.value.trim());
+const canGenerate = computed(() => !props.disabled && !props.busy && taskValue.value.length > 1);
+
+function chooseSuggestion(value: string) {
+  task.value = value;
+}
 
 function generate() {
-  const value = task.value.trim();
-  if (value) emit('generate', value);
+  if (canGenerate.value) emit('generate', taskValue.value);
 }
 </script>
 
 <template>
-  <section class="context-panel">
-    <div class="context-intro">
-      <span class="agent-mark"><Bot :size="21" /></span>
+  <section class="task-console">
+    <header class="console-intro">
       <div>
-        <span class="eyebrow">AGENT CONTEXT PACK</span>
-        <h2>把项目边界交给任何开发智能体</h2>
-        <p>输入任务后，系统从当前 commit 中组合规则、任务、文档、代码与配置，并保留可追溯引用。</p>
+        <span class="eyebrow">具体改动</span>
+        <h2>为一次改动准备代码证据</h2>
+        <p>写清要修改的行为或故障。你可以继续问答、检索源码，或从当前快照生成一份可追溯的上下文包。</p>
       </div>
-    </div>
+      <span class="console-mark"><Code2 :size="22" /></span>
+    </header>
 
-    <div class="context-command">
+    <div class="task-input">
       <el-input
         v-model="task"
         type="textarea"
-        :rows="3"
+        :rows="2"
         maxlength="1000"
-        show-word-limit
-        placeholder="例如：为订单创建接口增加幂等校验，保持现有领域边界和错误返回约定"
+        resize="none"
+        placeholder="例如：为登录接口增加失败次数限制，并确认会影响哪些调用方"
+        aria-label="描述开发任务"
         @keydown.ctrl.enter="generate"
       />
-      <div class="command-actions">
-        <span>Ctrl + Enter 生成 · 只读 · 绑定当前快照</span>
-        <el-button type="primary" :loading="busy" :disabled="!canGenerate" @click="generate">
-          <Sparkles :size="14" /> 生成上下文包
-        </el-button>
+      <div v-if="suggestions.length" class="suggestion-list" aria-label="建议任务">
+        <span>试试</span>
+        <button
+          v-for="suggestion in suggestions"
+          :key="suggestion"
+          type="button"
+          @click="chooseSuggestion(suggestion)"
+        >
+          {{ suggestion }}
+        </button>
       </div>
     </div>
 
-    <div class="context-result">
-      <template v-if="pack">
-        <header class="result-head">
-          <div>
-            <strong>{{ pack.items.length }} 条当前版本证据</strong>
-            <span class="mono">{{ pack.commitSha?.slice(0, 10) ?? '无 commit' }}</span>
-          </div>
-          <div>
-            <el-button size="small" @click="emit('copy')"><Clipboard :size="13" />复制</el-button>
-            <el-button size="small" @click="emit('download')"><Download :size="13" />下载 .md</el-button>
-          </div>
-        </header>
-        <div class="context-items">
-          <button v-for="item in pack.items" :key="item.chunkId" type="button" @click="emit('openFile', item.filePath)">
-            <span :data-type="item.assetType">{{ item.assetType }}</span>
-            <div><strong>{{ item.filePath }}</strong><p>{{ item.excerpt }}</p></div>
-            <small>{{ item.startLine ? `L${item.startLine}` : 'FILE' }}</small>
-          </button>
-        </div>
-      </template>
-      <el-empty v-else :image-size="52" description="描述一个开发任务，生成可交给 Codex、Claude Code 或 Kimi 的项目上下文" />
+    <div class="task-rail" aria-label="选择工作方式">
+      <button type="button" class="rail-action ask-action" :disabled="disabled || !taskValue" @click="emit('analyze', taskValue)">
+        <span class="action-icon"><SearchCheck :size="17" /></span>
+        <span><strong>分析改动影响</strong><small>核验候选代码、模块与测试</small></span>
+        <ArrowRight :size="14" />
+      </button>
+      <button type="button" class="rail-action" @click="emit('search', taskValue)">
+        <span class="action-icon"><Search :size="17" /></span>
+        <span><strong>检索相关源码</strong><small>定位文件、规则和实现片段</small></span>
+        <ArrowRight :size="14" />
+      </button>
+      <button type="button" class="rail-action" :disabled="!canGenerate" @click="generate">
+        <span class="action-icon"><Sparkles :size="17" /></span>
+        <span><strong>生成上下文包</strong><small>导出当前快照的相关片段</small></span>
+        <ArrowRight :size="14" />
+      </button>
     </div>
+
+    <div v-if="pack" class="context-result">
+      <header class="result-head">
+        <div>
+          <span class="result-mark"><Sparkles :size="14" /></span>
+          <div><strong>Agent 上下文已生成</strong><small>{{ pack.items.length }} 条当前版本证据 · {{ pack.commitSha?.slice(0, 10) ?? '无 commit' }}</small></div>
+        </div>
+        <nav aria-label="上下文导出操作">
+          <button type="button" @click="emit('copy')"><Clipboard :size="13" />复制</button>
+          <button type="button" @click="emit('download')"><Download :size="13" />下载</button>
+        </nav>
+      </header>
+      <div class="context-items">
+        <button v-for="item in pack.items" :key="item.chunkId" type="button" @click="emit('openFile', item.filePath)">
+          <span :data-type="item.assetType">{{ item.assetType }}</span>
+          <div><strong>{{ item.filePath }}</strong><p>{{ item.excerpt }}</p></div>
+          <small>{{ item.startLine ? `L${item.startLine}` : 'FILE' }}</small>
+        </button>
+      </div>
+    </div>
+
+    <footer class="console-foot">
+      <span>关键词匹配当前快照，只生成证据材料，不会启动或执行编码 Agent</span>
+      <span v-if="disabled">完成内容索引后可使用问答和 Agent 上下文</span>
+      <span v-else>Ctrl + Enter 生成 Agent 上下文</span>
+    </footer>
   </section>
 </template>
 
 <style scoped>
-.context-panel { display: grid; grid-template-columns: minmax(240px, .75fr) minmax(320px, 1fr) minmax(360px, 1.25fr); min-width: 0; overflow: hidden; border: 1px solid #ccd9e2; border-radius: 8px; background: #fff; box-shadow: 0 10px 30px rgb(28 58 78 / 7%); }
-.context-intro { display: flex; gap: 12px; padding: 18px; color: #fff; background: #223b4b; }
-.agent-mark { display: grid; flex: none; width: 40px; height: 40px; place-items: center; border: 1px solid rgb(255 255 255 / 22%); border-radius: 6px; background: #16735a; }
-.context-intro div { min-width: 0; }
-.eyebrow { color: #8ed6c1; font: 700 9px Consolas, monospace; letter-spacing: .13em; }
-.context-intro h2 { max-width: 310px; margin: 8px 0 10px; font-size: 17px; line-height: 1.35; }
-.context-intro p { margin: 0; color: #c1d0d9; font-size: 10px; line-height: 1.65; }
-.context-command { display: grid; align-content: center; gap: 10px; padding: 16px; border-right: 1px solid #e3e8ec; }
-.context-command :deep(.el-textarea__inner) { min-height: 88px !important; border-radius: 5px; box-shadow: 0 0 0 1px #cfd9e0 inset; font-size: 11px; line-height: 1.55; resize: none; }
-.command-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.command-actions span { color: #89939b; font-size: 8px; }
-.command-actions .el-button { gap: 5px; }
-.context-result { min-width: 0; min-height: 210px; background: #fafbfc; }
-.result-head { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #e3e8ec; }
-.result-head > div { display: flex; align-items: center; gap: 8px; }
-.result-head strong { color: #344653; font-size: 11px; }
-.result-head span { color: #7d8992; font-size: 9px; }
-.result-head .el-button { gap: 4px; }
-.context-items { max-height: 250px; overflow: auto; }
-.context-items button { display: grid; grid-template-columns: 62px minmax(0, 1fr) 38px; align-items: start; gap: 9px; width: 100%; padding: 9px 12px; text-align: left; border: 0; border-bottom: 1px solid #e8ecef; background: transparent; }
-.context-items button:hover { background: #f0f6f9; }
-.context-items > button > span { padding: 3px 4px; color: #526672; text-align: center; border-radius: 3px; background: #e4eaee; font: 8px Consolas, monospace; }
-.context-items > button > span[data-type='RULE'] { color: #76501f; background: #f2e6d4; }
-.context-items > button > span[data-type='TASK'] { color: #624d77; background: #ece6f2; }
+.task-console { min-width: 0; overflow: hidden; border: 1px solid var(--el-border-color, #dedee3); border-radius: 7px; background: #fff; }
+.console-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 17px 18px 12px; }
+.eyebrow { color: var(--app-text-muted); font-size: 11px; font-weight: 650; letter-spacing: .04em; }
+.console-intro h2 { margin: 6px 0 4px; color: var(--el-text-color-primary, #1d1d1f); font-size: 20px; font-weight: 650; line-height: 1.25; }
+.console-intro p { max-width: 620px; margin: 0; color: var(--app-text-muted); font-size: 12px; line-height: 1.6; }
+.console-mark { display: grid; flex: none; width: 42px; height: 42px; place-items: center; color: #fff; border-radius: 7px; background: var(--el-color-primary, #0066cc); }
+.task-input { padding: 0 18px 13px; }
+.task-input :deep(.el-textarea__inner) { min-height: 58px !important; padding: 10px 12px; color: var(--el-text-color-primary, #1d1d1f); border-radius: 6px !important; background: #fafbfc; box-shadow: 0 0 0 1px #d8dce2 inset; font-size: 12px; line-height: 1.6; }
+.task-input :deep(.el-textarea__inner:hover) { background: #fff; box-shadow: 0 0 0 1px #aeb7c2 inset; }
+.task-input :deep(.el-textarea__inner:focus) { background: #fff; box-shadow: 0 0 0 1px var(--el-color-primary, #0066cc) inset, 0 0 0 3px rgb(0 102 204 / 10%); }
+.suggestion-list { display: flex; min-width: 0; align-items: center; gap: 6px; margin-top: 8px; overflow-x: auto; }
+.suggestion-list > span { flex: none; color: var(--app-text-muted); font-size: 11px; }
+.suggestion-list button { flex: none; max-width: 270px; padding: 5px 8px; overflow: hidden; color: #5e6670; border: 1px solid #d8dce2; border-radius: 999px; background: #fff; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.suggestion-list button:hover, .suggestion-list button:focus-visible { color: var(--el-color-primary, #0066cc); border-color: #90bde5; outline: none; background: #f7fbff; }
+.task-rail { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; border-top: 1px solid #ececef; border-bottom: 1px solid #ececef; background: #ececef; }
+.rail-action { display: grid; grid-template-columns: 34px minmax(0, 1fr) 18px; min-width: 0; align-items: center; gap: 8px; min-height: 68px; padding: 10px 12px; color: #52525b; text-align: left; border: 0; background: #fff; }
+.rail-action:hover, .rail-action:focus-visible { position: relative; z-index: 1; color: var(--el-color-primary, #0066cc); outline: 2px solid rgb(0 102 204 / 22%); outline-offset: -2px; background: #f7fbff; }
+.rail-action:disabled { cursor: not-allowed; opacity: .48; }
+.rail-action > span:nth-child(2) { display: grid; min-width: 0; gap: 3px; }
+.rail-action strong { color: var(--el-text-color-primary, #1d1d1f); font-size: 12px; }
+.rail-action small { overflow: hidden; color: var(--app-text-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.action-icon { display: grid; width: 32px; height: 32px; place-items: center; color: var(--el-color-primary, #0066cc); border-radius: 6px; background: #eaf3fd; }
+.ask-action .action-icon { color: var(--el-color-primary, #0066cc); background: #eaf3fd; }
+.context-result { background: #fafafa; }
+.result-head { display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 13px; border-bottom: 1px solid #ececef; }
+.result-head > div { display: flex; align-items: center; gap: 9px; }
+.result-mark { display: grid; width: 28px; height: 28px; place-items: center; color: #16855b; border-radius: 6px; background: #eaf6f0; }
+.result-head > div > div { display: grid; gap: 2px; }
+.result-head strong { color: var(--el-text-color-primary, #1d1d1f); font-size: 12px; }
+.result-head small { color: var(--app-text-muted); font: 11px "SFMono-Regular", Consolas, monospace; }
+.result-head nav { display: flex; gap: 5px; }
+.result-head nav button { display: flex; align-items: center; gap: 4px; padding: 5px 7px; color: #52525b; border: 1px solid #dedee3; border-radius: 4px; background: #fff; font-size: 11px; }
+.result-head nav button:hover, .result-head nav button:focus-visible { color: var(--el-color-primary, #0066cc); border-color: #90bde5; outline: none; }
+.context-items { max-height: 220px; overflow: auto; }
+.context-items > button { display: grid; grid-template-columns: 58px minmax(0, 1fr) 38px; align-items: start; gap: 9px; width: 100%; padding: 9px 13px; text-align: left; border: 0; border-bottom: 1px solid #ececef; background: transparent; }
+.context-items > button:hover, .context-items > button:focus-visible { outline: none; background: #f1f7fd; }
+.context-items > button > span { padding: 3px 4px; color: #5e6670; text-align: center; border-radius: 3px; background: #e9ecef; font: 11px "SFMono-Regular", Consolas, monospace; }
+.context-items > button > span[data-type='RULE'] { color: #78521f; background: #f3e7d6; }
+.context-items > button > span[data-type='TASK'] { color: #654e7a; background: #ede7f3; }
 .context-items div { display: grid; min-width: 0; gap: 3px; }
-.context-items strong { overflow: hidden; color: #385064; font: 600 9px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.context-items p { display: -webkit-box; margin: 0; overflow: hidden; color: #77838c; font-size: 9px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.context-items small { color: #8a969f; font: 8px Consolas, monospace; text-align: right; }
-@media (max-width: 1100px) {
-  .context-panel { grid-template-columns: 1fr 1.4fr; }
-  .context-result { grid-column: 1 / -1; border-top: 1px solid #e3e8ec; }
-}
+.context-items strong { overflow: hidden; color: #3f4b56; font: 600 11px "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.context-items p { display: -webkit-box; margin: 0; overflow: hidden; color: #5f6973; font-size: 12px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.context-items small { color: var(--app-text-muted); font: 11px "SFMono-Regular", Consolas, monospace; text-align: right; }
+.console-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 33px; padding: 7px 13px; color: var(--app-text-muted); background: #fafafa; font-size: 11px; }
 @media (max-width: 700px) {
-  .context-panel { grid-template-columns: 1fr; }
-  .context-result { grid-column: auto; }
-  .command-actions { align-items: stretch; flex-direction: column; }
+  .task-rail { grid-template-columns: 1fr; }
+  .rail-action { min-height: 58px; }
+  .suggestion-list { align-items: flex-start; flex-direction: column; }
+  .suggestion-list button { max-width: 100%; }
+  .console-foot { align-items: flex-start; flex-direction: column; }
 }
 </style>

@@ -2,7 +2,7 @@
 import { Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onMounted, shallowRef, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import {
   intelligenceApi,
   type AskModel,
@@ -17,6 +17,7 @@ import { useAskConversation } from '@/features/ask/useAskConversation';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
 const repositories = useRepositoryStore();
+const route = useRoute();
 const router = useRouter();
 const conversation = useAskConversation();
 const history = shallowRef<QaHistoryRecord[]>([]);
@@ -203,6 +204,15 @@ async function openGraph(reference: CodeReference) {
 }
 
 
+watch(
+  () => [route.name, route.query.q] as const,
+  ([routeName, routeQuestion]) => {
+    if (routeName !== 'ask' || typeof routeQuestion !== 'string' || !routeQuestion.trim()) return;
+    conversation.reset();
+    conversation.question.value = routeQuestion.trim();
+  },
+  { immediate: true },
+);
 watch(() => repositories.selectedRepositoryId, loadContext);
 onMounted(async () => {
   if (!repositories.repositories.length) await repositories.loadRepositories();
@@ -268,9 +278,9 @@ onMounted(async () => {
 <style scoped>
 .qa-page { display:grid; grid-template-columns:280px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:12px; min-height:0; height:100%; }
 .qa-command { grid-column:1/-1; display:flex; min-height:62px; align-items:center; gap:12px; padding:9px 14px; border:1px solid #dedee3; border-radius:7px; background:#fff; }
-.scope-copy { display:grid; grid-template-columns:auto auto; align-items:baseline; gap:2px 9px; min-width:0; }.scope-copy>span { grid-row:1/3; align-self:center; padding-right:10px; color:#0066cc; border-right:2px solid #90bde5; font-size:9px; font-weight:700; letter-spacing:.08em; }.scope-copy strong { overflow:hidden; color:#2d3035; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }.scope-copy small { color:#858a90; font-size:9px; }
-.qa-command>p { margin:0; color:#7b5a1b; font-size:10px; }.command-actions { display:flex; gap:8px; margin-left:auto; }
-.model-selector { display:flex; align-items:center; gap:7px; }.model-selector>span { color:#737980; font-size:10px; white-space:nowrap; }.model-selector :deep(.el-select) { width:240px; }.model-selector :deep(.el-select-dropdown__item) { display:flex; justify-content:space-between; gap:12px; }.model-selector small { color:#8a9097; }
+.scope-copy { display:grid; grid-template-columns:auto auto; align-items:baseline; gap:2px 9px; min-width:0; }.scope-copy>span { grid-row:1/3; align-self:center; padding-right:10px; color:#0066cc; border-right:2px solid #90bde5; font-size: 11px; font-weight:700; letter-spacing:.08em; }.scope-copy strong { overflow:hidden; color:#2d3035; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }.scope-copy small { color: var(--app-text-muted); font-size: 11px; }
+.qa-command>p { margin:0; color:#7b5a1b; font-size: 11px; }.command-actions { display:flex; gap:8px; margin-left:auto; }
+.model-selector { display:flex; align-items:center; gap:7px; }.model-selector>span { color: var(--app-text-muted); font-size: 11px; white-space:nowrap; }.model-selector :deep(.el-select) { width:240px; }.model-selector :deep(.el-select-dropdown__item) { display:flex; justify-content:space-between; gap:12px; }.model-selector small { color: var(--app-text-muted); }
 @media (max-width:900px) { .qa-page { grid-template-columns:1fr; grid-template-rows:auto auto minmax(620px,1fr); gap:10px; overflow:auto; }.qa-command { grid-column:1; }.qa-command>p { display:none; } }
 @media (max-width:760px) { .qa-page { height:auto; }.qa-command { flex-wrap:wrap; }.scope-copy { flex:1; }.command-actions { width:100%; margin-left:0; }.model-selector { flex:1; }.model-selector :deep(.el-select) { width:100%; }.command-actions .el-button { flex:0 0 auto; } }
 </style>

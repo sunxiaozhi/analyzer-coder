@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import WorkspaceShell from '@/components/WorkspaceShell.vue';
 import AccountsView from '@/views/AccountsView.vue';
 import AskView from '@/views/AskView.vue';
+import ChangeImpactView from '@/views/ChangeImpactView.vue';
 import ChunksView from '@/views/ChunksM0View.vue';
 import GraphView from '@/views/GraphView.vue';
 import IndexJobsView from '@/views/UnifiedIndexJobsView.vue';
@@ -18,6 +19,7 @@ export const router = createRouter({
     { path: '/', component: WorkspaceShell, children: [
       { path: '', redirect: '/overview' },
       { path: 'overview', name: 'overview', component: ProjectOverviewView, meta: { title: '项目总览' } },
+      { path: 'change-impact', name: 'change-impact', component: ChangeImpactView, meta: { title: '变更分析' } },
       { path: 'repositories', name: 'repositories', component: RepositoriesView, meta: { title: '仓库管理' } },
       { path: 'indexing', name: 'indexing', component: IndexJobsView, meta: { title: '索引任务' } },
       { path: 'search', name: 'search', component: ChunksView, meta: { title: '源码检索' } },

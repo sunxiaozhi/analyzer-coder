@@ -19,6 +19,7 @@ import com.analyzercoder.infrastructure.persistence.mapper.IndexJobMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.KnowledgeHistoryMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.LlmSettingsMapper;
+import com.analyzercoder.infrastructure.persistence.mapper.MarkdownKnowledgeSourceMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryGovernanceMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.VectorIndexQueryMapper;
@@ -48,6 +49,7 @@ class PostgresMyBatisContextIT {
     @Autowired IntelligenceMapper intelligence;
     @Autowired LlmSettingsMapper llmSettings;
     @Autowired LlmSettingsService llmService;
+    @Autowired MarkdownKnowledgeSourceMapper markdownSources;
     @Autowired CodeChunkMapper chunks;
     @Autowired VectorIndexQueryMapper vectorIndex;
     @Autowired VectorIndexQueryService vectorIndexService;
@@ -81,6 +83,9 @@ class PostgresMyBatisContextIT {
                         vectorIndexService.summary(id);
                         vectorIndexService.chunks(id, null, null, null, 1, 15);
                         vectorIndexService.knowledge(id, null, null, 1, 15);
+                        if (visible.get(0).currentSnapshotId() != null) {
+                            markdownSources.listSources(id, visible.get(0).currentSnapshotId());
+                        }
                     }
                 });
     }

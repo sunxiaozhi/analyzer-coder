@@ -115,8 +115,8 @@ function formatTime(value: string | null) {
 
 .item-identity span,
 .vector-model small {
-  color: #77777e;
-  font-size: 10px;
+  color: var(--app-text-muted);
+  font-size: 11px;
 }
 
 .content-excerpt {
@@ -132,6 +132,6 @@ function formatTime(value: string | null) {
 
 .vector-model code {
   color: #4a4a4f;
-  font-size: 10px;
+  font-size: 11px;
 }
 </style>

@@ -121,6 +121,46 @@ export interface KnowledgeCard {
   attachments: KnowledgeAttachment[];
   codeReferences: CodeReference[];
 }
+export type MarkdownKnowledgeSourceStatus = 'PENDING' | 'CURRENT' | 'STALE';
+export interface MarkdownKnowledgeSourceCounts {
+  total: number;
+  pending: number;
+  current: number;
+  stale: number;
+}
+export interface MarkdownKnowledgeSource {
+  sourceId: string;
+  sourcePath: string;
+  sourceSnapshotId: string;
+  sourceContentHash: string;
+  title: string;
+  assetType: string;
+  lineCount: number;
+  byteSize: number;
+  excerpt?: string | null;
+  updatedAt?: string | null;
+  status: MarkdownKnowledgeSourceStatus;
+  cardId: string | null;
+  cardRevision: number | null;
+  cardTitle?: string | null;
+  cardStatus?: string | null;
+  generatedSnapshotId: string | null;
+  generatedContentHash: string | null;
+}
+export interface MarkdownKnowledgeSourceList {
+  snapshotId: string;
+  counts: MarkdownKnowledgeSourceCounts;
+  items: MarkdownKnowledgeSource[];
+}
+export interface GenerateMarkdownKnowledgeSourceInput {
+  sourcePath: string;
+  expectedSnapshotId: string;
+  expectedContentHash: string;
+}
+export interface MarkdownKnowledgeBatchGenerationResult {
+  generated: number;
+  remaining: number;
+}
 export interface CardInput {
   title: string;
   cardType: string;
@@ -188,6 +228,23 @@ export const intelligenceApi = {
   },
   cards: (repositoryId: string) =>
     request<KnowledgeCard[]>(`/api/repositories/${repositoryId}/knowledge`),
+  markdownSources: (repositoryId: string) =>
+    request<MarkdownKnowledgeSourceList>(
+      `/api/repositories/${repositoryId}/knowledge/markdown-sources`,
+    ),
+  generateMarkdownSource: (
+    repositoryId: string,
+    input: GenerateMarkdownKnowledgeSourceInput,
+  ) =>
+    request<KnowledgeCard>(
+      `/api/repositories/${repositoryId}/knowledge/markdown-sources/generate`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  generatePendingMarkdownSources: (repositoryId: string, expectedSnapshotId: string) =>
+    request<MarkdownKnowledgeBatchGenerationResult>(
+      `/api/repositories/${repositoryId}/knowledge/markdown-sources/generate-pending`,
+      { method: 'POST', body: JSON.stringify({ expectedSnapshotId }) },
+    ),
   createCard: (repositoryId: string, input: CardInput) =>
     request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge`, {
       method: 'POST',

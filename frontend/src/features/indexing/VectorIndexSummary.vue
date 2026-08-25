@@ -108,8 +108,8 @@ function shortHash(value: string | null) {
 
 .vector-summary small,
 .vector-summary footer {
-  color: #77777e;
-  font-size: 10px;
+  color: var(--app-text-muted);
+  font-size: 11px;
 }
 
 .vector-summary footer {

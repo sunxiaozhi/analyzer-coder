@@ -161,7 +161,7 @@ function isEdgeActive(edge: RenderedEdge) {
 }
 
 .call-graph-title .el-icon { color: #0066cc; font-size: 15px; }
-.call-graph-stats { gap: 12px; color: #71717a; font-size: 10px; }
+.call-graph-stats { gap: 12px; color: #71717a; font-size: 11px; }
 .scroll-hint { padding-left: 12px; border-left: 1px solid #dedee3; color: #0066cc; }
 
 .call-graph-viewport {
@@ -204,7 +204,7 @@ function isEdgeActive(edge: RenderedEdge) {
   stroke-width: 4px;
   paint-order: stroke;
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.02em;
 }
 .call-edge.active { color: #0066cc; }
@@ -249,8 +249,8 @@ function isEdgeActive(edge: RenderedEdge) {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #718090;
-  font-size: 9px;
+  color: var(--app-text-muted);
+  font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.07em;
   text-transform: uppercase;

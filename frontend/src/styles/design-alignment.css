@@ -103,7 +103,7 @@
 
 
 .repository-label {
-  color: #85858c;
+  color: var(--app-text-muted);
   font-size: 11px;
 }
 
@@ -129,7 +129,7 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  color: #77777e;
+  color: var(--app-text-muted);
   font-size: 11px;
 }
 
@@ -167,7 +167,7 @@
 
 .page-masthead p {
   margin: 5px 0 0;
-  color: #77777e;
+  color: var(--app-text-muted);
   font-size: 13px;
 }
 
@@ -203,8 +203,9 @@
 
 .login-footnote {
   margin: 26px 0 0;
-  color: #7d9abb;
-  font-size: 11px;
+  color: #5f7590;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .message.user {
@@ -253,7 +254,7 @@
 }
 
 .primary-cell span {
-  color: #818188;
+  color: var(--app-text-muted);
   font-size: 11px;
 }
 
@@ -328,7 +329,7 @@
 }
 
 .app-search-input .el-input__prefix {
-  color: #7b8490;
+  color: var(--app-text-muted);
 }
 
 .repository-design .el-table td.el-table__cell,
@@ -366,7 +367,7 @@
 
 .settings-heading p {
   margin: 10px 0 25px;
-  color: #818188;
+  color: var(--app-text-muted);
   font-size: 12px;
 }
 
@@ -381,7 +382,8 @@
 .settings-content small {
   display: block;
   margin-top: 6px;
-  color: #8b8b92;
+  color: var(--app-text-muted);
+  font-size: var(--app-font-caption);
 }
 
 .switch-line {
@@ -400,21 +402,21 @@
   color: #66666d;
 }
 
-.route-view .page:has(.knowledge-grid) .summary-strip {
+.route-view .knowledge-page .summary-strip {
   display: none;
 }
 
-.route-view .page:has(.knowledge-grid) {
+.route-view .knowledge-page {
   display: block;
 }
 
-.route-view .page:has(.knowledge-grid) .surface {
+.route-view .knowledge-page .knowledge-surface {
   background: transparent;
   border: 0;
   overflow: visible;
 }
 
-.route-view .page:has(.knowledge-grid) .toolbar {
+.route-view .knowledge-page .toolbar {
   background: #fff;
   border: 1px solid #dedee3;
   border-radius: 7px;
@@ -477,7 +479,7 @@
 }
 
 .result-search small {
-  color: #818188;
+  color: var(--app-text-muted);
   font-size: 11px;
 }
 
@@ -555,7 +557,7 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: #818188;
+  color: var(--app-text-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;

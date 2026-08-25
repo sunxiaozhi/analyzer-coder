@@ -1,6 +1,7 @@
 package com.analyzercoder.application.indexing;
 
 import com.analyzercoder.application.intelligence.IntelligenceService;
+import com.analyzercoder.application.intelligence.MarkdownKnowledgeSourceService;
 import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.indexing.IndexJob;
@@ -39,6 +40,7 @@ public class IndexJobProcessor {
     private final RepositoryScannerPort repositoryScannerPort;
     private final CodeChunkStore codeChunkStore;
     private final IntelligenceService intelligenceService;
+    private final MarkdownKnowledgeSourceService markdownKnowledgeSourceService;
     private final GitDiffService gitDiffService;
 
     @Autowired
@@ -48,12 +50,14 @@ public class IndexJobProcessor {
             RepositoryScannerPort repositoryScannerPort,
             CodeChunkStore codeChunkStore,
             IntelligenceService intelligenceService,
+            MarkdownKnowledgeSourceService markdownKnowledgeSourceService,
             GitDiffService gitDiffService) {
         this.indexJobStore = indexJobStore;
         this.repositoryStore = repositoryStore;
         this.repositoryScannerPort = repositoryScannerPort;
         this.codeChunkStore = codeChunkStore;
         this.intelligenceService = intelligenceService;
+        this.markdownKnowledgeSourceService = markdownKnowledgeSourceService;
         this.gitDiffService = gitDiffService;
     }
 
@@ -67,6 +71,7 @@ public class IndexJobProcessor {
                 repositoryStore,
                 repositoryScannerPort,
                 codeChunkStore,
+                null,
                 null,
                 new GitDiffService());
     }
@@ -93,16 +98,18 @@ public class IndexJobProcessor {
             }
 
             String indexedCommit = codeChunkStore.latestIndexedCommit(repository.id());
-            Set<String> changedPaths =
-                    runningJob.type() == com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL
-                            ? gitDiffService.changedPaths(repository, indexedCommit)
-                            : Set.of();
             boolean incremental =
                     runningJob.type() == com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL
                             && indexedCommit != null
-                            && !indexedCommit.isBlank();
+                            && !indexedCommit.isBlank()
+                            && !repository.worktreeDirty();
+            Set<String> changedPaths =
+                    incremental
+                            ? gitDiffService.changedPaths(repository, indexedCommit)
+                            : Set.of();
+            List<ScannedRepositoryFile> allFiles = repositoryScannerPort.scan(repository);
             List<CodeChunk> chunks =
-                    repositoryScannerPort.scan(repository).stream()
+                    allFiles.stream()
                             .filter(
                                     file ->
                                             !incremental
@@ -126,6 +133,10 @@ public class IndexJobProcessor {
                         repository.currentCommit());
             } else {
                 codeChunkStore.replaceRepositoryChunks(repository.id(), chunks);
+            }
+            if (markdownKnowledgeSourceService != null) {
+                markdownKnowledgeSourceService.synchronize(
+                        repository, allFiles, incremental, changedPaths);
             }
 
             boolean vectorsReady = true;
@@ -216,6 +227,12 @@ public class IndexJobProcessor {
     }
 
     private static Symbol inferSymbol(String content, String filePath, String language) {
+        if ("markdown".equals(language)) {
+            Matcher heading = MARKDOWN_HEADING.matcher(content);
+            if (heading.find()) {
+                return new Symbol(heading.group(1).trim(), "DOC_SECTION");
+            }
+        }
         Matcher declaration = DECLARATION.matcher(content);
         if (declaration.find()) {
             return new Symbol(declaration.group(2), declaration.group(1).toUpperCase());
@@ -223,12 +240,6 @@ public class IndexJobProcessor {
         Matcher callable = CALLABLE.matcher(content);
         if (callable.find()) {
             return new Symbol(callable.group(1), "CALLABLE");
-        }
-        if ("markdown".equals(language)) {
-            Matcher heading = MARKDOWN_HEADING.matcher(content);
-            if (heading.find()) {
-                return new Symbol(heading.group(1).trim(), "DOC_SECTION");
-            }
         }
         String normalized = filePath.replace('\\', '/');
         String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);

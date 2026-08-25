@@ -725,7 +725,7 @@ public class IntelligenceService {
         }
         String title = clean(input.title(), 1, 200, "知识标题");
         String cardType = clean(input.cardType(), 1, 40, "知识类型");
-        String content = clean(input.content(), 1, 100_000, "知识正文");
+        String content = clean(input.content(), 1, 600_000, "知识正文");
         String status =
                 input.status() == null ? "DRAFT" : input.status().trim().toUpperCase(Locale.ROOT);
         if (!CARD_STATUSES.contains(status)) {

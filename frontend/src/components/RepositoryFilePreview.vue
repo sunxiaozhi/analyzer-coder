@@ -232,7 +232,7 @@ watch(
 
 .preview-empty-copy p {
   margin: 0;
-  color: #74808c;
+  color: var(--app-text-muted);
   font-size: 12px;
   line-height: 1.7;
 }
@@ -267,7 +267,7 @@ watch(
   color: #005eb8;
   background: #eaf3fd;
   border-radius: 50%;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .preview-empty-steps i {
@@ -320,7 +320,7 @@ watch(
 .file-title p {
   margin: 4px 0 0;
   overflow: hidden;
-  color: #818188;
+  color: var(--app-text-muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;

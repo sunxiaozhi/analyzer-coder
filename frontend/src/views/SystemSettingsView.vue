@@ -428,7 +428,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
   border-radius: 4px;
   background: #f1f3f5;
   color: #5e6670;
-  font: 10px Consolas, monospace;
+  font: 11px Consolas, monospace;
 }
 
 .registry-body {
@@ -496,7 +496,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
   margin-top: 6px;
   overflow: hidden;
   color: #71717a;
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -517,8 +517,8 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
 
 .model-card dt {
   margin-bottom: 4px;
-  color: #8a8a91;
-  font-size: 10px;
+  color: var(--app-text-muted);
+  font-size: 11px;
 }
 
 .model-card dd {
@@ -549,7 +549,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
   padding: 58px;
   border: 1px dashed #d6dbe2;
   border-radius: 6px;
-  color: #7a7a81;
+  color: var(--app-text-muted);
 }
 
 .empty-registry p {
@@ -586,7 +586,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
 }
 
 .switch-field small {
-  color: #818991;
+  color: var(--app-text-muted);
 }
 
 @media (max-width: 1000px) {

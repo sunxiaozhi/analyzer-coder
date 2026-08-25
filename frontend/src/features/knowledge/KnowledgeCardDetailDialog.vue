@@ -110,7 +110,7 @@ const statusLabel = computed(() => props.card ? localizeStatus(props.card.status
 .detail-code-links article > div { display: grid; min-width: 0; }
 .detail-code-links b,
 .detail-code-links span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.detail-code-links span { color: #71717a; font-size: 10px; }
+.detail-code-links span { color: #71717a; font-size: 11px; }
 
 @media (max-width: 760px) {
   .detail-code-links article { grid-template-columns: minmax(0, 1fr) auto; }
