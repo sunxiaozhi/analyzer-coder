@@ -69,6 +69,27 @@ public class PostgresIndexJobStore implements IndexJobStore {
     }
 
     @Override
+    @Transactional
+    public Optional<IndexJob> claimNextQueued(
+            IndexJobType type, String initialStep, long timeoutSeconds) {
+        return Optional.ofNullable(
+                toDomain(
+                        mapper.claimNextQueuedByType(
+                                type.name(), initialStep, Math.max(1, timeoutSeconds))));
+    }
+
+    @Override
+    public Optional<IndexJob> heartbeat(IndexJobId id, String currentStep) {
+        mapper.heartbeat(id.value(), currentStep);
+        return findById(id);
+    }
+
+    @Override
+    public int expireTimedOut(IndexJobType type) {
+        return mapper.expireTimedOut(type.name());
+    }
+
+    @Override
     public void deleteByRepositoryId(CodeRepositoryId id) {
         mapper.deleteByRepositoryId(id.value());
     }
@@ -80,8 +101,13 @@ public class PostgresIndexJobStore implements IndexJobStore {
                 job.type().name(),
                 job.status().name(),
                 job.currentStep(),
+                job.executionMode(),
+                job.fallbackReason(),
+                job.failureCode(),
                 job.errorMessage(),
                 job.startedAt(),
+                job.heartbeatAt(),
+                job.timeoutAt(),
                 job.finishedAt(),
                 job.createdAt());
     }
@@ -95,8 +121,13 @@ public class PostgresIndexJobStore implements IndexJobStore {
                         IndexJobType.valueOf(row.jobType()),
                         IndexJobStatus.valueOf(row.status()),
                         row.currentStep(),
+                        row.executionMode(),
+                        row.fallbackReason(),
+                        row.failureCode(),
                         row.errorMessage(),
                         row.startedAt(),
+                        row.heartbeatAt(),
+                        row.timeoutAt(),
                         row.finishedAt(),
                         row.createdAt());
     }

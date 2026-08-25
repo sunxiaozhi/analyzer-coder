@@ -119,13 +119,16 @@ watch(
       <aside class="impact-panel">
         <div class="pane-head">
           <b>确定性影响分析</b>
-          <span>深度 {{ depth }}</span>
+          <span>{{ result?.relationSource === 'CODEGRAPH_CLI' ? 'CodeGraph CLI' : '启发式关系' }} · 深度 {{ depth }}</span>
         </div>
         <div class="impact-score">
           <b>{{ result?.risk ?? '—' }}</b>
           <span>变更风险</span>
         </div>
         <h3>影响关系（{{ result?.edges.length ?? 0 }}）</h3>
+        <p v-if="result" class="graph-provenance">
+          Snapshot {{ result.snapshotId.slice(0, 8) }} · {{ result.algorithm }}
+        </p>
         <ul class="impact-relations">
           <li v-for="(edge, index) in result?.edges"
             :key="`${edge.source}|${edge.target}|${edge.relation}|${index}`">
@@ -191,6 +194,7 @@ watch(
   letter-spacing: 0.05em;
 }
 .impact-panel :deep(.el-alert) { margin: 8px 14px; width: auto; }
+.graph-provenance { margin:0 14px 10px; color:var(--app-text-muted); font:11px "SFMono-Regular",Consolas,monospace; }
 
 @media (max-width: 760px) {
   .graph-toolbar { flex-wrap: wrap; min-height: 112px; padding: 10px; }

@@ -1,7 +1,7 @@
 import { request } from '@/api/http';
 import type { ProjectArchitectureRisk } from '@/api/repositories';
 
-export type ChangeAnalysisConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+export type ChangeEvidenceCoverageLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 export type ChangeAnalysisCandidateState = 'PENDING' | 'CONFIRMED' | 'EXCLUDED';
 export type ChangeIntentParserMode = 'MODEL' | 'RULES';
 
@@ -26,8 +26,8 @@ export interface ChangeRetrievalQuery {
   hitCount: number;
 }
 
-export interface ChangeAnalysisConfidence {
-  level: ChangeAnalysisConfidenceLevel;
+export interface ChangeEvidenceCoverage {
+  level: ChangeEvidenceCoverageLevel;
   label: string;
   detail: string;
 }
@@ -35,6 +35,7 @@ export interface ChangeAnalysisConfidence {
 export interface ChangeCandidateEvidence {
   chunkId: string | null;
   sourceType: string;
+  snapshotId: string;
   filePath: string;
   symbolName: string | null;
   symbolKind: string | null;
@@ -62,13 +63,22 @@ export interface ChangeDependencyImpact {
   target: string;
   relation: 'DEPENDS_ON' | 'CONNECTS_TO';
   weight: number;
-  samples: string[];
+  samples: ChangeDependencyEvidenceSample[];
+}
+
+export interface ChangeDependencyEvidenceSample {
+  filePath: string;
+  relatedFilePath: string | null;
+  snapshotId: string;
+  contentHash: string;
 }
 
 export interface ChangeTestSuggestion {
   filePath: string | null;
   startLine: number | null;
   endLine: number | null;
+  snapshotId: string | null;
+  contentHash: string | null;
   existing: boolean;
   reason: string;
 }
@@ -88,7 +98,7 @@ export interface ChangeImpactAnalysis {
   task: string;
   intent: ChangeIntentInterpretation;
   retrievalQueries: ChangeRetrievalQuery[];
-  confidence: ChangeAnalysisConfidence;
+  evidenceCoverage: ChangeEvidenceCoverage;
   candidates: ChangeCandidateEvidence[];
   modules: ChangeModuleImpact[];
   dependencies: ChangeDependencyImpact[];

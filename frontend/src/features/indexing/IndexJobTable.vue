@@ -15,6 +15,12 @@ const emit = defineEmits<{ select: [taskId: string] }>();
 function repositoryName(repositoryId: string) {
   return props.repositories.find((item) => item.id === repositoryId)?.name ?? repositoryId;
 }
+
+function typeLabel(type: Task['type']) {
+  if (type === 'FULL') return '全量内容索引';
+  if (type === 'INCREMENTAL') return '增量内容索引';
+  return 'CodeGraph 构建';
+}
 </script>
 
 <template>
@@ -31,7 +37,7 @@ function repositoryName(repositoryId: string) {
       <template #default="{ row }">{{ repositoryName(row.repositoryId) }}</template>
     </el-table-column>
     <el-table-column label="类型" width="130">
-      <template #default="{ row }">{{ row.type === 'FULL' ? '全量内容索引' : '增量内容索引' }}</template>
+      <template #default="{ row }">{{ typeLabel(row.type) }}</template>
     </el-table-column>
     <el-table-column label="状态" width="110">
       <template #default="{ row }"><TaskStatusTag :status="row.status" /></template>

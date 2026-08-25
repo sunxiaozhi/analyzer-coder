@@ -38,6 +38,8 @@ export interface ProjectProfile {
   vectorizedChunks: number;
   missingChunks: number;
   knowledgeCards: number;
+  retrievalCapability: 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING';
+  retrievalCapabilityLabel: '字符相似度' | '语义检索';
   graphNodes: number;
   graphEdges: number;
   languages: ProjectProfileCount[];
@@ -64,6 +66,14 @@ export interface ProjectArchitectureEdge {
   relation: 'CONTAINS' | 'DEPENDS_ON' | 'CONNECTS_TO';
   weight: number;
   samples: string[];
+  evidenceSamples: ProjectArchitectureEvidenceSample[];
+}
+
+export interface ProjectArchitectureEvidenceSample {
+  filePath: string;
+  relatedFilePath: string | null;
+  snapshotId: string;
+  contentHash: string;
 }
 
 export interface ProjectArchitectureRisk {

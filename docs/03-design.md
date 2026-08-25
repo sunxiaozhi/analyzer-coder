@@ -84,7 +84,8 @@ Browser
 - `RetrievalQueryAnalyzer/RetrievalRanker`：查询分析与多通道融合。
 - `AnswerCitationValidator`：校验模型答案中的 `[S编号]`。
 - `CodeGraphService/ManagedCodeGraphService`：CLI 构建、产物登记和影响查询。
-- `CodeGraphTaskService`：把 CodeGraph 构建结果写入 `index_jobs`。
+- `CodeGraphTaskService`：只把 CodeGraph 构建请求加入 `index_jobs`。
+- `CodeGraphJobWorker/CodeGraphJobProcessor`：领取图谱任务，维护心跳、超时和取消，并执行复制、构建与发布。
 
 ### 3.4 模型与知识
 
@@ -239,7 +240,7 @@ LOCAL_GIT 原始目录不在清理范围。
 - `POST /api/repositories/{id}/prepare` 幂等推进准备流程，要求 MAINTAIN：远程来源执行同步，本地/ZIP 执行重扫；快照变化后启动增量索引，无 chunk 时启动全量索引；内容就绪后构建当前快照 CodeGraph。
 - 内容索引继续由 `IndexJobWorker` 后台执行，前端轮询子任务并再次调用 prepare 推进下一阶段；关闭页面不会取消已入队任务。
 - 项目画像由 `RepositoryPreparationService` 聚合当前快照文件、`VectorIndexQueryService` 汇总和当前 `codegraph_artifacts`，不调用模型，不生成推测性架构结论。
-- 当前尚无独立 preparation job 表；CodeGraph 阶段仍沿用同步执行的 `CodeGraphTaskService`。
+- 当前尚无独立 preparation job 表；CodeGraph 阶段复用 `index_jobs`，由独立 Worker 异步执行。
 
 ### 6.7 项目资产与 Context Pack
 
@@ -312,11 +313,11 @@ IndexJobWorker
 
 ### 8.3 向量准备
 
-`IntelligenceService` 根据激活模型及维度查找缺失向量。LOCAL_HASH 生成确定性 64 维向量；外部模型调用 `/embeddings` 并校验返回长度等于备案维度。外部失败时退回关键词和结构通道。
+`IntelligenceService` 根据激活模型、维度和检索能力查找缺失向量。LOCAL_HASH 生成确定性 64 维字符哈希投影，仅用于字符相似度；外部模型调用 `/embeddings` 并校验返回长度等于备案维度，才具备语义检索标识。外部失败时退回关键词和结构通道。
 
 ### 8.4 当前向量索引查询
 
-- summary：当前仓库快照、commit、chunk/知识数量、缺失数量、模型、维度和更新时间。
+- summary：当前仓库快照、commit、chunk/知识数量、缺失数量、模型、维度、检索能力和更新时间。
 - chunks：按查询、EMBEDDED/MISSING、chunkType 分页。
 - knowledge：按查询和 EMBEDDED/MISSING 分页。
 
@@ -327,16 +328,18 @@ IndexJobWorker
 ### 9.1 通道
 
 - `CODE_KEYWORD`：代码正文、路径和符号关键词。
-- `CODE_GRAPH`：关键词命中的符号扩展到相关 chunk。
-- `CODE_SEMANTIC`：代码向量 cosine。
+- `HEURISTIC_CALL_REFERENCE`：索引阶段由 `symbol(` 字符模式构建的启发式关系，不等同于 CodeGraph CLI。
+- `CODE_CHARACTER_SIMILARITY`：LOCAL_HASH 代码字符相似度。
+- `CODE_SEMANTIC`：外部 embedding 代码语义向量 cosine。
 - `KNOWLEDGE_KEYWORD`：问答场景下的已发布知识。
-- `KNOWLEDGE_SEMANTIC`：问答场景下的知识向量。
+- `KNOWLEDGE_CHARACTER_SIMILARITY`：LOCAL_HASH 知识字符相似度。
+- `KNOWLEDGE_SEMANTIC`：外部 embedding 知识语义向量。
 
 `hybrid-search` 不包含知识；`unifiedSearch` 用于问答并包含知识。
 
 ### 9.2 融合与降级
 
-`RetrievalRanker` 对各通道赋权、去重并返回 score、lexicalScore、semanticScore 和 channels。向量补建或查询异常被捕获，关键词/结构通道继续工作。当前没有显式通道故障结构返回前端。
+`RetrievalRanker` 在内部对各通道赋权、去重；接口返回 `score`、`lexicalScore`、`similarityScore`、`similarityKind` 和 `channels`。向量补建或查询异常被捕获，关键词/结构通道继续工作。当前没有显式通道故障结构返回前端。
 
 ## 10. 知识问答
 
@@ -372,7 +375,7 @@ Prompt 约束模型只能使用编号证据。总证据预算约 14000 字符，
 
 ## 11. CodeGraph 与影响分析
 
-`ManagedCodeGraphService` 在独立目录运行 CLI，校验产物后写 `codegraph_artifacts` 与 `code_graph_edges`。`CodeGraphTaskService` 创建 CODEGRAPH 任务，但在 HTTP 请求线程中直接运行构建。
+`CodeGraphTaskService` 只创建 CODEGRAPH 排队任务并立即返回。`CodeGraphJobWorker` 排他领取任务，写入固定超时截止时间，并在快照复制和 CLI 等待期间持续更新心跳、检查取消。`ManagedCodeGraphService` 在独立目录运行 CLI，校验产物与当前快照仍一致后，通过 `CodeGraphArtifactPublisher` 的单一事务切换 `codegraph_artifacts` 发布状态；任何前置失败都不会退役旧产物。
 
 影响分析以符号字符串为中心，深度 1–5。后端基础图方法支持 BOTH/UPSTREAM/DOWNSTREAM；当前 `/codegraph/impact` 和前端主要使用双向。风险按边数量分 LOW/MEDIUM/HIGH，限制固定说明反射和动态分派不完整。
 
@@ -384,7 +387,7 @@ Prompt 约束模型只能使用编号证据。总证据预算约 14000 字符，
 
 创建/更新先校验标题、正文、类型、状态、附件和代码引用，更新时保存历史修订。历史恢复通过复制旧修订内容形成新草稿，不改写旧记录。
 
-当前类型：业务规则、技术决策、接口约定、模块说明。当前状态：DRAFT、PUBLISHED、NEEDS_REVIEW、ARCHIVED。
+当前类型：业务规则、技术决策、接口约定、模块说明。状态分为三条正交轴：发布状态 DRAFT/PUBLISHED/ARCHIVED，人工评审状态 UNREVIEWED/APPROVED/CHANGES_REQUESTED，来源版本状态 UNVERIFIED/CURRENT/STALE。保存正文只生成草稿和未评审修订；人工评审与发布是两个独立的 MANAGE 操作。检索只接纳已发布、人工通过且来源未过期的卡片。
 
 ### 12.2 Markdown 与引用
 

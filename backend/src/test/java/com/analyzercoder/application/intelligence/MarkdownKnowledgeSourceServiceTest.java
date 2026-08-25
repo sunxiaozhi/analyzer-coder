@@ -122,7 +122,6 @@ class MarkdownKnowledgeSourceServiceTest {
         ArgumentCaptor<IntelligenceService.CardInput> input =
                 ArgumentCaptor.forClass(IntelligenceService.CardInput.class);
         verify(intelligence).createCard(eq(REPOSITORY_ID), eq(ACTOR_ID), input.capture());
-        assertEquals("DRAFT", input.getValue().status());
         assertEquals("项目说明", input.getValue().cardType());
         assertEquals(content, input.getValue().content());
         assertEquals(List.of(new IntelligenceService.CodeReferenceInput(chunkId)), input.getValue().codeReferences());
@@ -214,7 +213,6 @@ class MarkdownKnowledgeSourceServiceTest {
                 ArgumentCaptor.forClass(IntelligenceService.CardInput.class);
         verify(intelligence)
                 .updateCard(eq(REPOSITORY_ID), eq(cardId), eq(ACTOR_ID), input.capture());
-        assertEquals("DRAFT", input.getValue().status());
         assertEquals(content, input.getValue().content());
         verify(mapper)
                 .insertProvenance(
@@ -389,6 +387,9 @@ class MarkdownKnowledgeSourceServiceTest {
                 "current-commit",
                 "CURRENT",
                 now,
+                "UNREVIEWED",
+                null,
+                null,
                 List.of(),
                 List.of());
     }

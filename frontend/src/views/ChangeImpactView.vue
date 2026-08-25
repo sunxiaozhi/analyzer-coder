@@ -48,7 +48,7 @@ const excludedCount = computed(() =>
   analysis.value?.candidates.filter(item => candidateState(item) === 'EXCLUDED').length ?? 0,
 );
 const reviewedCount = computed(() => confirmedCandidates.value.length + excludedCount.value);
-const confidenceTone = computed(() => analysis.value?.confidence.level.toLowerCase() ?? 'low');
+const coverageTone = computed(() => analysis.value?.evidenceCoverage.level.toLowerCase() ?? 'low');
 const hasBlockingUnknowns = computed(() =>
   analysis.value?.unknowns.some(item => item.severity === 'HIGH') ?? false,
 );
@@ -134,7 +134,7 @@ function openModule(moduleId: string) {
 }
 
 function openDependencySample(edge: ChangeDependencyImpact) {
-  const source = edge.samples[0]?.split(' → ')[0]?.trim();
+  const source = edge.samples[0]?.filePath;
   if (source) void router.push({ name: 'search', query: { path: source } });
 }
 
@@ -157,10 +157,12 @@ async function copyScope() {
     `- 任务：${analysis.value.task}`,
     `- Commit：${analysis.value.commitSha ?? 'unknown'}`,
     `- Snapshot：${analysis.value.snapshotId}`,
-    `- 置信度：${analysis.value.confidence.label}`,
+    `- 证据覆盖等级：${analysis.value.evidenceCoverage.label}`,
     ``,
     `## 已确认相关`,
-    ...confirmedCandidates.value.map(item => `- ${item.filePath}${item.startLine ? `:${item.startLine}` : ''}`),
+    ...confirmedCandidates.value.map(item =>
+      `- ${item.filePath}${item.startLine ? `:${item.startLine}` : ''} · Snapshot ${item.snapshotId} · SHA-256 ${item.contentHash}`,
+    ),
     ``,
     `## 已排除`,
     ...(analysis.value.candidates
@@ -253,12 +255,12 @@ watch(
 
     <div v-if="analysis" class="analysis-result">
       <section class="result-main">
-        <header class="result-verdict" :data-tone="confidenceTone">
+        <header class="result-verdict" :data-tone="coverageTone">
           <span class="verdict-icon">
-            <CheckCircle2 v-if="analysis.confidence.level === 'HIGH'" :size="20" />
+            <CheckCircle2 v-if="analysis.evidenceCoverage.level === 'HIGH'" :size="20" />
             <AlertTriangle v-else :size="20" />
           </span>
-          <div><span class="eyebrow">本次分析</span><h2>{{ analysis.confidence.label }}</h2><p>{{ analysis.confidence.detail }}</p></div>
+          <div><span class="eyebrow">证据覆盖等级</span><h2>{{ analysis.evidenceCoverage.label }}</h2><p>{{ analysis.evidenceCoverage.detail }}</p></div>
           <div class="review-progress">
             <strong>{{ reviewedCount }}/{{ analysis.candidates.length }}</strong>
             <span>候选已核验</span>
@@ -315,6 +317,7 @@ watch(
                   <strong>{{ item.symbolName || item.filePath.split('/').pop() }}</strong>
                   <code>{{ item.filePath }}{{ item.startLine ? `:${item.startLine}` : '' }}</code>
                   <p>{{ item.excerpt }}</p>
+                  <small class="provenance">Snapshot {{ item.snapshotId.slice(0, 8) }} · SHA {{ item.contentHash.slice(0, 12) }}</small>
                   <small v-if="item.matchedQueries.length > 1">{{ item.matchedQueries.length }} 个检索角度共同命中</small>
                 </span>
                 <span class="score">{{ Math.round(item.score * 100) }}%</span>
@@ -342,7 +345,11 @@ watch(
             <div class="dependency-list">
               <button v-for="edge in analysis.dependencies" :key="`${edge.source}:${edge.target}:${edge.relation}`" type="button" @click="openDependencySample(edge)">
                 <Network :size="14" />
-                <span><strong>{{ edge.source }} → {{ edge.target }}</strong><small>{{ edge.relation }} · {{ edge.weight }} 条证据</small></span>
+                <span>
+                  <strong>{{ edge.source }} → {{ edge.target }}</strong>
+                  <small>{{ edge.relation }} · {{ edge.weight }} 条关系 · {{ edge.samples.length }} 条可核验样例</small>
+                  <small v-if="edge.samples[0]">Snapshot {{ edge.samples[0].snapshotId.slice(0, 8) }} · SHA {{ edge.samples[0].contentHash.slice(0, 12) }}</small>
+                </span>
                 <ArrowRight :size="12" />
               </button>
               <p v-if="!analysis.dependencies.length">没有形成可追溯的一跳模块关系。</p>
@@ -371,7 +378,10 @@ watch(
           <header><TestTube2 :size="16" /><div><span>测试核验</span><strong>{{ analysis.tests.filter(item => item.existing).length }}</strong></div></header>
           <button v-for="item in analysis.tests" :key="item.filePath ?? item.reason" type="button" :disabled="!item.filePath" @click="openEvidence(item)">
             <span :data-existing="item.existing">{{ item.existing ? '现有' : '缺口' }}</span>
-            <div><strong>{{ item.filePath ?? '未找到直接相关测试' }}</strong><p>{{ item.reason }}</p></div>
+            <div>
+              <strong>{{ item.filePath ?? '未找到直接相关测试' }}</strong><p>{{ item.reason }}</p>
+              <small v-if="item.snapshotId && item.contentHash">Snapshot {{ item.snapshotId.slice(0, 8) }} · SHA {{ item.contentHash.slice(0, 12) }}</small>
+            </div>
             <ArrowRight v-if="item.filePath" :size="12" />
           </button>
         </section>

@@ -50,6 +50,7 @@ const historyCard = shallowRef<KnowledgeCard | null>(null);
 const revisions = shallowRef<CardRevision[]>([]);
 const emptySourceCounts = { total: 0, pending: 0, current: 0, stale: 0 };
 const canMaintain = computed(() => repositories.selectedRepository?.capabilities.canUpdate ?? false);
+const canManage = computed(() => repositories.selectedRepository?.capabilities.canConfigure ?? false);
 const cardTypes = computed(() => [...new Set(cards.value
   .map(card => card.cardType?.trim())
   .filter((value): value is string => Boolean(value)))]
@@ -269,6 +270,32 @@ async function save(input: CardInput) {
     ElMessage.error(error instanceof Error ? error.message : '保存失败');
   } finally { busy.value = false; }
 }
+async function reviewCard(card: KnowledgeCard, reviewStatus: 'APPROVED' | 'CHANGES_REQUESTED') {
+  const repositoryId = repositories.selectedRepositoryId;
+  if (!repositoryId) return;
+  const action = reviewStatus === 'APPROVED' ? '通过人工评审' : '标记为要求修改';
+  try {
+    await ElMessageBox.confirm(`${action}“${card.title}”？该操作不会自动改变发布状态。`, '人工评审', { type: 'warning' });
+    await intelligenceApi.reviewCard(repositoryId, card.id, reviewStatus);
+    await loadCards();
+    ElMessage.success(`${action}完成`);
+  } catch (error) {
+    if (error instanceof Error) ElMessage.error(error.message);
+  }
+}
+async function setPublication(card: KnowledgeCard, publicationStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED') {
+  const repositoryId = repositories.selectedRepositoryId;
+  if (!repositoryId) return;
+  const action = publicationStatus === 'PUBLISHED' ? '发布' : publicationStatus === 'ARCHIVED' ? '归档' : '撤回为草稿';
+  try {
+    await ElMessageBox.confirm(`${action}“${card.title}”？`, '发布状态', { type: 'warning' });
+    await intelligenceApi.setCardPublication(repositoryId, card.id, publicationStatus);
+    await loadCards();
+    ElMessage.success(`${action}完成`);
+  } catch (error) {
+    if (error instanceof Error) ElMessage.error(error.message);
+  }
+}
 async function showHistory(card: KnowledgeCard) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
@@ -397,9 +424,12 @@ onMounted(() => void load());
             v-for="card in cardRows"
             :key="card.id"
             :card="card"
+            :can-manage="canManage"
             @view="openDetail"
             @edit="openEdit"
             @history="showHistory"
+            @review="reviewCard"
+            @publish="setPublication"
           />
         </div>
       </div>
@@ -430,7 +460,7 @@ onMounted(() => void load());
       @submit="save" @open-code="openCode" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">
-        <el-card shadow="never"><template #header><div class="toolbar"><b>v{{ item.revision }} · {{ statusLabel(item.status) }}</b><span class="spacer" /><el-button link type="primary" @click="restore(item.revision)">恢复为新草稿</el-button></div></template>
+        <el-card shadow="never"><template #header><div class="toolbar"><b>v{{ item.revision }} · {{ statusLabel(item.publicationStatus) }}</b><span class="spacer" /><el-button link type="primary" @click="restore(item.revision)">恢复为新草稿</el-button></div></template>
           <div class="history-markdown" v-html="renderMarkdown(item.content, item.repositoryId)" /><small>{{ item.cardType }} · {{ item.tags.join(', ')||'无标签' }}</small>
         </el-card>
       </el-timeline-item></el-timeline>

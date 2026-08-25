@@ -13,6 +13,29 @@ const canRetry = computed(() => props.job?.status === 'FAILED');
 function repositoryName(repositoryId: string) {
   return props.repositories.find((item) => item.id === repositoryId)?.name ?? repositoryId;
 }
+
+function typeLabel(type: Task['type']) {
+  if (type === 'FULL') return '全量内容索引';
+  if (type === 'INCREMENTAL') return '增量内容索引';
+  return 'CodeGraph 构建';
+}
+
+function modeLabel(mode: Task['executionMode']) {
+  if (mode === 'FULL') return '全量';
+  if (mode === 'INCREMENTAL') return '增量';
+  return '尚未决策';
+}
+
+const fallbackLabels: Record<string, string> = {
+  BASELINE_MISSING: '缺少可用索引基线',
+  GIT_DIFF_FAILED: 'Git 差异计算失败',
+  DIRTY_WORKTREE: '工作区存在未提交变更',
+  CHANGE_RATIO_EXCEEDED: '变更比例超过增量阈值',
+};
+
+function fallbackLabel(reason: string | null) {
+  return reason ? (fallbackLabels[reason] ?? reason) : '—';
+}
 </script>
 
 <template>
@@ -22,12 +45,17 @@ function repositoryName(repositoryId: string) {
       <dl class="meta-grid">
         <div><dt>任务 ID</dt><dd class="mono">{{ job.id }}</dd></div>
         <div><dt>仓库</dt><dd>{{ repositoryName(job.repositoryId) }}</dd></div>
+        <div><dt>请求类型</dt><dd>{{ typeLabel(job.type) }}</dd></div>
+        <div v-if="job.type !== 'CODEGRAPH'"><dt>实际模式</dt><dd>{{ modeLabel(job.executionMode) }}</dd></div>
+        <div v-if="job.fallbackReason"><dt>回退原因</dt><dd>{{ fallbackLabel(job.fallbackReason) }}</dd></div>
         <div><dt>阶段</dt><dd class="mono">{{ job.currentStep ?? '—' }}</dd></div>
         <div><dt>创建时间</dt><dd>{{ new Date(job.createdAt).toLocaleString() }}</dd></div>
         <div><dt>开始时间</dt><dd>{{ job.startedAt ? new Date(job.startedAt).toLocaleString() : '—' }}</dd></div>
+        <div><dt>最近心跳</dt><dd>{{ job.heartbeatAt ? new Date(job.heartbeatAt).toLocaleString() : '—' }}</dd></div>
+        <div><dt>超时截止</dt><dd>{{ job.timeoutAt ? new Date(job.timeoutAt).toLocaleString() : '—' }}</dd></div>
         <div><dt>结束时间</dt><dd>{{ job.finishedAt ? new Date(job.finishedAt).toLocaleString() : '—' }}</dd></div>
       </dl>
-      <el-alert v-if="job.errorMessage" :title="job.errorMessage" type="error" :closable="false" show-icon />
+      <el-alert v-if="job.errorMessage" :title="job.errorMessage" :description="job.failureCode ?? undefined" type="error" :closable="false" show-icon />
       <el-alert
         v-else-if="job.status === 'CANCEL_REQUESTED'"
         title="取消请求已受理，任务将在下一个安全检查点停止。"

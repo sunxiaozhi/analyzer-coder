@@ -6,7 +6,14 @@ defineProps<{ records: readonly QaHistoryRecord[]; activeThreadId: string | null
 const emit = defineEmits<{ open: [record: QaHistoryRecord]; refresh: []; rename: [record: QaHistoryRecord]; delete: [record: QaHistoryRecord] }>();
 
 function statusLabel(status: QaHistoryRecord['evidenceStatus']) {
-  return ({ SUPPORTED: '引用已校验', DEGRADED: '本地证据', MODEL_OUTPUT_REJECTED: '已安全降级', INSUFFICIENT: '证据不足' })[status];
+  return ({
+    CITATION_COMPLETE: '引用覆盖完整',
+    CITATION_INCOMPLETE: '引用覆盖不完整',
+    SUPPORTED: '历史引用格式校验',
+    DEGRADED: '本地证据',
+    MODEL_OUTPUT_REJECTED: '已安全降级',
+    INSUFFICIENT: '证据不足',
+  })[status];
 }
 </script>
 

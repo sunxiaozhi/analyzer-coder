@@ -66,11 +66,11 @@ function formatTime(value: string | null) {
         <p class="content-excerpt">{{ row.contentExcerpt || '没有可预览内容' }}</p>
       </template>
     </el-table-column>
-    <el-table-column label="模型" min-width="155">
+    <el-table-column label="检索能力" min-width="175">
       <template #default="{ row }">
         <div class="vector-model">
-          <code>{{ row.vectorModel ?? '—' }}</code>
-          <small>{{ row.dimension ? `${row.dimension} 维` : '' }}</small>
+          <b>{{ row.capabilityLabel ?? '尚未生成' }}</b>
+          <small>{{ row.vectorModel ?? '—' }}{{ row.dimension ? ` · ${row.dimension} 维` : '' }}</small>
         </div>
       </template>
     </el-table-column>
@@ -101,6 +101,7 @@ function formatTime(value: string | null) {
 }
 
 .item-identity b,
+.vector-model b,
 .item-identity span,
 .vector-model code {
   overflow: hidden;
@@ -111,6 +112,11 @@ function formatTime(value: string | null) {
 .item-identity b {
   color: #1d1d1f;
   font-size: 12px;
+}
+
+.vector-model b {
+  color: #1d1d1f;
+  font-size: 11px;
 }
 
 .item-identity span,

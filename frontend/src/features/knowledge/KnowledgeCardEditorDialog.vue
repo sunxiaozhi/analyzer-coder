@@ -17,7 +17,7 @@ const emit = defineEmits<{
   openCode: [reference: CodeReference];
 }>();
 const form = reactive<CardInput>({
-  title: '', cardType: '业务规则', content: '', tags: [], status: 'DRAFT', attachmentIds: [], codeReferences: [],
+  title: '', cardType: '业务规则', content: '', tags: [], attachmentIds: [], codeReferences: [],
 });
 const tagText = shallowRef('');
 const items = shallowRef<KnowledgeAttachment[]>([]);
@@ -29,10 +29,10 @@ watch(() => [props.modelValue, props.card] as const, () => {
   const cardReferences = props.card?.codeReferences ?? [];
   Object.assign(form, props.card ? {
     title: props.card.title, cardType: props.card.cardType, content: props.card.content,
-    tags: [...props.card.tags], status: props.card.status,
+    tags: [...props.card.tags],
     attachmentIds: props.card.attachments.map(item => item.id),
     codeReferences: cardReferences.filter(item => item.chunkId).map(item => ({ chunkId: item.chunkId! })),
-  } : { title: '', cardType: '业务规则', content: '', tags: [], status: 'DRAFT', attachmentIds: [], codeReferences: [] });
+  } : { title: '', cardType: '业务规则', content: '', tags: [], attachmentIds: [], codeReferences: [] });
   tagText.value = form.tags.join(', ');
   items.value = props.card ? [...props.card.attachments] : [];
   codeReferences.value = [...cardReferences];
@@ -120,17 +120,12 @@ function save() {
         />
       </el-form-item>
 
-      <div class="form-grid">
-        <el-form-item label="标签（逗号分隔）"><el-input v-model="tagText" /></el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="form.status" class="full-width">
-            <el-option label="草稿" value="DRAFT" />
-            <el-option label="已发布" value="PUBLISHED" />
-            <el-option label="需要复核" value="NEEDS_REVIEW" />
-            <el-option label="已归档" value="ARCHIVED" />
-          </el-select>
-        </el-form-item>
-      </div>
+      <el-form-item label="标签（逗号分隔）"><el-input v-model="tagText" /></el-form-item>
+      <el-alert
+        type="info"
+        :closable="false"
+        title="保存只会生成草稿和未评审修订；人工评审通过后，需另行执行发布。"
+      />
     </el-form>
 
     <template #footer>

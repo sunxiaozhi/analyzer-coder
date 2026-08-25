@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 public class IndexJobProcessor {
     private static final int MAX_CHUNK_LINES = 120;
     private static final int CHUNK_OVERLAP_LINES = 20;
+    static final double MAX_INCREMENTAL_CHANGE_RATIO = 0.35d;
     private static final Pattern DECLARATION =
             Pattern.compile(
                     "(?m)^\\s*(?:(?:public|protected|private|static|final|abstract|async|export|default)\\s+)*"
@@ -97,23 +98,23 @@ public class IndexJobProcessor {
                 throw new IllegalStateException("仓库尚未发布可用的代码版本");
             }
 
-            String indexedCommit = codeChunkStore.latestIndexedCommit(repository.id());
-            boolean incremental =
-                    runningJob.type() == com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL
-                            && indexedCommit != null
-                            && !indexedCommit.isBlank()
-                            && !repository.worktreeDirty();
-            Set<String> changedPaths =
-                    incremental
-                            ? gitDiffService.changedPaths(repository, indexedCommit)
-                            : Set.of();
             List<ScannedRepositoryFile> allFiles = repositoryScannerPort.scan(repository);
+            String indexedCommit = codeChunkStore.latestIndexedCommit(repository.id());
+            ExecutionPlan plan = executionPlan(runningJob, repository, indexedCommit, allFiles.size());
+            boolean incremental = plan.incremental();
+            Set<String> affectedPaths = plan.affectedPaths();
+            Set<String> indexPaths = plan.indexPaths();
+            indexJobStore.save(
+                    indexJobStore
+                            .findById(runningJob.id())
+                            .orElse(runningJob)
+                            .withExecutionPlan(plan.mode(), plan.fallbackReason()));
             List<CodeChunk> chunks =
                     allFiles.stream()
                             .filter(
                                     file ->
                                             !incremental
-                                                    || changedPaths.contains(
+                                                    || indexPaths.contains(
                                                             file.relativePath().replace('\\', '/')))
                             .flatMap(file -> splitIntoChunks(repository, file).stream())
                             .toList();
@@ -127,7 +128,7 @@ public class IndexJobProcessor {
             if (incremental) {
                 codeChunkStore.replaceRepositoryPaths(
                         repository.id(),
-                        changedPaths,
+                        affectedPaths,
                         chunks,
                         repository.currentSnapshotId(),
                         repository.currentCommit());
@@ -136,7 +137,7 @@ public class IndexJobProcessor {
             }
             if (markdownKnowledgeSourceService != null) {
                 markdownKnowledgeSourceService.synchronize(
-                        repository, allFiles, incremental, changedPaths);
+                        repository, allFiles, incremental, affectedPaths);
             }
 
             boolean vectorsReady = true;
@@ -153,9 +154,12 @@ public class IndexJobProcessor {
 
             IndexJob publishState = indexJobStore.findById(runningJob.id()).orElseThrow();
             String completion =
-                    (incremental ? "incremental" : "full")
+                    plan.mode().toLowerCase()
                             + ":completed:"
                             + chunks.size()
+                            + (plan.fallbackReason() == null
+                                    ? ""
+                                    : ":fallback-" + plan.fallbackReason().toLowerCase())
                             + (vectorsReady ? ":vectors-ready" : ":vectors-degraded");
             indexJobStore.save(publishState.succeed(completion));
             return true;
@@ -164,6 +168,34 @@ public class IndexJobProcessor {
             indexJobStore.save(latest.fail("failed", safeMessage(exception)));
             return false;
         }
+    }
+
+    private ExecutionPlan executionPlan(
+            IndexJob job,
+            CodeRepository repository,
+            String indexedCommit,
+            int currentFileCount) {
+        if (job.type() != com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL) {
+            return ExecutionPlan.full(null);
+        }
+        if (indexedCommit == null || indexedCommit.isBlank()) {
+            return ExecutionPlan.full("BASELINE_MISSING");
+        }
+        if (repository.worktreeDirty()) {
+            return ExecutionPlan.full("DIRTY_WORKTREE");
+        }
+
+        GitDiffService.DiffResult diff;
+        try {
+            diff = gitDiffService.diff(repository, indexedCommit);
+        } catch (RuntimeException unavailable) {
+            return ExecutionPlan.full("GIT_DIFF_FAILED");
+        }
+        double ratio = (double) diff.changeCount() / Math.max(1, currentFileCount);
+        if (ratio > MAX_INCREMENTAL_CHANGE_RATIO) {
+            return ExecutionPlan.full("CHANGE_RATIO_EXCEEDED");
+        }
+        return ExecutionPlan.incremental(diff.affectedPaths(), diff.indexPaths());
     }
 
     private boolean finishCancellation(IndexJobId indexJobId) {
@@ -248,4 +280,22 @@ public class IndexJobProcessor {
     }
 
     private record Symbol(String name, String kind) {}
+
+    private record ExecutionPlan(
+            String mode,
+            String fallbackReason,
+            Set<String> affectedPaths,
+            Set<String> indexPaths) {
+        static ExecutionPlan full(String fallbackReason) {
+            return new ExecutionPlan("FULL", fallbackReason, Set.of(), Set.of());
+        }
+
+        static ExecutionPlan incremental(Set<String> affectedPaths, Set<String> indexPaths) {
+            return new ExecutionPlan("INCREMENTAL", null, affectedPaths, indexPaths);
+        }
+
+        boolean incremental() {
+            return "INCREMENTAL".equals(mode);
+        }
+    }
 }

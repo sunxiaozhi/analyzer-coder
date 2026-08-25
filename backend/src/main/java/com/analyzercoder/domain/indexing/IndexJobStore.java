@@ -68,6 +68,13 @@ public interface IndexJobStore {
      */
     Optional<IndexJob> claimNextQueued();
 
+    Optional<IndexJob> claimNextQueued(
+            IndexJobType type, String initialStep, long timeoutSeconds);
+
+    Optional<IndexJob> heartbeat(IndexJobId id, String currentStep);
+
+    int expireTimedOut(IndexJobType type);
+
     /**
      * 删除符合给定条件的数据。
      *

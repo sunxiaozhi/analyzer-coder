@@ -154,11 +154,36 @@ public class IntelligenceController {
         return service.updateCard(repoId, cardId, account.id(), body);
     }
 
+    @PostMapping("/repositories/{repoId}/knowledge/{cardId}/review")
+    public IntelligenceService.KnowledgeCard reviewCard(
+            @PathVariable UUID repoId,
+            @PathVariable UUID cardId,
+            @RequestBody ReviewCardRequest body,
+            HttpServletRequest request) {
+        var account = require(request, repoId, RepositoryPermission.MANAGE);
+        return service.reviewCard(repoId, cardId, account.id(), body.reviewStatus());
+    }
+
+    @PostMapping("/repositories/{repoId}/knowledge/{cardId}/publication")
+    public IntelligenceService.KnowledgeCard setCardPublication(
+            @PathVariable UUID repoId,
+            @PathVariable UUID cardId,
+            @RequestBody PublicationRequest body,
+            HttpServletRequest request) {
+        var account = require(request, repoId, RepositoryPermission.MANAGE);
+        return service.setCardPublication(
+                repoId, cardId, account.id(), body.publicationStatus());
+    }
+
     @GetMapping("/settings")
     public Map<String, String> settings(HttpServletRequest request) {
         SecurityContext.requireAdmin(request);
         return service.settings();
     }
+
+    public record ReviewCardRequest(String reviewStatus) {}
+
+    public record PublicationRequest(String publicationStatus) {}
 
     @PutMapping("/settings")
     public Map<String, String> saveSettings(

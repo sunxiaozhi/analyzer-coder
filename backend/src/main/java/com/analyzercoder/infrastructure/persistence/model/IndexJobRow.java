@@ -10,7 +10,12 @@ public record IndexJobRow(
         String jobType,
         String status,
         String currentStep,
+        String executionMode,
+        String fallbackReason,
+        String failureCode,
         String errorMessage,
         Instant startedAt,
+        Instant heartbeatAt,
+        Instant timeoutAt,
         Instant finishedAt,
         Instant createdAt) {}

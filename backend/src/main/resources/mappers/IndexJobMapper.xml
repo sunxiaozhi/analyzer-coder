@@ -8,17 +8,25 @@
             <arg column="job_type" javaType="java.lang.String"/>
             <arg column="status" javaType="java.lang.String"/>
             <arg column="current_step" javaType="java.lang.String"/>
+            <arg column="execution_mode" javaType="java.lang.String"/>
+            <arg column="fallback_reason" javaType="java.lang.String"/>
+            <arg column="failure_code" javaType="java.lang.String"/>
             <arg column="error_message" javaType="java.lang.String"/>
             <arg column="started_at" javaType="java.time.Instant"/>
+            <arg column="heartbeat_at" javaType="java.time.Instant"/>
+            <arg column="timeout_at" javaType="java.time.Instant"/>
             <arg column="finished_at" javaType="java.time.Instant"/>
             <arg column="created_at" javaType="java.time.Instant"/>
         </constructor>
     </resultMap>
-    <sql id="columns">id,repo_id,job_type,status,current_step,error_message,started_at,finished_at,created_at</sql>
+    <sql id="columns">id,repo_id,job_type,status,current_step,execution_mode,fallback_reason,failure_code,error_message,started_at,heartbeat_at,timeout_at,finished_at,created_at</sql>
     <insert id="upsert">INSERT INTO index_jobs(<include refid="columns"/>)
-        VALUES(#{id},#{repositoryId},#{jobType},#{status},#{currentStep},#{errorMessage},#{startedAt},#{finishedAt},#{createdAt})
+        VALUES(#{id},#{repositoryId},#{jobType},#{status},#{currentStep},#{executionMode},#{fallbackReason},#{failureCode},#{errorMessage},#{startedAt},#{heartbeatAt},#{timeoutAt},#{finishedAt},#{createdAt})
         ON CONFLICT(id) DO UPDATE SET
-        status=EXCLUDED.status,current_step=EXCLUDED.current_step,error_message=EXCLUDED.error_message,started_at=EXCLUDED.started_at,finished_at=EXCLUDED.finished_at
+        status=EXCLUDED.status,current_step=EXCLUDED.current_step,execution_mode=EXCLUDED.execution_mode,
+        fallback_reason=EXCLUDED.fallback_reason,failure_code=EXCLUDED.failure_code,
+        error_message=EXCLUDED.error_message,started_at=EXCLUDED.started_at,heartbeat_at=EXCLUDED.heartbeat_at,
+        timeout_at=EXCLUDED.timeout_at,finished_at=EXCLUDED.finished_at
     </insert>
     <select id="findById" resultMap="row">SELECT
         <include refid="columns"/>
@@ -38,7 +46,8 @@
     </select>
     <select id="findVisiblePage" resultMap="row">
         SELECT DISTINCT
-        j.id,j.repo_id,j.job_type,j.status,j.current_step,j.error_message,j.started_at,j.finished_at,j.created_at
+        j.id,j.repo_id,j.job_type,j.status,j.current_step,j.execution_mode,j.fallback_reason,j.failure_code,j.error_message,j.started_at,
+        j.heartbeat_at,j.timeout_at,j.finished_at,j.created_at
         FROM index_jobs j
         JOIN repositories r ON r.id=j.repo_id AND r.deleted_at IS NULL
         LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}
@@ -58,5 +67,27 @@
         UPDATE index_jobs job SET status='RUNNING',current_step='scan_repository',started_at=CURRENT_TIMESTAMP FROM
         candidate WHERE job.id=candidate.id RETURNING job.*
     </select>
+    <select id="claimNextQueuedByType" resultMap="row">
+        WITH candidate AS(
+            SELECT id FROM index_jobs
+            WHERE status='QUEUED' AND job_type=#{jobType}
+            ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1
+        )
+        UPDATE index_jobs job SET
+            status='RUNNING',current_step=#{initialStep},started_at=CURRENT_TIMESTAMP,
+            heartbeat_at=CURRENT_TIMESTAMP,
+            timeout_at=CURRENT_TIMESTAMP + make_interval(secs =&gt; #{timeoutSeconds})
+        FROM candidate WHERE job.id=candidate.id RETURNING job.*
+    </select>
+    <update id="heartbeat">
+        UPDATE index_jobs SET current_step=#{currentStep},heartbeat_at=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND status IN('RUNNING','CANCEL_REQUESTED')
+    </update>
+    <update id="expireTimedOut">
+        UPDATE index_jobs SET status='FAILED',current_step='timed_out',failure_code='CODEGRAPH_TIMEOUT',
+            error_message='CodeGraph 后台任务超过固定执行时限',finished_at=CURRENT_TIMESTAMP
+        WHERE job_type=#{jobType} AND status IN('RUNNING','CANCEL_REQUESTED')
+          AND timeout_at IS NOT NULL AND timeout_at&lt;CURRENT_TIMESTAMP
+    </update>
     <delete id="deleteByRepositoryId">DELETE FROM index_jobs WHERE repo_id=#{repositoryId}</delete>
 </mapper>

@@ -48,7 +48,9 @@ onActivated(scrollToLatest);
 
 function statusLabel(status: Answer['evidenceStatus']) {
   return ({
-    SUPPORTED: '引用校验通过',
+    CITATION_COMPLETE: '引用覆盖完整',
+    CITATION_INCOMPLETE: '引用覆盖不完整',
+    SUPPORTED: '历史引用格式已校验',
     DEGRADED: '本地证据模式',
     MODEL_OUTPUT_REJECTED: '模型回答已拦截',
     INSUFFICIENT: '证据不足',
@@ -87,6 +89,22 @@ function shortcut(event: KeyboardEvent) {
               <strong :data-status="turn.evidenceStatus">{{ statusLabel(turn.evidenceStatus) }}</strong>
               <em v-if="turn.conversationId === activeAnswerId" class="current-turn">当前轮次</em>
               <small>第 {{ turn.turnNo }} 轮 · {{ turn.provider }} · {{ new Date(turn.createdAt).toLocaleString() }}</small>
+            </div>
+            <div
+              v-if="turn.citationAssessment && (turn.citationAssessment.factualBlockCount || turn.citationAssessment.invalidReferences.length)"
+              class="citation-assessment"
+            >
+              <span>
+                引用覆盖 {{ Math.round(turn.citationAssessment.coverageRate * 100) }}%
+                （{{ turn.citationAssessment.citedBlockCount }}/{{ turn.citationAssessment.factualBlockCount }} 段）
+              </span>
+              <span v-if="turn.citationAssessment.uncitedBlockCount">
+                {{ turn.citationAssessment.uncitedBlockCount }} 个事实段未引用
+              </span>
+              <span v-if="turn.citationAssessment.invalidReferences.length">
+                非法引用：{{ turn.citationAssessment.invalidReferences.join('、') }}
+              </span>
+              <small>仅检查引用编号与段落覆盖，未验证证据是否在语义上支持回答。</small>
             </div>
             <AnswerEvidencePanel v-if="turn.citations.length" :citations="turn.citations" @click.stop
               @open-knowledge="emit('openKnowledge', $event)" @open-code="emit('openCode', $event)"
@@ -166,6 +184,9 @@ function shortcut(event: KeyboardEvent) {
 .current-turn { margin-left:auto; padding:3px 7px; color:#4f6b82; border:1px solid #ccdce9; border-radius:4px; background:#f2f7fb; font-size: 11px; font-style:normal; }
 .answer-trust strong { padding:3px 7px; color:#1e6b44; border-radius:4px; background:#e9f7ef; }
 .answer-trust strong[data-status="MODEL_OUTPUT_REJECTED"],.answer-trust strong[data-status="INSUFFICIENT"] { color:#9a4c22; background:#fff0e8; }
+.answer-trust strong[data-status="CITATION_INCOMPLETE"] { color:#8a5b00; background:#fff6db; }
+.citation-assessment { display:flex; flex-wrap:wrap; gap:5px 12px; color:#5e6872; font-size:11px; }
+.citation-assessment small { flex-basis:100%; color:#8a5b00; }
 .citations { display:grid; gap:7px; width:min(100%,680px); }.citations button { display:grid; grid-template-columns:auto minmax(0,1fr); gap:3px 10px; align-items:baseline; width:100%; padding:9px 11px; text-align:left; border:1px solid #dbe6f0; background:#f7fafd; }.citations button:hover,.citations button.active { border-color:#9fc3e5; background:#eef6fd; box-shadow:inset 3px 0 #0066cc; }.citations button span { color:#0066cc; font-size: 11px; font-weight:650; }.citations button b { overflow-wrap:anywhere; color:#34404b; font-size: 11px; }.citations button small { grid-column:2; color: var(--app-text-muted); font:11px "SFMono-Regular",Consolas,monospace; }
 .answer-loading { display:flex; gap:10px; align-items:center; padding:4px 0; }.answer-loading i { width:13px; height:13px; border:2px solid #b9d2e8; border-top-color:#0066cc; border-radius:50%; animation:spin .8s linear infinite; }.answer-loading div { display:grid; gap:3px; }.answer-loading b { font-size:12px; }.answer-loading small { color: var(--app-text-muted); font-size: 11px; }.message.failed :deep(.el-alert) { width:min(100%,680px); }
 .composer { display:flex; align-items:flex-end; gap:10px; padding:12px; border-top:1px solid #ececef; background:#fff; }.composer .el-button { flex:none; margin-bottom:4px; }

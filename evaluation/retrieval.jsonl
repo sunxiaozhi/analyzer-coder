@@ -1,0 +1,50 @@
+{"id":"RET-001","repositoryType":"JAVA_SPRING","question":"登录凭据校验和会话创建在哪里实现？","expectedPaths":["backend/src/main/java/com/analyzercoder/security/AuthService.java"],"tags":["auth","service"]}
+{"id":"RET-002","repositoryType":"JAVA_SPRING","question":"验证码生成与校验逻辑在哪里？","expectedPaths":["backend/src/main/java/com/analyzercoder/security/CaptchaService.java"],"tags":["auth","captcha"]}
+{"id":"RET-003","repositoryType":"JAVA_SPRING","question":"HTTP 请求如何恢复当前登录会话？","expectedPaths":["backend/src/main/java/com/analyzercoder/security/SessionInterceptor.java"],"tags":["auth","interceptor"]}
+{"id":"RET-004","repositoryType":"JAVA_SPRING","question":"密码重置安全约束在哪里测试？","expectedPaths":["backend/src/test/java/com/analyzercoder/security/PasswordResetSecurityTest.java"],"tags":["auth","test"]}
+{"id":"RET-005","repositoryType":"JAVA_SPRING","question":"仓库注册命令如何落地？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/repository/RegisterRepositoryService.java"],"tags":["repository","registration"]}
+{"id":"RET-006","repositoryType":"JAVA_SPRING","question":"远程 Git 地址的安全策略在哪里？","expectedPaths":["backend/src/main/java/com/analyzercoder/infrastructure/repository/RemoteRepositoryTargetPolicy.java"],"tags":["repository","ssrf"]}
+{"id":"RET-007","repositoryType":"JAVA_SPRING","question":"仓库凭据如何加密保存？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/repository/CredentialSecretCipher.java"],"tags":["repository","secret"]}
+{"id":"RET-008","repositoryType":"JAVA_SPRING","question":"重新扫描仓库并判断是否变化在哪里实现？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/repository/RepositoryRemoteSyncService.java"],"tags":["repository","scan"]}
+{"id":"RET-009","repositoryType":"JAVA_SPRING","question":"当前快照文件树和文件内容由谁提供？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/repository/RepositoryCodeBrowserService.java"],"tags":["repository","browser"]}
+{"id":"RET-010","repositoryType":"JAVA_SPRING","question":"删除仓库时关联数据如何清理？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/repository/RepositoryDeletionService.java"],"tags":["repository","delete"]}
+{"id":"RET-011","repositoryType":"JAVA_SPRING","question":"索引任务的创建和取消入口在哪里？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java"],"tags":["index","job"]}
+{"id":"RET-012","repositoryType":"JAVA_SPRING","question":"内容索引任务的处理流水线在哪里？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java"],"tags":["index","processor"]}
+{"id":"RET-013","repositoryType":"JAVA_SPRING","question":"后台索引 Worker 如何领取任务？","expectedPaths":["backend/src/main/java/com/analyzercoder/worker/IndexJobWorker.java"],"tags":["index","worker"]}
+{"id":"RET-014","repositoryType":"JAVA_SPRING","question":"Git 差异分析封装在哪里？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/indexing/GitDiffService.java"],"tags":["index","git"]}
+{"id":"RET-015","repositoryType":"JAVA_SPRING","question":"文件系统扫描如何过滤仓库文件？","expectedPaths":["backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java"],"tags":["index","scanner"]}
+{"id":"RET-016","repositoryType":"JAVA_SPRING","question":"代码分块分页查询在哪里编排？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/chunk/CodeChunkQueryService.java"],"tags":["chunk","query"]}
+{"id":"RET-017","repositoryType":"JAVA_SPRING","question":"代码关键词和向量 SQL 如何限定当前快照？","expectedPaths":["backend/src/main/resources/mappers/IntelligenceMapper.xml"],"tags":["retrieval","sql"]}
+{"id":"RET-018","repositoryType":"JAVA_SPRING","question":"当前向量索引汇总与明细在哪里构造？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/indexing/VectorIndexQueryService.java"],"tags":["vector","query"]}
+{"id":"RET-019","repositoryType":"JAVA_SPRING","question":"向量模型备案、检测和切换在哪里实现？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java"],"tags":["llm","settings"]}
+{"id":"RET-020","repositoryType":"JAVA_SPRING","question":"OpenAI-compatible 生成与 embedding HTTP 调用在哪里？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/llm/OpenAiCompatibleClient.java"],"tags":["llm","http"]}
+{"id":"RET-021","repositoryType":"JAVA_SPRING","question":"模型端点如何阻止访问不安全地址？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/llm/LlmEndpointPolicy.java"],"tags":["llm","ssrf"]}
+{"id":"RET-022","repositoryType":"JAVA_SPRING","question":"自然语言检索词和符号词如何拆分？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/RetrievalQueryAnalyzer.java"],"tags":["retrieval","query"]}
+{"id":"RET-023","repositoryType":"JAVA_SPRING","question":"多通道召回如何加权去重？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/RetrievalRanker.java"],"tags":["retrieval","ranking"]}
+{"id":"RET-024","repositoryType":"JAVA_SPRING","question":"问答、混合检索和引用持久化主流程在哪里？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java"],"tags":["qa","retrieval"]}
+{"id":"RET-025","repositoryType":"JAVA_SPRING","question":"回答中的引用覆盖率如何校验？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/AnswerCitationValidator.java"],"tags":["qa","citation"]}
+{"id":"RET-026","repositoryType":"JAVA_SPRING","question":"CodeGraph CLI 构建和发布产物在哪里实现？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphService.java"],"tags":["graph","build"]}
+{"id":"RET-027","repositoryType":"JAVA_SPRING","question":"CodeGraph 构建任务如何入队？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphTaskService.java"],"tags":["graph","job"]}
+{"id":"RET-028","repositoryType":"JAVA_SPRING","question":"已发布 CodeGraph 产物如何执行图查询？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java"],"tags":["graph","query"]}
+{"id":"RET-029","repositoryType":"JAVA_SPRING","question":"自然语言修改任务如何解析成变更意图？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/change/ChangeIntentParser.java"],"tags":["change","intent"]}
+{"id":"RET-030","repositoryType":"JAVA_SPRING","question":"变更影响候选和测试建议在哪里生成？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/change/ChangeImpactAnalysisService.java"],"tags":["change","impact"]}
+{"id":"RET-031","repositoryType":"JAVA_SPRING","question":"项目模块架构图如何从当前快照推导？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/architecture/ProjectArchitectureMapService.java"],"tags":["architecture","map"]}
+{"id":"RET-032","repositoryType":"JAVA_SPRING","question":"运行时依赖配置如何识别？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/architecture/RuntimeDependencyDetector.java"],"tags":["architecture","dependency"]}
+{"id":"RET-033","repositoryType":"JAVA_SPRING","question":"Markdown 知识源同步在哪里实现？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/MarkdownKnowledgeSourceService.java"],"tags":["knowledge","markdown"]}
+{"id":"RET-034","repositoryType":"JAVA_SPRING","question":"知识附件上传和读取规则在哪里？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/KnowledgeAttachmentService.java"],"tags":["knowledge","attachment"]}
+{"id":"RET-035","repositoryType":"VUE_TYPESCRIPT","question":"前端登录请求和当前用户接口在哪里定义？","expectedPaths":["frontend/src/api/auth.ts"],"tags":["frontend","auth"]}
+{"id":"RET-036","repositoryType":"VUE_TYPESCRIPT","question":"全局仓库选择状态在哪里维护？","expectedPaths":["frontend/src/stores/repositoryStore.ts"],"tags":["frontend","store"]}
+{"id":"RET-037","repositoryType":"VUE_TYPESCRIPT","question":"问答发送、历史加载和状态管理组合式函数在哪里？","expectedPaths":["frontend/src/features/ask/useAskConversation.ts"],"tags":["frontend","qa"]}
+{"id":"RET-038","repositoryType":"VUE_TYPESCRIPT","question":"回答正文和引用覆盖提示在哪里展示？","expectedPaths":["frontend/src/features/ask/AskConversationPanel.vue"],"tags":["frontend","qa"]}
+{"id":"RET-039","repositoryType":"VUE_TYPESCRIPT","question":"当前向量索引的能力、模型和覆盖率在哪里展示？","expectedPaths":["frontend/src/features/indexing/VectorIndexSummary.vue"],"tags":["frontend","vector"]}
+{"id":"RET-040","repositoryType":"VUE_TYPESCRIPT","question":"向量模型配置卡片和编辑弹窗在哪里？","expectedPaths":["frontend/src/views/SystemSettingsView.vue"],"tags":["frontend","settings"]}
+{"id":"RET-041","repositoryType":"VUE_TYPESCRIPT","question":"调用图谱页面如何加载并展示来源限制？","expectedPaths":["frontend/src/views/GraphView.vue"],"tags":["frontend","graph"]}
+{"id":"RET-042","repositoryType":"VUE_TYPESCRIPT","question":"变更影响分析表单和结果页面在哪里？","expectedPaths":["frontend/src/views/ChangeImpactView.vue"],"tags":["frontend","change"]}
+{"id":"RET-043","repositoryType":"VUE_TYPESCRIPT","question":"项目总览页如何组合准备度和架构面板？","expectedPaths":["frontend/src/views/ProjectOverviewView.vue"],"tags":["frontend","overview"]}
+{"id":"RET-044","repositoryType":"VUE_TYPESCRIPT","question":"仓库列表的主要表格组件在哪里？","expectedPaths":["frontend/src/features/repositories/RepositoryTable.vue"],"tags":["frontend","repository"]}
+{"id":"RET-045","repositoryType":"VUE_TYPESCRIPT","question":"仓库导入任务 API 在哪里定义？","expectedPaths":["frontend/src/api/sourceImports.ts"],"tags":["frontend","import"]}
+{"id":"RET-046","repositoryType":"VUE_TYPESCRIPT","question":"前端路由和权限进入规则在哪里？","expectedPaths":["frontend/src/router/index.ts"],"tags":["frontend","router"]}
+{"id":"RET-047","repositoryType":"VUE_TYPESCRIPT","question":"工作区导航和标签页外壳在哪里实现？","expectedPaths":["frontend/src/components/WorkspaceShell.vue"],"tags":["frontend","shell"]}
+{"id":"RET-048","repositoryType":"OPS_AUTOMATION","question":"本地容器编排的服务定义在哪里？","expectedPaths":["compose.yaml"],"tags":["ops","compose"]}
+{"id":"RET-049","repositoryType":"OPS_AUTOMATION","question":"Linux 启动与环境检查脚本在哪里？","expectedPaths":["scripts/start.sh"],"tags":["ops","startup"]}
+{"id":"RET-050","repositoryType":"OPS_AUTOMATION","question":"离线安装包的 Linux 组装脚本在哪里？","expectedPaths":["scripts/build-offline-package.sh"],"tags":["ops","offline"]}

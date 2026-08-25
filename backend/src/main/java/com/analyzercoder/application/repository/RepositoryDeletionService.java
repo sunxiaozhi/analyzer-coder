@@ -35,7 +35,7 @@ public class RepositoryDeletionService {
     public void complete(UUID repositoryId) {
         mapper.deleteQaConversations(repositoryId);
         mapper.deleteKnowledgeCards(repositoryId);
-        mapper.deleteCodeGraphEdges(repositoryId);
+        mapper.deleteHeuristicCallEdges(repositoryId);
         mapper.deleteCodeGraphArtifacts(repositoryId);
         mapper.deleteChunkEmbeddings(repositoryId);
         mapper.deleteCodeChunks(repositoryId);

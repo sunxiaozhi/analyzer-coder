@@ -122,8 +122,13 @@ public class IndexController {
             IndexJobType type,
             IndexJobStatus status,
             String currentStep,
+            String executionMode,
+            String fallbackReason,
+            String failureCode,
             String errorMessage,
             Instant startedAt,
+            Instant heartbeatAt,
+            Instant timeoutAt,
             Instant finishedAt,
             Instant createdAt) {
         public static IndexJobResponse from(IndexJob job) {
@@ -133,8 +138,13 @@ public class IndexController {
                     job.type(),
                     job.status(),
                     job.currentStep(),
+                    job.executionMode(),
+                    job.fallbackReason(),
+                    job.failureCode(),
                     job.errorMessage(),
                     job.startedAt(),
+                    job.heartbeatAt(),
+                    job.timeoutAt(),
                     job.finishedAt(),
                     job.createdAt());
         }

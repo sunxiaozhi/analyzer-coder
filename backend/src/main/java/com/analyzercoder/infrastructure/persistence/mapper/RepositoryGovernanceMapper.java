@@ -159,7 +159,7 @@ public interface RepositoryGovernanceMapper {
      * @param repositoryId 目标对象的唯一标识
      * @return 本次操作影响的记录数
      */
-    int deleteCodeGraphEdges(@Param("repositoryId") UUID repositoryId);
+    int deleteHeuristicCallEdges(@Param("repositoryId") UUID repositoryId);
 
     /**
      * 删除符合给定条件的数据。

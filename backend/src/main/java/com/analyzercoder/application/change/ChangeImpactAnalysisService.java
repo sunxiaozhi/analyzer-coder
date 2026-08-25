@@ -50,6 +50,8 @@ public class ChangeImpactAnalysisService {
         if (repository.currentSnapshotId() == null) {
             throw new IllegalStateException("仓库尚未发布可用于分析的项目快照");
         }
+        UUID analysisSnapshotId = repository.currentSnapshotId().value();
+        EvidenceAudit evidenceAudit = new EvidenceAudit();
 
         ChangeIntentParser.IntentInterpretation intent =
                 intentParser.parse(normalizedTask, modelConfigId);
@@ -62,7 +64,12 @@ public class ChangeImpactAnalysisService {
                             repositoryId.value(), query.query(), query.limit());
             retrievalQueries.add(
                     new RetrievalQuery(query.query(), query.purpose(), hits.size()));
-            mergeEvidence(aggregated, hits, query.query());
+            mergeEvidence(
+                    aggregated,
+                    hits,
+                    query.query(),
+                    analysisSnapshotId,
+                    evidenceAudit);
         }
         List<EvidenceAggregate> selectedAggregates =
                 aggregated.values().stream()
@@ -79,7 +86,17 @@ public class ChangeImpactAnalysisService {
         List<IntelligenceService.Evidence> testEvidence =
                 intelligence.unifiedSearch(repositoryId.value(), testQuery, 8);
         retrievalQueries.add(new RetrievalQuery(testQuery, "测试覆盖", testEvidence.size()));
-        ProjectArchitectureMapService.ArchitectureMap map = loadArchitecture(repositoryId);
+        ProjectArchitectureMapService.ArchitectureMap loadedMap =
+                loadArchitecture(repositoryId, evidenceAudit);
+        ProjectArchitectureMapService.ArchitectureMap map;
+        if (loadedMap != null && !analysisSnapshotId.toString().equals(loadedMap.snapshotId())) {
+            evidenceAudit.architectureSnapshotMismatch++;
+            map = null;
+        } else {
+            map = loadedMap;
+        }
+        List<IntelligenceService.Evidence> currentTestEvidence =
+                currentEvidence(testEvidence, analysisSnapshotId, evidenceAudit);
 
         List<CandidateEvidence> candidates =
                 selectedAggregates.stream().map(item -> candidate(item, map)).toList();
@@ -92,7 +109,8 @@ public class ChangeImpactAnalysisService {
             inferTaskModules(normalizedTask, map).forEach(directModules::add);
         }
 
-        List<DependencyImpact> dependencies = dependencies(map, directModules);
+        List<DependencyImpact> dependencies =
+                dependencies(map, directModules, analysisSnapshotId, evidenceAudit);
         Set<String> impactedModules = new LinkedHashSet<>(directModules);
         dependencies.forEach(
                 edge -> {
@@ -101,22 +119,29 @@ public class ChangeImpactAnalysisService {
                 });
         List<ModuleImpact> modules = modules(map, directModules, impactedModules, candidates);
         List<ProjectArchitectureMapService.ArchitectureRisk> risks = risks(map, impactedModules);
-        List<TestSuggestion> tests = tests(testEvidence, selected);
+        List<TestSuggestion> tests = tests(currentTestEvidence, selected);
         List<AnalysisUnknown> unknowns =
-                unknowns(repository, map, intent, candidates, directModules, tests);
-        Confidence confidence =
-                confidence(repository, map, intent, candidates, directModules, unknowns);
+                unknowns(
+                        repository,
+                        map,
+                        intent,
+                        candidates,
+                        directModules,
+                        tests,
+                        evidenceAudit);
+        EvidenceCoverage evidenceCoverage =
+                evidenceCoverage(repository, map, intent, candidates, directModules, unknowns);
 
         return new ChangeImpactAnalysis(
                 UUID.randomUUID(),
                 repositoryId.value(),
-                repository.currentSnapshotId().value(),
+                analysisSnapshotId,
                 repository.currentCommit(),
                 Instant.now(),
                 normalizedTask,
                 intent,
                 List.copyOf(retrievalQueries),
-                confidence,
+                evidenceCoverage,
                 candidates,
                 modules,
                 dependencies,
@@ -156,46 +181,46 @@ public class ChangeImpactAnalysisService {
     private static void mergeEvidence(
             Map<String, EvidenceAggregate> aggregated,
             List<IntelligenceService.Evidence> hits,
-            String query) {
-        hits.stream()
-                .filter(ChangeImpactAnalysisService::hasFile)
-                .forEach(
-                        evidence -> {
-                            String key = evidenceKey(evidence);
-                            EvidenceAggregate current = aggregated.get(key);
-                            if (current == null) {
-                                aggregated.put(
-                                        key,
-                                        new EvidenceAggregate(
-                                                evidence,
-                                                evidence.score(),
-                                                List.of(query)));
-                                return;
-                            }
-                            LinkedHashSet<String> matched =
-                                    new LinkedHashSet<>(current.matchedQueries());
-                            matched.add(query);
-                            IntelligenceService.Evidence best =
-                                    evidence.score() > current.evidence().score()
-                                            ? evidence
-                                            : current.evidence();
-                            double boosted =
-                                    Math.min(
-                                            1.0,
-                                            Math.max(current.aggregateScore(), evidence.score())
-                                                    + (matched.size() > current.matchedQueries().size()
-                                                            ? 0.035
-                                                            : 0));
-                            aggregated.put(
-                                    key,
-                                    new EvidenceAggregate(best, boosted, List.copyOf(matched)));
-                        });
+            String query,
+            UUID currentSnapshotId,
+            EvidenceAudit evidenceAudit) {
+        for (IntelligenceService.Evidence evidence : hits) {
+            if (!hasFile(evidence) || !acceptEvidence(evidence, currentSnapshotId, evidenceAudit)) {
+                continue;
+            }
+            String key = evidenceKey(evidence);
+            EvidenceAggregate current = aggregated.get(key);
+            if (current == null) {
+                aggregated.put(
+                        key,
+                        new EvidenceAggregate(evidence, evidence.score(), List.of(query)));
+                continue;
+            }
+            LinkedHashSet<String> matched = new LinkedHashSet<>(current.matchedQueries());
+            matched.add(query);
+            IntelligenceService.Evidence best =
+                    evidence.score() > current.evidence().score()
+                            ? evidence
+                            : current.evidence();
+            double boosted =
+                    Math.min(
+                            1.0,
+                            Math.max(current.aggregateScore(), evidence.score())
+                                    + (matched.size() > current.matchedQueries().size()
+                                            ? 0.035
+                                            : 0));
+            aggregated.put(
+                    key, new EvidenceAggregate(best, boosted, List.copyOf(matched)));
+        }
     }
 
     private ProjectArchitectureMapService.ArchitectureMap loadArchitecture(
-            CodeRepositoryId repositoryId) {
+            CodeRepositoryId repositoryId, EvidenceAudit evidenceAudit) {
         try {
             return architecture.map(repositoryId);
+        } catch (ProjectArchitectureMapService.ArchitectureSnapshotChangedException exception) {
+            evidenceAudit.architectureSnapshotMismatch++;
+            return null;
         } catch (RuntimeException ignored) {
             return null;
         }
@@ -208,6 +233,7 @@ public class ChangeImpactAnalysisService {
         return new CandidateEvidence(
                 evidence.chunkId(),
                 evidence.sourceType(),
+                evidence.snapshotId(),
                 evidence.filePath(),
                 evidence.symbolName(),
                 evidence.symbolKind(),
@@ -237,7 +263,10 @@ public class ChangeImpactAnalysisService {
     }
 
     private static List<DependencyImpact> dependencies(
-            ProjectArchitectureMapService.ArchitectureMap map, Set<String> directModules) {
+            ProjectArchitectureMapService.ArchitectureMap map,
+            Set<String> directModules,
+            UUID currentSnapshotId,
+            EvidenceAudit evidenceAudit) {
         if (map == null || directModules.isEmpty()) return List.of();
         return map.edges().stream()
                 .filter(edge -> !"CONTAINS".equals(edge.relation()))
@@ -254,15 +283,39 @@ public class ChangeImpactAnalysisService {
                                 .thenComparing(
                                         ProjectArchitectureMapService.ArchitectureEdge::target))
                 .limit(MAX_DEPENDENCIES)
-                .map(
-                        edge ->
-                                new DependencyImpact(
-                                        edge.source(),
-                                        edge.target(),
-                                        edge.relation(),
-                                        edge.weight(),
-                                        edge.samples()))
+                .map(edge -> dependency(edge, currentSnapshotId, evidenceAudit))
                 .toList();
+    }
+
+    private static DependencyImpact dependency(
+            ProjectArchitectureMapService.ArchitectureEdge edge,
+            UUID currentSnapshotId,
+            EvidenceAudit evidenceAudit) {
+        List<DependencyEvidenceSample> samples =
+                edge.evidenceSamples().stream()
+                        .filter(
+                                sample -> {
+                                    if (!currentSnapshotId.toString().equals(sample.snapshotId())) {
+                                        evidenceAudit.mixedSnapshotEvidence++;
+                                        return false;
+                                    }
+                                    if (!isContentHash(sample.contentHash())) {
+                                        evidenceAudit.missingContentHash++;
+                                        return false;
+                                    }
+                                    return true;
+                                })
+                        .map(
+                                sample ->
+                                        new DependencyEvidenceSample(
+                                                sample.filePath(),
+                                                sample.relatedFilePath(),
+                                                UUID.fromString(sample.snapshotId()),
+                                                sample.contentHash()))
+                        .toList();
+        if (edge.weight() > 0 && samples.isEmpty()) evidenceAudit.dependencyProvenanceMissing++;
+        return new DependencyImpact(
+                edge.source(), edge.target(), edge.relation(), edge.weight(), samples);
     }
 
     private static List<ModuleImpact> modules(
@@ -333,6 +386,8 @@ public class ChangeImpactAnalysisService {
                             null,
                             null,
                             null,
+                            null,
+                            null,
                             false,
                             "未检索到直接相关的现有测试；修改前需要按候选入口补充或人工定位测试。"));
         }
@@ -344,6 +399,8 @@ public class ChangeImpactAnalysisService {
                                         item.filePath(),
                                         item.startLine(),
                                         item.endLine(),
+                                        item.snapshotId(),
+                                        item.contentHash(),
                                         true,
                                         "现有测试与任务关键词或候选实现匹配"))
                 .toList();
@@ -355,8 +412,42 @@ public class ChangeImpactAnalysisService {
             ChangeIntentParser.IntentInterpretation intent,
             List<CandidateEvidence> candidates,
             Set<String> directModules,
-            List<TestSuggestion> tests) {
+            List<TestSuggestion> tests,
+            EvidenceAudit evidenceAudit) {
         List<AnalysisUnknown> result = new ArrayList<>();
+        if (evidenceAudit.mixedSnapshotEvidence > 0) {
+            result.add(
+                    new AnalysisUnknown(
+                            "MIXED_SNAPSHOT_EVIDENCE_EXCLUDED",
+                            "HIGH",
+                            "已排除 "
+                                    + evidenceAudit.mixedSnapshotEvidence
+                                    + " 条与分析快照不一致的代码证据；结果可能缺少并发切换版本期间的候选。"));
+        }
+        if (evidenceAudit.architectureSnapshotMismatch > 0) {
+            result.add(
+                    new AnalysisUnknown(
+                            "ARCHITECTURE_SNAPSHOT_MISMATCH",
+                            "HIGH",
+                            "架构关系不属于本次分析快照，模块、依赖和架构风险已全部排除。"));
+        }
+        if (evidenceAudit.missingContentHash > 0) {
+            result.add(
+                    new AnalysisUnknown(
+                            "EVIDENCE_HASH_MISSING",
+                            "HIGH",
+                            "已排除 "
+                                    + evidenceAudit.missingContentHash
+                                    + " 条缺少内容摘要的代码证据，无法确认其精确内容版本。"));
+        }
+        if (evidenceAudit.dependencyProvenanceMissing > 0) {
+            result.add(
+                    new AnalysisUnknown(
+                            "DEPENDENCY_PROVENANCE_MISSING",
+                            "MEDIUM",
+                            evidenceAudit.dependencyProvenanceMissing
+                                    + " 条依赖关系没有可核对的文件版本样例，关系权重不能替代源码凭据。"));
+        }
         if ("RULES".equals(intent.parserMode())) {
             result.add(
                     new AnalysisUnknown(
@@ -414,7 +505,7 @@ public class ChangeImpactAnalysisService {
         return List.copyOf(result);
     }
 
-    private static Confidence confidence(
+    private static EvidenceCoverage evidenceCoverage(
             CodeRepository repository,
             ProjectArchitectureMapService.ArchitectureMap map,
             ChangeIntentParser.IntentInterpretation intent,
@@ -423,26 +514,26 @@ public class ChangeImpactAnalysisService {
             List<AnalysisUnknown> unknowns) {
         boolean highUnknown = unknowns.stream().anyMatch(item -> "HIGH".equals(item.severity()));
         if (candidates.isEmpty() || map == null || repository.worktreeDirty()) {
-            return new Confidence(
+            return new EvidenceCoverage(
                     "LOW",
-                    "需要人工补充入口",
+                    "证据覆盖低",
                     "当前证据或版本状态不足以支持完整影响判断。先处理高优先级未知项。");
         }
         if (highUnknown || candidates.size() < 3 || directModules.isEmpty()) {
-            return new Confidence(
+            return new EvidenceCoverage(
                     "MEDIUM",
-                    "可用于初步排查",
+                    "证据覆盖中",
                     "候选代码来自当前快照，但跨模块或测试覆盖仍需要人工核验。");
         }
         if ("RULES".equals(intent.parserMode())) {
-            return new Confidence(
+            return new EvidenceCoverage(
                     "MEDIUM",
-                    "证据可用，语义待确认",
+                    "证据覆盖中",
                     "代码与模块证据较完整，但任务通过规则解析，需要人工确认目标和约束。 ");
         }
-        return new Confidence(
+        return new EvidenceCoverage(
                 "HIGH",
-                "可用于制定修改计划",
+                "证据覆盖高",
                 "已找到多条当前快照证据并关联模块依赖，仍需逐条确认后再修改。");
     }
 
@@ -494,6 +585,35 @@ public class ChangeImpactAnalysisService {
         return evidence.filePath() != null && !evidence.filePath().isBlank();
     }
 
+    private static List<IntelligenceService.Evidence> currentEvidence(
+            List<IntelligenceService.Evidence> evidence,
+            UUID currentSnapshotId,
+            EvidenceAudit evidenceAudit) {
+        return evidence.stream()
+                .filter(ChangeImpactAnalysisService::hasFile)
+                .filter(item -> acceptEvidence(item, currentSnapshotId, evidenceAudit))
+                .toList();
+    }
+
+    private static boolean acceptEvidence(
+            IntelligenceService.Evidence evidence,
+            UUID currentSnapshotId,
+            EvidenceAudit evidenceAudit) {
+        if (!currentSnapshotId.equals(evidence.snapshotId())) {
+            evidenceAudit.mixedSnapshotEvidence++;
+            return false;
+        }
+        if (!isContentHash(evidence.contentHash())) {
+            evidenceAudit.missingContentHash++;
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isContentHash(String contentHash) {
+        return contentHash != null && contentHash.matches("[0-9a-f]{64}");
+    }
+
     private static String evidenceKey(IntelligenceService.Evidence evidence) {
         if (evidence.chunkId() != null) return evidence.chunkId().toString();
         return evidence.filePath() + ":" + evidence.startLine();
@@ -525,7 +645,7 @@ public class ChangeImpactAnalysisService {
             String task,
             ChangeIntentParser.IntentInterpretation intent,
             List<RetrievalQuery> retrievalQueries,
-            Confidence confidence,
+            EvidenceCoverage evidenceCoverage,
             List<CandidateEvidence> candidates,
             List<ModuleImpact> modules,
             List<DependencyImpact> dependencies,
@@ -533,11 +653,12 @@ public class ChangeImpactAnalysisService {
             List<TestSuggestion> tests,
             List<AnalysisUnknown> unknowns) {}
 
-    public record Confidence(String level, String label, String detail) {}
+    public record EvidenceCoverage(String level, String label, String detail) {}
 
     public record CandidateEvidence(
             UUID chunkId,
             String sourceType,
+            UUID snapshotId,
             String filePath,
             String symbolName,
             String symbolKind,
@@ -563,12 +684,20 @@ public class ChangeImpactAnalysisService {
             String target,
             String relation,
             int weight,
-            List<String> samples) {}
+            List<DependencyEvidenceSample> samples) {}
+
+    public record DependencyEvidenceSample(
+            String filePath,
+            String relatedFilePath,
+            UUID snapshotId,
+            String contentHash) {}
 
     public record TestSuggestion(
             String filePath,
             Integer startLine,
             Integer endLine,
+            UUID snapshotId,
+            String contentHash,
             boolean existing,
             String reason) {}
 
@@ -582,4 +711,11 @@ public class ChangeImpactAnalysisService {
             IntelligenceService.Evidence evidence,
             double aggregateScore,
             List<String> matchedQueries) {}
+
+    private static final class EvidenceAudit {
+        private int mixedSnapshotEvidence;
+        private int missingContentHash;
+        private int architectureSnapshotMismatch;
+        private int dependencyProvenanceMissing;
+    }
 }

@@ -107,7 +107,7 @@
     </select>
     <delete id="deleteQaConversations">DELETE FROM qa_conversations WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteKnowledgeCards">DELETE FROM knowledge_cards WHERE repo_id=#{repositoryId}</delete>
-    <delete id="deleteCodeGraphEdges">DELETE FROM code_graph_edges WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteHeuristicCallEdges">DELETE FROM heuristic_call_edges WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteCodeGraphArtifacts">DELETE FROM codegraph_artifacts WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteChunkEmbeddings">DELETE FROM chunk_embeddings WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteCodeChunks">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}</delete>

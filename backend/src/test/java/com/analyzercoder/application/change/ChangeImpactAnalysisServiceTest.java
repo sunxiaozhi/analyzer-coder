@@ -80,7 +80,13 @@ class ChangeImpactAnalysisServiceTest {
                                         "DEPENDS_ON",
                                         3,
                                         List.of(
-                                                "backend/src/main/java/com/acme/application/AuthService.java → backend/src/main/java/com/acme/domain/User.java"))),
+                                                "backend/src/main/java/com/acme/application/AuthService.java → backend/src/main/java/com/acme/domain/User.java"),
+                                        List.of(
+                                                new ProjectArchitectureMapService.ArchitectureEvidenceSample(
+                                                        "backend/src/main/java/com/acme/application/AuthService.java",
+                                                        "backend/src/main/java/com/acme/domain/User.java",
+                                                        snapshotId.value().toString(),
+                                                        "b".repeat(64))))),
                         List.of(risk),
                         new ProjectArchitectureMapService.AnalysisCoverage(
                                 12, 12, 0, 0, 0, false, List.of()));
@@ -94,16 +100,25 @@ class ChangeImpactAnalysisServiceTest {
         assertThat(result.retrievalQueries()).hasSize(2);
         assertThat(result.candidates()).hasSize(1);
         assertThat(result.candidates().get(0).moduleId()).isEqualTo("backend/application");
+        assertThat(result.candidates().get(0).snapshotId()).isEqualTo(snapshotId.value());
+        assertThat(result.candidates().get(0).contentHash()).hasSize(64);
         assertThat(result.modules())
                 .extracting(ChangeImpactAnalysisService.ModuleImpact::moduleId)
                 .containsExactly("backend/application", "backend/domain");
         assertThat(result.dependencies()).hasSize(1);
+        assertThat(result.dependencies().get(0).samples()).singleElement().satisfies(sample -> {
+            assertThat(sample.snapshotId()).isEqualTo(snapshotId.value());
+            assertThat(sample.contentHash()).hasSize(64);
+        });
         assertThat(result.risks()).extracting(ProjectArchitectureMapService.ArchitectureRisk::id)
                 .containsExactly("boundary-1");
         assertThat(result.tests()).singleElement().satisfies(item -> {
             assertThat(item.existing()).isTrue();
             assertThat(item.filePath()).endsWith("AuthServiceTest.java");
+            assertThat(item.snapshotId()).isEqualTo(snapshotId.value());
+            assertThat(item.contentHash()).hasSize(64);
         });
+        assertThat(result.evidenceCoverage().label()).startsWith("证据覆盖");
         assertThat(result.unknowns())
                 .extracting(ChangeImpactAnalysisService.AnalysisUnknown::code)
                 .contains("DYNAMIC_BEHAVIOR")
@@ -125,6 +140,125 @@ class ChangeImpactAnalysisServiceTest {
         assertThatThrownBy(() -> service.analyze(repositoryId, "修改登录流程"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("项目快照");
+    }
+
+    @Test
+    void excludesEvidenceFromAnOlderSnapshot() {
+        RegisterRepositoryUseCase repositories = mock(RegisterRepositoryUseCase.class);
+        IntelligenceService intelligence = mock(IntelligenceService.class);
+        ProjectArchitectureMapService architecture = mock(ProjectArchitectureMapService.class);
+        ChangeIntentParser intentParser = mock(ChangeIntentParser.class);
+        ChangeImpactAnalysisService service =
+                new ChangeImpactAnalysisService(
+                        repositories, intelligence, architecture, intentParser);
+        CodeRepositoryId repositoryId = CodeRepositoryId.newId();
+        RepositorySnapshotId currentSnapshot = RepositorySnapshotId.newId();
+        RepositorySnapshotId previousSnapshot = RepositorySnapshotId.newId();
+        when(repositories.get(repositoryId))
+                .thenReturn(repository(repositoryId, currentSnapshot, false));
+        when(intentParser.parse("修改登录流程", null)).thenReturn(intent("修改登录流程"));
+        when(intelligence.unifiedSearch(
+                        eq(repositoryId.value()), eq("修改登录流程"), eq(12)))
+                .thenReturn(
+                        List.of(
+                                evidence(
+                                        repositoryId,
+                                        previousSnapshot,
+                                        "backend/src/main/java/com/acme/AuthService.java",
+                                        "AuthService",
+                                        "class AuthService {}")));
+
+        ChangeImpactAnalysisService.ChangeImpactAnalysis result =
+                service.analyze(repositoryId, "修改登录流程");
+
+        assertThat(result.snapshotId()).isEqualTo(currentSnapshot.value());
+        assertThat(result.candidates()).isEmpty();
+        assertThat(result.unknowns())
+                .extracting(ChangeImpactAnalysisService.AnalysisUnknown::code)
+                .contains("MIXED_SNAPSHOT_EVIDENCE_EXCLUDED", "NO_DIRECT_EVIDENCE");
+    }
+
+    @Test
+    void excludesStaleTestEvidenceAndReportsTheCoverageGap() {
+        RegisterRepositoryUseCase repositories = mock(RegisterRepositoryUseCase.class);
+        IntelligenceService intelligence = mock(IntelligenceService.class);
+        ProjectArchitectureMapService architecture = mock(ProjectArchitectureMapService.class);
+        ChangeIntentParser intentParser = mock(ChangeIntentParser.class);
+        ChangeImpactAnalysisService service =
+                new ChangeImpactAnalysisService(
+                        repositories, intelligence, architecture, intentParser);
+        CodeRepositoryId repositoryId = CodeRepositoryId.newId();
+        RepositorySnapshotId currentSnapshot = RepositorySnapshotId.newId();
+        RepositorySnapshotId previousSnapshot = RepositorySnapshotId.newId();
+        when(repositories.get(repositoryId))
+                .thenReturn(repository(repositoryId, currentSnapshot, false));
+        when(intentParser.parse("修改登录流程", null)).thenReturn(intent("修改登录流程"));
+        when(intelligence.unifiedSearch(
+                        eq(repositoryId.value()), eq("修改登录流程"), eq(12)))
+                .thenReturn(List.of(evidence(
+                        repositoryId,
+                        currentSnapshot,
+                        "backend/src/main/java/com/acme/AuthService.java",
+                        "AuthService",
+                        "class AuthService {}")));
+        when(intelligence.unifiedSearch(
+                        eq(repositoryId.value()), eq("修改登录流程 test 测试 spec"), eq(8)))
+                .thenReturn(List.of(evidence(
+                        repositoryId,
+                        previousSnapshot,
+                        "backend/src/test/java/com/acme/AuthServiceTest.java",
+                        "AuthServiceTest",
+                        "class AuthServiceTest {}")));
+
+        ChangeImpactAnalysisService.ChangeImpactAnalysis result =
+                service.analyze(repositoryId, "修改登录流程");
+
+        assertThat(result.candidates()).hasSize(1);
+        assertThat(result.tests()).singleElement().satisfies(item -> {
+            assertThat(item.existing()).isFalse();
+            assertThat(item.contentHash()).isNull();
+        });
+        assertThat(result.unknowns())
+                .extracting(ChangeImpactAnalysisService.AnalysisUnknown::code)
+                .contains("MIXED_SNAPSHOT_EVIDENCE_EXCLUDED", "TEST_NOT_FOUND");
+    }
+
+    @Test
+    void rejectsArchitectureFromAnotherSnapshot() {
+        RegisterRepositoryUseCase repositories = mock(RegisterRepositoryUseCase.class);
+        IntelligenceService intelligence = mock(IntelligenceService.class);
+        ProjectArchitectureMapService architecture = mock(ProjectArchitectureMapService.class);
+        ChangeIntentParser intentParser = mock(ChangeIntentParser.class);
+        ChangeImpactAnalysisService service =
+                new ChangeImpactAnalysisService(
+                        repositories, intelligence, architecture, intentParser);
+        CodeRepositoryId repositoryId = CodeRepositoryId.newId();
+        RepositorySnapshotId currentSnapshot = RepositorySnapshotId.newId();
+        RepositorySnapshotId previousSnapshot = RepositorySnapshotId.newId();
+        when(repositories.get(repositoryId))
+                .thenReturn(repository(repositoryId, currentSnapshot, false));
+        when(intentParser.parse("修改登录流程", null)).thenReturn(intent("修改登录流程"));
+        when(architecture.map(repositoryId))
+                .thenReturn(new ProjectArchitectureMapService.ArchitectureMap(
+                        repositoryId.value().toString(),
+                        previousSnapshot.value().toString(),
+                        "old-commit",
+                        Instant.now(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        new ProjectArchitectureMapService.AnalysisCoverage(
+                                1, 1, 0, 0, 0, false, List.of())));
+
+        ChangeImpactAnalysisService.ChangeImpactAnalysis result =
+                service.analyze(repositoryId, "修改登录流程");
+
+        assertThat(result.modules()).isEmpty();
+        assertThat(result.dependencies()).isEmpty();
+        assertThat(result.unknowns())
+                .extracting(ChangeImpactAnalysisService.AnalysisUnknown::code)
+                .contains("ARCHITECTURE_SNAPSHOT_MISMATCH", "ARCHITECTURE_UNAVAILABLE");
+        assertThat(result.evidenceCoverage().level()).isEqualTo("LOW");
     }
 
     private static ProjectArchitectureMapService.ArchitectureNode node(
@@ -168,10 +302,11 @@ class ChangeImpactAnalysisServiceTest {
                 1,
                 20,
                 content,
-                UUID.randomUUID().toString(),
+                "a".repeat(64),
                 0.9,
                 0.8,
                 0.7,
+                "SEMANTIC_EMBEDDING",
                 List.of("lexical", "vector"),
                 List.of());
     }

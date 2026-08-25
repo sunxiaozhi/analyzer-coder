@@ -34,6 +34,11 @@
     <sql id="columns">
         id,repo_id,snapshot_id,commit_sha,file_path,symbol_id,symbol_name,symbol_kind,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at
     </sql>
+    <sql id="currentSnapshot">
+        AND snapshot_id=(
+            SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId}
+        )
+    </sql>
     <delete id="deleteByRepositoryId">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteByPaths">DELETE FROM code_chunks WHERE repo_id=#{repositoryId} AND file_path IN
         <foreach collection="paths" item="path" open="(" close=")" separator=",">#{path}</foreach>
@@ -63,6 +68,7 @@
     <select id="find" resultMap="row">SELECT
         <include refid="columns"/>
         FROM code_chunks WHERE repo_id=#{repositoryId}
+        <include refid="currentSnapshot"/>
         <include refid="filter"/>
         ORDER BY <if test="query != null and query != ''">CASE WHEN POSITION(LOWER(#{query}) IN LOWER(file_path))&gt;0
             THEN 4 ELSE 0 END+CASE WHEN POSITION(LOWER(#{query}) IN LOWER(COALESCE(symbol_name,'')))&gt;0 THEN 3 ELSE 0
@@ -96,6 +102,7 @@
         LIMIT #{limit}
     </select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM code_chunks WHERE repo_id=#{repositoryId}
+        <include refid="currentSnapshot"/>
         <include refid="filter"/>
     </select>
 </mapper>

@@ -22,7 +22,6 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 在受管副本上构建并查询 CodeGraph 产物。
@@ -42,6 +41,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
     private final String executable;
     private final Path root;
     private final long timeoutMinutes;
+    private final CodeGraphArtifactPublisher publisher;
 
     public ManagedCodeGraphService(
             CodeGraphArtifactMapper mapper,
@@ -49,18 +49,24 @@ public class ManagedCodeGraphService extends CodeGraphService {
             @Value("${app.codegraph.executable:codegraph}") String executable,
             @Value("${app.codegraph.timeout-minutes:10}") long timeoutMinutes,
             @Value("${app.codegraph.artifact-root:${java.io.tmpdir}/analyzer-coder/codegraph}")
-                    String root) {
+                    String root,
+            CodeGraphArtifactPublisher publisher) {
         super(mapper, json, executable, timeoutMinutes);
         this.mapper = mapper;
         this.json = json;
         this.executable = executable;
         this.timeoutMinutes = timeoutMinutes;
         this.root = Path.of(root).toAbsolutePath().normalize();
+        this.publisher = publisher;
     }
 
     @Override
-    @Transactional
     public Artifact build(UUID repositoryId) {
+        return build(repositoryId, BuildControl.none());
+    }
+
+    @Override
+    public Artifact build(UUID repositoryId, BuildControl control) {
         Version version = version(repositoryId);
         UUID artifactId = UUID.randomUUID();
         Path project =
@@ -70,18 +76,29 @@ public class ManagedCodeGraphService extends CodeGraphService {
                         .resolve(artifactId.toString())
                         .resolve("project");
         try {
-            copySnapshot(version.snapshotPath(), project);
-            String output = run(List.of("init", project.toString()), timeoutMinutes * 60);
+            control.checkpoint("copy_snapshot");
+            copySnapshot(version.snapshotPath(), project, control);
+            String output =
+                    run(
+                            List.of("init", project.toString()),
+                            timeoutMinutes * 60,
+                            control,
+                            "building_codegraph");
             int nodes = metric(output, "nodes");
             int edges = metric(output, "edges");
-            String cliVersion = run(List.of("--version"), 30).trim();
+            String cliVersion =
+                    run(List.of("--version"), 30, control, "inspect_codegraph").trim();
             Path marker = project.resolve(".codegraph");
             if (!Files.isDirectory(marker)) {
                 throw new IllegalStateException("CodeGraph 未生成预期产物目录");
             }
 
-            mapper.retirePublished(repositoryId);
-            mapper.insertPublished(
+            control.checkpoint("publish_codegraph");
+            Version current = version(repositoryId);
+            if (!version.snapshotId().equals(current.snapshotId())) {
+                throw new IllegalStateException("CodeGraph 构建期间仓库快照已切换，拒绝发布旧版本产物");
+            }
+            CodeGraphArtifactRow row =
                     new CodeGraphArtifactRow(
                             artifactId,
                             repositoryId,
@@ -90,7 +107,8 @@ public class ManagedCodeGraphService extends CodeGraphService {
                             "PUBLISHED",
                             marker.toString(),
                             nodes,
-                            edges));
+                            edges);
+            publisher.publish(row);
             return new Artifact(
                     artifactId,
                     repositoryId,
@@ -145,6 +163,9 @@ public class ManagedCodeGraphService extends CodeGraphService {
                     new ArrayList<>(nodes.values()),
                     edges,
                     riskLevel(count),
+                    "CODEGRAPH_CLI",
+                    version.snapshotId(),
+                    "CODEGRAPH_CLI_STATIC_ANALYSIS",
                     List.of(
                             "CodeGraph " + artifact.cliVersion() + " 确定性静态分析",
                             "动态反射和运行时分派可能无法确认",
@@ -176,10 +197,12 @@ public class ManagedCodeGraphService extends CodeGraphService {
         return new Version(row.snapshotId(), Path.of(row.snapshotPath()));
     }
 
-    private static void copySnapshot(Path source, Path target) throws IOException {
+    private static void copySnapshot(Path source, Path target, BuildControl control)
+            throws IOException {
         Files.createDirectories(target);
         try (var paths = Files.walk(source)) {
             for (Path path : paths.filter(candidate -> !candidate.equals(source)).toList()) {
+                control.checkpoint("copy_snapshot");
                 Path relativePath = source.relativize(path);
                 if (relativePath.getNameCount() > 0
                         && ".codegraph".equals(relativePath.getName(0).toString())) {
@@ -204,6 +227,14 @@ public class ManagedCodeGraphService extends CodeGraphService {
     }
 
     private String run(List<String> arguments, long timeoutSeconds) {
+        return run(arguments, timeoutSeconds, BuildControl.none(), "query_codegraph");
+    }
+
+    private String run(
+            List<String> arguments,
+            long timeoutSeconds,
+            BuildControl control,
+            String step) {
         try {
             List<String> command = command(arguments);
             java.lang.ProcessBuilder builder =
@@ -212,9 +243,18 @@ public class ManagedCodeGraphService extends CodeGraphService {
             Process process = builder.start();
             ByteArrayOutputStream buffer = new ByteArrayOutputStream();
             Thread reader = outputReader(process, buffer);
-            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, timeoutSeconds));
+            try {
+                while (!process.waitFor(1, TimeUnit.SECONDS)) {
+                    control.checkpoint(step);
+                    if (System.nanoTime() >= deadline) {
+                        process.destroyForcibly();
+                        throw new IllegalStateException("CodeGraph 执行超时");
+                    }
+                }
+            } catch (RuntimeException exception) {
                 process.destroyForcibly();
-                throw new IllegalStateException("CodeGraph 执行超时");
+                throw exception;
             }
             reader.join(5000);
 

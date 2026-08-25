@@ -5,12 +5,15 @@ import { statusLabel } from '@/utils/displayLabels';
 
 defineProps<{
   card: KnowledgeCard;
+  canManage: boolean;
 }>();
 
 const emit = defineEmits<{
   view: [card: KnowledgeCard];
   edit: [card: KnowledgeCard];
   history: [card: KnowledgeCard];
+  review: [card: KnowledgeCard, status: 'APPROVED' | 'CHANGES_REQUESTED'];
+  publish: [card: KnowledgeCard, status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'];
 }>();
 
 function statusType(status: string): TagProps['type'] {
@@ -28,13 +31,13 @@ function formatDate(value: string) {
   <article class="knowledge-card">
     <header class="card-header">
       <el-tag effect="plain" size="small">{{ card.cardType || '未分类' }}</el-tag>
-      <el-tag :type="statusType(card.status)" size="small">{{ statusLabel(card.status) }}</el-tag>
+      <el-tag :type="statusType(card.publicationStatus)" size="small">{{ statusLabel(card.publicationStatus) }}</el-tag>
     </header>
 
     <h3 class="card-title">{{ card.title }}</h3>
     <el-alert
-      v-if="card.codeReviewStatus === 'REVIEW_REQUIRED'"
-      title="关联代码已更新，请复核知识内容"
+      v-if="card.sourceVersionStatus === 'STALE'"
+      title="来源版本已过期；发布状态不代表内容仍适用于当前代码"
       type="warning"
       :closable="false"
       show-icon
@@ -53,12 +56,12 @@ function formatDate(value: string) {
         <dd>{{ formatDate(card.updatedAt) }}</dd>
       </div>
       <div>
-        <dt>附件</dt>
-        <dd>{{ card.attachments.length }} 个</dd>
+        <dt>人工评审</dt>
+        <dd>{{ statusLabel(card.reviewStatus) }}</dd>
       </div>
       <div>
-        <dt>修订</dt>
-        <dd>v{{ card.revision }}</dd>
+        <dt>来源版本</dt>
+        <dd>{{ statusLabel(card.sourceVersionStatus) }}</dd>
       </div>
     </dl>
 
@@ -66,6 +69,12 @@ function formatDate(value: string) {
       <el-button link type="primary" @click="emit('view', card)">查看</el-button>
       <el-button link @click="emit('edit', card)">编辑</el-button>
       <el-button link @click="emit('history', card)">历史</el-button>
+      <template v-if="canManage">
+        <el-button v-if="card.reviewStatus !== 'APPROVED'" link type="primary" @click="emit('review', card, 'APPROVED')">通过评审</el-button>
+        <el-button v-else link @click="emit('review', card, 'CHANGES_REQUESTED')">要求修改</el-button>
+        <el-button v-if="card.publicationStatus !== 'PUBLISHED' && card.reviewStatus === 'APPROVED' && card.sourceVersionStatus !== 'STALE'" link type="success" @click="emit('publish', card, 'PUBLISHED')">发布</el-button>
+        <el-button v-if="card.publicationStatus === 'PUBLISHED'" link @click="emit('publish', card, 'DRAFT')">撤回</el-button>
+      </template>
     </footer>
   </article>
 </template>

@@ -35,6 +35,8 @@ public class VectorIndexQueryService {
                 number(row, "vectorized_knowledge_cards").longValue(),
                 string(row, "vector_model"),
                 integer(row, "dimension"),
+                string(row, "retrieval_capability"),
+                capabilityLabel(string(row, "retrieval_capability")),
                 instant(row, "updated_at"));
     }
 
@@ -81,6 +83,8 @@ public class VectorIndexQueryService {
                 string(row, "content_hash"),
                 string(row, "vector_model"),
                 integer(row, "dimension"),
+                string(row, "retrieval_capability"),
+                capabilityLabel(string(row, "retrieval_capability")),
                 instant(row, "vectorized_at"),
                 string(row, "vector_status"));
     }
@@ -95,6 +99,8 @@ public class VectorIndexQueryService {
                 string(row, "content_hash"),
                 string(row, "vector_model"),
                 integer(row, "dimension"),
+                string(row, "retrieval_capability"),
+                capabilityLabel(string(row, "retrieval_capability")),
                 instant(row, "vectorized_at"),
                 string(row, "vector_status"));
     }
@@ -113,6 +119,11 @@ public class VectorIndexQueryService {
 
     private static String normalized(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static String capabilityLabel(String capability) {
+        if (capability == null) return null;
+        return "CHARACTER_HASH".equals(capability) ? "字符相似度" : "语义检索";
     }
 
     private static Object value(Map<String, Object> row, String key) {
@@ -171,6 +182,8 @@ public class VectorIndexQueryService {
             long vectorizedKnowledgeCards,
             String vectorModel,
             Integer dimension,
+            String retrievalCapability,
+            String capabilityLabel,
             Instant updatedAt) {}
 
     public record ChunkItem(
@@ -188,6 +201,8 @@ public class VectorIndexQueryService {
             String contentHash,
             String vectorModel,
             Integer dimension,
+            String retrievalCapability,
+            String capabilityLabel,
             Instant vectorizedAt,
             String vectorStatus) {}
 
@@ -200,6 +215,8 @@ public class VectorIndexQueryService {
             String contentHash,
             String vectorModel,
             Integer dimension,
+            String retrievalCapability,
+            String capabilityLabel,
             Instant vectorizedAt,
             String vectorStatus) {}
 }

@@ -253,7 +253,14 @@ public class LlmSettingsService {
         int dimension = integer(candidate, "dimension", 64);
         if ("LOCAL_HASH".equals(string(candidate, "provider_type"))) {
             return new VectorModelCheckView(
-                    uuid(candidate, "id"), true, dimension, elapsed(started), null, null);
+                    uuid(candidate, "id"),
+                    true,
+                    dimension,
+                    "CHARACTER_HASH",
+                    "字符相似度",
+                    elapsed(started),
+                    null,
+                    null);
         }
         try {
             client.embed(
@@ -264,12 +271,21 @@ public class LlmSettingsService {
                     dimension,
                     integer(candidate, "request_timeout_ms", 30000));
             return new VectorModelCheckView(
-                    uuid(candidate, "id"), true, dimension, elapsed(started), null, null);
+                    uuid(candidate, "id"),
+                    true,
+                    dimension,
+                    "SEMANTIC_EMBEDDING",
+                    "语义检索",
+                    elapsed(started),
+                    null,
+                    null);
         } catch (LlmConnectionException exception) {
             return new VectorModelCheckView(
                     uuid(candidate, "id"),
                     false,
                     dimension,
+                    "SEMANTIC_EMBEDDING",
+                    "语义检索",
                     elapsed(started),
                     exception.code(),
                     safeSummary(exception.getMessage()));
@@ -286,10 +302,18 @@ public class LlmSettingsService {
         return row == null ? 64 : integer(row, "dimension", 64);
     }
 
+    public String activeRetrievalCapability() {
+        Map<String, Object> row = mapper.activeVectorModel();
+        return row == null
+                ? "CHARACTER_HASH"
+                : retrievalCapability(string(row, "provider_type"));
+    }
+
     public VectorEmbedding vectorize(String input) {
         Map<String, Object> row = mapper.activeVectorModel();
         if (row == null || "LOCAL_HASH".equals(string(row, "provider_type"))) {
-            return new VectorEmbedding(activeVectorModelName(), 64, null);
+            return new VectorEmbedding(
+                    activeVectorModelName(), 64, null, "CHARACTER_HASH");
         }
         int dimension = integer(row, "dimension", 64);
         String vector =
@@ -300,7 +324,8 @@ public class LlmSettingsService {
                         input,
                         dimension,
                         integer(row, "request_timeout_ms", 30000));
-        return new VectorEmbedding(string(row, "model"), dimension, vector);
+        return new VectorEmbedding(
+                string(row, "model"), dimension, vector, "SEMANTIC_EMBEDDING");
     }
 
     public CheckView startCheck(UUID actorId, ConnectivityCheckRequest request) {
@@ -733,11 +758,30 @@ public class LlmSettingsService {
                 string(row, "model"),
                 integer(row, "dimension", 64),
                 integer(row, "request_timeout_ms", 30000),
+                retrievalCapability(string(row, "provider_type")),
+                retrievalCapabilityLabel(string(row, "provider_type")),
+                retrievalLimitations(string(row, "provider_type")),
                 uuid(row, "secret_version_id") != null,
                 Objects.equals(id, activeId),
                 number(row, "activation_version", 0),
                 instant(row, "created_at"),
                 instant(row, "activated_at"));
+    }
+
+    private static String retrievalCapability(String providerType) {
+        return "LOCAL_HASH".equals(providerType)
+                ? "CHARACTER_HASH"
+                : "SEMANTIC_EMBEDDING";
+    }
+
+    private static String retrievalCapabilityLabel(String providerType) {
+        return "LOCAL_HASH".equals(providerType) ? "字符相似度" : "语义检索";
+    }
+
+    private static List<String> retrievalLimitations(String providerType) {
+        return "LOCAL_HASH".equals(providerType)
+                ? List.of("基于字符哈希投影与余弦距离", "不理解同义词、业务含义或代码语义")
+                : List.of("语义能力取决于外部 embedding 模型及其训练覆盖");
     }
 
     private CheckView checkView(Map<String, Object> row) {
@@ -1031,18 +1075,24 @@ public class LlmSettingsService {
             String model,
             int dimension,
             int requestTimeoutMs,
+            String retrievalCapability,
+            String capabilityLabel,
+            List<String> limitations,
             boolean secretConfigured,
             boolean active,
             long activationVersion,
             Instant createdAt,
             Instant activatedAt) {}
 
-    public record VectorEmbedding(String model, int dimension, String vector) {}
+    public record VectorEmbedding(
+            String model, int dimension, String vector, String retrievalCapability) {}
 
     public record VectorModelCheckView(
             UUID configId,
             boolean available,
             int dimension,
+            String retrievalCapability,
+            String capabilityLabel,
             long durationMs,
             String errorCode,
             String errorSummary) {}

@@ -36,6 +36,11 @@ jobs:
           bash -n scripts/start.sh
           pwsh -NoProfile -File scripts/start.ps1 -Help
 
+      - name: Validate quality gold standard and gate logic
+        run: |
+          node scripts/evaluate-quality.mjs --validate
+          node --test scripts/evaluate-quality.test.mjs
+
       - name: Test backend on Linux
         run: mvn -pl backend -am test
 
@@ -47,6 +52,12 @@ jobs:
 
       - name: Package backend
         run: mvn -pl backend -am package -DskipTests
+
+      - name: Enforce release quality gate
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          test -f evaluation/results/release.json
+          node scripts/evaluate-quality.mjs --results evaluation/results/release.json
 
       - name: Assemble release artifact
         run: |

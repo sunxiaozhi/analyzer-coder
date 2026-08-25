@@ -80,6 +80,15 @@ public interface IndexJobMapper {
      */
     IndexJobRow claimNextQueued();
 
+    IndexJobRow claimNextQueuedByType(
+            @Param("jobType") String jobType,
+            @Param("initialStep") String initialStep,
+            @Param("timeoutSeconds") long timeoutSeconds);
+
+    int heartbeat(@Param("id") UUID id, @Param("currentStep") String currentStep);
+
+    int expireTimedOut(@Param("jobType") String jobType);
+
     /**
      * 删除符合给定条件的数据。
      *

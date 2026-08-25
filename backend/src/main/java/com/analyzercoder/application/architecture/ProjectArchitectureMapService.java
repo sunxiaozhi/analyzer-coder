@@ -4,21 +4,25 @@ import com.analyzercoder.application.repository.RepositoryCodeBrowserService;
 import com.analyzercoder.domain.indexing.RepositoryAssetClassifier;
 import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -79,12 +83,24 @@ public class ProjectArchitectureMapService {
                 .removeIf(key -> key.startsWith(repositoryPrefix) && !key.equals(cacheKey));
         return snapshotCache.computeIfAbsent(
                 cacheKey,
-                ignored ->
-                        analyze(
-                                repositoryId,
-                                snapshot,
-                                path -> browser.read(repositoryId, path).content(),
-                                Instant.now()));
+                        ignored ->
+                                analyze(
+                                        repositoryId,
+                                        snapshot,
+                                        path -> readSnapshotContent(repositoryId, snapshot, path),
+                                        Instant.now()));
+    }
+
+    private String readSnapshotContent(
+            CodeRepositoryId repositoryId,
+            RepositoryCodeBrowserService.SnapshotFiles snapshot,
+            String path) {
+        RepositoryCodeBrowserService.FileContent file = browser.read(repositoryId, path);
+        if (!snapshot.snapshotId().equals(file.snapshotId())) {
+            throw new ArchitectureSnapshotChangedException(
+                    "架构分析期间仓库快照已切换，请基于新快照重试");
+        }
+        return file.content();
     }
 
     static ArchitectureMap analyze(
@@ -124,6 +140,8 @@ public class ProjectArchitectureMapService {
         for (RepositoryCodeBrowserService.FileEntry file : candidates) {
             try {
                 contents.put(file.path(), contentReader.apply(file.path()));
+            } catch (ArchitectureSnapshotChangedException exception) {
+                throw exception;
             } catch (RuntimeException exception) {
                 unreadable++;
             }
@@ -134,6 +152,8 @@ public class ProjectArchitectureMapService {
             if (runtimeContents.containsKey(file.path())) continue;
             try {
                 runtimeContents.put(file.path(), contentReader.apply(file.path()));
+            } catch (ArchitectureSnapshotChangedException exception) {
+                throw exception;
             } catch (RuntimeException exception) {
                 runtimeUnreadable++;
             }
@@ -160,11 +180,18 @@ public class ProjectArchitectureMapService {
                 EdgeKey key = new EdgeKey(sourceModule, targetModule);
                 dependencies
                         .computeIfAbsent(key, ignored -> new EdgeAccumulator())
-                        .add(source.getKey() + " → " + targetPath);
+                        .add(
+                                source.getKey() + " → " + targetPath,
+                                evidenceSample(
+                                        source.getKey(),
+                                        targetPath,
+                                        snapshot.snapshotId(),
+                                        source.getValue()));
             }
         }
 
-        RuntimeGraph runtimeGraph = runtimeGraph(runtimeContents, modules.keySet());
+        RuntimeGraph runtimeGraph =
+                runtimeGraph(runtimeContents, modules.keySet(), snapshot.snapshotId());
 
         List<ArchitectureNode> nodes = new ArrayList<>();
         nodes.add(
@@ -185,7 +212,9 @@ public class ProjectArchitectureMapService {
 
         List<ArchitectureEdge> edges = new ArrayList<>();
         for (String module : modules.keySet().stream().sorted().toList()) {
-            edges.add(new ArchitectureEdge("$project", module, "CONTAINS", 1, List.of()));
+            edges.add(
+                    new ArchitectureEdge(
+                            "$project", module, "CONTAINS", 1, List.of(), List.of()));
         }
         dependencies.entrySet().stream()
                 .sorted(
@@ -199,7 +228,8 @@ public class ProjectArchitectureMapService {
                                         entry.getKey().target(),
                                         "DEPENDS_ON",
                                         entry.getValue().weight,
-                                        List.copyOf(entry.getValue().samples)))
+                                        List.copyOf(entry.getValue().samples),
+                                        List.copyOf(entry.getValue().evidenceSamples)))
                 .forEach(edges::add);
 
         edges.addAll(runtimeGraph.edges());
@@ -247,7 +277,7 @@ public class ProjectArchitectureMapService {
                         notes));
     }
     private static RuntimeGraph runtimeGraph(
-            Map<String, String> runtimeContents, Set<String> moduleIds) {
+            Map<String, String> runtimeContents, Set<String> moduleIds, String snapshotId) {
         Map<String, RuntimeDependencyDetector.DetectedResource> resources =
                 new LinkedHashMap<>();
         Map<EdgeKey, EdgeAccumulator> links = new LinkedHashMap<>();
@@ -259,7 +289,13 @@ public class ProjectArchitectureMapService {
                 resources.putIfAbsent(resource.id(), resource);
                 EdgeKey key = new EdgeKey(sourceModule, resource.id());
                 links.computeIfAbsent(key, ignored -> new EdgeAccumulator())
-                        .add(source.getKey());
+                        .add(
+                                source.getKey(),
+                                evidenceSample(
+                                        source.getKey(),
+                                        null,
+                                        snapshotId,
+                                        source.getValue()));
 
                 if (resource.insecure()) {
                     String riskId = "transport:" + sourceModule + ":" + resource.id();
@@ -327,7 +363,8 @@ public class ProjectArchitectureMapService {
                                                 entry.getKey().target(),
                                                 "CONNECTS_TO",
                                                 entry.getValue().weight,
-                                                List.copyOf(entry.getValue().samples)))
+                                                List.copyOf(entry.getValue().samples),
+                                                List.copyOf(entry.getValue().evidenceSamples)))
                         .toList();
         return new RuntimeGraph(nodes, edges, List.copyOf(risks.values()));
     }
@@ -342,6 +379,23 @@ public class ProjectArchitectureMapService {
         return "configured".equals(resource.locator())
                 ? resource.label()
                 : resource.label() + " · " + resource.locator();
+    }
+
+    private static ArchitectureEvidenceSample evidenceSample(
+            String filePath, String relatedFilePath, String snapshotId, String content) {
+        return new ArchitectureEvidenceSample(
+                filePath, relatedFilePath, snapshotId, sha256(content));
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of()
+                    .formatHex(
+                            MessageDigest.getInstance("SHA-256")
+                                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 不可用", exception);
+        }
     }
 
 
@@ -619,11 +673,13 @@ public class ProjectArchitectureMapService {
     private static final class EdgeAccumulator {
         private int weight;
         private final List<String> samples = new ArrayList<>();
+        private final List<ArchitectureEvidenceSample> evidenceSamples = new ArrayList<>();
 
-        private void add(String sample) {
+        private void add(String sample, ArchitectureEvidenceSample evidenceSample) {
             weight++;
             if (samples.size() < MAX_EDGE_SAMPLES && !samples.contains(sample)) {
                 samples.add(sample);
+                evidenceSamples.add(evidenceSample);
             }
         }
     }
@@ -649,7 +705,24 @@ public class ProjectArchitectureMapService {
             String resourceType) {}
 
     public record ArchitectureEdge(
-            String source, String target, String relation, int weight, List<String> samples) {}
+            String source,
+            String target,
+            String relation,
+            int weight,
+            List<String> samples,
+            List<ArchitectureEvidenceSample> evidenceSamples) {
+        public ArchitectureEdge {
+            samples = samples == null ? List.of() : List.copyOf(samples);
+            evidenceSamples =
+                    evidenceSamples == null ? List.of() : List.copyOf(evidenceSamples);
+        }
+    }
+
+    public record ArchitectureEvidenceSample(
+            String filePath,
+            String relatedFilePath,
+            String snapshotId,
+            String contentHash) {}
 
     public record ArchitectureRisk(
             String id,
@@ -667,4 +740,11 @@ public class ProjectArchitectureMapService {
             int unreadableFiles,
             boolean partial,
             List<String> notes) {}
+
+    public static final class ArchitectureSnapshotChangedException
+            extends IllegalStateException {
+        public ArchitectureSnapshotChangedException(String message) {
+            super(message);
+        }
+    }
 }

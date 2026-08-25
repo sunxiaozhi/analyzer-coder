@@ -1,4 +1,4 @@
-export type IndexJobType='FULL'|'INCREMENTAL';
+export type IndexJobType='FULL'|'INCREMENTAL'|'CODEGRAPH';
 export type IndexJobStatus='QUEUED'|'RUNNING'|'CANCEL_REQUESTED'|'SUCCEEDED'|'FAILED'|'CANCELED';
 export type ChunkType='FILE'|'SYMBOL'|'DOC_SECTION'|'TEST_CASE'|'CONFIG'|'KNOWLEDGE_CARD';
 export type RepositoryAssetType='CODE'|'DOCUMENT'|'RULE'|'TASK'|'CONFIG';
@@ -8,7 +8,7 @@ export interface RepositoryCapabilities{canRead:boolean;canEditRepository?:boole
 export interface Repository{id:string;name:string;description:string;version:number;path:string;sourceType:RepositorySourceType;branch:string|null;commit:string|null;worktreeDigest:string|null;dirty:boolean;snapshotId:string|null;snapshotCreatedAt:string|null;codeGraphPath:string;codeGraphDetected:boolean;lastScannedAt:string|null;ownerAccountId:string;ownerDisplayName:string;relationship:'SUPER_ADMIN'|'OWNER'|'READ'|'MAINTAIN'|'MANAGE';ownershipVersion:number;repositoryStatus:string;capabilities:RepositoryCapabilities}
 export interface RegisterRepositoryPayload{name:string;path:string}
 export interface RescanRepositoryResponse{changed:boolean;repository:Repository}
-export interface IndexJob{id:string;repositoryId:string;type:IndexJobType;status:IndexJobStatus;currentStep:string|null;errorMessage:string|null;startedAt:string|null;finishedAt:string|null;createdAt:string}
+export interface IndexJob{id:string;repositoryId:string;type:IndexJobType;status:IndexJobStatus;currentStep:string|null;executionMode:'FULL'|'INCREMENTAL'|null;fallbackReason:string|null;failureCode:string|null;errorMessage:string|null;startedAt:string|null;heartbeatAt:string|null;timeoutAt:string|null;finishedAt:string|null;createdAt:string}
 export interface CodeChunk{id:string;repositoryId:string;snapshotId:string;commitSha:string;filePath:string;symbolId:string|null;symbolName:string|null;symbolKind:string|null;language:string|null;assetType:RepositoryAssetType;chunkType:ChunkType;startLine:number|null;endLine:number|null;content:string;contentHash:string;createdAt:string}
 export interface CodeChunkListResponse{total:number;limit:number;offset:number;chunks:CodeChunk[]}
 export interface RepositoryFileEntry{path:string;name:string;language:string;sizeBytes:number}

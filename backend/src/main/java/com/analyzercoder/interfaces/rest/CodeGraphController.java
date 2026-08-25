@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.http.HttpStatus;
 
 /** 提供代码图谱相关 HTTP 接口，负责请求参数绑定并将已认证的调用委派给应用服务。 */
 @RestController
@@ -32,6 +34,7 @@ public class CodeGraphController {
     }
 
     @PostMapping("/build")
+    @ResponseStatus(HttpStatus.ACCEPTED)
     public IndexController.IndexJobResponse build(
             @PathVariable UUID repoId, HttpServletRequest request) {
         var id = CodeRepositoryId.of(repoId);
