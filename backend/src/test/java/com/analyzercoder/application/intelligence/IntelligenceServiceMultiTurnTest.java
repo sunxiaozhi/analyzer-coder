@@ -225,6 +225,53 @@ class IntelligenceServiceMultiTurnTest {
         assertTrue(hit.channels().contains("CODE_SEMANTIC"));
     }
 
+    @Test
+    void exposesSnapshotModelRecallTimingAndEnabledChannels() {
+        UUID repositoryId = UUID.randomUUID();
+        UUID snapshotId = UUID.randomUUID();
+        Map<String, Object> evidence = vectorEvidence();
+        when(mapper.currentSnapshotId(repositoryId)).thenReturn(snapshotId);
+        stubVectorModel("text-embedding-test", 3, "SEMANTIC_EMBEDDING", "[0.1,0.2,0.3]");
+        when(mapper.searchCodeVector(
+                        eq(repositoryId), anyString(), eq("text-embedding-test"), eq(3), anyInt()))
+                .thenReturn(List.of(evidence));
+
+        IntelligenceService.SearchResponse response =
+                service.hybridSearchDetailed(repositoryId, "Example", 5);
+
+        assertEquals(snapshotId, response.retrieval().snapshotId());
+        assertEquals("text-embedding-test", response.retrieval().vectorModel());
+        assertEquals("SEMANTIC_EMBEDDING", response.retrieval().retrievalCapability());
+        assertEquals(1, response.retrieval().recalledCount());
+        assertTrue(response.retrieval().durationMs() >= 0);
+        assertTrue(response.retrieval().enabledChannels().contains("CODE_SEMANTIC"));
+        assertTrue(response.retrieval().unavailableChannels().isEmpty());
+    }
+
+    @Test
+    void exposesVectorFailureAsUnavailableInsteadOfClaimingFullCapability() {
+        UUID repositoryId = UUID.randomUUID();
+        when(mapper.searchCodeKeyword(
+                        eq(repositoryId), anyString(), anyList(), anyInt(), anyInt()))
+                .thenReturn(List.of(vectorEvidence()));
+        when(llm.vectorize(anyString())).thenThrow(new IllegalStateException("embedding timeout"));
+        when(llm.activeVectorModelName()).thenReturn("unreachable-model");
+        when(llm.activeRetrievalCapability()).thenReturn("SEMANTIC_EMBEDDING");
+
+        IntelligenceService.SearchResponse response =
+                service.hybridSearchDetailed(repositoryId, "Example", 5);
+
+        assertTrue(response.retrieval().degraded());
+        assertTrue(response.retrieval().enabledChannels().contains("CODE_KEYWORD"));
+        assertTrue(response.retrieval().enabledChannels().stream()
+                .noneMatch(channel -> channel.contains("SEMANTIC")));
+        assertTrue(response.retrieval().unavailableChannels().stream()
+                .anyMatch(channel -> channel.channel().equals("CODE_VECTOR")
+                        && channel.reason().equals("VECTOR_RETRIEVAL_FAILED")));
+        assertTrue(response.retrieval().degradationReasons().contains(
+                "CODE_VECTOR:VECTOR_RETRIEVAL_FAILED"));
+    }
+
     private void stubVectorModel(
             String model, int dimension, String capability, String vector) {
         when(llm.activeVectorModelName()).thenReturn(model);

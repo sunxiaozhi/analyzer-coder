@@ -38,13 +38,13 @@ public class IntelligenceController {
     }
 
     @GetMapping("/repositories/{repoId}/hybrid-search")
-    public List<IntelligenceService.SearchHit> search(
+    public IntelligenceService.SearchResponse search(
             @PathVariable UUID repoId,
             @RequestParam String query,
             @RequestParam(defaultValue = "20") int limit,
             HttpServletRequest request) {
         require(request, repoId, RepositoryPermission.READ);
-        return service.hybridSearch(repoId, query, limit);
+        return service.hybridSearchDetailed(repoId, query, limit);
     }
 
     @PostMapping("/repositories/{repoId}/ask")

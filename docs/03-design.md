@@ -337,9 +337,11 @@ IndexJobWorker
 
 `hybrid-search` 不包含知识；`unifiedSearch` 用于问答并包含知识。
 
+`hybrid-search` 返回 `hits + retrieval`。`retrieval` 记录查询时的当前快照、实际向量模型和能力类型、启用/不可用通道、各通道召回数量与耗时、融合召回数、总耗时及降级原因。问答将同一诊断写入每轮 `answer_payload`，因此历史回答保留当时的检索状态，而不是用当前配置反推。
+
 ### 9.2 融合与降级
 
-`RetrievalRanker` 在内部对各通道赋权、去重；接口返回 `score`、`lexicalScore`、`similarityScore`、`similarityKind` 和 `channels`。向量补建或查询异常被捕获，关键词/结构通道继续工作。当前没有显式通道故障结构返回前端。
+`RetrievalRanker` 在内部对各通道赋权、去重；命中项返回 `score`、`lexicalScore`、`similarityScore`、`similarityKind` 和 `channels`。各通道独立记录成功或故障；向量补建/查询异常时关键词与结构通道继续工作，`retrieval.unavailableChannels` 同时返回稳定原因和安全截断的错误摘要。
 
 ## 10. 知识问答
 
@@ -358,7 +360,8 @@ POST /repositories/{repoId}/ask
       → Prompt 长度保护
       → OpenAI-compatible 非流式 completion
   → AnswerCitationValidator
-      → 合法：SUPPORTED
+      → 全事实段有合法引用：CITATION_COMPLETE
+      → 部分事实段无引用：CITATION_INCOMPLETE
       → 非法：MODEL_OUTPUT_REJECTED + deterministic-local
       → 未调用/失败：DEGRADED + deterministic-local
   → insert qa_conversations + qa_citations
@@ -465,7 +468,7 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 
 ### 15.1 路由与壳层
 
-`WorkspaceShell` 负责导航、全局仓库、账号信息、工作区页签和 KeepAlive。登录后默认进入 `/overview`；管理员菜单由 `auth.isAdmin` 追加，路由守卫再次限制 admin 页面。
+`WorkspaceShell` 负责导航、全局仓库、账号信息、工作区页签和 KeepAlive。正常登录完成后进入 `/ask`，直接访问根路径时重定向 `/overview`；管理员菜单由 `auth.isAdmin` 追加，路由守卫再次限制 admin 页面。
 
 当前路由组件：
 
@@ -479,7 +482,7 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 - 账号：`AccountsView`
 - 设置：`SystemSettingsView`
 
-`AppShell.vue`、`RepositoriesView.vue`、`IndexJobsView.vue` 等未被当前路由引用的旧原型文件不属于运行信息架构。
+路由不可达的旧原型页面已删除；功能存在性只以 `router/index.ts` 中的真实路由及其 API 行为为准。
 
 ### 15.2 状态所有权
 
@@ -532,7 +535,7 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 1. QuickStartApplicationService 和 `/quick-start` API。
 2. OnboardingApplicationService、路径、进度、笔记和投影表。
 3. 问答 SSE 事件流、停止/断线恢复和流式 message 状态机。
-4. 多仓检索、真实增量索引和版本化内容索引指针。
+4. 多仓检索和版本化内容索引指针。
 5. 仓库级外发策略、SSH 凭据和 GitLab 项目 API/Webhook。
 6. 备份、恢复、维护模式、RPO/RTO。
 7. 统一任务对导入、附件、删除、备份的完整覆盖。
@@ -542,6 +545,6 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 
 ## 19. 验证与测试
 
-当前 `mvn test` 执行 50 个单元/组件测试；`npm run build` 通过 Vue 类型检查和生产构建。Linux CI 在 Ubuntu runner 重复执行测试、构建并组装发布产物。数据库集成测试 `PostgresMyBatisContextIT` 不在默认 Surefire 测试命名范围，前端没有组件测试和浏览器 E2E。
+默认验证分成三层：`mvn test` 执行无外部依赖的单元/组件测试；`APP_RUN_POSTGRES_IT=true mvn -pl backend -Dtest='*IT' test` 在 PostgreSQL 17 + pgvector 上执行 Flyway、真实 MyBatis SQL、快照切换和仓库导入到问答链路；`npm test && npm run build` 执行关键路由测试、Vue 类型检查和生产构建。Linux CI 默认启动健康的 pgvector 服务并执行三层验证，另在 Linux 上以假可执行文件检查 CodeGraph CLI 参数和产物契约。
 
 完成定义：接口、权限、持久化、失败路径、UI 状态和自动化测试同时与 `01-requirements.md` 当前基线一致。

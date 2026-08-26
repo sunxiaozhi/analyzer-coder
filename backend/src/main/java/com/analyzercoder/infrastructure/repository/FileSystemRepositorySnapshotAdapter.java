@@ -61,11 +61,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
         try {
             Files.createDirectories(content);
             copyVersionedFiles(sourceRoot, content, sourceVersion.worktreeDigest());
-            try {
-                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException exception) {
-                throw new IllegalStateException("当前存储不支持代码版本原子发布", exception);
-            }
+            publishDirectory(temporary, target);
             makeReadOnly(target);
             return new ManagedRepositorySnapshot(
                     snapshotId,
@@ -80,6 +76,27 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
                     ? runtime
                     : new IllegalStateException(
                             "Unable to create managed repository snapshot", exception);
+        }
+    }
+
+    private static void publishDirectory(Path temporary, Path target) throws IOException {
+        try {
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException exception) {
+            Files.move(temporary, target);
+        } catch (IOException atomicFailure) {
+            if (!Files.isDirectory(temporary) || Files.exists(target)) {
+                throw atomicFailure;
+            }
+            try {
+                // Windows may reject ATOMIC_MOVE for a directory even on the same volume.
+                // The UUID target is unpublished and in the same parent, so a directory rename
+                // remains isolated until the repository row is committed.
+                Files.move(temporary, target);
+            } catch (IOException fallbackFailure) {
+                fallbackFailure.addSuppressed(atomicFailure);
+                throw fallbackFailure;
+            }
         }
     }
 

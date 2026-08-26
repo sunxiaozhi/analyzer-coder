@@ -44,6 +44,19 @@ export interface CitationAssessment {
   entailmentVerified: boolean;
 }
 
+export interface RetrievalDiagnostics {
+  snapshotId: string | null;
+  vectorModel: string | null;
+  retrievalCapability: 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING' | 'UNKNOWN' | null;
+  enabledChannels: string[];
+  unavailableChannels: { channel: string; reason: string; detail: string }[];
+  channelMetrics: { channel: string; recalledCount: number; durationMs: number }[];
+  recalledCount: number;
+  durationMs: number;
+  degraded: boolean;
+  degradationReasons: string[];
+}
+
 export interface Answer {
   conversationId: string;
   threadId: string;
@@ -64,6 +77,7 @@ export interface Answer {
     | 'INSUFFICIENT';
   fallbackReason: string | null;
   citationAssessment: CitationAssessment | null;
+  retrieval: RetrievalDiagnostics;
   createdAt: string;
 }
 export interface AskModel {

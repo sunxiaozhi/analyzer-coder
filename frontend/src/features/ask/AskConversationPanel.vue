@@ -106,6 +106,22 @@ function shortcut(event: KeyboardEvent) {
               </span>
               <small>仅检查引用编号与段落覆盖，未验证证据是否在语义上支持回答。</small>
             </div>
+            <details class="retrieval-diagnostics">
+              <summary>
+                检索 {{ turn.retrieval.recalledCount }} 条 · {{ turn.retrieval.durationMs }} ms
+                <span v-if="turn.retrieval.degraded">· 已降级</span>
+              </summary>
+              <div>
+                <span>快照 {{ turn.retrieval.snapshotId?.slice(0, 8) ?? '不可用' }}</span>
+                <span>向量模型 {{ turn.retrieval.vectorModel ?? '未执行' }}</span>
+                <span>启用通道 {{ turn.retrieval.enabledChannels.join('、') || '无' }}</span>
+              </div>
+              <ul v-if="turn.retrieval.unavailableChannels.length">
+                <li v-for="item in turn.retrieval.unavailableChannels" :key="`${item.channel}:${item.reason}`">
+                  {{ item.channel }} 不可用：{{ item.reason }}（{{ item.detail }}）
+                </li>
+              </ul>
+            </details>
             <AnswerEvidencePanel v-if="turn.citations.length" :citations="turn.citations" @click.stop
               @open-knowledge="emit('openKnowledge', $event)" @open-code="emit('openCode', $event)"
               @open-graph="emit('openGraph', $event)" />
@@ -187,6 +203,9 @@ function shortcut(event: KeyboardEvent) {
 .answer-trust strong[data-status="CITATION_INCOMPLETE"] { color:#8a5b00; background:#fff6db; }
 .citation-assessment { display:flex; flex-wrap:wrap; gap:5px 12px; color:#5e6872; font-size:11px; }
 .citation-assessment small { flex-basis:100%; color:#8a5b00; }
+.retrieval-diagnostics { padding:8px 10px; color:#5e6872; border:1px solid #e0e6eb; border-radius:5px; background:#fafbfc; font-size:11px; }
+.retrieval-diagnostics summary { cursor:pointer; font-weight:650; }.retrieval-diagnostics summary span { color:#9a4c22; }
+.retrieval-diagnostics div { display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:8px; }.retrieval-diagnostics ul { margin:7px 0 0; padding-left:18px; color:#8a4b22; }
 .citations { display:grid; gap:7px; width:min(100%,680px); }.citations button { display:grid; grid-template-columns:auto minmax(0,1fr); gap:3px 10px; align-items:baseline; width:100%; padding:9px 11px; text-align:left; border:1px solid #dbe6f0; background:#f7fafd; }.citations button:hover,.citations button.active { border-color:#9fc3e5; background:#eef6fd; box-shadow:inset 3px 0 #0066cc; }.citations button span { color:#0066cc; font-size: 11px; font-weight:650; }.citations button b { overflow-wrap:anywhere; color:#34404b; font-size: 11px; }.citations button small { grid-column:2; color: var(--app-text-muted); font:11px "SFMono-Regular",Consolas,monospace; }
 .answer-loading { display:flex; gap:10px; align-items:center; padding:4px 0; }.answer-loading i { width:13px; height:13px; border:2px solid #b9d2e8; border-top-color:#0066cc; border-radius:50%; animation:spin .8s linear infinite; }.answer-loading div { display:grid; gap:3px; }.answer-loading b { font-size:12px; }.answer-loading small { color: var(--app-text-muted); font-size: 11px; }.message.failed :deep(.el-alert) { width:min(100%,680px); }
 .composer { display:flex; align-items:flex-end; gap:10px; padding:12px; border-top:1px solid #ececef; background:#fff; }.composer .el-button { flex:none; margin-bottom:4px; }

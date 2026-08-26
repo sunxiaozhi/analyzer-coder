@@ -7,7 +7,7 @@ Java 17 + Spring Boot 3.5 后端，承载账号、仓库、索引、检索、问
 - Spring MVC、Bean Validation、Actuator
 - MyBatis Mapper/XML、PageHelper
 - PostgreSQL 17、pgvector 64 维向量
-- Flyway `V1__baseline.sql`
+- Flyway 版本化迁移（`V1`–`V8`）
 - Spring Scheduler + 数据库任务表
 - Git CLI、CodeGraph CLI
 - JDK `HttpClient` + OpenAI-compatible chat/embedding
@@ -45,7 +45,14 @@ mvn -pl backend spring-boot:run
 mvn -pl backend -am test
 ```
 
-当前基线执行 44 个测试。
+数据库集成测试需要可用的 PostgreSQL 17 + pgvector，并使用独立测试数据：
+
+```bash
+export APP_RUN_POSTGRES_IT=true
+mvn -pl backend -Dtest='*IT' test
+```
+
+Linux CI 默认启动临时 pgvector 服务并执行这组集成测试；普通单元测试仍可在没有数据库时运行。前端执行 `npm test` 验证关键路由，`npm run build` 完成类型检查和生产构建。
 
 ## Linux 发布
 

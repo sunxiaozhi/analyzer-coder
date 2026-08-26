@@ -93,6 +93,19 @@ class CurrentSnapshotSqlContractTest {
                 .contains("c.source_version_status&lt;&gt;'STALE'");
     }
 
+    @Test
+    void indexExecutionModeAndFallbackReasonArePersisted() throws Exception {
+        String migration = resource("db/migration/V8__index_execution_plan.sql");
+        String mapper = resource("mappers/IndexJobMapper.xml");
+
+        assertThat(migration)
+                .contains("execution_mode", "fallback_reason")
+                .contains("'FULL','INCREMENTAL'");
+        assertThat(mapper)
+                .contains("execution_mode", "fallback_reason")
+                .contains("#{executionMode}", "#{fallbackReason}");
+    }
+
     private static String resource(String name) throws Exception {
         try (InputStream input =
                 CurrentSnapshotSqlContractTest.class.getClassLoader().getResourceAsStream(name)) {

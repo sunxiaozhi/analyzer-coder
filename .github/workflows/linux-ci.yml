@@ -13,6 +13,30 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: codebase_kb
+          POSTGRES_USER: codebase_kb
+          POSTGRES_PASSWORD: integration-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U codebase_kb -d codebase_kb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      APP_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/codebase_kb
+      APP_DATASOURCE_USERNAME: codebase_kb
+      APP_DATASOURCE_PASSWORD: integration-postgres-password
+      APP_INITIAL_ADMIN_USERNAME: integration-admin
+      APP_INITIAL_ADMIN_PASSWORD: Integration-Admin-Password-123!
+      APP_LLM_MASTER_KEY: integration-llm-master-key-at-least-24-chars
+      APP_CREDENTIAL_MASTER_KEY: integration-credential-master-key-32-chars
+      APP_REPOSITORY_ALLOWED_ROOTS: /tmp
+      APP_MANAGED_DATA_ROOT: /tmp/analyzer-coder-ci
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -44,10 +68,16 @@ jobs:
       - name: Test backend on Linux
         run: mvn -pl backend -am test
 
+      - name: Test real PostgreSQL and pgvector integration
+        env:
+          APP_RUN_POSTGRES_IT: 'true'
+        run: mvn -pl backend -Dtest='*IT' test
+
       - name: Build frontend
         working-directory: frontend
         run: |
           npm ci
+          npm test
           npm run build
 
       - name: Package backend

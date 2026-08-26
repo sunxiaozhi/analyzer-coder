@@ -33,6 +33,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 @EnabledIfEnvironmentVariable(named = "APP_RUN_POSTGRES_IT", matches = "true")
@@ -56,6 +57,7 @@ class PostgresMyBatisContextIT {
     @Autowired KnowledgeHistoryMapper history;
     @Autowired RepositorySourceImportService imports;
     @Autowired RepositorySnapshotPort managedFiles;
+    @Autowired JdbcTemplate jdbc;
 
     @Test
     void loadsFlywaySchemaAndExecutesRepresentativeMapperSql() {
@@ -139,6 +141,76 @@ class PostgresMyBatisContextIT {
         assertEquals("UNTESTED", saved.availability());
         assertFalse(saved.secretConfigured());
         assertEquals(64, saved.fingerprint().length());
+    }
+
+    @Test
+    @Transactional
+    void realMyBatisQueriesSwitchAtomicallyWithCurrentSnapshot() {
+        UUID ownerId = auth.listAccounts().get(0).id();
+        UUID repositoryId = UUID.randomUUID();
+        UUID oldSnapshot = UUID.randomUUID();
+        UUID currentSnapshot = UUID.randomUUID();
+        jdbc.update(
+                """
+                INSERT INTO repositories(
+                    id,name,normalized_name,path,current_commit,current_snapshot_id,
+                    current_snapshot_path,codegraph_path,owner_account_id,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """,
+                repositoryId,
+                "snapshot-switch",
+                "snapshot-switch-" + repositoryId,
+                "/tmp/snapshot-switch-" + repositoryId,
+                "current-commit",
+                currentSnapshot,
+                "/tmp/current",
+                "/tmp/current/.codegraph",
+                ownerId);
+        insertChunk(repositoryId, oldSnapshot, "old-commit", "src/Old.java", "old-only");
+        insertChunk(
+                repositoryId,
+                currentSnapshot,
+                "current-commit",
+                "src/Current.java",
+                "current-only");
+
+        assertEquals(1, chunks.count(repositoryId, null));
+        assertEquals(
+                "src/Current.java",
+                chunks.find(repositoryId, null, 20, 0).get(0).filePath());
+        assertTrue(chunks.find(repositoryId, "old-only", 20, 0).isEmpty());
+
+        jdbc.update(
+                "UPDATE repositories SET current_snapshot_id=? WHERE id=?",
+                oldSnapshot,
+                repositoryId);
+
+        assertEquals(1, chunks.count(repositoryId, null));
+        assertEquals("src/Old.java", chunks.find(repositoryId, null, 20, 0).get(0).filePath());
+        assertTrue(chunks.find(repositoryId, "current-only", 20, 0).isEmpty());
+        assertEquals(3, jdbc.queryForObject("SELECT vector_dims('[1,2,3]'::vector)", Integer.class));
+    }
+
+    private void insertChunk(
+            UUID repositoryId,
+            UUID snapshotId,
+            String commit,
+            String path,
+            String content) {
+        jdbc.update(
+                """
+                INSERT INTO code_chunks(
+                    id,repo_id,snapshot_id,commit_sha,file_path,language,chunk_type,asset_type,
+                    start_line,end_line,content,content_hash,created_at)
+                VALUES(?,?,?,?,?,'java','FILE','CODE',1,1,?,?,CURRENT_TIMESTAMP)
+                """,
+                UUID.randomUUID(),
+                repositoryId,
+                snapshotId,
+                commit,
+                path,
+                content,
+                "hash-" + content);
     }
 
     private static byte[] sampleZip() throws Exception {
