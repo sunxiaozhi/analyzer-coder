@@ -63,6 +63,8 @@ class RepositoryPreparationServiceTest {
                         0,
                         "local-hash-64",
                         64,
+                        "CHARACTER_HASH",
+                        "字符相似度",
                         null);
         IndexJob queued = IndexJob.create(repository.id(), IndexJobType.FULL);
         when(repositories.get(repository.id())).thenReturn(repository);
@@ -109,6 +111,8 @@ class RepositoryPreparationServiceTest {
                         3,
                         "local-hash-64",
                         64,
+                        "CHARACTER_HASH",
+                        "字符相似度",
                         Instant.now());
         List<RepositoryCodeBrowserService.FileEntry> files =
                 List.of(

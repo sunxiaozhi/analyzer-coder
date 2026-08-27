@@ -11,10 +11,13 @@ public record KnowledgeCardRow(
         String cardType,
         String content,
         String[] tags,
-        String status,
+        String publicationStatus,
         int revision,
         Instant createdAt,
         Instant updatedAt,
         String verifiedCommit,
-        String codeReviewStatus,
-        Instant codeReviewedAt) {}
+        String sourceVersionStatus,
+        Instant sourceVersionCheckedAt,
+        String reviewStatus,
+        UUID reviewedBy,
+        Instant reviewedAt) {}

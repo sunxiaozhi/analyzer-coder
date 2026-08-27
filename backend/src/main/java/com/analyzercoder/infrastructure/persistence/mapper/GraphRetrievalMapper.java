@@ -7,7 +7,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
-/** 定义图谱检索数据访问操作的 MyBatis 映射接口，集中维护持久化层查询边界。 */
+/** 查询索引阶段生成的启发式调用候选；该数据不属于 CodeGraph CLI 产物。 */
 @Mapper
 public interface GraphRetrievalMapper {
     /**
@@ -24,7 +24,8 @@ public interface GraphRetrievalMapper {
             SELECT DISTINCT c.id,c.snapshot_id,c.file_path,c.symbol_name,c.symbol_kind,
             c.start_line,c.end_line,c.content,c.content_hash,
             0.24 lexical_score,0.0 semantic_score
-            FROM code_graph_edges g
+            FROM heuristic_call_edges g
+            JOIN repositories r ON r.id=g.repo_id AND g.snapshot_id=r.current_snapshot_id
             JOIN code_chunks c ON(
               (c.id=g.source_chunk_id AND g.target_symbol IN
                 <foreach collection="symbols" item="symbol" open="(" separator="," close=")">
@@ -36,7 +37,7 @@ public interface GraphRetrievalMapper {
                   #{symbol}
                 </foreach>)
             )
-            WHERE g.repo_id=#{repositoryId}
+            WHERE g.repo_id=#{repositoryId} AND c.snapshot_id=r.current_snapshot_id
             ORDER BY c.id
             LIMIT #{limit}
             </script>

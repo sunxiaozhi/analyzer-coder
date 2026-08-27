@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.time.Instant;
 
 /** 提供索引任务的存储实现，并负责领域对象与持久化数据之间的转换。 */
 public class InMemoryIndexJobStore implements IndexJobStore {
@@ -71,9 +72,58 @@ public class InMemoryIndexJobStore implements IndexJobStore {
 
     @Override
     public synchronized Optional<IndexJob> claimNextQueued() {
-        Optional<IndexJob> queued = findNextQueued();
+        Optional<IndexJob> queued = findNextQueued().filter(job -> job.type() != com.analyzercoder.domain.indexing.IndexJobType.CODEGRAPH);
         queued.ifPresent(job -> save(job.start("scan_repository")));
         return queued.map(job -> findById(job.id()).orElseThrow());
+    }
+
+    @Override
+    public synchronized Optional<IndexJob> claimNextQueued(
+            com.analyzercoder.domain.indexing.IndexJobType type,
+            String initialStep,
+            long timeoutSeconds) {
+        Optional<IndexJob> queued =
+                indexJobs.values().stream()
+                        .filter(job -> job.status() == IndexJobStatus.QUEUED && job.type() == type)
+                        .min(Comparator.comparing(IndexJob::createdAt));
+        queued.ifPresent(
+                job ->
+                        save(
+                                job.start(initialStep)
+                                        .withTimeout(
+                                                Instant.now()
+                                                        .plusSeconds(Math.max(1, timeoutSeconds)))));
+        return queued.map(job -> findById(job.id()).orElseThrow());
+    }
+
+    @Override
+    public synchronized Optional<IndexJob> heartbeat(IndexJobId id, String currentStep) {
+        IndexJob current = indexJobs.get(id.value());
+        if (current == null) return Optional.empty();
+        if (current.status() == IndexJobStatus.RUNNING) save(current.heartbeat(currentStep));
+        return findById(id);
+    }
+
+    @Override
+    public synchronized int expireTimedOut(
+            com.analyzercoder.domain.indexing.IndexJobType type) {
+        int[] count = {0};
+        indexJobs.replaceAll(
+                (id, job) -> {
+                    if (job.type() == type
+                            && (job.status() == IndexJobStatus.RUNNING
+                                    || job.status() == IndexJobStatus.CANCEL_REQUESTED)
+                            && job.timeoutAt() != null
+                            && job.timeoutAt().isBefore(Instant.now())) {
+                        count[0]++;
+                        return job.fail(
+                                "timed_out",
+                                "CODEGRAPH_TIMEOUT",
+                                "CodeGraph 后台任务超过固定执行时限");
+                    }
+                    return job;
+                });
+        return count[0];
     }
 
     @Override

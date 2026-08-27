@@ -52,6 +52,9 @@ export interface VectorModel {
   model: string;
   dimension: number;
   requestTimeoutMs: number;
+  retrievalCapability: 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING';
+  capabilityLabel: '字符相似度' | '语义检索';
+  limitations: string[];
   secretConfigured: boolean;
   active: boolean;
   activationVersion: number;
@@ -74,6 +77,8 @@ export interface VectorModelCheck {
   configId: string;
   available: boolean;
   dimension: number;
+  retrievalCapability: 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING';
+  capabilityLabel: '字符相似度' | '语义检索';
   durationMs: number;
   errorCode: string | null;
   errorSummary: string | null;

@@ -29,9 +29,32 @@ export interface Citation {
   rank: number;
   score: number;
   lexicalScore: number;
-  semanticScore: number;
+  similarityScore: number;
+  similarityKind: 'NONE' | 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING';
   channels: string[];
   codeReferences: CodeReference[];
+}
+
+export interface CitationAssessment {
+  factualBlockCount: number;
+  citedBlockCount: number;
+  uncitedBlockCount: number;
+  coverageRate: number;
+  invalidReferences: string[];
+  entailmentVerified: boolean;
+}
+
+export interface RetrievalDiagnostics {
+  snapshotId: string | null;
+  vectorModel: string | null;
+  retrievalCapability: 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING' | 'UNKNOWN' | null;
+  enabledChannels: string[];
+  unavailableChannels: { channel: string; reason: string; detail: string }[];
+  channelMetrics: { channel: string; recalledCount: number; durationMs: number }[];
+  recalledCount: number;
+  durationMs: number;
+  degraded: boolean;
+  degradationReasons: string[];
 }
 
 export interface Answer {
@@ -45,8 +68,16 @@ export interface Answer {
   snapshotId: string | null;
   citations: Citation[];
   provider: string;
-  evidenceStatus: 'SUPPORTED' | 'DEGRADED' | 'MODEL_OUTPUT_REJECTED' | 'INSUFFICIENT';
+  evidenceStatus:
+    | 'CITATION_COMPLETE'
+    | 'CITATION_INCOMPLETE'
+    | 'SUPPORTED'
+    | 'DEGRADED'
+    | 'MODEL_OUTPUT_REJECTED'
+    | 'INSUFFICIENT';
   fallbackReason: string | null;
+  citationAssessment: CitationAssessment | null;
+  retrieval: RetrievalDiagnostics;
   createdAt: string;
 }
 export interface AskModel {
@@ -81,6 +112,9 @@ export interface GraphResult {
   nodes: { symbol: string; depth: number; focus: boolean }[];
   edges: { source: string; target: string; relation: string }[];
   risk: string;
+  relationSource: 'CODEGRAPH_CLI' | 'HEURISTIC_CALL_REFERENCE';
+  snapshotId: string;
+  algorithm: string;
   limitations: string[];
 }
 export interface GraphTarget { symbol: string; filePath: string; startLine: number | null }
@@ -111,13 +145,16 @@ export interface KnowledgeCard {
   content: string;
   renderedContent: string;
   tags: string[];
-  status: string;
+  publicationStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   revision: number;
   createdAt: string;
   updatedAt: string;
   verifiedCommit: string | null;
-  codeReviewStatus: 'UNVERIFIED' | 'CURRENT' | 'REVIEW_REQUIRED';
-  codeReviewedAt: string | null;
+  sourceVersionStatus: 'UNVERIFIED' | 'CURRENT' | 'STALE';
+  sourceVersionCheckedAt: string | null;
+  reviewStatus: 'UNREVIEWED' | 'APPROVED' | 'CHANGES_REQUESTED';
+  reviewedBy: string | null;
+  reviewedAt: string | null;
   attachments: KnowledgeAttachment[];
   codeReferences: CodeReference[];
 }
@@ -166,7 +203,6 @@ export interface CardInput {
   cardType: string;
   content: string;
   tags: string[];
-  status: string;
   attachmentIds: string[];
   codeReferences: { chunkId: string }[];
 }
@@ -179,7 +215,7 @@ export interface CardRevision {
   content: string;
   renderedContent: string;
   tags: string[];
-  status: string;
+  publicationStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   changedBy: string | null;
   changedAt: string;
 }
@@ -255,6 +291,22 @@ export const intelligenceApi = {
       method: 'PUT',
       body: JSON.stringify(input),
     }),
+  reviewCard: (
+    repositoryId: string,
+    id: string,
+    reviewStatus: 'APPROVED' | 'CHANGES_REQUESTED',
+  ) => request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ reviewStatus }),
+  }),
+  setCardPublication: (
+    repositoryId: string,
+    id: string,
+    publicationStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED',
+  ) => request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}/publication`, {
+    method: 'POST',
+    body: JSON.stringify({ publicationStatus }),
+  }),
   cardHistory: (repositoryId: string, id: string) =>
     request<CardRevision[]>(`/api/repositories/${repositoryId}/knowledge/${id}/history`),
   restoreCardRevision: (repositoryId: string, id: string, revision: number) =>

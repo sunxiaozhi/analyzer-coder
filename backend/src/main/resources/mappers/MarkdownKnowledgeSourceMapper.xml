@@ -125,7 +125,7 @@
                 ) THEN #{commitSha,jdbcType=VARCHAR}
                 ELSE c.verified_commit
             END,
-            code_review_status=CASE
+            source_version_status=CASE
                 WHEN EXISTS(
                     SELECT 1
                     FROM knowledge_card_markdown_source_links l
@@ -139,9 +139,9 @@
                       )
                       AND s.content_hash=l.source_content_hash
                 ) THEN CASE WHEN #{commitAvailable} THEN 'CURRENT' ELSE 'UNVERIFIED' END
-                ELSE 'REVIEW_REQUIRED'
+                ELSE 'STALE'
             END,
-            code_reviewed_at=CASE
+            source_version_checked_at=CASE
                 WHEN #{commitAvailable} AND EXISTS(
                     SELECT 1
                     FROM knowledge_card_markdown_source_links l

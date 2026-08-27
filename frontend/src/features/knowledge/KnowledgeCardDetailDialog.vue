@@ -14,7 +14,7 @@ const emit = defineEmits<{
 
 const visible = defineModel<boolean>({ required: true });
 
-const statusLabel = computed(() => props.card ? localizeStatus(props.card.status) : '');
+const statusLabel = computed(() => props.card ? localizeStatus(props.card.publicationStatus) : '');
 </script>
 
 <template>
@@ -22,8 +22,14 @@ const statusLabel = computed(() => props.card ? localizeStatus(props.card.status
     <template v-if="card">
       <div class="detail-meta">
         <el-tag effect="plain">{{ card.cardType }}</el-tag>
-        <el-tag :type="card.status === 'PUBLISHED' ? 'success' : card.status === 'NEEDS_REVIEW' ? 'warning' : 'info'">
+        <el-tag :type="card.publicationStatus === 'PUBLISHED' ? 'success' : 'info'">
           {{ statusLabel }}
+        </el-tag>
+        <el-tag :type="card.reviewStatus === 'APPROVED' ? 'success' : card.reviewStatus === 'CHANGES_REQUESTED' ? 'warning' : 'info'">
+          人工评审：{{ localizeStatus(card.reviewStatus) }}
+        </el-tag>
+        <el-tag :type="card.sourceVersionStatus === 'STALE' ? 'warning' : card.sourceVersionStatus === 'CURRENT' ? 'success' : 'info'">
+          来源版本：{{ localizeStatus(card.sourceVersionStatus) }}
         </el-tag>
         <span>修订 v{{ card.revision }}</span>
         <time>{{ new Date(card.updatedAt).toLocaleString() }}</time>

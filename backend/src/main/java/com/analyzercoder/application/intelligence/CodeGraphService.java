@@ -39,14 +39,22 @@ public class CodeGraphService {
 
     @Transactional
     public Artifact build(UUID repoId) {
+        return build(repoId, BuildControl.none());
+    }
+
+    @Transactional
+    public Artifact build(UUID repoId, BuildControl control) {
         RepoVersion repo = version(repoId);
         Path marker = repo.path().resolve(".codegraph");
         String command = Files.isDirectory(marker) ? "index" : "init";
+        control.checkpoint("building_codegraph");
         run(List.of(command, repo.path().toString()), timeout);
+        control.checkpoint("inspect_codegraph");
         String cli = run(List.of("--version"), Duration.ofSeconds(15)).trim();
         String status = run(List.of("status", repo.path().toString()), Duration.ofMinutes(1));
         int nodes = numberBefore(status, "nodes"), edges = numberBefore(status, "edges");
         UUID id = UUID.randomUUID();
+        control.checkpoint("publish_codegraph");
         mapper.retirePublished(repoId);
         mapper.insertPublished(
                 new CodeGraphArtifactRow(
@@ -99,6 +107,9 @@ public class CodeGraphService {
                     new ArrayList<>(nodes.values()),
                     edges,
                     risk,
+                    "CODEGRAPH_CLI",
+                    repo.snapshotId(),
+                    "CODEGRAPH_CLI_STATIC_ANALYSIS",
                     List.of(
                             "CodeGraph CLI 确定性静态分析",
                             "动态反射和运行时分派可能无法确认",
@@ -184,6 +195,20 @@ public class CodeGraphService {
     }
 
     private record RepoVersion(UUID snapshotId, Path path) {}
+
+    public interface BuildControl {
+        void checkpoint(String step);
+
+        static BuildControl none() {
+            return step -> {};
+        }
+    }
+
+    public static class BuildCanceledException extends RuntimeException {
+        public BuildCanceledException() {
+            super("CodeGraph 构建已取消");
+        }
+    }
 
     public record Artifact(
             UUID id,

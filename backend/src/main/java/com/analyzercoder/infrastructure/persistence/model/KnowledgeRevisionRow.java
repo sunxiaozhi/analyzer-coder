@@ -12,6 +12,6 @@ public record KnowledgeRevisionRow(
         String cardType,
         String content,
         String[] tags,
-        String status,
+        String publicationStatus,
         UUID changedBy,
         Instant changedAt) {}

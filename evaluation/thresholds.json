@@ -1,0 +1,7 @@
+{
+  "retrievalRecallAt10": 0.85,
+  "citationCoverageRate": 0.95,
+  "statementSupportRate": 0.9,
+  "changeFileRecallRate": 0.85,
+  "p95LatencyMs": 5000
+}

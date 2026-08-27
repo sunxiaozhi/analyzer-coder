@@ -1,6 +1,9 @@
 package com.analyzercoder.application.architecture;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.analyzercoder.application.repository.RepositoryCodeBrowserService;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
@@ -11,6 +14,32 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class ProjectArchitectureMapServiceTest {
+
+    @Test
+    void abortsWhenSnapshotChangesBetweenListingAndReadingFiles() {
+        RepositoryCodeBrowserService browser = mock(RepositoryCodeBrowserService.class);
+        ProjectArchitectureMapService service = new ProjectArchitectureMapService(browser);
+        CodeRepositoryId repositoryId = CodeRepositoryId.newId();
+        String path = "src/Example.java";
+        String listedSnapshot = UUID.randomUUID().toString();
+        when(browser.list(repositoryId))
+                .thenReturn(new RepositoryCodeBrowserService.SnapshotFiles(
+                        listedSnapshot, "main", "abc123", List.of(file(path, "java"))));
+        when(browser.read(repositoryId, path))
+                .thenReturn(new RepositoryCodeBrowserService.FileContent(
+                        UUID.randomUUID().toString(),
+                        path,
+                        "Example.java",
+                        "java",
+                        20,
+                        1,
+                        "class Example {}"));
+
+        assertThatThrownBy(() -> service.map(repositoryId))
+                .isInstanceOf(
+                        ProjectArchitectureMapService.ArchitectureSnapshotChangedException.class)
+                .hasMessageContaining("快照已切换");
+    }
 
     @Test
     void extractsCrossModuleDependenciesCyclesAndBoundaryRisks() {
@@ -76,6 +105,14 @@ class ProjectArchitectureMapServiceTest {
                 .contains(
                         org.assertj.core.groups.Tuple.tuple(
                                 "$project", "resource:http_api:partner.internal:8080"));
+        assertThat(result.edges())
+                .filteredOn(edge -> !edge.evidenceSamples().isEmpty())
+                .flatExtracting(ProjectArchitectureMapService.ArchitectureEdge::evidenceSamples)
+                .allSatisfy(sample -> {
+                    assertThat(sample.snapshotId()).isEqualTo(snapshotId.toString());
+                    assertThat(sample.contentHash()).matches("[0-9a-f]{64}");
+                    assertThat(sample.filePath()).isNotBlank();
+                });
         assertThat(result.risks())
                 .extracting(ProjectArchitectureMapService.ArchitectureRisk::type)
                 .contains("BOUNDARY", "CYCLE", "INSECURE_TRANSPORT");

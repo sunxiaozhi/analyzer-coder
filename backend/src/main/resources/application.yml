@@ -85,6 +85,9 @@ app:
     executable: ${APP_CODEGRAPH_EXECUTABLE:codegraph}
     # 单次 CodeGraph 构建允许执行的最长时间（分钟）。
     timeout-minutes: ${APP_CODEGRAPH_TIMEOUT_MINUTES:10}
+    # Worker 任务的固定总时限，包含快照复制、CLI 构建和发布。
+    task-timeout-minutes: ${APP_CODEGRAPH_TASK_TIMEOUT_MINUTES:12}
+    poll-interval-ms: ${APP_CODEGRAPH_POLL_INTERVAL_MS:2000}
     # 图谱产物随仓库快照存放，通常无需单独修改。
     artifact-root: ${app.repository.managed-data-root}/repositories
   llm:

@@ -102,9 +102,11 @@ const signals = computed(() => [
     tone: (props.architecture ? coverage.value?.partial ? 'warning' : 'ready' : 'muted') as Tone,
   },
   {
-    label: '语义检索',
+    label: props.profile.retrievalCapabilityLabel,
     value: `${vectorCoverage.value}%`,
-    detail: vectorCoverage.value === 100 ? '全部片段可参与语义召回' : '问答可能退化为关键词检索',
+    detail: vectorCoverage.value === 100
+      ? `全部片段可参与${props.profile.retrievalCapabilityLabel}召回`
+      : '问答可能退化为关键词检索',
     tone: (vectorCoverage.value === 100 ? 'ready' : vectorCoverage.value > 0 ? 'warning' : 'muted') as Tone,
   },
 ]);

@@ -34,7 +34,7 @@ public class KnowledgeCardHistoryService {
                 row.cardType(),
                 row.content(),
                 List.of(row.tags()),
-                row.status(),
+                row.publicationStatus(),
                 row.changedBy(),
                 row.changedAt());
     }
@@ -71,13 +71,16 @@ public class KnowledgeCardHistoryService {
                 card.content(),
                 markdown.render(repoId, card.content()),
                 List.of(card.tags()),
-                card.status(),
+                card.publicationStatus(),
                 card.revision(),
                 card.createdAt(),
                 card.updatedAt(),
                 card.verifiedCommit(),
-                card.codeReviewStatus(),
-                card.codeReviewedAt(),
+                card.sourceVersionStatus(),
+                card.sourceVersionCheckedAt(),
+                card.reviewStatus(),
+                card.reviewedBy(),
+                card.reviewedAt(),
                 attachments.list(repoId, cardId, card.revision()),
                 List.of());
     }
@@ -90,7 +93,7 @@ public class KnowledgeCardHistoryService {
             String cardType,
             String content,
             List<String> tags,
-            String status,
+            String publicationStatus,
             UUID changedBy,
             Instant changedAt) {}
 }

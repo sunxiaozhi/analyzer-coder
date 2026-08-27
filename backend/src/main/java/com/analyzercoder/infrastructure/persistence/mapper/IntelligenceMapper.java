@@ -186,7 +186,9 @@ public interface IntelligenceMapper {
      * @param repositoryId 目标对象的唯一标识
      * @return 匹配结果列表；无匹配数据时返回空列表
      */
-    List<Map<String, Object>> graphEdges(@Param("repositoryId") UUID repositoryId);
+    List<Map<String, Object>> heuristicCallEdges(@Param("repositoryId") UUID repositoryId);
+
+    UUID currentSnapshotId(@Param("repositoryId") UUID repositoryId);
 
     /**
      * 删除符合给定条件的数据。
@@ -194,7 +196,7 @@ public interface IntelligenceMapper {
      * @param repositoryId 目标对象的唯一标识
      * @return 本次操作影响的记录数
      */
-    int deleteGraphEdges(@Param("repositoryId") UUID repositoryId);
+    int deleteHeuristicCallEdges(@Param("repositoryId") UUID repositoryId);
 
     /**
      * 查询与图谱节点关联的代码片段证据。
@@ -216,7 +218,7 @@ public interface IntelligenceMapper {
      * @param targetSymbol 代码图谱边的目标符号标识
      * @return 本次操作影响的记录数
      */
-    int insertGraphEdge(
+    int insertHeuristicCallEdge(
             @Param("id") UUID id,
             @Param("repositoryId") UUID repositoryId,
             @Param("snapshotId") UUID snapshotId,
@@ -255,8 +257,7 @@ public interface IntelligenceMapper {
             @Param("title") String title,
             @Param("cardType") String cardType,
             @Param("content") String content,
-            @Param("tags") String[] tags,
-            @Param("status") String status);
+            @Param("tags") String[] tags);
 
     /**
      * 更新符合给定条件的记录状态或内容。
@@ -278,8 +279,22 @@ public interface IntelligenceMapper {
             @Param("title") String title,
             @Param("cardType") String cardType,
             @Param("content") String content,
-            @Param("tags") String[] tags,
-            @Param("status") String status);
+            @Param("tags") String[] tags);
+
+    int refreshCardSourceVersion(
+            @Param("repositoryId") UUID repositoryId, @Param("id") UUID id);
+
+    int reviewCard(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("id") UUID id,
+            @Param("actorId") UUID actorId,
+            @Param("reviewStatus") String reviewStatus);
+
+    int setCardPublication(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("id") UUID id,
+            @Param("actorId") UUID actorId,
+            @Param("publicationStatus") String publicationStatus);
 
     /**
      * 按给定条件查询匹配数据。
@@ -361,7 +376,8 @@ public interface IntelligenceMapper {
     List<Map<String, Object>> missingEmbeddings(
             @Param("repositoryId") UUID repositoryId,
             @Param("model") String model,
-            @Param("dimension") int dimension);
+            @Param("dimension") int dimension,
+            @Param("capability") String capability);
 
     /**
      * 新增或更新代码片段的向量数据。
@@ -378,6 +394,7 @@ public interface IntelligenceMapper {
             @Param("repositoryId") UUID repositoryId,
             @Param("model") String model,
             @Param("dimension") int dimension,
+            @Param("capability") String capability,
             @Param("vector") String vector,
             @Param("contentHash") String contentHash);
 
@@ -391,7 +408,8 @@ public interface IntelligenceMapper {
     List<Map<String, Object>> missingKnowledgeEmbeddings(
             @Param("repositoryId") UUID repositoryId,
             @Param("model") String model,
-            @Param("dimension") int dimension);
+            @Param("dimension") int dimension,
+            @Param("capability") String capability);
 
     /**
      * 新增或更新知识内容的向量数据。
@@ -410,6 +428,7 @@ public interface IntelligenceMapper {
             @Param("revision") int revision,
             @Param("model") String model,
             @Param("dimension") int dimension,
+            @Param("capability") String capability,
             @Param("vector") String vector,
             @Param("contentHash") String contentHash);
 }

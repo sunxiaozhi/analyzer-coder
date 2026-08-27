@@ -4,6 +4,7 @@ import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.infrastructure.persistence.mapper.GraphRetrievalMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
 import com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -30,8 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class IntelligenceService {
     private static final int DIMENSION = 64;
     private static final int MAX_CANDIDATES_PER_CHANNEL = 40;
-    private static final Set<String> CARD_STATUSES =
-            Set.of("DRAFT", "PUBLISHED", "NEEDS_REVIEW", "ARCHIVED");
+    private static final Set<String> REVIEW_STATUSES =
+            Set.of("APPROVED", "CHANGES_REQUESTED");
+    private static final Set<String> PUBLICATION_STATUSES =
+            Set.of("DRAFT", "PUBLISHED", "ARCHIVED");
 
     private final IntelligenceMapper mapper;
     private final GraphRetrievalMapper graphRetrievalMapper;
@@ -66,26 +69,40 @@ public class IntelligenceService {
 
     @Transactional
     public List<SearchHit> hybridSearch(UUID repositoryId, String query, int limit) {
+        return hybridSearchDetailed(repositoryId, query, limit).hits();
+    }
+
+    @Transactional
+    public SearchResponse hybridSearchDetailed(UUID repositoryId, String query, int limit) {
         RetrievalQueryAnalyzer.Query analyzed = queryAnalyzer.analyze(query);
         if (analyzed.normalized().isBlank()) {
-            return List.of();
+            return new SearchResponse(List.of(), RetrievalDiagnostics.notExecuted("EMPTY_QUERY"));
         }
         int resolvedLimit = Math.max(1, Math.min(limit, 100));
-        List<RetrievalRanker.RankedCandidate> ranked =
-                retrieve(repositoryId, analyzed, false, resolvedLimit);
-        return ranked.stream().map(this::searchHit).toList();
+        RetrievalOutcome outcome = retrieve(repositoryId, analyzed, false, resolvedLimit);
+        return new SearchResponse(
+                outcome.ranked().stream().map(this::searchHit).toList(), outcome.diagnostics());
     }
 
     @Transactional
     public List<Evidence> unifiedSearch(UUID repositoryId, String query, int limit) {
+        return unifiedSearchDetailed(repositoryId, query, limit).evidence();
+    }
+
+    @Transactional
+    public EvidenceSearchResult unifiedSearchDetailed(UUID repositoryId, String query, int limit) {
         RetrievalQueryAnalyzer.Query analyzed = queryAnalyzer.analyze(query);
         if (analyzed.normalized().isBlank()) {
-            return List.of();
+            return new EvidenceSearchResult(
+                    List.of(), RetrievalDiagnostics.notExecuted("EMPTY_QUERY"));
         }
         int resolvedLimit = Math.max(1, Math.min(limit, 20));
-        return retrieve(repositoryId, analyzed, true, resolvedLimit).stream()
-                .map(candidate -> evidence(repositoryId, candidate))
-                .toList();
+        RetrievalOutcome outcome = retrieve(repositoryId, analyzed, true, resolvedLimit);
+        return new EvidenceSearchResult(
+                outcome.ranked().stream()
+                        .map(candidate -> evidence(repositoryId, candidate))
+                        .toList(),
+                outcome.diagnostics());
     }
 
     public List<LlmSettingsService.AskModelView> askModels() {
@@ -128,6 +145,7 @@ public class IntelligenceService {
         }
 
         String retrievalQuery = contextualQuery(question, history);
+        EvidenceSearchResult retrieval = unifiedSearchDetailed(repositoryId, retrievalQuery, 10);
         return answer(
                 repositoryId,
                 accountId,
@@ -138,7 +156,8 @@ public class IntelligenceService {
                 turnNo,
                 threadTitle,
                 history,
-                unifiedSearch(repositoryId, retrievalQuery, 10),
+                retrieval.evidence(),
+                retrieval.retrieval(),
                 modelConfigId);
     }
 
@@ -153,23 +172,25 @@ public class IntelligenceService {
             String threadTitle,
             List<Answer> history,
             List<Evidence> evidence,
+            RetrievalDiagnostics retrieval,
             UUID modelConfigId) {
-        UUID snapshotId =
-                evidence.stream()
+        UUID snapshotId = evidence.stream()
                         .map(Evidence::snapshotId)
                         .filter(Objects::nonNull)
                         .findFirst()
-                        .orElse(null);
+                        .orElse(retrieval.snapshotId());
         String answer;
         String provider = "deterministic-local";
         String evidenceStatus;
         String fallbackReason;
         List<IndexedEvidence> cited;
+        CitationAssessment citationAssessment;
         if (evidence.isEmpty()) {
             answer = "当前仓库的代码索引和有效知识中没有找到达到相关度门槛的证据。" + "请先完成索引、发布相关知识，或使用更具体的模块名、符号名和业务术语。";
             evidenceStatus = "INSUFFICIENT";
             fallbackReason = "NO_EVIDENCE";
             cited = List.of();
+            citationAssessment = CitationAssessment.empty();
         } else {
             Optional<LlmSettingsService.GenerationResult> generated =
                     llm.generate(modelConfigId, llmPrompt(question, history, evidence));
@@ -179,28 +200,32 @@ public class IntelligenceService {
                 if (validation.valid()) {
                     answer = generated.get().answer();
                     provider = generated.get().provider();
-                    evidenceStatus = "SUPPORTED";
+                    evidenceStatus = validation.complete() ? "CITATION_COMPLETE" : "CITATION_INCOMPLETE";
                     fallbackReason = null;
                     cited = validation.citedEvidence().stream()
                             .map(index -> new IndexedEvidence(index, evidence.get(index - 1)))
                             .toList();
+                    citationAssessment = validation.assessment();
                 } else {
                     answer = deterministicAnswer(evidence) + "\n\n外部模型回答因“" + validation.reason() + "”未通过引用校验，已安全降级。";
                     evidenceStatus = "MODEL_OUTPUT_REJECTED";
                     fallbackReason = "CITATION_VALIDATION_FAILED";
                     cited = indexed(evidence, Math.min(5, evidence.size()));
+                    citationAssessment = validation.assessment();
                 }
             } else {
                 answer = deterministicAnswer(evidence);
                 evidenceStatus = "DEGRADED";
                 fallbackReason = "MODEL_UNAVAILABLE";
                 cited = indexed(evidence, Math.min(5, evidence.size()));
+                citationAssessment = citationValidator.validate(answer, evidence.size()).assessment();
             }
         }
         Instant createdAt = Instant.now();
         List<Citation> citations = citations(cited);
         Answer result = new Answer(conversationId, threadId, turnNo, repositoryId, threadTitle, question,
-                answer, snapshotId, citations, provider, evidenceStatus, fallbackReason, createdAt);
+                answer, snapshotId, citations, provider, evidenceStatus, fallbackReason, citationAssessment,
+                retrieval, createdAt);
         mapper.insertConversation(conversationId, threadId, turnNo, repositoryId, accountId,
                 clientRequestId, threadTitle, question, answer, snapshotId, provider, evidenceStatus,
                 fallbackReason, writeJson(result));
@@ -250,7 +275,7 @@ public class IntelligenceService {
     }
     public boolean prepareRepositoryEmbeddings(UUID repositoryId) {
         try {
-            rebuildGraph(repositoryId);
+            rebuildHeuristicCallReferences(repositoryId);
             ensureCodeEmbeddings(repositoryId);
             ensureKnowledgeEmbeddings(repositoryId);
             return true;
@@ -259,19 +284,42 @@ public class IntelligenceService {
         }
     }
 
-    private List<RetrievalRanker.RankedCandidate> retrieve(
+    private RetrievalOutcome retrieve(
             UUID repositoryId,
             RetrievalQueryAnalyzer.Query query,
             boolean includeKnowledge,
             int limit) {
+        long retrievalStarted = System.nanoTime();
         int candidateLimit = Math.min(MAX_CANDIDATES_PER_CHANNEL, Math.max(16, limit * 4));
         int termCount = Math.max(1, query.terms().size());
         List<RetrievalRanker.ChannelResult> channels = new ArrayList<>();
+        List<ChannelMetric> metrics = new ArrayList<>();
+        List<UnavailableChannel> unavailable = new ArrayList<>();
+        UUID snapshotId = null;
+        String vectorModel = null;
+        String retrievalCapability = null;
 
-        List<Map<String, Object>> codeKeywordRows =
-                mapper.searchCodeKeyword(
-                        repositoryId, query.normalized(), query.terms(), termCount, candidateLimit);
-        channels.add(channel("CODE_KEYWORD", 1.15, "CODE", codeKeywordRows, true));
+        try {
+            snapshotId = mapper.currentSnapshotId(repositoryId);
+        } catch (RuntimeException exception) {
+            unavailable.add(unavailable("CURRENT_SNAPSHOT", "SNAPSHOT_LOOKUP_FAILED", exception));
+        }
+
+        List<Map<String, Object>> codeKeywordRows = List.of();
+        long channelStarted = System.nanoTime();
+        try {
+            codeKeywordRows =
+                    mapper.searchCodeKeyword(
+                            repositoryId,
+                            query.normalized(),
+                            query.terms(),
+                            termCount,
+                            candidateLimit);
+            channels.add(channel("CODE_KEYWORD", 1.15, "CODE", codeKeywordRows, true));
+            metrics.add(metric("CODE_KEYWORD", codeKeywordRows.size(), channelStarted));
+        } catch (RuntimeException exception) {
+            unavailable.add(unavailable("CODE_KEYWORD", "CODE_KEYWORD_FAILED", exception));
+        }
         List<String> matchedSymbols =
                 codeKeywordRows.stream()
                         .map(row -> string(row, "symbol_name"))
@@ -281,72 +329,157 @@ public class IntelligenceService {
                         .limit(8)
                         .toList();
         if (!matchedSymbols.isEmpty()) {
-            channels.add(
-                    channel(
-                            "CODE_GRAPH",
-                            0.9,
-                            "CODE",
-                            graphRetrievalMapper.relatedCodeChunks(
-                                    repositoryId, matchedSymbols, candidateLimit),
-                            true));
+            channelStarted = System.nanoTime();
+            try {
+                List<Map<String, Object>> graphRows =
+                        graphRetrievalMapper.relatedCodeChunks(
+                                repositoryId, matchedSymbols, candidateLimit);
+                channels.add(
+                        channel(
+                                "HEURISTIC_CALL_REFERENCE", 0.9, "CODE", graphRows, true));
+                metrics.add(
+                        metric("HEURISTIC_CALL_REFERENCE", graphRows.size(), channelStarted));
+            } catch (RuntimeException exception) {
+                unavailable.add(
+                        unavailable(
+                                "HEURISTIC_CALL_REFERENCE",
+                                "HEURISTIC_RELATION_FAILED",
+                                exception));
+            }
         }
         if (includeKnowledge) {
-            channels.add(
-                    channel(
-                            "KNOWLEDGE_KEYWORD",
-                            1.2,
-                            "KNOWLEDGE",
-                            mapper.searchKnowledgeKeyword(
-                                    repositoryId,
-                                    query.normalized(),
-                                    query.terms(),
-                                    termCount,
-                                    candidateLimit),
-                            true));
+            channelStarted = System.nanoTime();
+            try {
+                List<Map<String, Object>> knowledgeRows =
+                        mapper.searchKnowledgeKeyword(
+                                repositoryId,
+                                query.normalized(),
+                                query.terms(),
+                                termCount,
+                                candidateLimit);
+                channels.add(
+                        channel(
+                                "KNOWLEDGE_KEYWORD",
+                                1.2,
+                                "KNOWLEDGE",
+                                knowledgeRows,
+                                true));
+                metrics.add(metric("KNOWLEDGE_KEYWORD", knowledgeRows.size(), channelStarted));
+            } catch (RuntimeException exception) {
+                unavailable.add(
+                        unavailable("KNOWLEDGE_KEYWORD", "KNOWLEDGE_KEYWORD_FAILED", exception));
+            }
         }
 
         try {
-            rebuildGraph(repositoryId);
             ensureCodeEmbeddings(repositoryId);
             if (includeKnowledge) {
                 ensureKnowledgeEmbeddings(repositoryId);
             }
             LlmSettingsService.VectorEmbedding embedding = llm.vectorize(query.normalized());
+            vectorModel = embedding.model();
+            retrievalCapability = embedding.retrievalCapability();
             String vector =
                     embedding.vector() == null
                             ? localVector(query.normalized())
                             : embedding.vector();
             String model = embedding.model();
-            channels.add(
-                    channel(
-                            "CODE_SEMANTIC",
-                            1.0,
-                            "CODE",
-                            mapper.searchCodeVector(
+            boolean semantic = "SEMANTIC_EMBEDDING".equals(embedding.retrievalCapability());
+            String codeVectorChannel =
+                    semantic ? "CODE_SEMANTIC" : "CODE_CHARACTER_SIMILARITY";
+            channelStarted = System.nanoTime();
+            try {
+                List<Map<String, Object>> vectorRows =
+                        mapper.searchCodeVector(
+                                repositoryId,
+                                vector,
+                                model,
+                                embedding.dimension(),
+                                candidateLimit);
+                channels.add(channel(codeVectorChannel, 1.0, "CODE", vectorRows, false));
+                metrics.add(metric(codeVectorChannel, vectorRows.size(), channelStarted));
+            } catch (RuntimeException exception) {
+                unavailable.add(
+                        unavailable(codeVectorChannel, "CODE_VECTOR_QUERY_FAILED", exception));
+            }
+            if (includeKnowledge) {
+                String knowledgeVectorChannel =
+                        semantic ? "KNOWLEDGE_SEMANTIC" : "KNOWLEDGE_CHARACTER_SIMILARITY";
+                channelStarted = System.nanoTime();
+                try {
+                    List<Map<String, Object>> vectorRows =
+                            mapper.searchKnowledgeVector(
                                     repositoryId,
                                     vector,
                                     model,
                                     embedding.dimension(),
-                                    candidateLimit),
-                            false));
-            if (includeKnowledge) {
-                channels.add(
-                        channel(
-                                "KNOWLEDGE_SEMANTIC",
-                                1.05,
-                                "KNOWLEDGE",
-                                mapper.searchKnowledgeVector(
-                                        repositoryId,
-                                        vector,
-                                        model,
-                                        embedding.dimension(),
-                                        candidateLimit),
-                                false));
+                                    candidateLimit);
+                    channels.add(
+                            channel(
+                                    knowledgeVectorChannel,
+                                    1.05,
+                                    "KNOWLEDGE",
+                                    vectorRows,
+                                    false));
+                    metrics.add(
+                            metric(knowledgeVectorChannel, vectorRows.size(), channelStarted));
+                } catch (RuntimeException exception) {
+                    unavailable.add(
+                            unavailable(
+                                    knowledgeVectorChannel,
+                                    "KNOWLEDGE_VECTOR_QUERY_FAILED",
+                                    exception));
+                }
             }
-        } catch (RuntimeException ignored) {
-            // Keyword and symbol retrieval remain available when embedding is unavailable.
+        } catch (RuntimeException exception) {
+            try {
+                vectorModel = llm.activeVectorModelName();
+                retrievalCapability = llm.activeRetrievalCapability();
+            } catch (RuntimeException metadataFailure) {
+                vectorModel = "unknown";
+                retrievalCapability = "UNKNOWN";
+            }
+            unavailable.add(unavailable("CODE_VECTOR", "VECTOR_RETRIEVAL_FAILED", exception));
+            if (includeKnowledge) {
+                unavailable.add(
+                        unavailable("KNOWLEDGE_VECTOR", "VECTOR_RETRIEVAL_FAILED", exception));
+            }
         }
-        return ranker.fuse(channels, limit);
+        List<RetrievalRanker.RankedCandidate> ranked = ranker.fuse(channels, limit);
+        List<String> enabledChannels = channels.stream()
+                .map(RetrievalRanker.ChannelResult::channel)
+                .toList();
+        RetrievalDiagnostics diagnostics =
+                new RetrievalDiagnostics(
+                        snapshotId,
+                        vectorModel,
+                        retrievalCapability,
+                        enabledChannels,
+                        List.copyOf(unavailable),
+                        List.copyOf(metrics),
+                        ranked.size(),
+                        elapsedMillis(retrievalStarted),
+                        !unavailable.isEmpty(),
+                        unavailable.stream()
+                                .map(item -> item.channel() + ":" + item.reason())
+                                .toList());
+        return new RetrievalOutcome(ranked, diagnostics);
+    }
+
+    private static ChannelMetric metric(String channel, int recalledCount, long started) {
+        return new ChannelMetric(channel, recalledCount, elapsedMillis(started));
+    }
+
+    private static UnavailableChannel unavailable(
+            String channel, String reason, RuntimeException exception) {
+        String detail = exception.getMessage();
+        if (detail == null || detail.isBlank()) detail = exception.getClass().getSimpleName();
+        if (detail.length() > 240) detail = detail.substring(0, 240);
+        return new UnavailableChannel(channel, reason, detail);
+    }
+
+    private static long elapsedMillis(long started) {
+        return Math.max(0, (System.nanoTime() - started) / 1_000_000L);
     }
 
     private RetrievalRanker.ChannelResult channel(
@@ -384,6 +517,7 @@ public class IntelligenceService {
                 candidate.score(),
                 candidate.lexicalScore(),
                 candidate.semanticScore(),
+                similarityKind(candidate.channels()),
                 candidate.channels());
     }
 
@@ -409,6 +543,7 @@ public class IntelligenceService {
                     candidate.score(),
                     candidate.lexicalScore(),
                     candidate.semanticScore(),
+                    similarityKind(candidate.channels()),
                     candidate.channels(),
                     codeReferences(repositoryId, cardId, revision));
         }
@@ -431,6 +566,7 @@ public class IntelligenceService {
                 candidate.score(),
                 candidate.lexicalScore(),
                 candidate.semanticScore(),
+                similarityKind(candidate.channels()),
                 candidate.channels(),
                 List.of());
     }
@@ -457,7 +593,8 @@ public class IntelligenceService {
                             indexed.index(),
                             item.score(),
                             item.lexicalScore(),
-                            item.semanticScore(),
+                            item.similarityScore(),
+                            item.similarityKind(),
                             item.channels(),
                             item.codeReferences()));
         }
@@ -554,7 +691,9 @@ public class IntelligenceService {
     private void ensureCodeEmbeddings(UUID repositoryId) {
         String model = llm.activeVectorModelName();
         int dimension = llm.activeVectorModelDimension();
-        for (Map<String, Object> row : mapper.missingEmbeddings(repositoryId, model, dimension)) {
+        String capability = llm.activeRetrievalCapability();
+        for (Map<String, Object> row :
+                mapper.missingEmbeddings(repositoryId, model, dimension, capability)) {
             LlmSettingsService.VectorEmbedding embedding = llm.vectorize(string(row, "content"));
             String vector =
                     embedding.vector() == null
@@ -565,6 +704,7 @@ public class IntelligenceService {
                     repositoryId,
                     embedding.model(),
                     embedding.dimension(),
+                    embedding.retrievalCapability(),
                     vector,
                     string(row, "content_hash"));
         }
@@ -573,8 +713,9 @@ public class IntelligenceService {
     private void ensureKnowledgeEmbeddings(UUID repositoryId) {
         String model = llm.activeVectorModelName();
         int dimension = llm.activeVectorModelDimension();
+        String capability = llm.activeRetrievalCapability();
         for (Map<String, Object> row :
-                mapper.missingKnowledgeEmbeddings(repositoryId, model, dimension)) {
+                mapper.missingKnowledgeEmbeddings(repositoryId, model, dimension, capability)) {
             String content = string(row, "content");
             LlmSettingsService.VectorEmbedding embedding = llm.vectorize(content);
             String vector = embedding.vector() == null ? localVector(content) : embedding.vector();
@@ -584,6 +725,7 @@ public class IntelligenceService {
                     integer(row, "revision"),
                     embedding.model(),
                     embedding.dimension(),
+                    embedding.retrievalCapability(),
                     vector,
                     sha256(content));
         }
@@ -591,10 +733,9 @@ public class IntelligenceService {
 
     @Transactional
     public GraphResult graph(UUID repositoryId, String symbol, int depth, String direction) {
-        rebuildGraph(repositoryId);
         int maximumDepth = Math.max(1, Math.min(depth, 5));
         List<GraphEdge> all =
-                mapper.graphEdges(repositoryId).stream()
+                mapper.heuristicCallEdges(repositoryId).stream()
                         .map(
                                 row ->
                                         new GraphEdge(
@@ -633,7 +774,13 @@ public class IntelligenceService {
                 nodes,
                 uniqueEdges,
                 uniqueEdges.size() > 20 ? "HIGH" : uniqueEdges.size() > 5 ? "MEDIUM" : "LOW",
-                List.of("静态关系不包含运行时反射与动态分派", "结果绑定当前已发布快照"));
+                "HEURISTIC_CALL_REFERENCE",
+                mapper.currentSnapshotId(repositoryId),
+                "SYMBOL_TOKEN_FOLLOWED_BY_PARENTHESIS",
+                List.of(
+                        "关系来自索引阶段的符号名加左括号字符串匹配，不是 CodeGraph CLI 结果",
+                        "无法可靠识别重载、动态分派、反射、别名和跨语言调用",
+                        "结果绑定当前已发布快照"));
     }
 
     public GraphTarget graphTarget(UUID repositoryId, UUID chunkId) {
@@ -663,14 +810,11 @@ public class IntelligenceService {
                 validated.title(),
                 validated.cardType(),
                 validated.content(),
-                validated.tags().toArray(String[]::new),
-                validated.status());
+                validated.tags().toArray(String[]::new));
         KnowledgeCard card = findCard(repositoryId, id);
         attachments.attach(repositoryId, id, card.revision(), validated.attachmentIds());
         attachCodeReferences(repositoryId, id, card.revision(), validated.codeReferences());
-        if ("PUBLISHED".equals(validated.status())) {
-            prepareRepositoryEmbeddings(repositoryId);
-        }
+        mapper.refreshCardSourceVersion(repositoryId, id);
         return findCard(repositoryId, id);
     }
 
@@ -684,17 +828,43 @@ public class IntelligenceService {
                         validated.title(),
                         validated.cardType(),
                         validated.content(),
-                        validated.tags().toArray(String[]::new),
-                        validated.status())
+                        validated.tags().toArray(String[]::new))
                 == 0) {
             throw new IllegalArgumentException("知识卡片不存在");
         }
         KnowledgeCard card = findCard(repositoryId, id);
         attachments.attach(repositoryId, id, card.revision(), validated.attachmentIds());
         attachCodeReferences(repositoryId, id, card.revision(), validated.codeReferences());
-        if ("PUBLISHED".equals(validated.status())) {
-            prepareRepositoryEmbeddings(repositoryId);
+        mapper.refreshCardSourceVersion(repositoryId, id);
+        return findCard(repositoryId, id);
+    }
+
+    @Transactional
+    public KnowledgeCard reviewCard(
+            UUID repositoryId, UUID id, UUID actor, String requestedStatus) {
+        String status = normalizeState(requestedStatus, REVIEW_STATUSES, "人工评审状态无效");
+        if (mapper.reviewCard(repositoryId, id, actor, status) == 0) {
+            throw new IllegalArgumentException("知识卡片不存在");
         }
+        return findCard(repositoryId, id);
+    }
+
+    @Transactional
+    public KnowledgeCard setCardPublication(
+            UUID repositoryId, UUID id, UUID actor, String requestedStatus) {
+        String status =
+                normalizeState(requestedStatus, PUBLICATION_STATUSES, "知识发布状态无效");
+        KnowledgeCard current = findCard(repositoryId, id);
+        if ("PUBLISHED".equals(status) && !"APPROVED".equals(current.reviewStatus())) {
+            throw new IllegalStateException("知识卡片尚未通过人工评审，不能发布");
+        }
+        if ("PUBLISHED".equals(status) && "STALE".equals(current.sourceVersionStatus())) {
+            throw new IllegalStateException("知识来源版本已过期，复核内容后才能发布");
+        }
+        if (mapper.setCardPublication(repositoryId, id, actor, status) == 0) {
+            throw new IllegalArgumentException("知识卡片不存在");
+        }
+        if ("PUBLISHED".equals(status)) prepareKnowledgeEmbeddingsSafely(repositoryId);
         return findCard(repositoryId, id);
     }
 
@@ -726,11 +896,6 @@ public class IntelligenceService {
         String title = clean(input.title(), 1, 200, "知识标题");
         String cardType = clean(input.cardType(), 1, 40, "知识类型");
         String content = clean(input.content(), 1, 600_000, "知识正文");
-        String status =
-                input.status() == null ? "DRAFT" : input.status().trim().toUpperCase(Locale.ROOT);
-        if (!CARD_STATUSES.contains(status)) {
-            throw new IllegalArgumentException("知识状态无效");
-        }
         List<String> tags =
                 input.tags().stream()
                         .filter(Objects::nonNull)
@@ -744,9 +909,15 @@ public class IntelligenceService {
                 cardType,
                 content,
                 tags,
-                status,
                 input.attachmentIds(),
                 input.codeReferences());
+    }
+
+    private static String normalizeState(
+            String value, Set<String> allowed, String errorMessage) {
+        String normalized = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        if (!allowed.contains(normalized)) throw new IllegalArgumentException(errorMessage);
+        return normalized;
     }
 
     private static String clean(String value, int minimum, int maximum, String label) {
@@ -804,8 +975,16 @@ public class IntelligenceService {
                 .toList();
     }
 
-    private void rebuildGraph(UUID repositoryId) {
-        mapper.deleteGraphEdges(repositoryId);
+    private void prepareKnowledgeEmbeddingsSafely(UUID repositoryId) {
+        try {
+            ensureKnowledgeEmbeddings(repositoryId);
+        } catch (RuntimeException ignored) {
+            // Published knowledge remains available through keyword retrieval.
+        }
+    }
+
+    private void rebuildHeuristicCallReferences(UUID repositoryId) {
+        mapper.deleteHeuristicCallEdges(repositoryId);
         List<Map<String, Object>> chunks = mapper.graphChunks(repositoryId);
         Map<String, Map<String, Object>> symbols = new LinkedHashMap<>();
         for (Map<String, Object> chunk : chunks) {
@@ -822,7 +1001,7 @@ public class IntelligenceService {
                 if (sourceId.equals(targetId) || !content.contains(target.getKey() + "(")) {
                     continue;
                 }
-                mapper.insertGraphEdge(
+                mapper.insertHeuristicCallEdge(
                         UUID.randomUUID(),
                         repositoryId,
                         uuid(source, "snapshot_id"),
@@ -867,13 +1046,16 @@ public class IntelligenceService {
                 row.content(),
                 markdown.render(row.repositoryId(), row.content()),
                 List.of(row.tags()),
-                row.status(),
+                row.publicationStatus(),
                 row.revision(),
                 row.createdAt(),
                 row.updatedAt(),
                 row.verifiedCommit(),
-                row.codeReviewStatus(),
-                row.codeReviewedAt(),
+                row.sourceVersionStatus(),
+                row.sourceVersionCheckedAt(),
+                row.reviewStatus(),
+                row.reviewedBy(),
+                row.reviewedAt(),
                 attachments.list(row.repositoryId(), row.id(), row.revision()),
                 codeReferences(row.repositoryId(), row.id(), row.revision()));
     }
@@ -924,7 +1106,9 @@ public class IntelligenceService {
                     integer(row, "turn_no") == null ? 1 : integer(row, "turn_no"),
                     uuid(row, "repo_id"), string(row, "title"), string(row, "question"),
                     string(row, "answer"), uuid(row, "snapshot_id"), List.of(), string(row, "provider"),
-                    string(row, "evidence_status"), string(row, "fallback_reason"), instant(row, "created_at"));
+                    string(row, "evidence_status"), string(row, "fallback_reason"),
+                    CitationAssessment.empty(), RetrievalDiagnostics.notExecuted("LEGACY_RECORD"),
+                    instant(row, "created_at"));
         }
         try {
             Answer restored = json.readValue(payload, Answer.class);
@@ -936,7 +1120,14 @@ public class IntelligenceService {
             return new Answer(restored.conversationId(), restoredThreadId, restoredTurnNo,
                     restored.repositoryId(), restored.title(), restored.question(), restored.answer(),
                     restored.snapshotId(), restored.citations(), restored.provider(), restored.evidenceStatus(),
-                    restored.fallbackReason(), restored.createdAt());
+                    restored.fallbackReason(),
+                    restored.citationAssessment() == null
+                            ? CitationAssessment.empty()
+                            : restored.citationAssessment(),
+                    restored.retrieval() == null
+                            ? RetrievalDiagnostics.notExecuted("LEGACY_RECORD")
+                            : restored.retrieval(),
+                    restored.createdAt());
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("无法恢复问答记录", exception);
         }
@@ -1023,7 +1214,56 @@ public class IntelligenceService {
         }
     }
 
+    private static String similarityKind(List<String> channels) {
+        if (channels.stream().anyMatch(channel -> channel.endsWith("_SEMANTIC"))) {
+            return "SEMANTIC_EMBEDDING";
+        }
+        if (channels.stream().anyMatch(channel -> channel.endsWith("_CHARACTER_SIMILARITY"))) {
+            return "CHARACTER_HASH";
+        }
+        return "NONE";
+    }
+
     private record IndexedEvidence(int index, Evidence evidence) {}
+
+    private record RetrievalOutcome(
+            List<RetrievalRanker.RankedCandidate> ranked,
+            RetrievalDiagnostics diagnostics) {}
+
+    public record SearchResponse(List<SearchHit> hits, RetrievalDiagnostics retrieval) {}
+
+    public record EvidenceSearchResult(
+            List<Evidence> evidence, RetrievalDiagnostics retrieval) {}
+
+    public record ChannelMetric(String channel, int recalledCount, long durationMs) {}
+
+    public record UnavailableChannel(String channel, String reason, String detail) {}
+
+    public record RetrievalDiagnostics(
+            UUID snapshotId,
+            String vectorModel,
+            String retrievalCapability,
+            List<String> enabledChannels,
+            List<UnavailableChannel> unavailableChannels,
+            List<ChannelMetric> channelMetrics,
+            int recalledCount,
+            long durationMs,
+            boolean degraded,
+            List<String> degradationReasons) {
+        public static RetrievalDiagnostics notExecuted(String reason) {
+            return new RetrievalDiagnostics(
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    0,
+                    0,
+                    false,
+                    List.of(reason));
+        }
+    }
 
     public record SearchHit(
             UUID chunkId,
@@ -1037,7 +1277,8 @@ public class IntelligenceService {
             String contentHash,
             double score,
             double lexicalScore,
-            double semanticScore,
+            @JsonAlias("semanticScore") double similarityScore,
+            String similarityKind,
             List<String> channels) {}
 
     public record Evidence(
@@ -1056,7 +1297,8 @@ public class IntelligenceService {
             String contentHash,
             double score,
             double lexicalScore,
-            double semanticScore,
+            @JsonAlias("semanticScore") double similarityScore,
+            String similarityKind,
             List<String> channels,
             List<CodeReference> codeReferences) {}
 
@@ -1076,7 +1318,8 @@ public class IntelligenceService {
             int rank,
             double score,
             double lexicalScore,
-            double semanticScore,
+            @JsonAlias("semanticScore") double similarityScore,
+            String similarityKind,
             List<String> channels,
             List<CodeReference> codeReferences) {}
 
@@ -1093,6 +1336,8 @@ public class IntelligenceService {
             String provider,
             String evidenceStatus,
             String fallbackReason,
+            CitationAssessment citationAssessment,
+            RetrievalDiagnostics retrieval,
             Instant createdAt) {}
 
     public record ThreadDetail(
@@ -1118,7 +1363,13 @@ public class IntelligenceService {
     public record GraphEdge(String source, String target, String relation) {}
 
     public record GraphResult(
-            List<GraphNode> nodes, List<GraphEdge> edges, String risk, List<String> limitations) {}
+            List<GraphNode> nodes,
+            List<GraphEdge> edges,
+            String risk,
+            String relationSource,
+            UUID snapshotId,
+            String algorithm,
+            List<String> limitations) {}
 
     public record CodeReferenceInput(UUID chunkId) {}
 
@@ -1138,15 +1389,11 @@ public class IntelligenceService {
             String cardType,
             String content,
             List<String> tags,
-            String status,
             List<UUID> attachmentIds,
             List<CodeReferenceInput> codeReferences) {
         public CardInput {
             if (tags == null) {
                 tags = List.of();
-            }
-            if (status == null) {
-                status = "DRAFT";
             }
             if (attachmentIds == null) {
                 attachmentIds = List.of();
@@ -1165,13 +1412,16 @@ public class IntelligenceService {
             String content,
             String renderedContent,
             List<String> tags,
-            String status,
+            String publicationStatus,
             int revision,
             Instant createdAt,
             Instant updatedAt,
             String verifiedCommit,
-            String codeReviewStatus,
-            Instant codeReviewedAt,
+            String sourceVersionStatus,
+            Instant sourceVersionCheckedAt,
+            String reviewStatus,
+            UUID reviewedBy,
+            Instant reviewedAt,
             List<KnowledgeAttachmentService.Attachment> attachments,
             List<CodeReference> codeReferences) {}
 }

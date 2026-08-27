@@ -9,13 +9,16 @@
             <arg column="card_type" javaType="string"/>
             <arg column="content" javaType="string"/>
             <arg column="tags" javaType="[Ljava.lang.String;" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/>
-            <arg column="status" javaType="string"/>
+            <arg column="publication_status" javaType="string"/>
             <arg column="revision" javaType="_int"/>
             <arg column="created_at" javaType="java.time.Instant"/>
             <arg column="updated_at" javaType="java.time.Instant"/>
             <arg column="verified_commit" javaType="string"/>
-            <arg column="code_review_status" javaType="string"/>
-            <arg column="code_reviewed_at" javaType="java.time.Instant"/>
+            <arg column="source_version_status" javaType="string"/>
+            <arg column="source_version_checked_at" javaType="java.time.Instant"/>
+            <arg column="review_status" javaType="string"/>
+            <arg column="reviewed_by" javaType="java.util.UUID"/>
+            <arg column="reviewed_at" javaType="java.time.Instant"/>
         </constructor>
     </resultMap>
 
@@ -28,8 +31,9 @@
         MD5(CONCAT(c.title,E'\n',c.content,E'\n',ARRAY_TO_STRING(c.tags,' '))) content_hash
     </sql>
     <sql id="validKnowledge">
-        c.repo_id=#{repositoryId} AND c.status='PUBLISHED'
-        AND c.code_review_status&lt;&gt;'REVIEW_REQUIRED'
+        c.repo_id=#{repositoryId} AND c.publication_status='PUBLISHED'
+        AND c.review_status='APPROVED'
+        AND c.source_version_status&lt;&gt;'STALE'
         AND NOT EXISTS(
             SELECT 1 FROM knowledge_code_refs r
             LEFT JOIN code_chunks current_chunk
@@ -37,6 +41,9 @@
              AND current_chunk.file_path=r.file_path
              AND current_chunk.start_line=r.start_line
              AND current_chunk.content_hash=r.content_hash
+             AND current_chunk.snapshot_id=(
+                 SELECT current_snapshot_id FROM repositories WHERE id=r.repo_id
+             )
             WHERE r.card_id=c.id AND r.revision=c.revision AND current_chunk.id IS NULL
         )
     </sql>
@@ -60,7 +67,9 @@
           ) / #{termCount}
         ) lexical_score,0.0 semantic_score
         FROM code_chunks c
-        WHERE c.repo_id=#{repositoryId} AND(
+        WHERE c.repo_id=#{repositoryId}
+        AND c.snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})
+        AND(
           POSITION(#{query} IN LOWER(c.file_path))&gt;0
           OR POSITION(#{query} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0
           OR POSITION(#{query} IN LOWER(c.content))&gt;0
@@ -78,7 +87,9 @@
         SELECT <include refid="codeColumns"/>,0.0 lexical_score,
         GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
         FROM chunk_embeddings e JOIN code_chunks c ON c.id=e.chunk_id
-        WHERE c.repo_id=#{repositoryId} AND e.model=#{model} AND e.dimension=#{dimension}
+        WHERE c.repo_id=#{repositoryId}
+        AND c.snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})
+        AND e.model=#{model} AND e.dimension=#{dimension}
         AND e.content_hash=c.content_hash
         ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.file_path,c.start_line NULLS FIRST
         LIMIT #{limit}
@@ -206,41 +217,77 @@
         VALUES(#{id},#{conversationId},#{repositoryId},#{sourceType},#{chunkId},#{knowledgeCardId},#{title},#{filePath},#{symbolName},#{startLine},#{endLine},#{evidenceHash},#{rank},CAST(#{citationPayload} AS jsonb))
     </insert>
 
-    <select id="graphEdges" resultType="map">
-        SELECT source_symbol,target_symbol,relation FROM code_graph_edges
-        WHERE repo_id=#{repositoryId} LIMIT 500
+    <select id="heuristicCallEdges" resultType="map">
+        SELECT source_symbol,target_symbol,relation FROM heuristic_call_edges
+        WHERE repo_id=#{repositoryId}
+        AND snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})
+        LIMIT 500
     </select>
-    <delete id="deleteGraphEdges">DELETE FROM code_graph_edges WHERE repo_id=#{repositoryId}</delete>
+    <select id="currentSnapshotId" resultType="java.util.UUID">
+        SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId}
+    </select>
+    <delete id="deleteHeuristicCallEdges">
+        DELETE FROM heuristic_call_edges WHERE repo_id=#{repositoryId}
+        AND snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})
+    </delete>
     <select id="graphChunks" resultType="map">
         SELECT id,snapshot_id,symbol_name,content FROM code_chunks
-        WHERE repo_id=#{repositoryId} AND symbol_name IS NOT NULL
+        WHERE repo_id=#{repositoryId}
+        AND snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})
+        AND symbol_name IS NOT NULL
     </select>
-    <insert id="insertGraphEdge">
-        INSERT INTO code_graph_edges(id,repo_id,snapshot_id,source_chunk_id,target_chunk_id,source_symbol,target_symbol,relation)
+    <insert id="insertHeuristicCallEdge">
+        INSERT INTO heuristic_call_edges(id,repo_id,snapshot_id,source_chunk_id,target_chunk_id,source_symbol,target_symbol,relation)
         VALUES(#{id},#{repositoryId},#{snapshotId},#{sourceChunkId},#{targetChunkId},#{sourceSymbol},#{targetSymbol},'CALLS')
         ON CONFLICT DO NOTHING
     </insert>
 
     <select id="cards" resultMap="card">
-        SELECT id,repo_id,title,card_type,content,tags,status,revision,created_at,updated_at,
-        verified_commit,code_review_status,code_reviewed_at
+        SELECT id,repo_id,title,card_type,content,tags,publication_status,revision,created_at,updated_at,
+        verified_commit,source_version_status,source_version_checked_at,review_status,reviewed_by,reviewed_at
         FROM knowledge_cards WHERE repo_id=#{repositoryId}
-        <if test="!includeDraft">AND status='PUBLISHED'</if>
+        <if test="!includeDraft">AND publication_status='PUBLISHED' AND review_status='APPROVED' AND source_version_status&lt;&gt;'STALE'</if>
         ORDER BY updated_at DESC
     </select>
     <insert id="insertCard">
-        INSERT INTO knowledge_cards(id,repo_id,title,card_type,content,tags,status,created_by,updated_by)
-        VALUES(#{id},#{repositoryId},#{title},#{cardType},#{content},#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},#{status},#{actorId},#{actorId})
+        INSERT INTO knowledge_cards(id,repo_id,title,card_type,content,tags,publication_status,review_status,created_by,updated_by)
+        VALUES(#{id},#{repositoryId},#{title},#{cardType},#{content},#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},'DRAFT','UNREVIEWED',#{actorId},#{actorId})
     </insert>
     <update id="updateCard">
         UPDATE knowledge_cards SET title=#{title},card_type=#{cardType},content=#{content},
-        tags=#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},status=#{status},
+        tags=#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},publication_status='DRAFT',
+        review_status='UNREVIEWED',reviewed_by=NULL,reviewed_at=NULL,
+        source_version_status='UNVERIFIED',verified_commit=NULL,source_version_checked_at=CURRENT_TIMESTAMP,
         revision=revision+1,updated_by=#{actorId},updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND repo_id=#{repositoryId}
+    </update>
+    <update id="refreshCardSourceVersion">
+        UPDATE knowledge_cards c SET
+            source_version_status=CASE WHEN EXISTS(
+                SELECT 1 FROM knowledge_code_refs ref
+                WHERE ref.card_id=c.id AND ref.revision=c.revision
+            ) THEN 'CURRENT' ELSE 'UNVERIFIED' END,
+            verified_commit=CASE WHEN EXISTS(
+                SELECT 1 FROM knowledge_code_refs ref
+                WHERE ref.card_id=c.id AND ref.revision=c.revision
+            ) THEN (SELECT current_commit FROM repositories WHERE id=c.repo_id) ELSE NULL END,
+            source_version_checked_at=CURRENT_TIMESTAMP
+        WHERE c.id=#{id} AND c.repo_id=#{repositoryId}
+    </update>
+    <update id="reviewCard">
+        UPDATE knowledge_cards SET review_status=#{reviewStatus},reviewed_by=#{actorId},
+            reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND repo_id=#{repositoryId}
+    </update>
+    <update id="setCardPublication">
+        UPDATE knowledge_cards SET publication_status=#{publicationStatus},updated_by=#{actorId},
+            updated_at=CURRENT_TIMESTAMP
         WHERE id=#{id} AND repo_id=#{repositoryId}
     </update>
     <select id="findChunk" resultType="map">
         SELECT id,snapshot_id,file_path,symbol_name,start_line,end_line,content,content_hash
         FROM code_chunks WHERE repo_id=#{repositoryId} AND id=#{chunkId}
+        AND snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})
     </select>
     <select id="codeReferences" resultType="map">
         SELECT COALESCE(c.id,r.chunk_id) chunk_id,COALESCE(c.snapshot_id,r.snapshot_id) snapshot_id,
@@ -271,13 +318,14 @@
         FROM knowledge_cards c LEFT JOIN knowledge_card_embeddings e ON e.card_id=c.id
         WHERE <include refid="validKnowledge"/>
         AND(e.card_id IS NULL OR e.revision&lt;&gt;c.revision OR e.model&lt;&gt;#{model}
-        OR e.dimension&lt;&gt;#{dimension})
+        OR e.dimension&lt;&gt;#{dimension} OR e.retrieval_capability&lt;&gt;#{capability})
     </select>
     <insert id="upsertKnowledgeEmbedding">
-        INSERT INTO knowledge_card_embeddings(card_id,repo_id,revision,model,dimension,embedding,content_hash)
-        VALUES(#{cardId},#{repositoryId},#{revision},#{model},#{dimension},CAST(#{vector} AS vector),#{contentHash})
+        INSERT INTO knowledge_card_embeddings(card_id,repo_id,revision,model,dimension,retrieval_capability,embedding,content_hash)
+        VALUES(#{cardId},#{repositoryId},#{revision},#{model},#{dimension},#{capability},CAST(#{vector} AS vector),#{contentHash})
         ON CONFLICT(card_id) DO UPDATE SET revision=EXCLUDED.revision,embedding=EXCLUDED.embedding,
-        model=EXCLUDED.model,dimension=EXCLUDED.dimension,content_hash=EXCLUDED.content_hash,
+        model=EXCLUDED.model,dimension=EXCLUDED.dimension,retrieval_capability=EXCLUDED.retrieval_capability,
+        content_hash=EXCLUDED.content_hash,
         created_at=CURRENT_TIMESTAMP
     </insert>
 
@@ -285,13 +333,15 @@
         SELECT c.id,c.content,c.content_hash FROM code_chunks c
         LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
         WHERE c.repo_id=#{repositoryId}
+        AND c.snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})
         AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash OR e.model&lt;&gt;#{model}
-        OR e.dimension&lt;&gt;#{dimension})
+        OR e.dimension&lt;&gt;#{dimension} OR e.retrieval_capability&lt;&gt;#{capability})
     </select>
     <insert id="upsertEmbedding">
-        INSERT INTO chunk_embeddings(chunk_id,repo_id,model,dimension,embedding,content_hash)
-        VALUES(#{chunkId},#{repositoryId},#{model},#{dimension},CAST(#{vector} AS vector),#{contentHash})
+        INSERT INTO chunk_embeddings(chunk_id,repo_id,model,dimension,retrieval_capability,embedding,content_hash)
+        VALUES(#{chunkId},#{repositoryId},#{model},#{dimension},#{capability},CAST(#{vector} AS vector),#{contentHash})
         ON CONFLICT(chunk_id) DO UPDATE SET model=EXCLUDED.model,embedding=EXCLUDED.embedding,
-        dimension=EXCLUDED.dimension,content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
+        dimension=EXCLUDED.dimension,retrieval_capability=EXCLUDED.retrieval_capability,
+        content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
     </insert>
 </mapper>

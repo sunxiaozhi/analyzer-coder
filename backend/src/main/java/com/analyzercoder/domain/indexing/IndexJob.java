@@ -11,8 +11,13 @@ public record IndexJob(
         IndexJobType type,
         IndexJobStatus status,
         String currentStep,
+        String executionMode,
+        String fallbackReason,
+        String failureCode,
         String errorMessage,
         Instant startedAt,
+        Instant heartbeatAt,
+        Instant timeoutAt,
         Instant finishedAt,
         Instant createdAt) {
 
@@ -23,6 +28,11 @@ public record IndexJob(
                 type,
                 IndexJobStatus.QUEUED,
                 "queued",
+                null,
+                null,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -47,10 +57,47 @@ public record IndexJob(
                 type,
                 IndexJobStatus.RUNNING,
                 currentStep,
+                executionMode,
+                fallbackReason,
+                null,
                 null,
                 effectiveStartedAt,
+                Instant.now(),
+                timeoutAt,
                 null,
                 createdAt);
+    }
+
+    public IndexJob withTimeout(Instant deadline) {
+        if (status != IndexJobStatus.RUNNING) {
+            throw new IllegalStateException("只有运行中的任务可以设置超时截止时间");
+        }
+        return new IndexJob(
+                id, repositoryId, type, status, currentStep, executionMode, fallbackReason,
+                failureCode, errorMessage,
+                startedAt, heartbeatAt, deadline, finishedAt, createdAt);
+    }
+
+    public IndexJob heartbeat(String step) {
+        if (status != IndexJobStatus.RUNNING && status != IndexJobStatus.CANCEL_REQUESTED) {
+            throw new IllegalStateException("只有活动任务可以写入心跳");
+        }
+        return new IndexJob(
+                id, repositoryId, type, status, step, executionMode, fallbackReason,
+                failureCode, errorMessage,
+                startedAt, Instant.now(), timeoutAt, finishedAt, createdAt);
+    }
+
+    public IndexJob withExecutionPlan(String mode, String reason) {
+        if (status != IndexJobStatus.RUNNING) {
+            throw new IllegalStateException("只有运行中的任务可以记录执行计划");
+        }
+        if (!"FULL".equals(mode) && !"INCREMENTAL".equals(mode)) {
+            throw new IllegalArgumentException("未知索引执行模式: " + mode);
+        }
+        return new IndexJob(
+                id, repositoryId, type, status, currentStep, mode, reason, failureCode,
+                errorMessage, startedAt, Instant.now(), timeoutAt, finishedAt, createdAt);
     }
 
     public IndexJob requestCancel() {
@@ -61,8 +108,13 @@ public record IndexJob(
                     type,
                     IndexJobStatus.CANCELED,
                     "canceled",
+                    executionMode,
+                    fallbackReason,
+                    null,
                     null,
                     startedAt,
+                    heartbeatAt,
+                    timeoutAt,
                     Instant.now(),
                     createdAt);
         }
@@ -73,8 +125,13 @@ public record IndexJob(
                     type,
                     IndexJobStatus.CANCEL_REQUESTED,
                     "cancel_requested",
+                    executionMode,
+                    fallbackReason,
+                    null,
                     null,
                     startedAt,
+                    heartbeatAt,
+                    timeoutAt,
                     null,
                     createdAt);
         }
@@ -91,8 +148,13 @@ public record IndexJob(
                 type,
                 IndexJobStatus.CANCELED,
                 "canceled",
+                executionMode,
+                fallbackReason,
+                null,
                 null,
                 startedAt,
+                heartbeatAt,
+                timeoutAt,
                 Instant.now(),
                 createdAt);
     }
@@ -107,13 +169,22 @@ public record IndexJob(
                 type,
                 IndexJobStatus.SUCCEEDED,
                 currentStep,
+                executionMode,
+                fallbackReason,
+                null,
                 null,
                 startedAt,
+                Instant.now(),
+                timeoutAt,
                 Instant.now(),
                 createdAt);
     }
 
     public IndexJob fail(String currentStep, String errorMessage) {
+        return fail(currentStep, "TASK_FAILED", errorMessage);
+    }
+
+    public IndexJob fail(String currentStep, String failureCode, String errorMessage) {
         if (status != IndexJobStatus.RUNNING && status != IndexJobStatus.CANCEL_REQUESTED) {
             throw new IllegalStateException("任务当前状态为“" + status + "”，不能标记为失败");
         }
@@ -123,8 +194,13 @@ public record IndexJob(
                 type,
                 IndexJobStatus.FAILED,
                 currentStep,
+                executionMode,
+                fallbackReason,
+                failureCode,
                 errorMessage,
                 startedAt,
+                Instant.now(),
+                timeoutAt,
                 Instant.now(),
                 createdAt);
     }

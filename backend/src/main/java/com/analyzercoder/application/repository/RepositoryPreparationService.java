@@ -131,14 +131,17 @@ public class RepositoryPreparationService {
                                         : jobDetail(latestJob, "等待生成项目资产片段")),
                         new PreparationStage(
                                 "vectors",
-                                "向量索引",
+                                summary.capabilityLabel() + "索引",
                                 vectorsReady
                                         ? "READY"
                                         : contentReady
                                                 ? "DEGRADED"
                                                 : jobActive ? "RUNNING" : "PENDING",
                                 vectorsReady
-                                        ? summary.vectorizedChunks() + " 个片段可语义检索"
+                                        ? summary.vectorizedChunks()
+                                                + " 个片段可进行"
+                                                + summary.capabilityLabel()
+                                                + "召回"
                                         : contentReady
                                                 ? summary.missingChunks() + " 个片段缺少向量，关键词检索仍可用"
                                                 : "等待内容索引"),
@@ -254,6 +257,8 @@ public class RepositoryPreparationService {
                 summary.vectorizedChunks(),
                 summary.missingChunks(),
                 summary.knowledgeCards(),
+                summary.retrievalCapability(),
+                summary.capabilityLabel(),
                 graph == null ? 0 : graph.nodeCount(),
                 graph == null ? 0 : graph.edgeCount(),
                 languageCounts,
@@ -359,6 +364,8 @@ public class RepositoryPreparationService {
             long vectorizedChunks,
             long missingChunks,
             long knowledgeCards,
+            String retrievalCapability,
+            String retrievalCapabilityLabel,
             int graphNodes,
             int graphEdges,
             List<ProfileCount> languages,

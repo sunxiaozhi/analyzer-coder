@@ -28,14 +28,15 @@ function shortHash(value: string | null) {
     <article>
       <span class="summary-icon"><Database :size="17" /></span>
       <div>
-        <strong class="model-name">{{ summary.vectorModel ?? '未配置' }}</strong>
-        <small>{{ summary.dimension ? `${summary.dimension} 维` : '向量模型' }}</small>
+        <strong>{{ summary.capabilityLabel }}</strong>
+        <small class="model-name">{{ summary.vectorModel ?? '未配置' }}{{ summary.dimension ? ` · ${summary.dimension} 维` : '' }}</small>
       </div>
     </article>
     <footer>
       <span>当前快照 <code>{{ shortHash(summary.snapshotId) }}</code></span>
       <span>Commit <code>{{ shortHash(summary.commitSha) }}</code></span>
       <span>知识卡片 {{ summary.vectorizedKnowledgeCards }}/{{ summary.knowledgeCards }}</span>
+      <span v-if="summary.retrievalCapability === 'CHARACTER_HASH'">字符哈希不理解同义词或代码语义</span>
       <span>更新于 {{ summary.updatedAt ? new Date(summary.updatedAt).toLocaleString() : '尚未生成' }}</span>
     </footer>
   </section>

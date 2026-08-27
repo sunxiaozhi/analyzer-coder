@@ -106,7 +106,7 @@ function bytes(value: number) {
 
         <section class="profile-metrics" aria-label="项目画像摘要">
           <article><Document /><b>{{ preparation.profile.fileCount }}</b><span>快照文件</span><small>{{ bytes(preparation.profile.totalBytes) }}</small></article>
-          <article><DataAnalysis /><b>{{ preparation.profile.chunkCount }}</b><span>代码片段</span><small>{{ preparation.profile.vectorizedChunks }} 个可语义检索</small></article>
+          <article><DataAnalysis /><b>{{ preparation.profile.chunkCount }}</b><span>代码片段</span><small>{{ preparation.profile.vectorizedChunks }} 个可{{ preparation.profile.retrievalCapabilityLabel }}召回</small></article>
           <article><Connection /><b>{{ preparation.profile.graphNodes }}</b><span>图谱节点</span><small>{{ preparation.profile.graphEdges }} 条关系</small></article>
           <article><CircleCheckFilled /><b>{{ preparation.profile.knowledgeCards }}</b><span>有效知识</span><small>{{ preparation.profile.missingChunks }} 个向量缺失</small></article>
         </section>

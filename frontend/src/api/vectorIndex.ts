@@ -15,6 +15,8 @@ export interface VectorIndexSummary {
   vectorizedKnowledgeCards: number;
   vectorModel: string | null;
   dimension: number | null;
+  retrievalCapability: 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING';
+  capabilityLabel: '字符相似度' | '语义检索';
   updatedAt: string | null;
 }
 
@@ -33,6 +35,8 @@ export interface VectorIndexChunk {
   contentHash: string;
   vectorModel: string | null;
   dimension: number | null;
+  retrievalCapability: 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING' | null;
+  capabilityLabel: '字符相似度' | '语义检索' | null;
   vectorizedAt: string | null;
   vectorStatus: VectorStatus;
 }
@@ -46,6 +50,8 @@ export interface VectorIndexKnowledge {
   contentHash: string | null;
   vectorModel: string | null;
   dimension: number | null;
+  retrievalCapability: 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING' | null;
+  capabilityLabel: '字符相似度' | '语义检索' | null;
   vectorizedAt: string | null;
   vectorStatus: VectorStatus;
 }

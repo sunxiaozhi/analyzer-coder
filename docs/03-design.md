@@ -84,7 +84,8 @@ Browser
 - `RetrievalQueryAnalyzer/RetrievalRanker`：查询分析与多通道融合。
 - `AnswerCitationValidator`：校验模型答案中的 `[S编号]`。
 - `CodeGraphService/ManagedCodeGraphService`：CLI 构建、产物登记和影响查询。
-- `CodeGraphTaskService`：把 CodeGraph 构建结果写入 `index_jobs`。
+- `CodeGraphTaskService`：只把 CodeGraph 构建请求加入 `index_jobs`。
+- `CodeGraphJobWorker/CodeGraphJobProcessor`：领取图谱任务，维护心跳、超时和取消，并执行复制、构建与发布。
 
 ### 3.4 模型与知识
 
@@ -239,7 +240,7 @@ LOCAL_GIT 原始目录不在清理范围。
 - `POST /api/repositories/{id}/prepare` 幂等推进准备流程，要求 MAINTAIN：远程来源执行同步，本地/ZIP 执行重扫；快照变化后启动增量索引，无 chunk 时启动全量索引；内容就绪后构建当前快照 CodeGraph。
 - 内容索引继续由 `IndexJobWorker` 后台执行，前端轮询子任务并再次调用 prepare 推进下一阶段；关闭页面不会取消已入队任务。
 - 项目画像由 `RepositoryPreparationService` 聚合当前快照文件、`VectorIndexQueryService` 汇总和当前 `codegraph_artifacts`，不调用模型，不生成推测性架构结论。
-- 当前尚无独立 preparation job 表；CodeGraph 阶段仍沿用同步执行的 `CodeGraphTaskService`。
+- 当前尚无独立 preparation job 表；CodeGraph 阶段复用 `index_jobs`，由独立 Worker 异步执行。
 
 ### 6.7 项目资产与 Context Pack
 
@@ -312,11 +313,11 @@ IndexJobWorker
 
 ### 8.3 向量准备
 
-`IntelligenceService` 根据激活模型及维度查找缺失向量。LOCAL_HASH 生成确定性 64 维向量；外部模型调用 `/embeddings` 并校验返回长度等于备案维度。外部失败时退回关键词和结构通道。
+`IntelligenceService` 根据激活模型、维度和检索能力查找缺失向量。LOCAL_HASH 生成确定性 64 维字符哈希投影，仅用于字符相似度；外部模型调用 `/embeddings` 并校验返回长度等于备案维度，才具备语义检索标识。外部失败时退回关键词和结构通道。
 
 ### 8.4 当前向量索引查询
 
-- summary：当前仓库快照、commit、chunk/知识数量、缺失数量、模型、维度和更新时间。
+- summary：当前仓库快照、commit、chunk/知识数量、缺失数量、模型、维度、检索能力和更新时间。
 - chunks：按查询、EMBEDDED/MISSING、chunkType 分页。
 - knowledge：按查询和 EMBEDDED/MISSING 分页。
 
@@ -327,16 +328,20 @@ IndexJobWorker
 ### 9.1 通道
 
 - `CODE_KEYWORD`：代码正文、路径和符号关键词。
-- `CODE_GRAPH`：关键词命中的符号扩展到相关 chunk。
-- `CODE_SEMANTIC`：代码向量 cosine。
+- `HEURISTIC_CALL_REFERENCE`：索引阶段由 `symbol(` 字符模式构建的启发式关系，不等同于 CodeGraph CLI。
+- `CODE_CHARACTER_SIMILARITY`：LOCAL_HASH 代码字符相似度。
+- `CODE_SEMANTIC`：外部 embedding 代码语义向量 cosine。
 - `KNOWLEDGE_KEYWORD`：问答场景下的已发布知识。
-- `KNOWLEDGE_SEMANTIC`：问答场景下的知识向量。
+- `KNOWLEDGE_CHARACTER_SIMILARITY`：LOCAL_HASH 知识字符相似度。
+- `KNOWLEDGE_SEMANTIC`：外部 embedding 知识语义向量。
 
 `hybrid-search` 不包含知识；`unifiedSearch` 用于问答并包含知识。
 
+`hybrid-search` 返回 `hits + retrieval`。`retrieval` 记录查询时的当前快照、实际向量模型和能力类型、启用/不可用通道、各通道召回数量与耗时、融合召回数、总耗时及降级原因。问答将同一诊断写入每轮 `answer_payload`，因此历史回答保留当时的检索状态，而不是用当前配置反推。
+
 ### 9.2 融合与降级
 
-`RetrievalRanker` 对各通道赋权、去重并返回 score、lexicalScore、semanticScore 和 channels。向量补建或查询异常被捕获，关键词/结构通道继续工作。当前没有显式通道故障结构返回前端。
+`RetrievalRanker` 在内部对各通道赋权、去重；命中项返回 `score`、`lexicalScore`、`similarityScore`、`similarityKind` 和 `channels`。各通道独立记录成功或故障；向量补建/查询异常时关键词与结构通道继续工作，`retrieval.unavailableChannels` 同时返回稳定原因和安全截断的错误摘要。
 
 ## 10. 知识问答
 
@@ -355,7 +360,8 @@ POST /repositories/{repoId}/ask
       → Prompt 长度保护
       → OpenAI-compatible 非流式 completion
   → AnswerCitationValidator
-      → 合法：SUPPORTED
+      → 全事实段有合法引用：CITATION_COMPLETE
+      → 部分事实段无引用：CITATION_INCOMPLETE
       → 非法：MODEL_OUTPUT_REJECTED + deterministic-local
       → 未调用/失败：DEGRADED + deterministic-local
   → insert qa_conversations + qa_citations
@@ -372,7 +378,7 @@ Prompt 约束模型只能使用编号证据。总证据预算约 14000 字符，
 
 ## 11. CodeGraph 与影响分析
 
-`ManagedCodeGraphService` 在独立目录运行 CLI，校验产物后写 `codegraph_artifacts` 与 `code_graph_edges`。`CodeGraphTaskService` 创建 CODEGRAPH 任务，但在 HTTP 请求线程中直接运行构建。
+`CodeGraphTaskService` 只创建 CODEGRAPH 排队任务并立即返回。`CodeGraphJobWorker` 排他领取任务，写入固定超时截止时间，并在快照复制和 CLI 等待期间持续更新心跳、检查取消。`ManagedCodeGraphService` 在独立目录运行 CLI，校验产物与当前快照仍一致后，通过 `CodeGraphArtifactPublisher` 的单一事务切换 `codegraph_artifacts` 发布状态；任何前置失败都不会退役旧产物。
 
 影响分析以符号字符串为中心，深度 1–5。后端基础图方法支持 BOTH/UPSTREAM/DOWNSTREAM；当前 `/codegraph/impact` 和前端主要使用双向。风险按边数量分 LOW/MEDIUM/HIGH，限制固定说明反射和动态分派不完整。
 
@@ -384,7 +390,7 @@ Prompt 约束模型只能使用编号证据。总证据预算约 14000 字符，
 
 创建/更新先校验标题、正文、类型、状态、附件和代码引用，更新时保存历史修订。历史恢复通过复制旧修订内容形成新草稿，不改写旧记录。
 
-当前类型：业务规则、技术决策、接口约定、模块说明。当前状态：DRAFT、PUBLISHED、NEEDS_REVIEW、ARCHIVED。
+当前类型：业务规则、技术决策、接口约定、模块说明。状态分为三条正交轴：发布状态 DRAFT/PUBLISHED/ARCHIVED，人工评审状态 UNREVIEWED/APPROVED/CHANGES_REQUESTED，来源版本状态 UNVERIFIED/CURRENT/STALE。保存正文只生成草稿和未评审修订；人工评审与发布是两个独立的 MANAGE 操作。检索只接纳已发布、人工通过且来源未过期的卡片。
 
 ### 12.2 Markdown 与引用
 
@@ -462,7 +468,7 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 
 ### 15.1 路由与壳层
 
-`WorkspaceShell` 负责导航、全局仓库、账号信息、工作区页签和 KeepAlive。登录后默认进入 `/overview`；管理员菜单由 `auth.isAdmin` 追加，路由守卫再次限制 admin 页面。
+`WorkspaceShell` 负责导航、全局仓库、账号信息、工作区页签和 KeepAlive。正常登录完成后进入 `/ask`，直接访问根路径时重定向 `/overview`；管理员菜单由 `auth.isAdmin` 追加，路由守卫再次限制 admin 页面。
 
 当前路由组件：
 
@@ -476,7 +482,7 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 - 账号：`AccountsView`
 - 设置：`SystemSettingsView`
 
-`AppShell.vue`、`RepositoriesView.vue`、`IndexJobsView.vue` 等未被当前路由引用的旧原型文件不属于运行信息架构。
+路由不可达的旧原型页面已删除；功能存在性只以 `router/index.ts` 中的真实路由及其 API 行为为准。
 
 ### 15.2 状态所有权
 
@@ -529,7 +535,7 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 1. QuickStartApplicationService 和 `/quick-start` API。
 2. OnboardingApplicationService、路径、进度、笔记和投影表。
 3. 问答 SSE 事件流、停止/断线恢复和流式 message 状态机。
-4. 多仓检索、真实增量索引和版本化内容索引指针。
+4. 多仓检索和版本化内容索引指针。
 5. 仓库级外发策略、SSH 凭据和 GitLab 项目 API/Webhook。
 6. 备份、恢复、维护模式、RPO/RTO。
 7. 统一任务对导入、附件、删除、备份的完整覆盖。
@@ -539,6 +545,6 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 
 ## 19. 验证与测试
 
-当前 `mvn test` 执行 50 个单元/组件测试；`npm run build` 通过 Vue 类型检查和生产构建。Linux CI 在 Ubuntu runner 重复执行测试、构建并组装发布产物。数据库集成测试 `PostgresMyBatisContextIT` 不在默认 Surefire 测试命名范围，前端没有组件测试和浏览器 E2E。
+默认验证分成三层：`mvn test` 执行无外部依赖的单元/组件测试；`APP_RUN_POSTGRES_IT=true mvn -pl backend -Dtest='*IT' test` 在 PostgreSQL 17 + pgvector 上执行 Flyway、真实 MyBatis SQL、快照切换和仓库导入到问答链路；`npm test && npm run build` 执行关键路由测试、Vue 类型检查和生产构建。Linux CI 默认启动健康的 pgvector 服务并执行三层验证，另在 Linux 上以假可执行文件检查 CodeGraph CLI 参数和产物契约。
 
 完成定义：接口、权限、持久化、失败路径、UI 状态和自动化测试同时与 `01-requirements.md` 当前基线一致。

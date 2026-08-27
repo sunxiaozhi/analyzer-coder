@@ -3,8 +3,9 @@
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.VectorIndexQueryMapper">
     <sql id="validKnowledge">
         k.repo_id=#{repositoryId}
-        AND k.status='PUBLISHED'
-        AND k.code_review_status&lt;&gt;'REVIEW_REQUIRED'
+        AND k.publication_status='PUBLISHED'
+        AND k.review_status='APPROVED'
+        AND k.source_version_status&lt;&gt;'STALE'
         AND NOT EXISTS(
             SELECT 1
             FROM knowledge_code_refs ref
@@ -13,6 +14,9 @@
              AND current_chunk.file_path=ref.file_path
              AND current_chunk.start_line=ref.start_line
              AND current_chunk.content_hash=ref.content_hash
+             AND current_chunk.snapshot_id=(
+                 SELECT current_snapshot_id FROM repositories WHERE id=ref.repo_id
+             )
             WHERE ref.card_id=k.id
               AND ref.revision=k.revision
               AND current_chunk.id IS NULL
@@ -46,6 +50,15 @@
                  JOIN vector_model_configs vm ON vm.id=va.active_config_id
                  WHERE va.singleton_id=1)
             ) dimension,
+            COALESCE(
+                MAX(e.retrieval_capability),
+                (SELECT CASE WHEN vm.provider_type='LOCAL_HASH'
+                        THEN 'CHARACTER_HASH' ELSE 'SEMANTIC_EMBEDDING' END
+                 FROM vector_model_activation va
+                 JOIN vector_model_configs vm ON vm.id=va.active_config_id
+                 WHERE va.singleton_id=1),
+                'CHARACTER_HASH'
+            ) retrieval_capability,
             GREATEST(
                 MAX(e.created_at),
                 (SELECT MAX(ke.created_at) FROM knowledge_card_embeddings ke WHERE ke.repo_id=r.id)
@@ -62,7 +75,8 @@
             c.id,c.snapshot_id,c.commit_sha,c.file_path,c.symbol_name,c.symbol_kind,c.language,
             c.chunk_type,c.start_line,c.end_line,
             LEFT(REGEXP_REPLACE(c.content,E'\\s+',' ','g'),260) content_excerpt,
-            c.content_hash,e.model vector_model,e.dimension,e.created_at vectorized_at,
+            c.content_hash,e.model vector_model,e.dimension,e.retrieval_capability,
+            e.created_at vectorized_at,
             CASE WHEN e.chunk_id IS NULL THEN 'MISSING' ELSE 'EMBEDDED' END vector_status
         FROM repositories r
         JOIN code_chunks c ON c.repo_id=r.id AND c.snapshot_id=r.current_snapshot_id
@@ -86,7 +100,7 @@
             k.id,k.title,k.card_type,k.revision,
             LEFT(REGEXP_REPLACE(k.content,E'\\s+',' ','g'),260) content_excerpt,
             ke.content_hash,ke.model vector_model,
-            ke.dimension,
+            ke.dimension,ke.retrieval_capability,
             ke.created_at vectorized_at,
             CASE WHEN ke.card_id IS NULL THEN 'MISSING' ELSE 'EMBEDDED' END vector_status
         FROM knowledge_cards k

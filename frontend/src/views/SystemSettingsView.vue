@@ -228,7 +228,7 @@ async function testVector(item: VectorModel) {
   try {
     const result = await llmSettingsApi.checkVectorModel(item.id);
     if (result.available) {
-      ElMessage.success(`${item.name} 检测通过：${result.dimension} 维，${result.durationMs} ms`);
+      ElMessage.success(`${item.name} 检测通过：${result.capabilityLabel}，${result.dimension} 维，${result.durationMs} ms`);
     } else {
       ElMessage.warning(result.errorSummary ?? '向量模型检测未通过');
     }
@@ -310,10 +310,11 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
       <div v-if="vectorModels.length" class="model-grid vector-grid">
         <article v-for="item in vectorModels" :key="item.id" class="model-card" :class="{ active: item.active }">
           <header class="card-header">
-            <el-tag effect="plain" size="small">{{ item.providerType === 'LOCAL_HASH' ? '本地哈希' : 'OpenAI-compatible' }}</el-tag>
+            <el-tag effect="plain" size="small">{{ item.providerType === 'LOCAL_HASH' ? '字符哈希（非语义）' : 'OpenAI-compatible' }}</el-tag>
             <el-tag :type="item.active ? 'success' : 'info'" size="small">{{ item.active ? '当前启用' : '已备案' }}</el-tag>
           </header>
           <div class="model-title"><h4>{{ item.name }}</h4><code>{{ item.model }}</code></div>
+          <p class="capability-copy"><b>{{ item.capabilityLabel }}</b> · {{ item.limitations.join('；') }}</p>
           <dl>
             <div><dt>运行方式</dt><dd>{{ item.providerType === 'LOCAL_HASH' ? '本地确定性' : '外部 API' }}</dd></div>
             <div><dt>向量维度</dt><dd>{{ item.dimension }}</dd></div>
@@ -361,7 +362,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
         <el-form-item label="备案名称"><el-input v-model="vectorForm.name" placeholder="例如：默认代码向量" /></el-form-item>
         <el-form-item label="模型标识"><el-input v-model="vectorForm.model" :placeholder="vectorForm.providerType === 'LOCAL_HASH' ? 'local-hash-64' : 'text-embedding-model'" /></el-form-item>
         <div class="form-pair">
-          <el-form-item label="运行方式"><el-select v-model="vectorForm.providerType" @change="changeVectorProvider"><el-option label="本地哈希" value="LOCAL_HASH" /><el-option label="OpenAI-compatible" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
+          <el-form-item label="运行方式"><el-select v-model="vectorForm.providerType" @change="changeVectorProvider"><el-option label="本地字符哈希（非语义）" value="LOCAL_HASH" /><el-option label="OpenAI-compatible 语义向量" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
           <el-form-item label="向量维度"><el-input-number v-model="vectorForm.dimension" :min="vectorForm.providerType === 'LOCAL_HASH' ? 64 : 1" :max="vectorForm.providerType === 'LOCAL_HASH' ? 64 : 4096" :disabled="vectorForm.providerType === 'LOCAL_HASH'" /></el-form-item>
         </div>
         <template v-if="vectorForm.providerType === 'OPENAI_COMPATIBLE'">
@@ -375,7 +376,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
           type="info"
           :closable="false"
           :title="vectorForm.providerType === 'LOCAL_HASH'
-            ? '本地哈希固定为 64 维。'
+            ? '本地哈希固定为 64 维，仅用于字符相似度；不理解同义词、业务含义或代码语义。'
             : '请填写模型实际支持的维度；检测会调用 OpenAI-compatible /embeddings 并校验返回长度。'"
         />
       </el-form>

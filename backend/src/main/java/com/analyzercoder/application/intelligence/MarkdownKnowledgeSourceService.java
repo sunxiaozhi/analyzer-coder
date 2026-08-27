@@ -230,7 +230,6 @@ public class MarkdownKnowledgeSourceService {
                         cardType(string(source, "asset_type"), sourcePath),
                         content,
                         tags(previous, string(source, "asset_type")),
-                        "DRAFT",
                         previous == null
                                 ? List.of()
                                 : previous.attachments().stream()
