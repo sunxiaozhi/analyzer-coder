@@ -70,6 +70,26 @@ class RepositoryCodeBrowserServiceTest {
                 .hasMessageContaining("大小限制");
     }
 
+    @Test
+    void readsOnlyBoundedProjectImagesForMarkdown() throws Exception {
+        Files.createDirectories(root.resolve("docs/images"));
+        byte[] png = new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47};
+        Files.write(root.resolve("docs/images/overview.png"), png);
+        Files.writeString(root.resolve("docs/images/not-image.txt"), "plain text");
+        RepositoryCodeBrowserService service = service(2_000_000);
+
+        var image = service.readImage(repositoryId(), "docs/images/overview.png");
+
+        assertThat(image.mediaType()).isEqualTo("image/png");
+        assertThat(image.bytes()).containsExactly(png);
+        assertThatThrownBy(() -> service.readImage(repositoryId(), "docs/images/not-image.txt"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("图片资源");
+        assertThatThrownBy(() -> service.readImage(repositoryId(), "../outside.png"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("超出");
+    }
+
     private RepositoryCodeBrowserService service(long maxBytes) {
         RegisterRepositoryUseCase repositories = mock(RegisterRepositoryUseCase.class);
         when(repositories.get(repositoryId())).thenReturn(repository());

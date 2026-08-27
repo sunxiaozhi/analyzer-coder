@@ -5,18 +5,76 @@ import { marked } from 'marked';
 
 const props = defineProps<{
   content: string;
+  sourcePath?: string;
+  repositoryId?: string;
 }>();
+const emit = defineEmits<{ openPath: [path: string] }>();
 
-const renderedMarkdown = computed(() => DOMPurify.sanitize(
-  marked.parse(props.content, { async: false, gfm: true }),
-  { USE_PROFILES: { html: true } },
-));
+function repositoryPath(sourcePath: string, reference: string) {
+  if (!reference || /^(?:[a-z]+:|\/|#)/i.test(reference)) return null;
+  const encodedReference = reference.split(/[?#]/, 1)[0];
+  let cleanReference = encodedReference;
+  try {
+    cleanReference = decodeURIComponent(encodedReference);
+  } catch {
+    return null;
+  }
+  const sourceParts = sourcePath.replace(/\\/g, '/').split('/');
+  sourceParts.pop();
+  for (const part of cleanReference.replace(/\\/g, '/').split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') sourceParts.pop();
+    else sourceParts.push(part);
+  }
+  return sourceParts.join('/');
+}
+
+const renderedMarkdown = computed(() => {
+  const sanitized = DOMPurify.sanitize(
+    marked.parse(props.content, { async: false, gfm: true }),
+    { USE_PROFILES: { html: true } },
+  );
+  if (!props.sourcePath) return sanitized;
+  const parsed = new DOMParser().parseFromString(sanitized, 'text/html');
+  parsed.querySelectorAll<HTMLAnchorElement>('a[href]').forEach(anchor => {
+    const path = repositoryPath(props.sourcePath!, anchor.getAttribute('href') ?? '');
+    if (path) {
+      anchor.dataset.repositoryPath = path;
+      anchor.href = '#';
+      return;
+    }
+    if (/^https?:/i.test(anchor.href)) {
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+    }
+  });
+  if (props.repositoryId) {
+    parsed.querySelectorAll<HTMLImageElement>('img[src]').forEach(image => {
+      const path = repositoryPath(props.sourcePath!, image.getAttribute('src') ?? '');
+      if (path) {
+        image.src = `/api/repositories/${encodeURIComponent(props.repositoryId!)}/files/raw?path=${encodeURIComponent(path)}`;
+        image.loading = 'lazy';
+      }
+    });
+  }
+  return DOMPurify.sanitize(parsed.body.innerHTML, { USE_PROFILES: { html: true } });
+});
+
+function handleClick(event: MouseEvent) {
+  const target = event.target instanceof Element
+    ? event.target.closest<HTMLAnchorElement>('a[data-repository-path]')
+    : null;
+  const path = target?.dataset.repositoryPath;
+  if (!path) return;
+  event.preventDefault();
+  emit('openPath', path);
+}
 </script>
 
 <template>
   <section class="markdown-preview-scroll" role="document" aria-label="Markdown 预览">
     <!-- Markdown 先由 DOMPurify 清理，再作为受控 HTML 渲染。 -->
-    <article class="markdown-body" v-html="renderedMarkdown"></article>
+    <article class="markdown-body" v-html="renderedMarkdown" @click="handleClick"></article>
   </section>
 </template>
 

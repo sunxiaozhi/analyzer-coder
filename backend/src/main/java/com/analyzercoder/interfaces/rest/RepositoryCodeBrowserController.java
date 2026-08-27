@@ -7,6 +7,10 @@ import com.analyzercoder.security.RepositoryPermission;
 import com.analyzercoder.security.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.UUID;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,5 +46,21 @@ public class RepositoryCodeBrowserController {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
         return browser.read(id, path);
+    }
+
+    @GetMapping("/raw")
+    public ResponseEntity<byte[]> rawImage(
+            @PathVariable UUID repositoryId,
+            @RequestParam String path,
+            HttpServletRequest request) {
+        CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
+        accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
+        RepositoryCodeBrowserService.BinaryContent content = browser.readImage(id, path);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(content.mediaType()));
+        headers.setCacheControl(CacheControl.noCache());
+        headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+        return ResponseEntity.ok().headers(headers).body(content.bytes());
     }
 }

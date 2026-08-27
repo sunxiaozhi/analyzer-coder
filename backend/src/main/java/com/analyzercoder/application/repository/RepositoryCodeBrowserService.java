@@ -19,6 +19,8 @@ import org.springframework.stereotype.Service;
 /** 提供仓库目录浏览与文件读取能力，并在访问前执行成员权限及路径越界校验。 */
 @Service
 public class RepositoryCodeBrowserService {
+    private static final List<String> INLINE_IMAGE_EXTENSIONS =
+            List.of("png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "svg");
     private final RegisterRepositoryUseCase repositories;
     private final long maxPreviewBytes;
 
@@ -81,6 +83,31 @@ public class RepositoryCodeBrowserService {
                     content);
         } catch (IOException exception) {
             throw new IllegalStateException("无法读取快照文件", exception);
+        }
+    }
+
+    /** 读取 README 引用的图片资源；仅允许受控图片类型并复用快照路径越界校验。 */
+    public BinaryContent readImage(CodeRepositoryId repositoryId, String requestedPath) {
+        CodeRepository repository = published(repositoryId);
+        Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
+        Path file = resolve(root, requestedPath);
+        try {
+            if (!Files.isRegularFile(file) || Files.isSymbolicLink(file)) {
+                throw new IllegalArgumentException("图片不存在于当前代码快照");
+            }
+            String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
+            int dot = name.lastIndexOf('.');
+            String extension = dot < 0 ? "" : name.substring(dot + 1);
+            if (!INLINE_IMAGE_EXTENSIONS.contains(extension)) {
+                throw new IllegalArgumentException("仅支持预览项目文档中的图片资源");
+            }
+            long size = Files.size(file);
+            if (size > maxPreviewBytes) {
+                throw new IllegalArgumentException("图片超过在线预览大小限制");
+            }
+            return new BinaryContent(imageMediaType(extension), Files.readAllBytes(file));
+        } catch (IOException exception) {
+            throw new IllegalStateException("无法读取快照图片", exception);
         }
     }
 
@@ -216,6 +243,18 @@ public class RepositoryCodeBrowserService {
         };
     }
 
+    private static String imageMediaType(String extension) {
+        return switch (extension) {
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "gif" -> "image/gif";
+            case "webp" -> "image/webp";
+            case "bmp" -> "image/bmp";
+            case "ico" -> "image/x-icon";
+            case "svg" -> "image/svg+xml";
+            default -> "image/png";
+        };
+    }
+
     public record SnapshotFiles(
             String snapshotId, String branch, String commit, List<FileEntry> files) {}
 
@@ -229,4 +268,6 @@ public class RepositoryCodeBrowserService {
             long sizeBytes,
             int lineCount,
             String content) {}
+
+    public record BinaryContent(String mediaType, byte[] bytes) {}
 }
