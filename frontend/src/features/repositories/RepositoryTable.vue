@@ -9,7 +9,6 @@ defineProps<{
   loading: boolean;
   rescanningId: string | null;
   buildingId: string | null;
-  preparingId: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -19,7 +18,7 @@ const emit = defineEmits<{
   remove: [repositoryId: string, name: string];
   govern: [repository: Repository];
   codegraph: [repository: Repository];
-  prepare: [repository: Repository];
+  overview: [repository: Repository];
 }>();
 
 function sourceLabel(source: Repository['sourceType']) {
@@ -76,17 +75,16 @@ function command(action: string, row: Repository) {
         </div>
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="410" fixed="right">
+    <el-table-column label="操作" width="400" fixed="right">
       <template #default="{ row }">
         <div class="repository-actions">
           <el-button
             class="action-button"
             link
             type="primary"
-            :loading="preparingId === row.id"
-            @click="emit('prepare', row)"
+            @click="emit('overview', row)"
           >
-            准备 / 画像
+            项目总览
           </el-button>
           <el-button v-if="canEditRepository(row)" class="action-button" link type="primary" @click="emit('edit', row)">编辑</el-button>
           <el-button

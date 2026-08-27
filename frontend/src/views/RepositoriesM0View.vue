@@ -8,17 +8,8 @@ import RepositoryFormDialog from '@/features/repositories/RepositoryFormDialog.v
 import RepositoryEditDialog from '@/features/repositories/RepositoryEditDialog.vue';
 import RepositoryGovernanceDialog from '@/features/repositories/RepositoryGovernanceDialog.vue';
 import RepositoryTable from '@/features/repositories/RepositoryTable.vue';
-import RepositoryPreparationDrawer from '@/features/repositories/RepositoryPreparationDrawer.vue';
 import { sourceImportsApi } from '@/api/sourceImports';
-import {
-  getIndexJob,
-  getRepositoryProfile,
-  listRepositoryPage,
-  prepareRepository,
-  syncRemoteRepository,
-  updateRepository,
-  type RepositoryPreparation,
-} from '@/api/repositories';
+import { listRepositoryPage, syncRemoteRepository, updateRepository } from '@/api/repositories';
 import { intelligenceApi } from '@/api/intelligence';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import type { Repository } from '@/types/api';
@@ -41,11 +32,6 @@ const importing = shallowRef(false);
 const editOpen = shallowRef(false);
 const editing = shallowRef<Repository | null>(null);
 const editBusy = shallowRef(false);
-const preparationOpen = shallowRef(false);
-const preparationRepository = shallowRef<Repository | null>(null);
-const preparation = shallowRef<RepositoryPreparation | null>(null);
-const preparationLoading = shallowRef(false);
-const preparingId = shallowRef<string | null>(null);
 let searchTimer: number | undefined;
 
 type Input = { sourceType: 'LOCAL_GIT' | 'REMOTE_GIT' | 'GITLAB' | 'ZIP'; name: string; path: string; url: string; branch: string; credentialId: string; file: File | null };
@@ -94,51 +80,9 @@ async function saveEdit(input: { name: string; description: string; defaultBranc
 async function rescan(id: string) { rescanningId.value = id; try { const repository=rows.value.find(item=>item.id===id); const result=repository&&['REMOTE_GIT','GITLAB'].includes(repository.sourceType)?await syncRemoteRepository(id):await store.rescanRepository(id); await reloadAll(); ElMessage.success(result.changed ? '已同步远端更新并排队增量索引' : '代码版本无变化'); } finally { rescanningId.value = null; } }
 async function startIndex(id: string) { await store.createIndexJob(id, 'FULL'); ElMessage.success('全量内容索引任务已进入队列'); }
 async function buildCodeGraph(repository: Repository) { buildingId.value = repository.id; try { await intelligenceApi.buildGraph(repository.id); await reloadAll(); ElMessage.success('CodeGraph 产物已发布'); } finally { buildingId.value = null; } }
-async function openPreparation(repository: Repository) {
-  preparationRepository.value = repository;
-  preparationOpen.value = true;
-  preparationLoading.value = true;
-  try { preparation.value = await getRepositoryProfile(repository.id); }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : '项目画像加载失败'); }
-  finally { preparationLoading.value = false; }
-}
-async function runPreparation() {
-  const repository = preparationRepository.value;
-  if (!repository || preparingId.value) return;
-  preparingId.value = repository.id;
-  try {
-    for (let round = 0; round < 4; round += 1) {
-      preparation.value = await prepareRepository(repository.id);
-      const jobId = preparation.value.activeJobId;
-      const status = preparation.value.activeJobStatus;
-      if (jobId && ['QUEUED', 'RUNNING', 'CANCEL_REQUESTED'].includes(status ?? '')) {
-        await waitForPreparationJob(jobId);
-        preparation.value = await getRepositoryProfile(repository.id);
-        continue;
-      }
-      break;
-    }
-    await reloadAll();
-    if (preparation.value?.state === 'READY') ElMessage.success('项目已准备完成，可以开始问答');
-    else if (preparation.value?.state === 'DEGRADED') ElMessage.warning('项目已准备完成，向量检索暂时降级');
-    else if (preparation.value?.state === 'ACTION_REQUIRED') ElMessage.error(preparation.value.message);
-  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '项目准备失败'); }
-  finally { preparingId.value = null; }
-}
-async function waitForPreparationJob(jobId: string) {
-  for (let attempt = 0; attempt < 240; attempt += 1) {
-    const job = await getIndexJob(jobId);
-    if (job.status === 'SUCCEEDED') return;
-    if (job.status === 'FAILED' || job.status === 'CANCELED') throw new Error(job.errorMessage ?? '项目准备任务未完成');
-    await new Promise(resolve => window.setTimeout(resolve, 1500));
-  }
-  throw new Error('项目仍在后台准备，可稍后重新打开项目画像继续');
-}
-async function openPreparedRoute(name: 'ask' | 'search' | 'graph') {
-  if (!preparationRepository.value) return;
-  await store.selectRepository(preparationRepository.value.id);
-  preparationOpen.value = false;
-  await router.push({ name });
+async function openOverview(repository: Repository) {
+  await store.selectRepository(repository.id);
+  await router.push({ name: 'overview' });
 }
 function govern(repository: Repository) { governedRepository.value = repository; governanceOpen.value = true; }
 async function governanceChanged() { await reloadAll(); governedRepository.value = store.repositories.find(item => item.id === governedRepository.value?.id) ?? null; }
@@ -160,24 +104,13 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <el-alert v-if="pageError || store.error" :title="pageError ?? store.error ?? ''" type="error" :closable="false" />
       </div>
       <div class="repository-table-region">
-        <RepositoryTable :rows="rows" :loading="pageLoading" :rescanning-id="rescanningId" :building-id="buildingId" :preparing-id="preparingId" @prepare="openPreparation" @edit="openEdit" @index="startIndex" @rescan="rescan" @codegraph="buildCodeGraph" @govern="govern" @remove="remove" />
+        <RepositoryTable :rows="rows" :loading="pageLoading" :rescanning-id="rescanningId" :building-id="buildingId" @overview="openOverview" @edit="openEdit" @index="startIndex" @rescan="rescan" @codegraph="buildCodeGraph" @govern="govern" @remove="remove" />
       </div>
       <AppPagination :page-num="pageNum" :page-size="pageSize" :total="total" :disabled="pageLoading" @page-change="changePage" @size-change="changePageSize" />
     </div>
     <RepositoryFormDialog v-model="dialogOpen" :busy="importing" @submit="create" />
     <RepositoryEditDialog v-model="editOpen" :repository="editing" :busy="editBusy" @submit="saveEdit" />
     <RepositoryGovernanceDialog v-model="governanceOpen" :repository="governedRepository" @changed="governanceChanged" />
-    <RepositoryPreparationDrawer
-      v-model="preparationOpen"
-      :repository="preparationRepository"
-      :preparation="preparation"
-      :loading="preparationLoading"
-      :running="preparingId === preparationRepository?.id"
-      @prepare="runPreparation"
-      @open-ask="openPreparedRoute('ask')"
-      @open-search="openPreparedRoute('search')"
-      @open-graph="openPreparedRoute('graph')"
-    />
   </section>
 </template>
 <style scoped>

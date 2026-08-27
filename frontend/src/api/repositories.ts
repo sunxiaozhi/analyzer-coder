@@ -105,6 +105,66 @@ export interface ProjectArchitectureMap {
   risks: ProjectArchitectureRisk[];
   coverage: ProjectArchitectureCoverage;
 }
+
+export interface ProjectTechnologyFact {
+  name: string;
+  category: 'LANGUAGE' | 'FRAMEWORK' | 'DATA' | 'UI' | 'STATE' | 'BUILD' | 'RUNTIME' | 'TEST' | 'INFRASTRUCTURE';
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  detail: string;
+  evidencePaths: string[];
+}
+
+export interface ProjectFileCategory {
+  key: string;
+  label: string;
+  detail: string;
+  count: number;
+  samples: string[];
+}
+
+export interface ProjectModuleHotspot {
+  module: string;
+  codeFiles: number;
+  incomingWeight: number;
+  outgoingWeight: number;
+  relationWeight: number;
+}
+
+export interface ProjectGraphFacts {
+  codeGraphReady: boolean;
+  codeGraphVersion: string | null;
+  symbolNodes: number;
+  symbolEdges: number;
+  modules: number;
+  dependencyEdges: number;
+  runtimeEdges: number;
+  hotspots: ProjectModuleHotspot[];
+  analyzedCodeFiles: number;
+  totalCodeFiles: number;
+  partial: boolean;
+}
+
+export interface ProjectSuggestion {
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+  category: string;
+  title: string;
+  detail: string;
+  evidence: string[];
+}
+
+export interface ProjectCodeFacts {
+  snapshotId: string;
+  commitSha: string | null;
+  generatedAt: string;
+  projectType: string;
+  confidence: number;
+  codeFileCount: number;
+  technologies: ProjectTechnologyFact[];
+  fileCategories: ProjectFileCategory[];
+  graph: ProjectGraphFacts;
+  suggestions: ProjectSuggestion[];
+  evidenceNotes: string[];
+}
 export interface ProjectArchitectureSymbol {
   symbolName: string;
   symbolKind: string | null;
@@ -229,6 +289,9 @@ export function getRepositoryProfile(repositoryId: string): Promise<RepositoryPr
 }
 export function getProjectArchitectureMap(repositoryId: string): Promise<ProjectArchitectureMap> {
   return request<ProjectArchitectureMap>(`/api/repositories/${repositoryId}/architecture-map`);
+}
+export function getProjectCodeFacts(repositoryId: string): Promise<ProjectCodeFacts> {
+  return request<ProjectCodeFacts>(`/api/repositories/${repositoryId}/code-facts`);
 }
 export function getProjectArchitectureModuleSymbols(
   repositoryId: string,
