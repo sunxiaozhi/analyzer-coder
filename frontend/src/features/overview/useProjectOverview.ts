@@ -4,16 +4,19 @@ import {
   getIndexJob,
   getProjectCodeFacts,
   getRepositoryProfile,
+  listRepositoryFiles,
   prepareRepository,
   type ProjectCodeFacts,
   type RepositoryPreparation,
 } from '@/api/repositories';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import type { RepositorySnapshotFiles } from '@/types/api';
 
 export function useProjectOverview() {
   const repositories = useRepositoryStore();
   const preparation = shallowRef<RepositoryPreparation | null>(null);
   const codeFacts = shallowRef<ProjectCodeFacts | null>(null);
+  const snapshot = shallowRef<RepositorySnapshotFiles | null>(null);
   const loading = shallowRef(false);
   const preparing = shallowRef(false);
   const error = shallowRef<string | null>(null);
@@ -23,17 +26,20 @@ export function useProjectOverview() {
     const version = ++loadVersion;
     preparation.value = null;
     codeFacts.value = null;
+    snapshot.value = null;
     error.value = null;
     if (!repositoryId) return;
     loading.value = true;
     try {
-      const [profile, facts] = await Promise.all([
+      const [profile, facts, files] = await Promise.all([
         getRepositoryProfile(repositoryId),
         getProjectCodeFacts(repositoryId).catch(() => null),
+        listRepositoryFiles(repositoryId).catch(() => null),
       ]);
       if (version !== loadVersion) return;
       preparation.value = profile;
       codeFacts.value = facts;
+      snapshot.value = files;
     } catch (exception) {
       if (version === loadVersion) {
         error.value = exception instanceof Error ? exception.message : '项目总览加载失败';
@@ -85,6 +91,7 @@ export function useProjectOverview() {
   return {
     preparation: shallowReadonly(preparation),
     codeFacts: shallowReadonly(codeFacts),
+    snapshot: shallowReadonly(snapshot),
     loading: shallowReadonly(loading),
     preparing: shallowReadonly(preparing),
     error: shallowReadonly(error),
