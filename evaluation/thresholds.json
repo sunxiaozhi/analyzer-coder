@@ -3,5 +3,10 @@
   "citationCoverageRate": 0.95,
   "statementSupportRate": 0.9,
   "changeFileRecallRate": 0.85,
+  "diffFileExactness": 1.0,
+  "fabricatedPathCount": 0,
+  "provenanceCompleteness": 1.0,
+  "exactReferenceDriftPrecision": 1.0,
+  "knowledgePrecision": 0.9,
   "p95LatencyMs": 5000
 }

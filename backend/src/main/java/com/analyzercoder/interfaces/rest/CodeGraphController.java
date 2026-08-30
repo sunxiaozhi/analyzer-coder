@@ -2,7 +2,7 @@ package com.analyzercoder.interfaces.rest;
 
 import com.analyzercoder.application.intelligence.CodeGraphService;
 import com.analyzercoder.application.intelligence.CodeGraphTaskService;
-import com.analyzercoder.application.intelligence.IntelligenceService;
+import com.analyzercoder.application.intelligence.CodeGraphPropagation;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.RepositoryPermission;
@@ -52,7 +52,7 @@ public class CodeGraphController {
     }
 
     @GetMapping("/impact")
-    public IntelligenceService.GraphResult impact(
+    public CodeGraphPropagation impact(
             @PathVariable UUID repoId,
             @RequestParam String symbol,
             @RequestParam(defaultValue = "3") int depth,

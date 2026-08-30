@@ -1,11 +1,13 @@
 {
-  "datasetVersion": "1.0.0",
-  "curatedAt": "2026-08-26",
-  "curationMethod": "HUMAN_REVIEWED_REPOSITORY_EVIDENCE",
+  "datasetVersion": "2.0.0",
+  "curatedAt": "2026-08-30",
+  "curationMethod": "MIXED_LEGACY_AND_PENDING_HUMAN_REVIEW",
   "repositoryTypes": ["JAVA_SPRING", "VUE_TYPESCRIPT", "OPS_AUTOMATION"],
   "datasets": {
     "retrieval": { "path": "evaluation/retrieval.jsonl", "expectedCount": 50 },
     "qa": { "path": "evaluation/qa.jsonl", "expectedCount": 30 },
-    "change": { "path": "evaluation/change.jsonl", "expectedCount": 20 }
+    "change": { "path": "evaluation/change.jsonl", "expectedCount": 20 },
+    "taskReview": { "path": "evaluation/task-review.jsonl", "expectedCount": 10 },
+    "knowledgeDrift": { "path": "evaluation/knowledge-drift.jsonl", "expectedCount": 8 }
   }
 }

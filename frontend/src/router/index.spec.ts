@@ -11,8 +11,10 @@ describe('workspace critical routes', () => {
       ['repositories', '/repositories'],
       ['indexing', '/indexing'],
       ['overview', '/overview'],
+      ['change-impact', '/change-impact'],
       ['settings', '/settings'],
       ['accounts', '/accounts'],
+      ['audit', '/audit'],
     ]);
 
     const actual = new Map(
@@ -25,12 +27,27 @@ describe('workspace critical routes', () => {
     expect(new Set(actual.values()).size).toBe(actual.size);
   });
 
-  it('routes source search and task center to live implementations', () => {
+  it('keeps maintenance and system operations behind explicit route metadata', () => {
+    const routes = new Map(router.getRoutes().map(route => [String(route.name), route]));
+
+    expect(routes.get('knowledge')?.meta.repositoryMaintain).toBe(true);
+    expect(routes.get('repositories')?.meta.projectManage).toBe(true);
+    for (const name of ['indexing', 'settings', 'accounts', 'audit']) {
+      expect(routes.get(name)?.meta.admin).toBe(true);
+    }
+  });
+
+  it('routes the code evidence workbench and task center to live implementations', () => {
     const search = router.getRoutes().find(route => route.name === 'search');
+    const graph = router.getRoutes().find(route => route.name === 'graph');
     const indexing = router.getRoutes().find(route => route.name === 'indexing');
+    const audit = router.getRoutes().find(route => route.name === 'audit');
 
     expect((search?.components?.default as { __name?: string }).__name).toBe('ChunksM0View');
+    expect(graph?.redirect).toBeTypeOf('function');
+    expect(graph?.components).toBeUndefined();
     expect((indexing?.components?.default as { __name?: string }).__name)
       .toBe('UnifiedIndexJobsView');
+    expect((audit?.components?.default as { __name?: string }).__name).toBe('AuditLogsView');
   });
 });

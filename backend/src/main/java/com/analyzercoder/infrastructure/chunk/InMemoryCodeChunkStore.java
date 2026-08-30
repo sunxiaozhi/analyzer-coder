@@ -63,6 +63,17 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
     }
 
     @Override
+    public List<CodeChunk> findByRepositoryPath(CodeRepositoryId repositoryId, String filePath) {
+        return findByRepositoryId(repositoryId).stream()
+                .filter(chunk -> chunk.filePath().equals(filePath))
+                .sorted(
+                        Comparator.comparing(
+                                CodeChunk::startLine,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+    }
+
+    @Override
     public List<CodeChunk> searchByRepositoryId(
             CodeRepositoryId repositoryId, String query, int limit, int offset) {
         String normalizedQuery = normalize(query);
@@ -111,9 +122,9 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
         }
         if (contains(chunk.symbolName(), normalizedQuery)) {
             score += 3;
-        if (contains(chunk.assetType().name(), normalizedQuery)) {
-            score += 2;
-        }
+            if (contains(chunk.assetType().name(), normalizedQuery)) {
+                score += 2;
+            }
         }
         if (contains(chunk.symbolKind(), normalizedQuery)
                 || contains(chunk.language(), normalizedQuery)) {

@@ -4,6 +4,7 @@ import com.analyzercoder.application.indexing.IndexJobUseCase;
 import com.analyzercoder.application.indexing.StartIndexCommand;
 import com.analyzercoder.application.indexing.VectorIndexQueryService;
 import com.analyzercoder.application.intelligence.CodeGraphTaskService;
+import com.analyzercoder.application.knowledge.KnowledgeDriftTaskService;
 import com.analyzercoder.domain.indexing.IndexJob;
 import com.analyzercoder.domain.indexing.IndexJobStatus;
 import com.analyzercoder.domain.indexing.IndexJobStore;
@@ -36,6 +37,7 @@ public class RepositoryPreparationService {
     private final IndexJobUseCase indexJobs;
     private final IndexJobStore indexJobStore;
     private final CodeGraphTaskService codeGraphTasks;
+    private final KnowledgeDriftTaskService driftTasks;
 
     public RepositoryPreparationService(
             RegisterRepositoryUseCase repositories,
@@ -45,7 +47,8 @@ public class RepositoryPreparationService {
             CodeGraphArtifactMapper graphArtifacts,
             IndexJobUseCase indexJobs,
             IndexJobStore indexJobStore,
-            CodeGraphTaskService codeGraphTasks) {
+            CodeGraphTaskService codeGraphTasks,
+            KnowledgeDriftTaskService driftTasks) {
         this.repositories = repositories;
         this.remoteSync = remoteSync;
         this.browser = browser;
@@ -54,6 +57,7 @@ public class RepositoryPreparationService {
         this.indexJobs = indexJobs;
         this.indexJobStore = indexJobStore;
         this.codeGraphTasks = codeGraphTasks;
+        this.driftTasks = driftTasks;
     }
 
     public PreparationView view(CodeRepositoryId repositoryId) {
@@ -94,13 +98,58 @@ public class RepositoryPreparationService {
                     indexJobs.start(new StartIndexCommand(repositoryId, IndexJobType.FULL));
             return view(repository, started);
         }
+        if (summary.missingChunks() > 0) {
+            IndexJob started =
+                    indexJobs.start(new StartIndexCommand(repositoryId, IndexJobType.INCREMENTAL));
+            return view(repository, started);
+        }
 
         CodeGraphArtifactRow graph = currentGraph(repository);
         if (graph == null) {
             IndexJob graphJob = codeGraphTasks.start(repositoryId);
             return view(repository, graphJob);
         }
+        IndexJob drift = currentDrift(repository);
+        if (drift == null) {
+            IndexJob driftJob = driftTasks.start(repositoryId);
+            return view(repository, driftJob);
+        }
         return view(repository, latest(repositoryId));
+    }
+
+    public PreparationView retryStage(
+            AuthenticatedAccount actor, CodeRepositoryId repositoryId, String stageKey) {
+        CodeRepository repository = repositories.get(repositoryId);
+        IndexJob active = active(repositoryId);
+        if (active != null) {
+            return view(repository, active);
+        }
+        String stage = stageKey == null ? "" : stageKey.trim().toLowerCase(Locale.ROOT);
+        return switch (stage) {
+            case "snapshot" -> prepare(actor, repositoryId);
+            case "content" ->
+                    view(
+                            repository,
+                            indexJobs.start(
+                                    new StartIndexCommand(repositoryId, IndexJobType.FULL)));
+            case "vectors" ->
+                    view(
+                            repository,
+                            indexJobs.start(
+                                    new StartIndexCommand(
+                                            repositoryId, IndexJobType.INCREMENTAL)));
+            case "graph" -> {
+                requireVectors(repositoryId);
+                yield view(repository, codeGraphTasks.start(repositoryId));
+            }
+            case "knowledge_drift" -> {
+                if (currentGraph(repository) == null) {
+                    throw new IllegalStateException("当前 Snapshot 尚无可用 CodeGraph");
+                }
+                yield view(repository, driftTasks.start(repositoryId));
+            }
+            default -> throw new IllegalArgumentException("未知准备阶段: " + stageKey);
+        };
     }
 
     private PreparationView view(CodeRepository repository, IndexJob latestJob) {
@@ -114,6 +163,14 @@ public class RepositoryPreparationService {
         boolean contentReady = snapshotReady && summary.totalChunks() > 0;
         boolean vectorsReady = contentReady && summary.missingChunks() == 0;
         boolean graphReady = graph != null;
+        IndexJob drift = currentDrift(repository);
+        boolean driftCompleted =
+                drift != null && drift.status() == IndexJobStatus.SUCCEEDED;
+        boolean driftReady =
+                driftCompleted && drift.currentStep() != null && drift.currentStep().endsWith(":ready");
+        boolean indexRunning = indexJobRunning(latestJob);
+        boolean indexFailed = indexJobFailed(latestJob);
+        boolean vectorRepairDegraded = vectorRepairDegraded(latestJob);
 
         List<PreparationStage> stages =
                 List.of(
@@ -125,7 +182,11 @@ public class RepositoryPreparationService {
                         new PreparationStage(
                                 "content",
                                 "内容索引",
-                                stage(contentReady, jobActive, jobFailed, latestJob, false),
+                                contentReady
+                                        ? "READY"
+                                        : indexRunning
+                                                ? "RUNNING"
+                                                : indexFailed ? "FAILED" : "PENDING",
                                 contentReady
                                         ? summary.totalChunks() + " 个项目资产片段"
                                         : jobDetail(latestJob, "等待生成项目资产片段")),
@@ -134,9 +195,11 @@ public class RepositoryPreparationService {
                                 summary.capabilityLabel() + "索引",
                                 vectorsReady
                                         ? "READY"
-                                        : contentReady
-                                                ? "DEGRADED"
-                                                : jobActive ? "RUNNING" : "PENDING",
+                                        : indexRunning
+                                                ? "RUNNING"
+                                                : indexFailed
+                                                        ? "FAILED"
+                                                        : contentReady ? "DEGRADED" : "PENDING",
                                 vectorsReady
                                         ? summary.vectorizedChunks()
                                                 + " 个片段可进行"
@@ -157,23 +220,40 @@ public class RepositoryPreparationService {
                                         ? graph.nodeCount() + " 个节点 · " + graph.edgeCount() + " 条边"
                                         : graphJobFailed(latestJob)
                                                 ? jobDetail(latestJob, "CodeGraph 构建失败")
-                                                : "等待构建 CodeGraph"));
+                                                : "等待构建 CodeGraph"),
+                        new PreparationStage(
+                                "knowledge_drift",
+                                "知识失效检查",
+                                driftCompleted
+                                        ? (driftReady ? "READY" : "DEGRADED")
+                                        : driftJobRunning(drift)
+                                                ? "RUNNING"
+                                                : driftJobFailed(drift) ? "FAILED" : "PENDING",
+                                driftCompleted
+                                        ? (driftReady
+                                                ? "已核对当前 Snapshot 的知识来源"
+                                                : "检查已完成，存在需要复核的知识")
+                                        : driftJobFailed(drift)
+                                                ? jobDetail(drift, "知识失效检查失败")
+                                                : graphReady ? "等待核对知识来源" : "等待 CodeGraph"));
 
         int progress =
-                (snapshotReady ? 25 : 0)
-                        + (contentReady ? 25 : 0)
-                        + (vectorsReady ? 25 : 0)
-                        + (graphReady ? 25 : 0);
+                (snapshotReady ? 20 : 0)
+                        + (contentReady ? 20 : 0)
+                        + (vectorsReady ? 20 : 0)
+                        + (graphReady ? 20 : 0)
+                        + (driftCompleted ? 20 : 0);
         String state =
                 jobActive
                         ? "PROCESSING"
-                        : graphReady && contentReady
-                                ? (vectorsReady ? "READY" : "DEGRADED")
+                        : vectorRepairDegraded && contentReady ? "DEGRADED"
+                        : graphReady && contentReady && driftCompleted
+                                ? (vectorsReady && driftReady ? "READY" : "DEGRADED")
                                 : jobFailed ? "ACTION_REQUIRED" : "NOT_READY";
         String message =
                 switch (state) {
-                    case "READY" -> "项目已经可以开始检索、问答和图谱分析";
-                    case "DEGRADED" -> "项目主体已准备完成，向量能力处于降级状态";
+                    case "READY" -> "当前 Snapshot 的检索、图谱和知识状态已经核对完成";
+                    case "DEGRADED" -> "准备流程已完成，但存在向量或知识治理缺口";
                     case "PROCESSING" -> "正在准备项目，完成当前阶段后会自动继续";
                     case "ACTION_REQUIRED" -> jobDetail(latestJob, "项目准备失败，请重试");
                     default -> "项目尚未完成准备";
@@ -196,6 +276,29 @@ public class RepositoryPreparationService {
         }
         return graphArtifacts.findPublished(
                 repository.id().value(), repository.currentSnapshotId().value());
+    }
+
+    private IndexJob currentDrift(CodeRepository repository) {
+        if (repository.currentSnapshotId() == null) {
+            return null;
+        }
+        String snapshotId = repository.currentSnapshotId().value().toString();
+        return indexJobStore.findByRepositoryId(repository.id()).stream()
+                .filter(job -> job.type() == IndexJobType.KNOWLEDGE_DRIFT)
+                .filter(
+                        job ->
+                                isActive(job.status())
+                                        || (job.currentStep() != null
+                                                && job.currentStep().contains(snapshotId)))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void requireVectors(CodeRepositoryId repositoryId) {
+        VectorIndexQueryService.Summary summary = vectors.summary(repositoryId.value());
+        if (summary.totalChunks() == 0 || summary.missingChunks() > 0) {
+            throw new IllegalStateException("请先完成内容和向量索引");
+        }
     }
 
     private IndexJob active(CodeRepositoryId repositoryId) {
@@ -321,15 +424,36 @@ public class RepositoryPreparationService {
                 && job.status() == IndexJobStatus.FAILED;
     }
 
-    private static String stage(
-            boolean ready, boolean active, boolean failed, IndexJob job, boolean graph) {
-        if (ready) {
-            return "READY";
-        }
-        if (active && job != null && (graph == (job.type() == IndexJobType.CODEGRAPH))) {
-            return "RUNNING";
-        }
-        return failed ? "FAILED" : "PENDING";
+    private static boolean driftJobRunning(IndexJob job) {
+        return job != null
+                && job.type() == IndexJobType.KNOWLEDGE_DRIFT
+                && isActive(job.status());
+    }
+
+    private static boolean driftJobFailed(IndexJob job) {
+        return job != null
+                && job.type() == IndexJobType.KNOWLEDGE_DRIFT
+                && job.status() == IndexJobStatus.FAILED;
+    }
+
+    private static boolean indexJobRunning(IndexJob job) {
+        return job != null
+                && (job.type() == IndexJobType.FULL || job.type() == IndexJobType.INCREMENTAL)
+                && isActive(job.status());
+    }
+
+    private static boolean indexJobFailed(IndexJob job) {
+        return job != null
+                && (job.type() == IndexJobType.FULL || job.type() == IndexJobType.INCREMENTAL)
+                && job.status() == IndexJobStatus.FAILED;
+    }
+
+    private static boolean vectorRepairDegraded(IndexJob job) {
+        return job != null
+                && (job.type() == IndexJobType.FULL || job.type() == IndexJobType.INCREMENTAL)
+                && job.status() == IndexJobStatus.SUCCEEDED
+                && job.currentStep() != null
+                && job.currentStep().contains(":vectors-degraded");
     }
 
     private static String jobDetail(IndexJob job, String fallback) {

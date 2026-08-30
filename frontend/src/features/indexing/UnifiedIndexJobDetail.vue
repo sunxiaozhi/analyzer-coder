@@ -17,7 +17,8 @@ function repositoryName(repositoryId: string) {
 function typeLabel(type: Task['type']) {
   if (type === 'FULL') return '全量内容索引';
   if (type === 'INCREMENTAL') return '增量内容索引';
-  return 'CodeGraph 构建';
+  if (type === 'CODEGRAPH') return 'CodeGraph 构建';
+  return '知识失效检查';
 }
 
 function modeLabel(mode: Task['executionMode']) {
@@ -46,7 +47,7 @@ function fallbackLabel(reason: string | null) {
         <div><dt>任务 ID</dt><dd class="mono">{{ job.id }}</dd></div>
         <div><dt>仓库</dt><dd>{{ repositoryName(job.repositoryId) }}</dd></div>
         <div><dt>请求类型</dt><dd>{{ typeLabel(job.type) }}</dd></div>
-        <div v-if="job.type !== 'CODEGRAPH'"><dt>实际模式</dt><dd>{{ modeLabel(job.executionMode) }}</dd></div>
+        <div v-if="job.type === 'FULL' || job.type === 'INCREMENTAL'"><dt>实际模式</dt><dd>{{ modeLabel(job.executionMode) }}</dd></div>
         <div v-if="job.fallbackReason"><dt>回退原因</dt><dd>{{ fallbackLabel(job.fallbackReason) }}</dd></div>
         <div><dt>阶段</dt><dd class="mono">{{ job.currentStep ?? '—' }}</dd></div>
         <div><dt>创建时间</dt><dd>{{ new Date(job.createdAt).toLocaleString() }}</dd></div>

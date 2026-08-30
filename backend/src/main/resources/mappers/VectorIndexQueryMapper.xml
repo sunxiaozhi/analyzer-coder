@@ -5,7 +5,7 @@
         k.repo_id=#{repositoryId}
         AND k.publication_status='PUBLISHED'
         AND k.review_status='APPROVED'
-        AND k.source_version_status&lt;&gt;'STALE'
+        AND k.source_version_status NOT IN ('SUSPECT','STALE')
         AND NOT EXISTS(
             SELECT 1
             FROM knowledge_code_refs ref

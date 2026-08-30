@@ -6,7 +6,7 @@ export type TaskStatus =
   | 'FAILED'
   | 'CANCELED';
 
-export type TaskType = 'FULL' | 'INCREMENTAL' | 'CODEGRAPH';
+export type TaskType = 'FULL' | 'INCREMENTAL' | 'CODEGRAPH' | 'KNOWLEDGE_DRIFT';
 
 export interface Task {
   id: string;

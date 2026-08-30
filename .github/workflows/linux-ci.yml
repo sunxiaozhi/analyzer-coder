@@ -65,6 +65,12 @@ jobs:
           node scripts/evaluate-quality.mjs --validate
           node --test scripts/evaluate-quality.test.mjs
 
+      - name: Test MCP thin adapter
+        working-directory: mcp-server
+        run: |
+          npm ci
+          npm test
+
       - name: Test backend on Linux
         run: mvn -pl backend -am test
 

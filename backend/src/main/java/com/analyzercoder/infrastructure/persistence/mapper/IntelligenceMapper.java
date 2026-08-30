@@ -247,7 +247,6 @@ public interface IntelligenceMapper {
      * @param cardType 知识卡片的业务类型
      * @param content 待保存、索引或渲染的正文内容
      * @param tags 用于分类和筛选内容的标签集合
-     * @param status 用于筛选或更新的目标状态
      * @return 本次操作影响的记录数
      */
     int insertCard(
@@ -257,7 +256,13 @@ public interface IntelligenceMapper {
             @Param("title") String title,
             @Param("cardType") String cardType,
             @Param("content") String content,
-            @Param("tags") String[] tags);
+            @Param("tags") String[] tags,
+            @Param("knowledgeKind") String knowledgeKind,
+            @Param("severity") String severity,
+            @Param("enforcement") String enforcement,
+            @Param("ownerAccountId") UUID ownerAccountId,
+            @Param("scopePayload") String scopePayload,
+            @Param("obligationsPayload") String obligationsPayload);
 
     /**
      * 更新符合给定条件的记录状态或内容。
@@ -269,7 +274,6 @@ public interface IntelligenceMapper {
      * @param cardType 知识卡片的业务类型
      * @param content 待保存、索引或渲染的正文内容
      * @param tags 用于分类和筛选内容的标签集合
-     * @param status 用于筛选或更新的目标状态
      * @return 本次操作影响的记录数
      */
     int updateCard(
@@ -279,7 +283,13 @@ public interface IntelligenceMapper {
             @Param("title") String title,
             @Param("cardType") String cardType,
             @Param("content") String content,
-            @Param("tags") String[] tags);
+            @Param("tags") String[] tags,
+            @Param("knowledgeKind") String knowledgeKind,
+            @Param("severity") String severity,
+            @Param("enforcement") String enforcement,
+            @Param("ownerAccountId") UUID ownerAccountId,
+            @Param("scopePayload") String scopePayload,
+            @Param("obligationsPayload") String obligationsPayload);
 
     int refreshCardSourceVersion(
             @Param("repositoryId") UUID repositoryId, @Param("id") UUID id);

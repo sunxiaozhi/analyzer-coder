@@ -92,7 +92,7 @@ class MarkdownKnowledgeSourceServiceTest {
                         eq(3),
                         eq((long) content.getBytes(StandardCharsets.UTF_8).length));
         verify(mapper).deleteMissingSources(REPOSITORY_ID, List.of("docs/design.md"));
-        verify(mapper).reconcileLinkedCards(REPOSITORY_ID, "current-commit", true);
+        verify(mapper).reconcileLinkedCards(REPOSITORY_ID, SNAPSHOT_ID, "current-commit", true);
     }
 
     @Test
@@ -380,6 +380,14 @@ class MarkdownKnowledgeSourceServiceTest {
                 content,
                 content,
                 List.of("markdown"),
+                com.analyzercoder.domain.knowledge.KnowledgeKind.REFERENCE,
+                com.analyzercoder.domain.knowledge.KnowledgeSeverity.INFO,
+                com.analyzercoder.domain.knowledge.KnowledgeEnforcement.REFERENCE,
+                null,
+                com.analyzercoder.domain.knowledge.KnowledgeScope.empty(),
+                com.analyzercoder.domain.knowledge.KnowledgeObligations.empty(),
+                null,
+                null,
                 status,
                 revision,
                 now,

@@ -1,16 +1,24 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import ProjectOverviewSheet from './ProjectOverviewSheet.vue';
-import type { ProjectCodeFacts, ProjectProfile, RepositoryPreparation } from '@/api/repositories';
-import type { Repository, RepositoryFileContent } from '@/types/api';
+import type {
+  ProjectCodeFacts,
+  ProjectHealthOverview,
+  ProjectProfile,
+  RepositoryPreparation,
+} from '@/api/repositories';
+import type { Repository } from '@/types/api';
 
 const repository = {
   id: 'repo-1',
   name: '示例项目',
   description: '',
   branch: 'main',
+  commit: '1234567890abcdef',
+  snapshotId: 'snapshot-1',
   dirty: false,
   snapshotCreatedAt: new Date().toISOString(),
+  capabilities: { canIndex: true, canUpdate: true },
 } as Repository;
 
 const profile = {
@@ -41,6 +49,7 @@ const preparation = {
     { key: 'content', label: '内容索引', state: 'READY', detail: '80 个片段' },
     { key: 'vectors', label: '语义索引', state: 'READY', detail: '80 个向量' },
     { key: 'graph', label: '调用图谱', state: 'READY', detail: '120 个节点' },
+    { key: 'knowledge_drift', label: '知识失效检查', state: 'READY', detail: '已核对' },
   ],
   profile,
   activeJobId: null,
@@ -79,6 +88,13 @@ const codeFacts = {
       count: 18,
       samples: ['backend/src/UserService.java'],
     },
+    {
+      key: 'TEST',
+      label: '测试代码',
+      detail: '自动化验证',
+      count: 6,
+      samples: ['backend/src/UserServiceTest.java'],
+    },
   ],
   graph: {
     codeGraphReady: true,
@@ -97,34 +113,60 @@ const codeFacts = {
   evidenceNotes: [],
 } satisfies ProjectCodeFacts;
 
-const readmeFile = {
+const health = {
+  repositoryId: 'repo-1',
   snapshotId: 'snapshot-1',
-  path: 'README.md',
-  name: 'README.md',
-  language: 'Markdown',
-  sizeBytes: 120,
-  lineCount: 8,
-  content: [
-    '# 项目介绍',
-    '',
-    '这是项目 README 原文。',
-    '',
-    '## 核心能力',
-    '',
-    '- 代码检索',
-  ].join('\n'),
-} satisfies RepositoryFileContent;
+  commitSha: '1234567890abcdef',
+  state: 'DEGRADED',
+  readyForReview: true,
+  knowledge: {
+    total: 7,
+    current: 4,
+    suspect: 1,
+    stale: 1,
+    unverified: 1,
+    trusted: 3,
+    requiredWithoutOwner: 1,
+    unreviewed: 2,
+  },
+  recentReviews: [{
+    reviewId: 'review-1',
+    status: 'COMPLETED',
+    repositoryId: 'repo-1',
+    snapshotId: 'snapshot-1',
+    createdBy: 'account-1',
+    clientRequestId: 'request-1',
+    task: '调整登录校验',
+    changeSource: 'WORKTREE',
+    changedFileCount: 3,
+    changedSymbolCount: 5,
+    applicableKnowledgeCount: 2,
+    requiredTestCount: 1,
+    requiredApprovalCount: 0,
+    staleKnowledgeCount: 0,
+    unknownCount: 0,
+    error: null,
+    createdAt: '2026-08-30T10:00:00Z',
+    finishedAt: '2026-08-30T10:01:00Z',
+  }],
+  issues: [{
+    code: 'REQUIRED_KNOWLEDGE_WITHOUT_OWNER',
+    severity: 'WARNING',
+    title: '必需知识缺少负责人',
+    detail: '1 条 REQUIRED 知识无法明确审批责任。',
+    actionTarget: 'KNOWLEDGE',
+  }],
+  generatedAt: '2026-08-30T10:02:00Z',
+} satisfies ProjectHealthOverview;
 
-function mountSheet() {
+function mountSheet(currentPreparation: RepositoryPreparation = preparation) {
   return mount(ProjectOverviewSheet, {
     props: {
       repository,
-      preparation,
+      preparation: currentPreparation,
       profile,
       codeFacts,
-      readmeFile,
-      readmeLoading: false,
-      readmeError: null,
+      health,
       loading: false,
       preparing: false,
     },
@@ -132,34 +174,51 @@ function mountSheet() {
 }
 
 describe('ProjectOverviewSheet', () => {
-  it('shows project data beside the README introduction without document tabs', () => {
+  it('shows snapshot facts, knowledge health, code categories and recent reviews without README or technologies', () => {
     const wrapper = mountSheet();
     const text = wrapper.text();
 
     expect(text).toContain('示例项目');
-    expect(text).toContain('已准备');
+    expect(text).toContain('可用但有缺口');
+    expect(text).toContain('1234567890');
+    expect(text).toContain('Snapshot snapshot');
     expect(text).toContain('CodeGraph');
     expect(text).toContain('120');
-    expect(text).toContain('80 / 80');
-    expect(text).toContain('Spring Boot');
-    expect(text).toContain('项目介绍');
-    expect(text).toContain('这是项目 README 原文。');
-    expect(text).toContain('核心能力');
-    expect(text).toContain('语言构成');
-    expect(wrapper.find('.document-tabs').exists()).toBe(false);
-    expect(text).not.toContain('代码类型');
-    expect(text).not.toContain('项目结构');
+    expect(text).toContain('100%');
+    expect(text).toContain('知识真实性');
+    expect(text).toContain('CURRENT');
+    expect(text).toContain('必需但无负责人');
+    expect(text).toContain('代码类型统计');
+    expect(text).toContain('应用与服务');
+    expect(text).toContain('最近变更审查');
+    expect(text).toContain('调整登录校验');
+    expect(text).toContain('当前阻塞与缺口');
+    expect(text).not.toContain('技术栈');
+    expect(text).not.toContain('Spring Boot');
+    expect(text).not.toContain('README 原文');
   });
 
-  it('opens a technology evidence file', async () => {
+  it('emits the primary review action and routes knowledge issue handling through explicit events', async () => {
     const wrapper = mountSheet();
-    await wrapper.get('.technology-list button').trigger('click');
-    expect(wrapper.emitted('openFile')).toEqual([['backend/pom.xml']]);
+    await wrapper.get('.review-action').trigger('click');
+    await wrapper.get('.issue-row button').trigger('click');
+
+    expect(wrapper.emitted('startReview')).toHaveLength(1);
+    expect(wrapper.emitted('openKnowledge')).toHaveLength(1);
   });
 
-  it('opens the README source from the single-document reader', async () => {
-    const wrapper = mountSheet();
-    await wrapper.get('.source-action').trigger('click');
-    expect(wrapper.emitted('openFile')).toEqual([['README.md']]);
+  it('offers a retry action on the exact degraded preparation stage', async () => {
+    const degraded = {
+      ...preparation,
+      state: 'DEGRADED',
+      stages: preparation.stages.map(stage => (
+        stage.key === 'vectors' ? { ...stage, state: 'DEGRADED' as const } : stage
+      )),
+    } satisfies RepositoryPreparation;
+    const wrapper = mountSheet(degraded);
+
+    await wrapper.get('.stage-title button').trigger('click');
+
+    expect(wrapper.emitted('retryStage')).toEqual([['vectors']]);
   });
 });

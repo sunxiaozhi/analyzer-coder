@@ -1,6 +1,12 @@
 package com.analyzercoder.application.intelligence;
 
+import com.analyzercoder.application.knowledge.EngineeringKnowledgePolicy;
 import com.analyzercoder.application.llm.LlmSettingsService;
+import com.analyzercoder.domain.knowledge.KnowledgeEnforcement;
+import com.analyzercoder.domain.knowledge.KnowledgeKind;
+import com.analyzercoder.domain.knowledge.KnowledgeObligations;
+import com.analyzercoder.domain.knowledge.KnowledgeScope;
+import com.analyzercoder.domain.knowledge.KnowledgeSeverity;
 import com.analyzercoder.infrastructure.persistence.mapper.GraphRetrievalMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
 import com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow;
@@ -44,6 +50,7 @@ public class IntelligenceService {
     private final RetrievalQueryAnalyzer queryAnalyzer;
     private final RetrievalRanker ranker;
     private final AnswerCitationValidator citationValidator;
+    private final EngineeringKnowledgePolicy engineeringKnowledgePolicy;
     private final ObjectMapper json;
 
     public IntelligenceService(
@@ -55,6 +62,7 @@ public class IntelligenceService {
             RetrievalQueryAnalyzer queryAnalyzer,
             RetrievalRanker ranker,
             AnswerCitationValidator citationValidator,
+            EngineeringKnowledgePolicy engineeringKnowledgePolicy,
             ObjectMapper json) {
         this.mapper = mapper;
         this.graphRetrievalMapper = graphRetrievalMapper;
@@ -64,6 +72,7 @@ public class IntelligenceService {
         this.queryAnalyzer = queryAnalyzer;
         this.ranker = ranker;
         this.citationValidator = citationValidator;
+        this.engineeringKnowledgePolicy = engineeringKnowledgePolicy;
         this.json = json;
     }
 
@@ -799,6 +808,38 @@ public class IntelligenceService {
         return mapper.cards(repositoryId, includeDraft).stream().map(this::card).toList();
     }
 
+    public KnowledgeCard card(UUID repositoryId, UUID cardId) {
+        return findCard(repositoryId, cardId);
+    }
+
+    /** 仅执行知识关键词召回并丢弃分数，供任务审查展示非强制参考候选。 */
+    @Transactional(readOnly = true)
+    public List<KnowledgeReferenceHit> reviewKnowledgeReferences(
+            UUID repositoryId, String task, int limit) {
+        RetrievalQueryAnalyzer.Query query = queryAnalyzer.analyze(task);
+        if (query.normalized().isBlank()) {
+            return List.of();
+        }
+        int resolvedLimit = Math.max(1, Math.min(limit, 20));
+        int termCount = Math.max(1, query.terms().size());
+        return mapper.searchKnowledgeKeyword(
+                        repositoryId,
+                        query.normalized(),
+                        query.terms(),
+                        termCount,
+                        resolvedLimit)
+                .stream()
+                .map(
+                        row ->
+                                new KnowledgeReferenceHit(
+                                        uuid(row, "id"),
+                                        "KNOWLEDGE_KEYWORD",
+                                        "任务描述通过关键词召回该知识，但未命中确定性适用范围"))
+                .filter(hit -> hit.knowledgeId() != null)
+                .distinct()
+                .toList();
+    }
+
     @Transactional
     public KnowledgeCard createCard(UUID repositoryId, UUID actor, CardInput input) {
         CardInput validated = validateCardInput(input);
@@ -810,7 +851,13 @@ public class IntelligenceService {
                 validated.title(),
                 validated.cardType(),
                 validated.content(),
-                validated.tags().toArray(String[]::new));
+                validated.tags().toArray(String[]::new),
+                validated.knowledgeKind(),
+                validated.severity(),
+                validated.enforcement(),
+                validated.ownerAccountId(),
+                writeJson(validated.scope()),
+                writeJson(validated.obligations()));
         KnowledgeCard card = findCard(repositoryId, id);
         attachments.attach(repositoryId, id, card.revision(), validated.attachmentIds());
         attachCodeReferences(repositoryId, id, card.revision(), validated.codeReferences());
@@ -828,7 +875,13 @@ public class IntelligenceService {
                         validated.title(),
                         validated.cardType(),
                         validated.content(),
-                        validated.tags().toArray(String[]::new))
+                        validated.tags().toArray(String[]::new),
+                        validated.knowledgeKind(),
+                        validated.severity(),
+                        validated.enforcement(),
+                        validated.ownerAccountId(),
+                        writeJson(validated.scope()),
+                        writeJson(validated.obligations()))
                 == 0) {
             throw new IllegalArgumentException("知识卡片不存在");
         }
@@ -858,8 +911,17 @@ public class IntelligenceService {
         if ("PUBLISHED".equals(status) && !"APPROVED".equals(current.reviewStatus())) {
             throw new IllegalStateException("知识卡片尚未通过人工评审，不能发布");
         }
-        if ("PUBLISHED".equals(status) && "STALE".equals(current.sourceVersionStatus())) {
+        if ("PUBLISHED".equals(status)
+                && Set.of("SUSPECT", "STALE").contains(current.sourceVersionStatus())) {
             throw new IllegalStateException("知识来源版本已过期，复核内容后才能发布");
+        }
+        if ("PUBLISHED".equals(status)) {
+            engineeringKnowledgePolicy.validateForPublication(
+                    current.enforcement(),
+                    current.ownerAccountId(),
+                    current.scope(),
+                    current.reviewStatus(),
+                    current.sourceVersionStatus());
         }
         if (mapper.setCardPublication(repositoryId, id, actor, status) == 0) {
             throw new IllegalArgumentException("知识卡片不存在");
@@ -889,7 +951,7 @@ public class IntelligenceService {
                 .orElseThrow();
     }
 
-    private static CardInput validateCardInput(CardInput input) {
+    private CardInput validateCardInput(CardInput input) {
         if (input == null) {
             throw new IllegalArgumentException("知识卡片不能为空");
         }
@@ -904,11 +966,25 @@ public class IntelligenceService {
                         .distinct()
                         .limit(20)
                         .toList();
+        EngineeringKnowledgePolicy.ValidatedKnowledge engineering =
+                engineeringKnowledgePolicy.validate(
+                        input.knowledgeKind(),
+                        input.severity(),
+                        input.enforcement(),
+                        input.ownerAccountId(),
+                        input.scope(),
+                        input.obligations());
         return new CardInput(
                 title,
                 cardType,
                 content,
                 tags,
+                engineering.kind().name(),
+                engineering.severity().name(),
+                engineering.enforcement().name(),
+                engineering.ownerAccountId(),
+                engineering.scope(),
+                engineering.obligations(),
                 input.attachmentIds(),
                 input.codeReferences());
     }
@@ -1046,6 +1122,17 @@ public class IntelligenceService {
                 row.content(),
                 markdown.render(row.repositoryId(), row.content()),
                 List.of(row.tags()),
+                KnowledgeKind.valueOf(row.knowledgeKind()),
+                KnowledgeSeverity.valueOf(row.severity()),
+                KnowledgeEnforcement.valueOf(row.enforcement()),
+                row.ownerAccountId(),
+                readPayload(row.scopePayload(), KnowledgeScope.class, KnowledgeScope.empty()),
+                readPayload(
+                        row.obligationsPayload(),
+                        KnowledgeObligations.class,
+                        KnowledgeObligations.empty()),
+                row.lastVerifiedSnapshotId(),
+                row.verificationNote(),
                 row.publicationStatus(),
                 row.revision(),
                 row.createdAt(),
@@ -1058,6 +1145,17 @@ public class IntelligenceService {
                 row.reviewedAt(),
                 attachments.list(row.repositoryId(), row.id(), row.revision()),
                 codeReferences(row.repositoryId(), row.id(), row.revision()));
+    }
+
+    private <T> T readPayload(String payload, Class<T> type, T fallback) {
+        if (payload == null || payload.isBlank()) {
+            return fallback;
+        }
+        try {
+            return json.readValue(payload, type);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("工程知识结构化数据无法读取", exception);
+        }
     }
 
     private static Object value(Map<String, Object> row, String key) {
@@ -1373,6 +1471,8 @@ public class IntelligenceService {
 
     public record CodeReferenceInput(UUID chunkId) {}
 
+    public record KnowledgeReferenceHit(UUID knowledgeId, String source, String detail) {}
+
     public record CodeReference(
             UUID repositoryId,
             UUID chunkId,
@@ -1389,6 +1489,12 @@ public class IntelligenceService {
             String cardType,
             String content,
             List<String> tags,
+            String knowledgeKind,
+            String severity,
+            String enforcement,
+            UUID ownerAccountId,
+            KnowledgeScope scope,
+            KnowledgeObligations obligations,
             List<UUID> attachmentIds,
             List<CodeReferenceInput> codeReferences) {
         public CardInput {
@@ -1401,6 +1507,12 @@ public class IntelligenceService {
             if (codeReferences == null) {
                 codeReferences = List.of();
             }
+            if (scope == null) {
+                scope = KnowledgeScope.empty();
+            }
+            if (obligations == null) {
+                obligations = KnowledgeObligations.empty();
+            }
         }
     }
 
@@ -1412,6 +1524,14 @@ public class IntelligenceService {
             String content,
             String renderedContent,
             List<String> tags,
+            KnowledgeKind knowledgeKind,
+            KnowledgeSeverity severity,
+            KnowledgeEnforcement enforcement,
+            UUID ownerAccountId,
+            KnowledgeScope scope,
+            KnowledgeObligations obligations,
+            UUID lastVerifiedSnapshotId,
+            String verificationNote,
             String publicationStatus,
             int revision,
             Instant createdAt,

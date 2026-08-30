@@ -156,6 +156,38 @@
                       AND s.content_hash=l.source_content_hash
                 ) THEN CURRENT_TIMESTAMP
                 ELSE NULL
+            END,
+            last_verified_snapshot_id=CASE
+                WHEN #{commitAvailable} AND EXISTS(
+                    SELECT 1
+                    FROM knowledge_card_markdown_source_links l
+                    JOIN repository_markdown_sources s
+                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                    WHERE l.card_id=c.id
+                      AND l.revision=(
+                          SELECT MAX(newer.revision)
+                          FROM knowledge_card_markdown_source_links newer
+                          WHERE newer.card_id=c.id
+                      )
+                      AND s.content_hash=l.source_content_hash
+                ) THEN #{snapshotId}
+                ELSE c.last_verified_snapshot_id
+            END,
+            verification_note=CASE
+                WHEN #{commitAvailable} AND EXISTS(
+                    SELECT 1
+                    FROM knowledge_card_markdown_source_links l
+                    JOIN repository_markdown_sources s
+                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                    WHERE l.card_id=c.id
+                      AND l.revision=(
+                          SELECT MAX(newer.revision)
+                          FROM knowledge_card_markdown_source_links newer
+                          WHERE newer.card_id=c.id
+                      )
+                      AND s.content_hash=l.source_content_hash
+                ) THEN 'Markdown 来源内容哈希已在当前快照中核验'
+                ELSE c.verification_note
             END
         WHERE c.repo_id=#{repositoryId}
           AND EXISTS(

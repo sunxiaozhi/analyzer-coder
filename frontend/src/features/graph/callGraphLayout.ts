@@ -1,7 +1,7 @@
 import type { GraphResult } from '@/api/intelligence';
 
 export const CALL_GRAPH_NODE_WIDTH = 244;
-export const CALL_GRAPH_NODE_HEIGHT = 72;
+export const CALL_GRAPH_NODE_HEIGHT = 86;
 
 const CANVAS_PADDING = 56;
 const COLUMN_GAP = 116;

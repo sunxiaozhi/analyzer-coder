@@ -99,6 +99,14 @@
     <select id="findRemoteUrl" resultType="string">
         SELECT remote_url FROM repositories WHERE id=#{id} AND deleted_at IS NULL
     </select>
+    <select id="findIdsByRemoteUrls" resultType="java.util.UUID">
+        SELECT id FROM repositories
+        WHERE deleted_at IS NULL AND LOWER(TRIM(TRAILING '/' FROM remote_url)) IN
+        <foreach collection="remoteUrls" item="remoteUrl" open="(" separator="," close=")">
+            #{remoteUrl}
+        </foreach>
+        ORDER BY id LIMIT 2
+    </select>
     <update id="updateSourceMetadata">
         UPDATE repositories SET source_type=#{sourceType},
         default_branch=CASE WHEN #{hideGitVersion} THEN NULL ELSE default_branch END,

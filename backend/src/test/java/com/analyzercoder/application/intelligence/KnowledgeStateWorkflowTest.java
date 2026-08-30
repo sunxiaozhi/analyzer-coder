@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.analyzercoder.application.knowledge.EngineeringKnowledgePolicy;
 import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.infrastructure.persistence.mapper.GraphRetrievalMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
@@ -43,6 +44,7 @@ class KnowledgeStateWorkflowTest {
                         new RetrievalQueryAnalyzer(),
                         new RetrievalRanker(),
                         new AnswerCitationValidator(),
+                        new EngineeringKnowledgePolicy(),
                         new ObjectMapper());
     }
 
@@ -90,8 +92,64 @@ class KnowledgeStateWorkflowTest {
                 .hasMessageContaining("来源版本已过期");
     }
 
+    @Test
+    void requiredKnowledgeCannotPublishWithoutOwnerScopeAndCurrentEvidence() {
+        when(mapper.cards(repositoryId, true))
+                .thenReturn(
+                        List.of(requiredRow(null, emptyScope(), "CURRENT")),
+                        List.of(requiredRow(actorId, emptyScope(), "CURRENT")),
+                        List.of(requiredRow(actorId, populatedScope(), "UNVERIFIED")));
+
+        assertThatThrownBy(
+                        () ->
+                                service.setCardPublication(
+                                        repositoryId, cardId, actorId, "PUBLISHED"))
+                .hasMessageContaining("负责人");
+        assertThatThrownBy(
+                        () ->
+                                service.setCardPublication(
+                                        repositoryId, cardId, actorId, "PUBLISHED"))
+                .hasMessageContaining("适用范围");
+        assertThatThrownBy(
+                        () ->
+                                service.setCardPublication(
+                                        repositoryId, cardId, actorId, "PUBLISHED"))
+                .hasMessageContaining("当前代码快照");
+        verify(mapper, never()).setCardPublication(any(), any(), any(), any());
+    }
+
     private KnowledgeCardRow row(
             String publicationStatus, String sourceVersionStatus, String reviewStatus) {
+        return row(
+                publicationStatus,
+                sourceVersionStatus,
+                reviewStatus,
+                "REFERENCE",
+                "REFERENCE",
+                null,
+                emptyScope());
+    }
+
+    private KnowledgeCardRow requiredRow(
+            UUID ownerAccountId, String scopePayload, String sourceVersionStatus) {
+        return row(
+                "DRAFT",
+                sourceVersionStatus,
+                "APPROVED",
+                "BUSINESS_RULE",
+                "REQUIRED",
+                ownerAccountId,
+                scopePayload);
+    }
+
+    private KnowledgeCardRow row(
+            String publicationStatus,
+            String sourceVersionStatus,
+            String reviewStatus,
+            String knowledgeKind,
+            String enforcement,
+            UUID ownerAccountId,
+            String scopePayload) {
         Instant now = Instant.parse("2026-08-26T00:00:00Z");
         return new KnowledgeCardRow(
                 cardId,
@@ -100,6 +158,14 @@ class KnowledgeStateWorkflowTest {
                 "业务规则",
                 "正文",
                 new String[0],
+                knowledgeKind,
+                "INFO",
+                enforcement,
+                ownerAccountId,
+                scopePayload,
+                "{\"requiredTests\":[],\"requiredApproverAccountIds\":[],\"instructions\":[]}",
+                null,
+                null,
                 publicationStatus,
                 1,
                 now,
@@ -110,5 +176,13 @@ class KnowledgeStateWorkflowTest {
                 reviewStatus,
                 "UNREVIEWED".equals(reviewStatus) ? null : actorId,
                 "UNREVIEWED".equals(reviewStatus) ? null : now);
+    }
+
+    private static String emptyScope() {
+        return "{\"pathPatterns\":[],\"symbols\":[],\"modules\":[]}";
+    }
+
+    private static String populatedScope() {
+        return "{\"pathPatterns\":[\"backend/src/**\"],\"symbols\":[],\"modules\":[]}";
     }
 }

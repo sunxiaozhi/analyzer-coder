@@ -66,13 +66,21 @@ public class InMemoryIndexJobStore implements IndexJobStore {
     @Override
     public Optional<IndexJob> findNextQueued() {
         return indexJobs.values().stream()
-                .filter(job -> job.status() == IndexJobStatus.QUEUED)
+                .filter(
+                        job ->
+                                job.status() == IndexJobStatus.QUEUED
+                                        && (job.type()
+                                                        == com.analyzercoder.domain.indexing
+                                                                .IndexJobType.FULL
+                                                || job.type()
+                                                        == com.analyzercoder.domain.indexing
+                                                                .IndexJobType.INCREMENTAL))
                 .min(Comparator.comparing(IndexJob::createdAt));
     }
 
     @Override
     public synchronized Optional<IndexJob> claimNextQueued() {
-        Optional<IndexJob> queued = findNextQueued().filter(job -> job.type() != com.analyzercoder.domain.indexing.IndexJobType.CODEGRAPH);
+        Optional<IndexJob> queued = findNextQueued();
         queued.ifPresent(job -> save(job.start("scan_repository")));
         return queued.map(job -> findById(job.id()).orElseThrow());
     }
@@ -116,10 +124,20 @@ public class InMemoryIndexJobStore implements IndexJobStore {
                             && job.timeoutAt() != null
                             && job.timeoutAt().isBefore(Instant.now())) {
                         count[0]++;
+                        String failureCode =
+                                type
+                                                == com.analyzercoder.domain.indexing.IndexJobType
+                                                        .CODEGRAPH
+                                        ? "CODEGRAPH_TIMEOUT"
+                                        : "KNOWLEDGE_DRIFT_TIMEOUT";
+                        String errorMessage =
+                                type
+                                                == com.analyzercoder.domain.indexing.IndexJobType
+                                                        .CODEGRAPH
+                                        ? "CodeGraph 后台任务超过固定执行时限"
+                                        : "知识失效检查超过固定执行时限";
                         return job.fail(
-                                "timed_out",
-                                "CODEGRAPH_TIMEOUT",
-                                "CodeGraph 后台任务超过固定执行时限");
+                                "timed_out", failureCode, errorMessage);
                     }
                     return job;
                 });

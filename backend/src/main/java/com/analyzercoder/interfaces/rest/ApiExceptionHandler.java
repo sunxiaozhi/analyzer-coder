@@ -1,5 +1,11 @@
 package com.analyzercoder.interfaces.rest;
 
+import com.analyzercoder.application.ci.CiCheckException;
+import com.analyzercoder.application.intelligence.CodeGraphException;
+import com.analyzercoder.application.knowledge.KnowledgeDriftException;
+import com.analyzercoder.application.memory.TaskContextException;
+import com.analyzercoder.application.pullrequest.PullRequestIntegrationException;
+import com.analyzercoder.application.review.TaskReviewException;
 import com.analyzercoder.security.ApiSecurityException;
 import java.time.Instant;
 import org.slf4j.Logger;
@@ -35,6 +41,88 @@ public class ApiExceptionHandler {
                         .map(x -> x.getField() + " " + x.getDefaultMessage())
                         .orElse("Validation failed");
         return ResponseEntity.badRequest().body(ApiErrorResponse.of("VALIDATION_FAILED", m));
+    }
+
+    @ExceptionHandler(TaskReviewException.class)
+    public ResponseEntity<ApiErrorResponse> taskReview(TaskReviewException e) {
+        HttpStatus status =
+                switch (e.code()) {
+                    case "TASK_REVIEW_NOT_FOUND", "REPOSITORY_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+                    case "IDEMPOTENCY_KEY_CONFLICT",
+                                    "CURRENT_SNAPSHOT_REQUIRED",
+                                    "SNAPSHOT_CHANGED_DURING_REVIEW",
+                                    "CHANGE_HEAD_NOT_CURRENT_SNAPSHOT" ->
+                            HttpStatus.CONFLICT;
+                    default -> HttpStatus.BAD_REQUEST;
+                };
+        return ResponseEntity.status(status)
+                .body(ApiErrorResponse.of(e.code(), e.getMessage()));
+    }
+
+    @ExceptionHandler(PullRequestIntegrationException.class)
+    public ResponseEntity<ApiErrorResponse> pullRequest(PullRequestIntegrationException e) {
+        HttpStatus status =
+                switch (e.code()) {
+                    case "REPOSITORY_NOT_FOUND", "WEBHOOK_REPOSITORY_NOT_FOUND" ->
+                            HttpStatus.NOT_FOUND;
+                    case "CURRENT_SNAPSHOT_REQUIRED", "PR_HEAD_NOT_CURRENT_SNAPSHOT" ->
+                            HttpStatus.CONFLICT;
+                    case "PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE", "WEBHOOK_NOT_CONFIGURED" ->
+                            HttpStatus.SERVICE_UNAVAILABLE;
+                    case "PROVIDER_HTTP_ERROR" -> HttpStatus.BAD_GATEWAY;
+                    case "WEBHOOK_SIGNATURE_INVALID" -> HttpStatus.UNAUTHORIZED;
+                    case "WEBHOOK_REPOSITORY_AMBIGUOUS" -> HttpStatus.CONFLICT;
+                    default -> HttpStatus.BAD_REQUEST;
+                };
+        return ResponseEntity.status(status).body(ApiErrorResponse.of(e.code(), e.getMessage()));
+    }
+
+    @ExceptionHandler(CiCheckException.class)
+    public ResponseEntity<ApiErrorResponse> ciCheck(CiCheckException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiErrorResponse.of(e.code(), e.getMessage()));
+    }
+
+    @ExceptionHandler(TaskContextException.class)
+    public ResponseEntity<ApiErrorResponse> taskContext(TaskContextException e) {
+        HttpStatus status =
+                switch (e.code()) {
+                    case "CURRENT_SNAPSHOT_REQUIRED",
+                                    "TASK_REVIEW_NOT_COMPLETED",
+                                    "TASK_REVIEW_SNAPSHOT_MISMATCH" ->
+                            HttpStatus.CONFLICT;
+                    default -> HttpStatus.BAD_REQUEST;
+                };
+        return ResponseEntity.status(status).body(ApiErrorResponse.of(e.code(), e.getMessage()));
+    }
+
+    @ExceptionHandler(KnowledgeDriftException.class)
+    public ResponseEntity<ApiErrorResponse> knowledgeDrift(KnowledgeDriftException e) {
+        HttpStatus status =
+                switch (e.code()) {
+                    case "KNOWLEDGE_CARD_NOT_FOUND", "REPOSITORY_NOT_FOUND" ->
+                            HttpStatus.NOT_FOUND;
+                    case "KNOWLEDGE_REVISION_CONFLICT", "CURRENT_SNAPSHOT_REQUIRED" ->
+                            HttpStatus.CONFLICT;
+                    default -> HttpStatus.BAD_REQUEST;
+                };
+        return ResponseEntity.status(status).body(ApiErrorResponse.of(e.code(), e.getMessage()));
+    }
+
+    @ExceptionHandler(CodeGraphException.class)
+    public ResponseEntity<ApiErrorResponse> codeGraph(CodeGraphException e) {
+        HttpStatus status =
+                switch (e.code()) {
+                    case "CODEGRAPH_SYMBOL_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+                    case "CODEGRAPH_CLI_OUTPUT_INVALID",
+                                    "CODEGRAPH_IMPACT_SCHEMA_UNSUPPORTED",
+                                    "CODEGRAPH_EXPORT_SCHEMA_UNSUPPORTED" ->
+                            HttpStatus.UNPROCESSABLE_ENTITY;
+                    case "CODEGRAPH_IMPACT_QUERY_FAILED", "CODEGRAPH_EXPORT_NOT_AVAILABLE" ->
+                            HttpStatus.SERVICE_UNAVAILABLE;
+                    default -> HttpStatus.CONFLICT;
+                };
+        return ResponseEntity.status(status).body(ApiErrorResponse.of(e.code(), e.getMessage()));
     }
 
     @ExceptionHandler({IllegalStateException.class, DataIntegrityViolationException.class})

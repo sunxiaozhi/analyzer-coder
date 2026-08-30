@@ -57,6 +57,77 @@ export interface RetrievalDiagnostics {
   degradationReasons: string[];
 }
 
+export interface HybridSearchHit {
+  chunkId: string;
+  snapshotId: string;
+  filePath: string;
+  symbolName: string | null;
+  symbolKind: string | null;
+  startLine: number | null;
+  endLine: number | null;
+  content: string;
+  contentHash: string;
+  score: number;
+  lexicalScore: number;
+  similarityScore: number;
+  similarityKind: 'NONE' | 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING';
+  channels: string[];
+}
+
+export interface HybridSearchResponse {
+  hits: HybridSearchHit[];
+  retrieval: RetrievalDiagnostics;
+}
+
+export interface CodeEvidenceKnowledgeReference {
+  knowledgeId: string;
+  title: string;
+  kind: string;
+  severity: string;
+  enforcement: string;
+  ownerAccountId: string | null;
+  revision: number;
+  publicationStatus: string;
+  reviewStatus: string;
+  sourceVersionStatus: string;
+  trusted: boolean;
+  bindings: {
+    chunkId: string | null;
+    snapshotId: string | null;
+    symbolName: string | null;
+    startLine: number | null;
+    endLine: number | null;
+    contentHash: string;
+    stale: boolean;
+    currentSnapshot: boolean;
+  }[];
+}
+
+export interface CodeEvidenceReviewReference {
+  reviewId: string;
+  task: string | null;
+  changeSource: string;
+  snapshotId: string;
+  currentSnapshot: boolean;
+  roles: string[];
+  symbols: string[];
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface CodeEvidenceContext {
+  repositoryId: string;
+  snapshotId: string | null;
+  commitSha: string | null;
+  filePath: string;
+  symbol: string | null;
+  knowledgeReferences: CodeEvidenceKnowledgeReference[];
+  reviewReferences: CodeEvidenceReviewReference[];
+  scannedReviewCount: number;
+  limitations: string[];
+  generatedAt: string;
+}
+
 export interface Answer {
   conversationId: string;
   threadId: string;
@@ -109,12 +180,40 @@ export interface QaHistoryRecord {
 }
 
 export interface GraphResult {
-  nodes: { symbol: string; depth: number; focus: boolean }[];
-  edges: { source: string; target: string; relation: string }[];
-  risk: string;
-  relationSource: 'CODEGRAPH_CLI' | 'HEURISTIC_CALL_REFERENCE';
+  nodes: {
+    id: string;
+    symbol: string;
+    kind: string;
+    filePath: string;
+    startLine: number | null;
+    endLine: number | null;
+    depth: number;
+    focus: boolean;
+  }[];
+  edges: {
+    id: string;
+    source: string;
+    target: string;
+    relation: string;
+    sourceLine: number | null;
+  }[];
+  paths: { targetNodeId: string; nodeIds: string[]; edgeIds: string[]; depth: number }[];
+  relationSource: 'CODEGRAPH_CLI';
+  graphArtifactId: string;
   snapshotId: string;
-  algorithm: string;
+  cliVersion: string;
+  affectedNodeCount: number;
+  maxDepthReached: number;
+  coverage: {
+    cliReportedNodeCount: number;
+    cliReportedEdgeCount: number;
+    representedNodeCount: number;
+    representedEdgeCount: number;
+    affectedRecordCount: number;
+    representedAffectedRecordCount: number;
+    unmappedAffectedRecordCount: number;
+    complete: boolean;
+  };
   limitations: string[];
 }
 export interface GraphTarget { symbol: string; filePath: string; startLine: number | null }
@@ -137,6 +236,32 @@ export interface KnowledgeAttachment {
   scanStatus: string;
   createdAt: string;
 }
+export type KnowledgeKind =
+  | 'REFERENCE'
+  | 'BUSINESS_RULE'
+  | 'ARCH_DECISION'
+  | 'API_CONTRACT'
+  | 'DATA_CONSTRAINT'
+  | 'TEST_OBLIGATION'
+  | 'SECURITY_POLICY'
+  | 'RUNBOOK'
+  | 'INCIDENT_LESSON'
+  | 'OWNERSHIP'
+  | 'TECH_DEBT';
+export type KnowledgeSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
+export type KnowledgeEnforcement = 'REFERENCE' | 'ADVISORY' | 'REQUIRED';
+export interface KnowledgeScope {
+  pathPatterns: string[];
+  symbols: string[];
+  modules: string[];
+}
+export interface KnowledgeObligations {
+  requiredTests: string[];
+  requiredApproverAccountIds: string[];
+  instructions: string[];
+  prohibitedPathPatterns: string[];
+  knowledgeUpdateRequired: boolean;
+}
 export interface KnowledgeCard {
   id: string;
   repositoryId: string;
@@ -145,18 +270,62 @@ export interface KnowledgeCard {
   content: string;
   renderedContent: string;
   tags: string[];
+  knowledgeKind: KnowledgeKind;
+  severity: KnowledgeSeverity;
+  enforcement: KnowledgeEnforcement;
+  ownerAccountId: string | null;
+  scope: KnowledgeScope;
+  obligations: KnowledgeObligations;
+  lastVerifiedSnapshotId: string | null;
+  verificationNote: string | null;
   publicationStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   revision: number;
   createdAt: string;
   updatedAt: string;
   verifiedCommit: string | null;
-  sourceVersionStatus: 'UNVERIFIED' | 'CURRENT' | 'STALE';
+  sourceVersionStatus: 'UNVERIFIED' | 'CURRENT' | 'SUSPECT' | 'STALE';
   sourceVersionCheckedAt: string | null;
   reviewStatus: 'UNREVIEWED' | 'APPROVED' | 'CHANGES_REQUESTED';
   reviewedBy: string | null;
   reviewedAt: string | null;
   attachments: KnowledgeAttachment[];
   codeReferences: CodeReference[];
+}
+export type KnowledgeDriftReasonKind =
+  | 'CODE_REFERENCE_HASH_CHANGED'
+  | 'PATH_SCOPE_MATCHED'
+  | 'SYMBOL_SCOPE_MATCHED'
+  | 'MANUAL_CONFIRMATION'
+  | 'MANUAL_STALE_DECISION';
+export interface KnowledgeDriftReason {
+  kind: KnowledgeDriftReasonKind;
+  rule: string | null;
+  filePath: string | null;
+  startLine: number | null;
+  endLine: number | null;
+  changeType: string | null;
+  detail: string;
+}
+export interface KnowledgeDriftEvent {
+  id: string;
+  repositoryId: string;
+  cardId: string;
+  cardRevision: number;
+  fromSnapshotId: string | null;
+  toSnapshotId: string;
+  fromCommit: string | null;
+  toCommit: string | null;
+  previousStatus: KnowledgeCard['sourceVersionStatus'];
+  resultStatus: Exclude<KnowledgeCard['sourceVersionStatus'], 'UNVERIFIED'>;
+  triggerType: 'AUTOMATIC_DIFF' | 'MANUAL_CONFIRM_CURRENT' | 'MANUAL_MARK_STALE';
+  reasons: KnowledgeDriftReason[];
+  note: string | null;
+  actorId: string | null;
+  createdAt: string;
+}
+export interface KnowledgeSourceReviewResponse {
+  card: KnowledgeCard;
+  event: KnowledgeDriftEvent;
 }
 export type MarkdownKnowledgeSourceStatus = 'PENDING' | 'CURRENT' | 'STALE';
 export interface MarkdownKnowledgeSourceCounts {
@@ -203,6 +372,12 @@ export interface CardInput {
   cardType: string;
   content: string;
   tags: string[];
+  knowledgeKind: KnowledgeKind;
+  severity: KnowledgeSeverity;
+  enforcement: KnowledgeEnforcement;
+  ownerAccountId: string | null;
+  scope: KnowledgeScope;
+  obligations: KnowledgeObligations;
   attachmentIds: string[];
   codeReferences: { chunkId: string }[];
 }
@@ -215,12 +390,31 @@ export interface CardRevision {
   content: string;
   renderedContent: string;
   tags: string[];
+  knowledgeKind: KnowledgeKind;
+  severity: KnowledgeSeverity;
+  enforcement: KnowledgeEnforcement;
+  ownerAccountId: string | null;
+  scope: KnowledgeScope;
+  obligations: KnowledgeObligations;
+  lastVerifiedSnapshotId: string | null;
+  verificationNote: string | null;
   publicationStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   changedBy: string | null;
   changedAt: string;
 }
 
 export const intelligenceApi = {
+  search: (repositoryId: string, query: string, limit = 50) =>
+    request<HybridSearchResponse>(
+      `/api/repositories/${repositoryId}/hybrid-search?query=${encodeURIComponent(query)}&limit=${limit}`,
+    ),
+  codeEvidenceContext: (repositoryId: string, filePath: string, symbol: string | null) => {
+    const query = new URLSearchParams({ filePath });
+    if (symbol) query.set('symbol', symbol);
+    return request<CodeEvidenceContext>(
+      `/api/repositories/${repositoryId}/code-evidence-context?${query}`,
+    );
+  },
   ask: (
     repositoryId: string,
     question: string,
@@ -307,6 +501,20 @@ export const intelligenceApi = {
     method: 'POST',
     body: JSON.stringify({ publicationStatus }),
   }),
+  sourceDrift: (repositoryId: string, id: string) =>
+    request<KnowledgeDriftEvent | null>(
+      `/api/repositories/${repositoryId}/knowledge/${id}/source-drift`,
+    ).then(result => result ?? null),
+  reviewKnowledgeSource: (
+    repositoryId: string,
+    id: string,
+    action: 'CONFIRM_CURRENT' | 'MARK_STALE',
+    expectedRevision: number,
+    note: string,
+  ) => request<KnowledgeSourceReviewResponse>(
+    `/api/repositories/${repositoryId}/knowledge/${id}/source-review`,
+    { method: 'POST', body: JSON.stringify({ action, expectedRevision, note }) },
+  ),
   cardHistory: (repositoryId: string, id: string) =>
     request<CardRevision[]>(`/api/repositories/${repositoryId}/knowledge/${id}/history`),
   restoreCardRevision: (repositoryId: string, id: string, revision: number) =>

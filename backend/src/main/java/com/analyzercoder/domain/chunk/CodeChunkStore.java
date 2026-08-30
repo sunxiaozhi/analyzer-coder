@@ -58,6 +58,15 @@ public interface CodeChunkStore {
     List<CodeChunk> findByRepositoryId(CodeRepositoryId repositoryId, int limit, int offset);
 
     /**
+     * 查询当前快照中指定仓库相对路径的代码片段。
+     *
+     * @param repositoryId 目标仓库
+     * @param filePath 仓库相对路径
+     * @return 该文件的代码片段，按起始行排序
+     */
+    List<CodeChunk> findByRepositoryPath(CodeRepositoryId repositoryId, String filePath);
+
+    /**
      * 按给定条件查询匹配数据。
      *
      * @param repositoryId 目标对象的唯一标识

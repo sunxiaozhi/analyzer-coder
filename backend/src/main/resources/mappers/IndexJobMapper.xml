@@ -84,8 +84,10 @@
         WHERE id=#{id} AND status IN('RUNNING','CANCEL_REQUESTED')
     </update>
     <update id="expireTimedOut">
-        UPDATE index_jobs SET status='FAILED',current_step='timed_out',failure_code='CODEGRAPH_TIMEOUT',
-            error_message='CodeGraph 后台任务超过固定执行时限',finished_at=CURRENT_TIMESTAMP
+        UPDATE index_jobs SET status='FAILED',current_step='timed_out',
+            failure_code=CASE WHEN #{jobType}='CODEGRAPH' THEN 'CODEGRAPH_TIMEOUT' ELSE 'KNOWLEDGE_DRIFT_TIMEOUT' END,
+            error_message=CASE WHEN #{jobType}='CODEGRAPH' THEN 'CodeGraph 后台任务超过固定执行时限' ELSE '知识失效检查超过固定执行时限' END,
+            finished_at=CURRENT_TIMESTAMP
         WHERE job_type=#{jobType} AND status IN('RUNNING','CANCEL_REQUESTED')
           AND timeout_at IS NOT NULL AND timeout_at&lt;CURRENT_TIMESTAMP
     </update>

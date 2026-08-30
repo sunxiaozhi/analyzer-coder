@@ -2,7 +2,6 @@ package com.analyzercoder.application.intelligence;
 
 import com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper;
 import com.analyzercoder.infrastructure.persistence.model.CodeGraphArtifactRow;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -11,10 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -32,8 +29,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class ManagedCodeGraphService extends CodeGraphService {
     private static final int MAX_IMPACT_DEPTH = 5;
-    private static final int HIGH_RISK_NODE_COUNT = 100;
-    private static final int MEDIUM_RISK_NODE_COUNT = 30;
     private static final int MAX_PROCESS_ERROR_LENGTH = 1000;
 
     private final CodeGraphArtifactMapper mapper;
@@ -124,55 +119,40 @@ public class ManagedCodeGraphService extends CodeGraphService {
     }
 
     @Override
-    public IntelligenceService.GraphResult impact(UUID repositoryId, String symbol, int depth) {
+    public CodeGraphPropagation impact(UUID repositoryId, String symbol, int depth) {
         Version version = version(repositoryId);
         Artifact artifact = published(repositoryId, version.snapshotId());
         Path project = Path.of(artifact.artifactPath()).getParent();
         int boundedDepth = Math.max(1, Math.min(depth, MAX_IMPACT_DEPTH));
-        String output =
-                run(
-                        List.of(
-                                "impact",
-                                "-p",
-                                project.toString(),
-                                "-d",
-                                String.valueOf(boundedDepth),
-                                "-j",
-                                symbol),
-                        120);
+        String impactOutput;
+        String exportOutput;
         try {
-            JsonNode result = json.readTree(output);
-            Map<String, IntelligenceService.GraphNode> nodes = new LinkedHashMap<>();
-            nodes.put(symbol, new IntelligenceService.GraphNode(symbol, 0, true));
-            List<IntelligenceService.GraphEdge> edges = new ArrayList<>();
-            for (JsonNode item : result.path("affected")) {
-                String label =
-                        item.path("name").asText()
-                                + " @ "
-                                + item.path("filePath").asText()
-                                + ":"
-                                + item.path("startLine").asInt();
-                if (!label.startsWith(symbol + " @")) {
-                    nodes.putIfAbsent(label, new IntelligenceService.GraphNode(label, 1, false));
-                    edges.add(new IntelligenceService.GraphEdge(symbol, label, "AFFECTS"));
-                }
-            }
-
-            int count = result.path("nodeCount").asInt(nodes.size());
-            return new IntelligenceService.GraphResult(
-                    new ArrayList<>(nodes.values()),
-                    edges,
-                    riskLevel(count),
-                    "CODEGRAPH_CLI",
-                    version.snapshotId(),
-                    "CODEGRAPH_CLI_STATIC_ANALYSIS",
-                    List.of(
-                            "CodeGraph " + artifact.cliVersion() + " 确定性静态分析",
-                            "动态反射和运行时分派可能无法确认",
-                            "快照 " + version.snapshotId()));
-        } catch (IOException exception) {
-            throw new IllegalStateException("CodeGraph 返回了无法解析的结果", exception);
+            impactOutput =
+                    run(
+                            List.of(
+                                    "impact",
+                                    "-p",
+                                    project.toString(),
+                                    "-d",
+                                    String.valueOf(boundedDepth),
+                                    "-j",
+                                    symbol),
+                            120);
+        } catch (IllegalStateException exception) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_IMPACT_QUERY_FAILED", "CodeGraph impact 查询失败", exception);
         }
+        try {
+            exportOutput =
+                    run(List.of("export", project.toString(), "--no-centrality"), 120);
+        } catch (IllegalStateException exception) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_EXPORT_NOT_AVAILABLE",
+                    "当前 CodeGraph CLI 无法提供真实边导出，已拒绝拼接关系",
+                    exception);
+        }
+        return CodeGraphPropagation.fromCli(
+                json, impactOutput, exportOutput, symbol, boundedDepth, artifact);
     }
 
     @Override
@@ -184,7 +164,17 @@ public class ManagedCodeGraphService extends CodeGraphService {
     private Artifact published(UUID repositoryId, UUID snapshotId) {
         Artifact result = artifact(mapper.findPublished(repositoryId, snapshotId));
         if (result == null) {
-            throw new IllegalStateException("当前快照尚未发布 CodeGraph 产物");
+            throw new CodeGraphException(
+                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 Snapshot 尚未发布 CodeGraph 产物");
+        }
+        if (!snapshotId.equals(result.snapshotId())) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_VERSION_MISMATCH", "CodeGraph 产物与当前 Snapshot 不一致");
+        }
+        Path marker = Path.of(result.artifactPath()).toAbsolutePath().normalize();
+        if (!marker.startsWith(root) || !Files.isDirectory(marker)) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_ARTIFACT_MISSING", "CodeGraph 产物目录不存在或超出受管目录");
         }
         return result;
     }
@@ -307,16 +297,6 @@ public class ManagedCodeGraphService extends CodeGraphService {
 
     private static String truncate(String output) {
         return output.substring(0, Math.min(output.length(), MAX_PROCESS_ERROR_LENGTH));
-    }
-
-    private static String riskLevel(int nodeCount) {
-        if (nodeCount > HIGH_RISK_NODE_COUNT) {
-            return "HIGH";
-        }
-        if (nodeCount > MEDIUM_RISK_NODE_COUNT) {
-            return "MEDIUM";
-        }
-        return "LOW";
     }
 
     private static boolean isWindows() {

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.ProjectHealthMapper">
+    <resultMap id="knowledgeHealth" type="com.analyzercoder.infrastructure.persistence.model.ProjectKnowledgeHealthRow">
+        <constructor>
+            <arg column="total" javaType="long"/>
+            <arg column="current_count" javaType="long"/>
+            <arg column="suspect_count" javaType="long"/>
+            <arg column="stale_count" javaType="long"/>
+            <arg column="unverified_count" javaType="long"/>
+            <arg column="trusted_count" javaType="long"/>
+            <arg column="required_without_owner" javaType="long"/>
+            <arg column="unreviewed_count" javaType="long"/>
+        </constructor>
+    </resultMap>
+
+    <select id="knowledgeHealth" resultMap="knowledgeHealth">
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE source_version_status='CURRENT') AS current_count,
+            COUNT(*) FILTER (WHERE source_version_status='SUSPECT') AS suspect_count,
+            COUNT(*) FILTER (WHERE source_version_status='STALE') AS stale_count,
+            COUNT(*) FILTER (WHERE source_version_status='UNVERIFIED') AS unverified_count,
+            COUNT(*) FILTER (
+                WHERE publication_status='PUBLISHED'
+                  AND review_status='APPROVED'
+                  AND source_version_status='CURRENT'
+            ) AS trusted_count,
+            COUNT(*) FILTER (
+                WHERE enforcement='REQUIRED' AND owner_account_id IS NULL
+            ) AS required_without_owner,
+            COUNT(*) FILTER (WHERE review_status='UNREVIEWED') AS unreviewed_count
+        FROM knowledge_cards
+        WHERE repo_id=#{repositoryId} AND publication_status&lt;&gt;'ARCHIVED'
+    </select>
+</mapper>

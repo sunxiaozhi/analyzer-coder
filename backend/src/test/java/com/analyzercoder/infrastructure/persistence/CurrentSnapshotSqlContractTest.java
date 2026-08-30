@@ -20,8 +20,12 @@ class CurrentSnapshotSqlContractTest {
         configuration.getTypeHandlerRegistry().register(PostgresUuidTypeHandler.class);
         parseMapper(configuration, "mappers/CodeChunkMapper.xml");
         parseMapper(configuration, "mappers/IntelligenceMapper.xml");
+        parseMapper(configuration, "mappers/KnowledgeHistoryMapper.xml");
         parseMapper(configuration, "mappers/VectorIndexQueryMapper.xml");
         parseMapper(configuration, "mappers/IndexJobMapper.xml");
+        parseMapper(configuration, "mappers/TaskReviewMapper.xml");
+        parseMapper(configuration, "mappers/KnowledgeDriftMapper.xml");
+        parseMapper(configuration, "mappers/ProjectHealthMapper.xml");
     }
 
     @Test
@@ -29,9 +33,12 @@ class CurrentSnapshotSqlContractTest {
         String mapper = resource("mappers/CodeChunkMapper.xml");
 
         assertThat(mapper).contains("<sql id=\"currentSnapshot\">");
-        assertThat(occurrences(mapper, "<include refid=\"currentSnapshot\"/>")).isEqualTo(2);
+        assertThat(occurrences(mapper, "<include refid=\"currentSnapshot\"/>")).isEqualTo(3);
         assertThat(mapper)
                 .contains("SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId}");
+        assertThat(compact(mapper))
+                .contains(
+                        "<selectid=\"findByPath\"resultMap=\"row\">SELECT<includerefid=\"columns\"/>FROMcode_chunksWHERErepo_id=#{repositoryId}ANDfile_path=#{filePath}<includerefid=\"currentSnapshot\"/>");
     }
 
     @Test
@@ -39,9 +46,10 @@ class CurrentSnapshotSqlContractTest {
         String intelligence = compact(resource("mappers/IntelligenceMapper.xml"));
         String vectors = compact(resource("mappers/VectorIndexQueryMapper.xml"));
 
-        assertThat(occurrences(
-                        intelligence,
-                        "snapshot_id=(SELECTcurrent_snapshot_idFROMrepositoriesWHEREid=#{repositoryId})"))
+        assertThat(
+                        occurrences(
+                                intelligence,
+                                "snapshot_id=(SELECTcurrent_snapshot_idFROMrepositoriesWHEREid=#{repositoryId})"))
                 .isGreaterThanOrEqualTo(6);
         assertThat(intelligence)
                 .contains(
@@ -55,7 +63,11 @@ class CurrentSnapshotSqlContractTest {
     void structuralRetrievalUsesOnlyThePublishedGraphSnapshot() throws Exception {
         Select select =
                 GraphRetrievalMapper.class
-                        .getMethod("relatedCodeChunks", java.util.UUID.class, java.util.List.class, int.class)
+                        .getMethod(
+                                "relatedCodeChunks",
+                                java.util.UUID.class,
+                                java.util.List.class,
+                                int.class)
                         .getAnnotation(Select.class);
         String sql = compact(String.join(" ", Arrays.asList(select.value())));
 
@@ -90,7 +102,90 @@ class CurrentSnapshotSqlContractTest {
                 .contains("publication_status='DRAFT',")
                 .contains("review_status='UNREVIEWED'")
                 .contains("c.review_status='APPROVED'")
-                .contains("c.source_version_status&lt;&gt;'STALE'");
+                .contains("c.source_version_status NOT IN ('SUSPECT','STALE')");
+    }
+
+    @Test
+    void taskReviewsAreIdempotentImmutableAndCompleteOnlyOnTheCapturedSnapshot() throws Exception {
+        String migration = resource("db/migration/V10__task_reviews.sql");
+        String mapper = compact(resource("mappers/TaskReviewMapper.xml"));
+
+        assertThat(migration)
+                .contains("CREATE TABLE task_reviews")
+                .contains("uq_task_reviews_client_request")
+                .contains("created_by,repo_id,client_request_id")
+                .contains("trg_task_reviews_immutable")
+                .contains("result_payload JSONB")
+                .contains("model_config_id UUID");
+        assertThat(mapper)
+                .contains("ONCONFLICT(created_by,repo_id,client_request_id)DONOTHING")
+                .contains("ANDstatus='RUNNING'")
+                .contains(
+                        "ANDsnapshot_id=(SELECTcurrent_snapshot_idFROMrepositoriesWHEREid=#{repositoryId})");
+    }
+
+    @Test
+    void engineeringKnowledgeFieldsAreVersionedAndRestoresLoseTrustState() throws Exception {
+        String migration = resource("db/migration/V9__engineering_knowledge.sql");
+        String intelligence = resource("mappers/IntelligenceMapper.xml");
+        String history = resource("mappers/KnowledgeHistoryMapper.xml");
+
+        assertThat(migration)
+                .contains(
+                        "knowledge_kind",
+                        "severity",
+                        "enforcement",
+                        "owner_account_id",
+                        "scope_payload",
+                        "obligations_payload",
+                        "last_verified_snapshot_id",
+                        "verification_note")
+                .contains("'UNVERIFIED','CURRENT','SUSPECT','STALE'")
+                .contains("NEW.scope_payload", "NEW.obligations_payload");
+        assertThat(intelligence)
+                .contains("CAST(#{scopePayload} AS jsonb)")
+                .contains("CAST(#{obligationsPayload} AS jsonb)");
+        assertThat(history)
+                .contains("knowledge_kind=#{source.knowledgeKind}")
+                .contains("publication_status='DRAFT'")
+                .contains("review_status='UNREVIEWED'")
+                .contains("source_version_status='UNVERIFIED'")
+                .contains("last_verified_snapshot_id=NULL,verification_note=NULL");
+        assertThat(resource("mappers/VectorIndexQueryMapper.xml"))
+                .contains("source_version_status NOT IN ('SUSPECT','STALE')");
+    }
+
+    @Test
+    void knowledgeDriftRemovesRepositoryWideTriggerAndPersistsEvidence() throws Exception {
+        String migration = resource("db/migration/V11__knowledge_drift_audit.sql");
+        String mapper = resource("mappers/KnowledgeDriftMapper.xml");
+
+        assertThat(migration)
+                .contains("DROP TRIGGER IF EXISTS trg_repository_knowledge_stale")
+                .contains("CREATE TABLE knowledge_drift_events")
+                .contains("reasons_payload JSONB")
+                .contains("uq_knowledge_drift_automatic_snapshot");
+        assertThat(mapper)
+                .contains("source_version_status='SUSPECT'")
+                .contains("source_version_status='CURRENT'")
+                .contains("revision=#{expectedRevision}")
+                .contains("ON CONFLICT DO NOTHING");
+    }
+
+    @Test
+    void projectHealthUsesIndependentPersistedKnowledgeStates() throws Exception {
+        String mapper = resource("mappers/ProjectHealthMapper.xml");
+
+        assertThat(mapper)
+                .contains("source_version_status='CURRENT'")
+                .contains("source_version_status='SUSPECT'")
+                .contains("source_version_status='STALE'")
+                .contains("source_version_status='UNVERIFIED'")
+                .contains("publication_status='PUBLISHED'")
+                .contains("review_status='APPROVED'")
+                .contains("enforcement='REQUIRED' AND owner_account_id IS NULL")
+                .contains("review_status='UNREVIEWED'")
+                .contains("WHERE repo_id=#{repositoryId} AND publication_status&lt;&gt;'ARCHIVED'");
     }
 
     @Test
@@ -118,7 +213,8 @@ class CurrentSnapshotSqlContractTest {
         try (InputStream input =
                 CurrentSnapshotSqlContractTest.class.getClassLoader().getResourceAsStream(name)) {
             assertThat(input).as(name).isNotNull();
-            new XMLMapperBuilder(input, configuration, name, configuration.getSqlFragments()).parse();
+            new XMLMapperBuilder(input, configuration, name, configuration.getSqlFragments())
+                    .parse();
         }
     }
 

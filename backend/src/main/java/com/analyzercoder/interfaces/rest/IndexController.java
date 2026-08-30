@@ -48,6 +48,9 @@ public class IndexController {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.MAINTAIN);
         IndexJobType type = body == null || body.type() == null ? IndexJobType.FULL : body.type();
+        if (type != IndexJobType.FULL && type != IndexJobType.INCREMENTAL) {
+            throw new IllegalArgumentException("该接口只允许启动 FULL 或 INCREMENTAL 索引任务");
+        }
         return IndexJobResponse.from(useCase.start(new StartIndexCommand(id, type)));
     }
 
@@ -63,7 +66,7 @@ public class IndexController {
             @org.springframework.web.bind.annotation.RequestParam(defaultValue = "1") int pageNum,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20") int pageSize,
             HttpServletRequest request) {
-        var account = SecurityContext.account(request);
+        var account = SecurityContext.requireAdmin(request);
         return pageService.page(account, pageNum, pageSize).map(IndexJobResponse::from);
     }
 
@@ -77,6 +80,7 @@ public class IndexController {
 
     @GetMapping("/api/index-jobs")
     public List<IndexJobResponse> list(HttpServletRequest request) {
+        SecurityContext.requireAdmin(request);
         Set<UUID> visible =
                 accessControl.visibleRepositoryIds(SecurityContext.account(request)).stream()
                         .collect(Collectors.toSet());

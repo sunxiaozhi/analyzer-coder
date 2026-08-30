@@ -3,6 +3,7 @@ backend/target/
 frontend/node_modules/
 frontend/dist/
 frontend/*.log
+mcp-server/node_modules/
 
 .idea/
 .vscode/

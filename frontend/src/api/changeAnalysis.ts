@@ -1,5 +1,6 @@
 import { request } from '@/api/http';
 import type { ProjectArchitectureRisk } from '@/api/repositories';
+import type { Provenance } from '@/types/evidence';
 
 export type ChangeEvidenceCoverageLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 export type ChangeAnalysisCandidateState = 'PENDING' | 'CONFIRMED' | 'EXCLUDED';
@@ -47,6 +48,7 @@ export interface ChangeCandidateEvidence {
   channels: string[];
   matchedQueries: string[];
   moduleId: string | null;
+  provenance: Provenance;
 }
 
 export interface ChangeModuleImpact {

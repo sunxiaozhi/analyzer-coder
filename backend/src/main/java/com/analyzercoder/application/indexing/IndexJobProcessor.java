@@ -1,5 +1,7 @@
 package com.analyzercoder.application.indexing;
 
+import com.analyzercoder.application.code.CodeSymbolExtractor;
+import com.analyzercoder.application.intelligence.CodeGraphTaskService;
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.application.intelligence.MarkdownKnowledgeSourceService;
 import com.analyzercoder.domain.chunk.CodeChunk;
@@ -11,31 +13,23 @@ import com.analyzercoder.domain.indexing.RepositoryScannerPort;
 import com.analyzercoder.domain.indexing.ScannedRepositoryFile;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
+import com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /** 执行单个索引任务的状态机，串联仓库扫描、代码分块、向量写入及失败回收。 */
 @Service
 public class IndexJobProcessor {
+    private static final Logger log = LoggerFactory.getLogger(IndexJobProcessor.class);
     private static final int MAX_CHUNK_LINES = 120;
     private static final int CHUNK_OVERLAP_LINES = 20;
     static final double MAX_INCREMENTAL_CHANGE_RATIO = 0.35d;
-    private static final Pattern DECLARATION =
-            Pattern.compile(
-                    "(?m)^\\s*(?:(?:public|protected|private|static|final|abstract|async|export|default)\\s+)*"
-                            + "(class|interface|record|enum|function|def|func|type)\\s+([A-Za-z_$][\\w$]*)");
-    private static final Pattern CALLABLE =
-            Pattern.compile(
-                    "(?m)^\\s*(?:(?:public|protected|private|static|final|abstract|synchronized|async|export)\\s+)+"
-                            + "(?:[\\w<>\\[\\],.?]+\\s+)?([A-Za-z_$][\\w$]*)\\s*\\(");
-    private static final Pattern MARKDOWN_HEADING = Pattern.compile("(?m)^#{1,6}\\s+(.+?)\\s*$");
-
     private final IndexJobStore indexJobStore;
     private final CodeRepositoryStore repositoryStore;
     private final RepositoryScannerPort repositoryScannerPort;
@@ -43,6 +37,9 @@ public class IndexJobProcessor {
     private final IntelligenceService intelligenceService;
     private final MarkdownKnowledgeSourceService markdownKnowledgeSourceService;
     private final GitDiffService gitDiffService;
+    private final CodeSymbolExtractor codeSymbols;
+    private final CodeGraphArtifactMapper graphArtifacts;
+    private final CodeGraphTaskService codeGraphTasks;
 
     @Autowired
     public IndexJobProcessor(
@@ -52,7 +49,10 @@ public class IndexJobProcessor {
             CodeChunkStore codeChunkStore,
             IntelligenceService intelligenceService,
             MarkdownKnowledgeSourceService markdownKnowledgeSourceService,
-            GitDiffService gitDiffService) {
+            GitDiffService gitDiffService,
+            CodeSymbolExtractor codeSymbols,
+            CodeGraphArtifactMapper graphArtifacts,
+            CodeGraphTaskService codeGraphTasks) {
         this.indexJobStore = indexJobStore;
         this.repositoryStore = repositoryStore;
         this.repositoryScannerPort = repositoryScannerPort;
@@ -60,6 +60,30 @@ public class IndexJobProcessor {
         this.intelligenceService = intelligenceService;
         this.markdownKnowledgeSourceService = markdownKnowledgeSourceService;
         this.gitDiffService = gitDiffService;
+        this.codeSymbols = codeSymbols;
+        this.graphArtifacts = graphArtifacts;
+        this.codeGraphTasks = codeGraphTasks;
+    }
+
+    public IndexJobProcessor(
+            IndexJobStore indexJobStore,
+            CodeRepositoryStore repositoryStore,
+            RepositoryScannerPort repositoryScannerPort,
+            CodeChunkStore codeChunkStore,
+            IntelligenceService intelligenceService,
+            MarkdownKnowledgeSourceService markdownKnowledgeSourceService,
+            GitDiffService gitDiffService) {
+        this(
+                indexJobStore,
+                repositoryStore,
+                repositoryScannerPort,
+                codeChunkStore,
+                intelligenceService,
+                markdownKnowledgeSourceService,
+                gitDiffService,
+                new CodeSymbolExtractor(),
+                null,
+                null);
     }
 
     public IndexJobProcessor(
@@ -74,7 +98,10 @@ public class IndexJobProcessor {
                 codeChunkStore,
                 null,
                 null,
-                new GitDiffService());
+                new GitDiffService(),
+                new CodeSymbolExtractor(),
+                null,
+                null);
     }
 
     public boolean processNextQueuedJob() {
@@ -100,7 +127,8 @@ public class IndexJobProcessor {
 
             List<ScannedRepositoryFile> allFiles = repositoryScannerPort.scan(repository);
             String indexedCommit = codeChunkStore.latestIndexedCommit(repository.id());
-            ExecutionPlan plan = executionPlan(runningJob, repository, indexedCommit, allFiles.size());
+            ExecutionPlan plan =
+                    executionPlan(runningJob, repository, indexedCommit, allFiles.size());
             boolean incremental = plan.incremental();
             Set<String> affectedPaths = plan.affectedPaths();
             Set<String> indexPaths = plan.indexPaths();
@@ -162,6 +190,9 @@ public class IndexJobProcessor {
                                     : ":fallback-" + plan.fallbackReason().toLowerCase())
                             + (vectorsReady ? ":vectors-ready" : ":vectors-degraded");
             indexJobStore.save(publishState.succeed(completion));
+            if (vectorsReady) {
+                enqueueCodeGraph(repository);
+            }
             return true;
         } catch (Exception exception) {
             IndexJob latest = indexJobStore.findById(runningJob.id()).orElse(runningJob);
@@ -170,11 +201,32 @@ public class IndexJobProcessor {
         }
     }
 
+    private void enqueueCodeGraph(CodeRepository indexedRepository) {
+        if (graphArtifacts == null || codeGraphTasks == null) {
+            return;
+        }
+        try {
+            CodeRepository current =
+                    repositoryStore.findById(indexedRepository.id()).orElse(indexedRepository);
+            if (indexedRepository.currentSnapshotId() == null
+                    || !indexedRepository.currentSnapshotId().equals(current.currentSnapshotId())) {
+                return;
+            }
+            if (graphArtifacts.findPublished(
+                            current.id().value(), current.currentSnapshotId().value())
+                    == null) {
+                codeGraphTasks.start(current.id());
+            }
+        } catch (RuntimeException continuationFailure) {
+            log.warn(
+                    "索引已完成，但无法自动排队 CodeGraph，repositoryId={}",
+                    indexedRepository.id().value(),
+                    continuationFailure);
+        }
+    }
+
     private ExecutionPlan executionPlan(
-            IndexJob job,
-            CodeRepository repository,
-            String indexedCommit,
-            int currentFileCount) {
+            IndexJob job, CodeRepository repository, String indexedCommit, int currentFileCount) {
         if (job.type() != com.analyzercoder.domain.indexing.IndexJobType.INCREMENTAL) {
             return ExecutionPlan.full(null);
         }
@@ -217,14 +269,17 @@ public class IndexJobProcessor {
     private List<CodeChunk> splitIntoChunks(
             CodeRepository repository, ScannedRepositoryFile scannedFile) {
         String[] lines = scannedFile.content().split("\\R", -1);
+        CodeSymbolExtractor.Extraction symbols =
+                codeSymbols.extract(
+                        scannedFile.content(), scannedFile.relativePath(), scannedFile.language());
         List<CodeChunk> chunks = new ArrayList<>();
         int step = MAX_CHUNK_LINES - CHUNK_OVERLAP_LINES;
         for (int start = 0; start < lines.length; start += step) {
             int end = Math.min(start + MAX_CHUNK_LINES, lines.length);
             String content = String.join("\n", Arrays.copyOfRange(lines, start, end));
             if (!content.isBlank()) {
-                Symbol symbol =
-                        inferSymbol(content, scannedFile.relativePath(), scannedFile.language());
+                CodeSymbolExtractor.SymbolDeclaration symbol =
+                        codeSymbols.symbolForChunk(symbols, start + 1, end);
                 CodeChunk chunk =
                         symbol == null
                                 ? CodeChunk.fileChunk(
@@ -258,34 +313,8 @@ public class IndexJobProcessor {
         return chunks;
     }
 
-    private static Symbol inferSymbol(String content, String filePath, String language) {
-        if ("markdown".equals(language)) {
-            Matcher heading = MARKDOWN_HEADING.matcher(content);
-            if (heading.find()) {
-                return new Symbol(heading.group(1).trim(), "DOC_SECTION");
-            }
-        }
-        Matcher declaration = DECLARATION.matcher(content);
-        if (declaration.find()) {
-            return new Symbol(declaration.group(2), declaration.group(1).toUpperCase());
-        }
-        Matcher callable = CALLABLE.matcher(content);
-        if (callable.find()) {
-            return new Symbol(callable.group(1), "CALLABLE");
-        }
-        String normalized = filePath.replace('\\', '/');
-        String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);
-        int extension = fileName.lastIndexOf('.');
-        return new Symbol(extension > 0 ? fileName.substring(0, extension) : fileName, "FILE");
-    }
-
-    private record Symbol(String name, String kind) {}
-
     private record ExecutionPlan(
-            String mode,
-            String fallbackReason,
-            Set<String> affectedPaths,
-            Set<String> indexPaths) {
+            String mode, String fallbackReason, Set<String> affectedPaths, Set<String> indexPaths) {
         static ExecutionPlan full(String fallbackReason) {
             return new ExecutionPlan("FULL", fallbackReason, Set.of(), Set.of());
         }

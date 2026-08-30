@@ -17,6 +17,7 @@ export const useRepositoryStore = defineStore('repository', () => {
   const repositories = ref<Repository[]>([]);
   const selectedRepositoryId = shallowRef<string | null>(null);
   const loading = shallowRef(false);
+  const initialized = shallowRef(false);
   const error = shallowRef<string | null>(null);
   const lastStartedJob = shallowRef<IndexJob | null>(null);
 
@@ -51,6 +52,7 @@ export const useRepositoryStore = defineStore('repository', () => {
       error.value = exception instanceof Error ? exception.message : '加载仓库失败';
     } finally {
       loading.value = false;
+      initialized.value = true;
     }
   }
 
@@ -101,6 +103,7 @@ export const useRepositoryStore = defineStore('repository', () => {
     selectedRepositoryId,
     selectedRepository,
     loading,
+    initialized,
     error,
     lastStartedJob,
     loadRepositories,

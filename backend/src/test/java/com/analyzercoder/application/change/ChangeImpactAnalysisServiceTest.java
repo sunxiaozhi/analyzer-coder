@@ -102,6 +102,8 @@ class ChangeImpactAnalysisServiceTest {
         assertThat(result.candidates().get(0).moduleId()).isEqualTo("backend/application");
         assertThat(result.candidates().get(0).snapshotId()).isEqualTo(snapshotId.value());
         assertThat(result.candidates().get(0).contentHash()).hasSize(64);
+        assertThat(result.candidates().get(0).provenance().snapshotId())
+                .isEqualTo(snapshotId.value());
         assertThat(result.modules())
                 .extracting(ChangeImpactAnalysisService.ModuleImpact::moduleId)
                 .containsExactly("backend/application", "backend/domain");
@@ -221,6 +223,56 @@ class ChangeImpactAnalysisServiceTest {
         assertThat(result.unknowns())
                 .extracting(ChangeImpactAnalysisService.AnalysisUnknown::code)
                 .contains("MIXED_SNAPSHOT_EVIDENCE_EXCLUDED", "TEST_NOT_FOUND");
+    }
+
+    @Test
+    void knowledgeRetrievalDoesNotCreateMixedCodeSnapshotWarnings() {
+        RegisterRepositoryUseCase repositories = mock(RegisterRepositoryUseCase.class);
+        IntelligenceService intelligence = mock(IntelligenceService.class);
+        ProjectArchitectureMapService architecture = mock(ProjectArchitectureMapService.class);
+        ChangeIntentParser intentParser = mock(ChangeIntentParser.class);
+        ChangeImpactAnalysisService service =
+                new ChangeImpactAnalysisService(
+                        repositories, intelligence, architecture, intentParser);
+        CodeRepositoryId repositoryId = CodeRepositoryId.newId();
+        RepositorySnapshotId snapshotId = RepositorySnapshotId.newId();
+        when(repositories.get(repositoryId))
+                .thenReturn(repository(repositoryId, snapshotId, false));
+        when(intentParser.parse("修改登录流程", null)).thenReturn(intent("修改登录流程"));
+        IntelligenceService.Evidence knowledge =
+                new IntelligenceService.Evidence(
+                        repositoryId.value(),
+                        "KNOWLEDGE",
+                        null,
+                        UUID.randomUUID(),
+                        null,
+                        "登录约束",
+                        "knowledge://login-rule",
+                        null,
+                        "RULE",
+                        null,
+                        null,
+                        "登录失败需要审计",
+                        "f".repeat(32),
+                        0.8,
+                        0.8,
+                        0,
+                        "LEXICAL",
+                        List.of("knowledge-keyword"),
+                        List.of());
+        when(intelligence.unifiedSearch(eq(repositoryId.value()), eq("修改登录流程"), eq(12)))
+                .thenReturn(List.of(knowledge));
+        when(intelligence.unifiedSearch(
+                        eq(repositoryId.value()), eq("修改登录流程 test 测试 spec"), eq(8)))
+                .thenReturn(List.of(knowledge));
+
+        ChangeImpactAnalysisService.ChangeImpactAnalysis result =
+                service.analyze(repositoryId, "修改登录流程");
+
+        assertThat(result.candidates()).isEmpty();
+        assertThat(result.unknowns())
+                .extracting(ChangeImpactAnalysisService.AnalysisUnknown::code)
+                .doesNotContain("MIXED_SNAPSHOT_EVIDENCE_EXCLUDED", "EVIDENCE_HASH_MISSING");
     }
 
     @Test

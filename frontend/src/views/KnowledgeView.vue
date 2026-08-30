@@ -10,6 +10,7 @@ import {
   type CardRevision,
   type CodeReference,
   type KnowledgeCard,
+  type KnowledgeDriftEvent,
   type MarkdownKnowledgeSource,
   type MarkdownKnowledgeSourceList as MarkdownKnowledgeSourceOverview,
   type MarkdownKnowledgeSourceStatus,
@@ -46,6 +47,9 @@ const bulkGenerating = shallowRef(false);
 const sourceLoadError = shallowRef<string | null>(null);
 const editing = shallowRef<KnowledgeCard | null>(null);
 const viewing = shallowRef<KnowledgeCard | null>(null);
+const driftEvent = shallowRef<KnowledgeDriftEvent | null>(null);
+const driftLoading = shallowRef(false);
+const sourceReviewLoading = shallowRef(false);
 const historyCard = shallowRef<KnowledgeCard | null>(null);
 const revisions = shallowRef<CardRevision[]>([]);
 const emptySourceCounts = { total: 0, pending: 0, current: 0, stale: 0 };
@@ -133,10 +137,91 @@ function syncRequestedCard() {
   activeMode.value = 'cards';
   viewing.value = card;
   detailDialog.value = true;
+  void loadDrift(card);
 }
 function openCreate() { editing.value = null; dialog.value = true; }
 function openEdit(card: KnowledgeCard) { editing.value = card; dialog.value = true; }
-function openDetail(card: KnowledgeCard) { viewing.value = card; detailDialog.value = true; }
+function openDetail(card: KnowledgeCard) {
+  viewing.value = card;
+  detailDialog.value = true;
+  void loadDrift(card);
+}
+async function loadDrift(card: KnowledgeCard) {
+  const repositoryId = repositories.selectedRepositoryId;
+  if (!repositoryId) return;
+  driftEvent.value = null;
+  driftLoading.value = true;
+  try {
+    const result = await intelligenceApi.sourceDrift(repositoryId, card.id);
+    if (repositoryId === repositories.selectedRepositoryId && viewing.value?.id === card.id) {
+      driftEvent.value = result;
+    }
+  } catch (error) {
+    if (repositoryId === repositories.selectedRepositoryId) {
+      ElMessage.error(error instanceof Error ? error.message : '知识漂移证据加载失败');
+    }
+  } finally {
+    if (repositoryId === repositories.selectedRepositoryId) driftLoading.value = false;
+  }
+}
+function openDrift(event: KnowledgeDriftEvent) {
+  detailDialog.value = false;
+  void router.push({
+    name: 'change-impact',
+    query: {
+      source: 'COMMIT_RANGE',
+      baseRef: event.fromCommit ?? undefined,
+      headRef: event.toCommit ?? undefined,
+      task: `核对知识“${viewing.value?.title ?? event.cardId}”的来源漂移证据`,
+    },
+  });
+}
+async function sourceReview(action: 'CONFIRM_CURRENT' | 'MARK_STALE') {
+  const repositoryId = repositories.selectedRepositoryId;
+  const card = viewing.value;
+  if (!repositoryId || !card) return;
+  const confirming = action === 'CONFIRM_CURRENT';
+  try {
+    const prompt = await ElMessageBox.prompt(
+      confirming
+        ? '说明你核对了哪些当前代码事实。确认后将绑定当前 Commit 和 Snapshot。'
+        : '说明知识的哪部分已经不再适用于当前代码。',
+      confirming ? '确认知识仍然有效' : '确认知识已经失效',
+      {
+        confirmButtonText: confirming ? '确认当前' : '标记失效',
+        cancelButtonText: '取消',
+        inputPlaceholder: confirming ? '例如：已核对当前退款审批实现和测试要求' : '例如：审批流程已被新规则替代',
+        inputValidator: value => {
+          const length = value.trim().length;
+          return length >= 1 && length <= 1000 ? true : '请输入 1 到 1000 个字符的复核说明';
+        },
+      },
+    );
+    sourceReviewLoading.value = true;
+    const response = await intelligenceApi.reviewKnowledgeSource(
+      repositoryId,
+      card.id,
+      action,
+      card.revision,
+      prompt.value.trim(),
+    );
+    cards.value = cards.value.map(item => item.id === response.card.id ? response.card : item);
+    viewing.value = response.card;
+    driftEvent.value = response.event;
+    ElMessage.success(confirming ? '已绑定当前代码版本' : '知识已标记为失效');
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error instanceof ApiError && error.code === 'KNOWLEDGE_REVISION_CONFLICT') {
+        await loadCards();
+        ElMessage.warning('知识修订已变化，列表已刷新，请重新打开后核对');
+      } else {
+        ElMessage.error(error.message);
+      }
+    }
+  } finally {
+    sourceReviewLoading.value = false;
+  }
+}
 function openCode(reference: CodeReference) {
   detailDialog.value = false;
   dialog.value = false;
@@ -251,7 +336,13 @@ async function openGraph(reference: CodeReference) {
       ? await intelligenceApi.graphTarget(repositoryId, reference.chunkId)
       : { symbol: reference.symbolName || reference.filePath, filePath: reference.filePath, startLine: reference.startLine };
     detailDialog.value = false;
-    await router.push({ name: 'graph', query: { symbol: target.symbol, depth: '3', analyze: '1' } });
+    await router.push({ name: 'search', query: {
+      path: target.filePath || reference.filePath,
+      startLine: String(target.startLine ?? reference.startLine ?? 1),
+      symbol: target.symbol,
+      depth: '3',
+      relation: '1',
+    } });
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '无法解析图谱目标');
   }
@@ -318,6 +409,9 @@ watch(() => repositories.selectedRepositoryId, () => {
   selectedSourceStatus.value = allSourceStatuses;
   cardQuery.value = '';
   sourceQuery.value = '';
+  viewing.value = null;
+  driftEvent.value = null;
+  detailDialog.value = false;
   void load();
 });
 watch(() => route.query.cardId, syncRequestedCard);
@@ -453,15 +547,26 @@ onMounted(() => void load());
         />
       </div>
     </div>
-    <KnowledgeCardDetailDialog v-model="detailDialog" :card="viewing"
-      @open-code="openCode" @open-graph="openGraph" />
+    <KnowledgeCardDetailDialog
+      v-model="detailDialog"
+      :card="viewing"
+      :drift-event="driftEvent"
+      :drift-loading="driftLoading"
+      :can-maintain="canMaintain"
+      :source-review-loading="sourceReviewLoading"
+      @open-code="openCode"
+      @open-graph="openGraph"
+      @open-drift="openDrift"
+      @source-review="sourceReview"
+    />
     <KnowledgeCardEditorDialog v-if="repositories.selectedRepositoryId" v-model="dialog"
       :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy"
       @submit="save" @open-code="openCode" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">
         <el-card shadow="never"><template #header><div class="toolbar"><b>v{{ item.revision }} · {{ statusLabel(item.publicationStatus) }}</b><span class="spacer" /><el-button link type="primary" @click="restore(item.revision)">恢复为新草稿</el-button></div></template>
-          <div class="history-markdown" v-html="renderMarkdown(item.content, item.repositoryId)" /><small>{{ item.cardType }} · {{ item.tags.join(', ')||'无标签' }}</small>
+          <div class="history-markdown" v-html="renderMarkdown(item.content, item.repositoryId)" />
+          <small>{{ item.knowledgeKind }} · {{ item.enforcement }} · {{ item.cardType }} · {{ item.tags.join(', ')||'无标签' }}</small>
         </el-card>
       </el-timeline-item></el-timeline>
     </el-dialog>

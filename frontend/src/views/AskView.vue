@@ -199,7 +199,13 @@ async function openGraph(reference: CodeReference) {
     const target = reference.chunkId
       ? await intelligenceApi.graphTarget(reference.repositoryId, reference.chunkId)
       : { symbol: reference.symbolName || reference.filePath };
-    await router.push({ name: 'graph', query: { symbol: target.symbol, depth: '3', analyze: '1' } });
+    await router.push({ name: 'search', query: {
+      path: ('filePath' in target ? target.filePath : null) || reference.filePath,
+      startLine: String(('startLine' in target ? target.startLine : null) ?? reference.startLine ?? 1),
+      symbol: target.symbol,
+      depth: '3',
+      relation: '1',
+    } });
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法解析图谱目标'); }
 }
 

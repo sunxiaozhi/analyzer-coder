@@ -1,4 +1,5 @@
 import { request } from '@/api/http';
+import type { TaskReviewSummary } from '@/api/taskReviews';
 import type { PageResult } from '@/types/pagination';
 import type {
   CodeChunkListResponse,
@@ -15,7 +16,7 @@ import type {
 export type PreparationStageState = 'READY' | 'RUNNING' | 'PENDING' | 'FAILED' | 'DEGRADED';
 
 export interface PreparationStage {
-  key: 'snapshot' | 'content' | 'vectors' | 'graph';
+  key: 'snapshot' | 'content' | 'vectors' | 'graph' | 'knowledge_drift';
   label: string;
   state: PreparationStageState;
   detail: string;
@@ -192,20 +193,56 @@ export interface RepositoryPreparation {
   stages: PreparationStage[];
   profile: ProjectProfile;
   activeJobId: string | null;
-  activeJobType: IndexJobType | 'CODEGRAPH' | null;
+  activeJobType: IndexJobType | null;
   activeJobStatus: IndexJob['status'] | null;
 }
 
 export interface ProjectContextItem {
-  chunkId: string;
+  id: string;
+  chunkId: string | null;
   assetType: RepositoryAssetType;
-  filePath: string;
+  sourceType: 'VERIFIED_KNOWLEDGE' | 'CODE_FACT' | 'RETRIEVAL_CANDIDATE' | 'UNKNOWN';
+  title: string;
+  filePath: string | null;
   symbolName: string | null;
   startLine: number | null;
   endLine: number | null;
   excerpt: string;
   content: string;
-  contentHash: string;
+  contentHash: string | null;
+}
+
+export type ProjectHealthState = 'READY' | 'DEGRADED' | 'BLOCKED' | 'PREPARING';
+
+export interface ProjectKnowledgeHealth {
+  total: number;
+  current: number;
+  suspect: number;
+  stale: number;
+  unverified: number;
+  trusted: number;
+  requiredWithoutOwner: number;
+  unreviewed: number;
+}
+
+export interface ProjectHealthIssue {
+  code: string;
+  severity: 'BLOCKING' | 'WARNING';
+  title: string;
+  detail: string;
+  actionTarget: 'PREPARATION' | 'KNOWLEDGE';
+}
+
+export interface ProjectHealthOverview {
+  repositoryId: string;
+  snapshotId: string | null;
+  commitSha: string | null;
+  state: ProjectHealthState;
+  readyForReview: boolean;
+  knowledge: ProjectKnowledgeHealth;
+  recentReviews: TaskReviewSummary[];
+  issues: ProjectHealthIssue[];
+  generatedAt: string;
 }
 
 export interface ProjectContextPack {
@@ -287,6 +324,9 @@ export function syncRemoteRepository(repositoryId: string): Promise<RescanReposi
 export function getRepositoryProfile(repositoryId: string): Promise<RepositoryPreparation> {
   return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/profile`);
 }
+export function getProjectHealthOverview(repositoryId: string): Promise<ProjectHealthOverview> {
+  return request<ProjectHealthOverview>(`/api/repositories/${repositoryId}/health-overview`);
+}
 export function getProjectArchitectureMap(repositoryId: string): Promise<ProjectArchitectureMap> {
   return request<ProjectArchitectureMap>(`/api/repositories/${repositoryId}/architecture-map`);
 }
@@ -309,6 +349,16 @@ export function getProjectArchitectureModuleSymbols(
 
 export function prepareRepository(repositoryId: string): Promise<RepositoryPreparation> {
   return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/prepare`, { method: 'POST' });
+}
+
+export function retryPreparationStage(
+  repositoryId: string,
+  stage: PreparationStage['key'],
+): Promise<RepositoryPreparation> {
+  return request<RepositoryPreparation>(
+    `/api/repositories/${repositoryId}/prepare/stages/${stage}/retry`,
+    { method: 'POST' },
+  );
 }
 
 export function listRepositoryFiles(repositoryId: string): Promise<RepositorySnapshotFiles> {

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.analyzercoder.application.intelligence.MarkdownKnowledgeSourceService;
+import com.analyzercoder.application.intelligence.CodeGraphTaskService;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.indexing.IndexJob;
 import com.analyzercoder.domain.indexing.IndexJobStore;
@@ -21,6 +22,7 @@ import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
 import com.analyzercoder.domain.repository.RepositorySnapshotId;
 import com.analyzercoder.domain.repository.RepositorySourceType;
+import com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
@@ -155,6 +157,43 @@ class IndexJobProcessorTest {
                         eq(fixture.repository().currentCommit()));
         assertThat(chunkCaptor.getValue()).extracting(chunk -> chunk.filePath()).containsOnly("new-name.java");
         assertExecutionPlan(fixture.jobs(), "INCREMENTAL", null);
+    }
+
+    @Test
+    void queuesCodeGraphAfterChunksAndVectorsAreReady() {
+        CodeRepository repository = cleanRepository();
+        IndexJobStore jobs = mock(IndexJobStore.class);
+        CodeRepositoryStore repositories = mock(CodeRepositoryStore.class);
+        RepositoryScannerPort scanner = mock(RepositoryScannerPort.class);
+        CodeChunkStore chunks = mock(CodeChunkStore.class);
+        CodeGraphArtifactMapper graphArtifacts = mock(CodeGraphArtifactMapper.class);
+        CodeGraphTaskService graphTasks = mock(CodeGraphTaskService.class);
+        IndexJob running = IndexJob.create(repository.id(), IndexJobType.FULL).start("scan");
+        when(jobs.claimNextQueued()).thenReturn(Optional.of(running));
+        when(jobs.findById(running.id())).thenReturn(Optional.of(running));
+        when(repositories.findById(repository.id())).thenReturn(Optional.of(repository));
+        when(scanner.scan(repository)).thenReturn(List.of(file("Sample.java")));
+        IndexJobProcessor processor =
+                new IndexJobProcessor(
+                        jobs,
+                        repositories,
+                        scanner,
+                        chunks,
+                        null,
+                        null,
+                        mock(GitDiffService.class),
+                        new com.analyzercoder.application.code.CodeSymbolExtractor(),
+                        graphArtifacts,
+                        graphTasks);
+
+        processor.processNextQueuedJob();
+
+        var order = org.mockito.Mockito.inOrder(chunks, graphTasks);
+        order.verify(chunks).replaceRepositoryChunks(eq(repository.id()), any());
+        order.verify(graphTasks).start(repository.id());
+        verify(graphArtifacts)
+                .findPublished(
+                        repository.id().value(), repository.currentSnapshotId().value());
     }
 
     private static Fixture fixture(

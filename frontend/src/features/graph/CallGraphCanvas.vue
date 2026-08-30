@@ -10,10 +10,10 @@ import {
 } from './callGraphLayout';
 
 const props = defineProps<{ result: GraphResult | null }>();
-const activeSymbol = shallowRef<string | null>(null);
+const activeNodeId = shallowRef<string | null>(null);
 const layout = computed(() => layoutCallGraph(props.result?.nodes ?? []));
-const nodeBySymbol = computed(
-  () => new Map(layout.value.nodes.map((node) => [node.symbol, node])),
+const nodeById = computed(
+  () => new Map(layout.value.nodes.map((node) => [node.id, node])),
 );
 
 type RenderedEdge = GraphResult['edges'][number] & {
@@ -52,8 +52,8 @@ function edgeGeometry(source: PositionedGraphNode, target: PositionedGraphNode) 
 const renderedEdges = computed<RenderedEdge[]>(() => {
   if (!props.result) return [];
   return props.result.edges.flatMap((edge, index) => {
-    const source = nodeBySymbol.value.get(edge.source);
-    const target = nodeBySymbol.value.get(edge.target);
+    const source = nodeById.value.get(edge.source);
+    const target = nodeById.value.get(edge.target);
     if (!source || !target) return [];
     return [{
       ...edge,
@@ -64,7 +64,11 @@ const renderedEdges = computed<RenderedEdge[]>(() => {
 });
 
 function isEdgeActive(edge: RenderedEdge) {
-  return activeSymbol.value === edge.source || activeSymbol.value === edge.target;
+  return activeNodeId.value === edge.source || activeNodeId.value === edge.target;
+}
+
+function nodeLabel(nodeId: string) {
+  return nodeById.value.get(nodeId)?.symbol ?? nodeId;
 }
 </script>
 
@@ -100,22 +104,24 @@ function isEdgeActive(edge: RenderedEdge) {
             <path :d="edge.path" :marker-end="isEdgeActive(edge)
               ? 'url(#call-graph-arrow-active)'
               : 'url(#call-graph-arrow)'">
-              <title>{{ edge.source }} → {{ edge.target }} · {{ edge.relation }}</title>
+              <title>{{ nodeLabel(edge.source) }} → {{ nodeLabel(edge.target) }} · {{ edge.relation }}</title>
             </path>
             <text :x="edge.labelX" :y="edge.labelY">{{ edge.relation }}</text>
           </g>
         </svg>
 
-        <button v-for="node in layout.nodes" :key="node.symbol" type="button"
-          :class="['call-node', { focus: node.focus, active: activeSymbol === node.symbol }]"
-          :style="{ left: `${node.x}px`, top: `${node.y}px` }" :title="node.symbol"
-          @mouseenter="activeSymbol = node.symbol" @mouseleave="activeSymbol = null"
-          @focus="activeSymbol = node.symbol" @blur="activeSymbol = null">
+        <button v-for="node in layout.nodes" :key="node.id" type="button"
+          :class="['call-node', { focus: node.focus, active: activeNodeId === node.id }]"
+          :style="{ left: `${node.x}px`, top: `${node.y}px` }"
+          :title="`${node.symbol} · ${node.filePath}${node.startLine ? `:${node.startLine}` : ''}`"
+          @mouseenter="activeNodeId = node.id" @mouseleave="activeNodeId = null"
+          @focus="activeNodeId = node.id" @blur="activeNodeId = null">
           <span class="call-node-kind">
             <el-icon><Connection /></el-icon>
             {{ node.focus ? '目标符号' : `深度 ${node.depth}` }}
           </span>
           <strong>{{ node.symbol }}</strong>
+          <small>{{ node.filePath }}{{ node.startLine ? `:${node.startLine}` : '' }}</small>
         </button>
       </div>
     </div>
@@ -263,6 +269,15 @@ function isEdgeActive(edge: RenderedEdge) {
   font-size: 11px;
   font-weight: 600;
   line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.call-node small {
+  display: block;
+  overflow: hidden;
+  color: #71717a;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

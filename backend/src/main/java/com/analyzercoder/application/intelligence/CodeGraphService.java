@@ -2,16 +2,13 @@ package com.analyzercoder.application.intelligence;
 
 import com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper;
 import com.analyzercoder.infrastructure.persistence.model.CodeGraphArtifactRow;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,53 +67,45 @@ public class CodeGraphService {
                 id, repoId, repo.snapshotId(), cli, "PUBLISHED", marker.toString(), nodes, edges);
     }
 
-    public IntelligenceService.GraphResult impact(UUID repoId, String symbol, int depth) {
+    public CodeGraphPropagation impact(UUID repoId, String symbol, int depth) {
         RepoVersion repo = version(repoId);
-        if (!Files.isDirectory(repo.path().resolve(".codegraph"))) {
-            throw new IllegalStateException("当前快照尚未构建 CodeGraph，请先点击构建图谱");
+        Artifact artifact = artifact(mapper.findPublished(repoId, repo.snapshotId()));
+        if (artifact == null || !Files.isDirectory(repo.path().resolve(".codegraph"))) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 Snapshot 尚未发布 CodeGraph 产物");
         }
-        String output =
-                run(
-                        List.of(
-                                "impact",
-                                "-p",
-                                repo.path().toString(),
-                                "-d",
-                                String.valueOf(Math.max(1, Math.min(depth, 5))),
-                                "-j",
-                                symbol),
-                        Duration.ofMinutes(2));
+        int boundedDepth = Math.max(1, Math.min(depth, 5));
+        String impactOutput;
+        String exportOutput;
         try {
-            JsonNode root = json.readTree(output);
-            Map<String, IntelligenceService.GraphNode> nodes = new LinkedHashMap<>();
-            nodes.put(symbol, new IntelligenceService.GraphNode(symbol, 0, true));
-            List<IntelligenceService.GraphEdge> edges = new ArrayList<>();
-            for (JsonNode item : root.path("affected")) {
-                String name = item.path("name").asText();
-                String file = item.path("filePath").asText();
-                int line = item.path("startLine").asInt();
-                String label = name + " @ " + file + ":" + line;
-                if (!label.startsWith(symbol + " @")) {
-                    nodes.putIfAbsent(label, new IntelligenceService.GraphNode(label, 1, false));
-                    edges.add(new IntelligenceService.GraphEdge(symbol, label, "AFFECTS"));
-                }
-            }
-            int count = root.path("nodeCount").asInt(nodes.size());
-            String risk = count > 100 ? "HIGH" : count > 30 ? "MEDIUM" : "LOW";
-            return new IntelligenceService.GraphResult(
-                    new ArrayList<>(nodes.values()),
-                    edges,
-                    risk,
-                    "CODEGRAPH_CLI",
-                    repo.snapshotId(),
-                    "CODEGRAPH_CLI_STATIC_ANALYSIS",
-                    List.of(
-                            "CodeGraph CLI 确定性静态分析",
-                            "动态反射和运行时分派可能无法确认",
-                            "快照 " + repo.snapshotId()));
-        } catch (IOException e) {
-            throw new IllegalStateException("CodeGraph 返回了无法解析的结果", e);
+            impactOutput =
+                    run(
+                            List.of(
+                                    "impact",
+                                    "-p",
+                                    repo.path().toString(),
+                                    "-d",
+                                    String.valueOf(boundedDepth),
+                                    "-j",
+                                    symbol),
+                            Duration.ofMinutes(2));
+        } catch (IllegalStateException exception) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_IMPACT_QUERY_FAILED", "CodeGraph impact 查询失败", exception);
         }
+        try {
+            exportOutput =
+                    run(
+                            List.of("export", repo.path().toString(), "--no-centrality"),
+                            Duration.ofMinutes(2));
+        } catch (IllegalStateException exception) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_EXPORT_NOT_AVAILABLE",
+                    "当前 CodeGraph CLI 无法提供真实边导出，已拒绝拼接关系",
+                    exception);
+        }
+        return CodeGraphPropagation.fromCli(
+                json, impactOutput, exportOutput, symbol, boundedDepth, artifact);
     }
 
     public Artifact latest(UUID repoId) {

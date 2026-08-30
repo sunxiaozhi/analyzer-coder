@@ -2,6 +2,8 @@ package com.analyzercoder.application.intelligence;
 
 import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.indexing.ScannedRepositoryFile;
+import com.analyzercoder.domain.knowledge.KnowledgeObligations;
+import com.analyzercoder.domain.knowledge.KnowledgeScope;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
@@ -96,6 +98,7 @@ public class MarkdownKnowledgeSourceService {
         mapper.deleteMissingSources(repositoryId, new ArrayList<>(documents.keySet()));
         mapper.reconcileLinkedCards(
                 repositoryId,
+                repository.currentSnapshotId().value(),
                 repository.currentCommit(),
                 repository.currentCommit() != null && !repository.currentCommit().isBlank());
     }
@@ -230,6 +233,12 @@ public class MarkdownKnowledgeSourceService {
                         cardType(string(source, "asset_type"), sourcePath),
                         content,
                         tags(previous, string(source, "asset_type")),
+                        previous == null ? "REFERENCE" : previous.knowledgeKind().name(),
+                        previous == null ? "INFO" : previous.severity().name(),
+                        previous == null ? "REFERENCE" : previous.enforcement().name(),
+                        previous == null ? null : previous.ownerAccountId(),
+                        previous == null ? KnowledgeScope.empty() : previous.scope(),
+                        previous == null ? KnowledgeObligations.empty() : previous.obligations(),
                         previous == null
                                 ? List.of()
                                 : previous.attachments().stream()

@@ -148,6 +148,17 @@ public class RepositoryController {
         return preparation.prepare(account, id);
     }
 
+    @PostMapping("/{repositoryId}/prepare/stages/{stageKey}/retry")
+    public RepositoryPreparationService.PreparationView retryPreparationStage(
+            @PathVariable UUID repositoryId,
+            @PathVariable String stageKey,
+            HttpServletRequest request) {
+        var account = SecurityContext.account(request);
+        var id = CodeRepositoryId.of(repositoryId);
+        accessControl.require(account, id, RepositoryPermission.MAINTAIN);
+        return preparation.retryStage(account, id, stageKey);
+    }
+
     @PatchMapping("/{repositoryId}")
     public RepositoryResponse update(
             @PathVariable UUID repositoryId,

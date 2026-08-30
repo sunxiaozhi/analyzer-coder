@@ -583,6 +583,14 @@ public class ProjectArchitectureMapService {
         return root;
     }
 
+    /** 使用与架构地图完全相同的规则计算仓库路径所属模块。 */
+    public static String moduleForPath(String path) {
+        if (path == null || path.isBlank()) {
+            throw new IllegalArgumentException("模块路径不能为空");
+        }
+        return moduleOf(path);
+    }
+
     private static int indexOf(String[] values, String target) {
         for (int index = 0; index < values.length; index++) {
             if (target.equalsIgnoreCase(values[index])) return index;

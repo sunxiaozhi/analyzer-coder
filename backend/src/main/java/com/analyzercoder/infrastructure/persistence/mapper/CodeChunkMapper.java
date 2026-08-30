@@ -75,6 +75,9 @@ public interface CodeChunkMapper {
             @Param("limit") Integer limit,
             @Param("offset") Integer offset);
 
+    List<CodeChunkRow> findByPath(
+            @Param("repositoryId") UUID repositoryId, @Param("filePath") String filePath);
+
     List<ModuleSymbolRow> findModuleSymbols(
             @Param("repositoryId") UUID repositoryId,
             @Param("snapshotId") UUID snapshotId,

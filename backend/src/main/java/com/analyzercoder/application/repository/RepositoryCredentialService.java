@@ -141,6 +141,12 @@ public class RepositoryCredentialService {
         return resolve(actor, uuid(row, "id"), repositoryUrl);
     }
 
+    /** 仅供已通过提供方签名校验的后台流程使用，不绕过状态和主机绑定校验。 */
+    public Resolved resolveBoundInternal(UUID repositoryId, String repositoryUrl) {
+        Map<String, Object> row = mapper.findBound(repositoryId);
+        return row == null ? null : resolveRow(row, repositoryUrl);
+    }
+
     @Transactional
     public CredentialView setEnabled(
             AuthenticatedAccount actor, UUID id, boolean enabled, String sourceIp) {

@@ -1,8 +1,15 @@
 package com.analyzercoder.application.intelligence;
 
+import com.analyzercoder.domain.knowledge.KnowledgeEnforcement;
+import com.analyzercoder.domain.knowledge.KnowledgeKind;
+import com.analyzercoder.domain.knowledge.KnowledgeObligations;
+import com.analyzercoder.domain.knowledge.KnowledgeScope;
+import com.analyzercoder.domain.knowledge.KnowledgeSeverity;
 import com.analyzercoder.infrastructure.persistence.mapper.KnowledgeHistoryMapper;
 import com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow;
 import com.analyzercoder.infrastructure.persistence.model.KnowledgeRevisionRow;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -15,17 +22,20 @@ public class KnowledgeCardHistoryService {
     private final KnowledgeHistoryMapper mapper;
     private final KnowledgeAttachmentService attachments;
     private final MarkdownRenderingService markdown;
+    private final ObjectMapper json;
 
     public KnowledgeCardHistoryService(
             KnowledgeHistoryMapper mapper,
             KnowledgeAttachmentService attachments,
-            MarkdownRenderingService markdown) {
+            MarkdownRenderingService markdown,
+            ObjectMapper json) {
         this.mapper = mapper;
         this.attachments = attachments;
         this.markdown = markdown;
+        this.json = json;
     }
 
-    private static Revision revision(KnowledgeRevisionRow row) {
+    private Revision revision(KnowledgeRevisionRow row) {
         return new Revision(
                 row.cardId(),
                 row.revision(),
@@ -34,6 +44,17 @@ public class KnowledgeCardHistoryService {
                 row.cardType(),
                 row.content(),
                 List.of(row.tags()),
+                KnowledgeKind.valueOf(row.knowledgeKind()),
+                KnowledgeSeverity.valueOf(row.severity()),
+                KnowledgeEnforcement.valueOf(row.enforcement()),
+                row.ownerAccountId(),
+                readPayload(row.scopePayload(), KnowledgeScope.class, KnowledgeScope.empty()),
+                readPayload(
+                        row.obligationsPayload(),
+                        KnowledgeObligations.class,
+                        KnowledgeObligations.empty()),
+                row.lastVerifiedSnapshotId(),
+                row.verificationNote(),
                 row.publicationStatus(),
                 row.changedBy(),
                 row.changedAt());
@@ -41,7 +62,7 @@ public class KnowledgeCardHistoryService {
 
     public List<Revision> history(UUID repoId, UUID cardId) {
         return mapper.findHistory(repoId, cardId).stream()
-                .map(KnowledgeCardHistoryService::revision)
+                .map(this::revision)
                 .toList();
     }
 
@@ -71,6 +92,17 @@ public class KnowledgeCardHistoryService {
                 card.content(),
                 markdown.render(repoId, card.content()),
                 List.of(card.tags()),
+                KnowledgeKind.valueOf(card.knowledgeKind()),
+                KnowledgeSeverity.valueOf(card.severity()),
+                KnowledgeEnforcement.valueOf(card.enforcement()),
+                card.ownerAccountId(),
+                readPayload(card.scopePayload(), KnowledgeScope.class, KnowledgeScope.empty()),
+                readPayload(
+                        card.obligationsPayload(),
+                        KnowledgeObligations.class,
+                        KnowledgeObligations.empty()),
+                card.lastVerifiedSnapshotId(),
+                card.verificationNote(),
                 card.publicationStatus(),
                 card.revision(),
                 card.createdAt(),
@@ -85,6 +117,17 @@ public class KnowledgeCardHistoryService {
                 List.of());
     }
 
+    private <T> T readPayload(String payload, Class<T> type, T fallback) {
+        if (payload == null || payload.isBlank()) {
+            return fallback;
+        }
+        try {
+            return json.readValue(payload, type);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("工程知识历史结构化数据无法读取", exception);
+        }
+    }
+
     public record Revision(
             UUID cardId,
             int revision,
@@ -93,6 +136,14 @@ public class KnowledgeCardHistoryService {
             String cardType,
             String content,
             List<String> tags,
+            KnowledgeKind knowledgeKind,
+            KnowledgeSeverity severity,
+            KnowledgeEnforcement enforcement,
+            UUID ownerAccountId,
+            KnowledgeScope scope,
+            KnowledgeObligations obligations,
+            UUID lastVerifiedSnapshotId,
+            String verificationNote,
             String publicationStatus,
             UUID changedBy,
             Instant changedAt) {}

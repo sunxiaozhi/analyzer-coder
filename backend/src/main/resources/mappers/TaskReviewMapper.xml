@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.TaskReviewMapper">
+    <resultMap id="row" type="com.analyzercoder.infrastructure.persistence.model.TaskReviewRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="repo_id" javaType="java.util.UUID"/>
+            <arg column="created_by" javaType="java.util.UUID"/>
+            <arg column="client_request_id" javaType="java.util.UUID"/>
+            <arg column="task" javaType="java.lang.String"/>
+            <arg column="change_source" javaType="java.lang.String"/>
+            <arg column="base_ref" javaType="java.lang.String"/>
+            <arg column="head_ref" javaType="java.lang.String"/>
+            <arg column="model_config_id" javaType="java.util.UUID"/>
+            <arg column="base_commit" javaType="java.lang.String"/>
+            <arg column="head_commit" javaType="java.lang.String"/>
+            <arg column="snapshot_id" javaType="java.util.UUID"/>
+            <arg column="worktree_digest" javaType="java.lang.String"/>
+            <arg column="status" javaType="java.lang.String"/>
+            <arg column="result_payload" javaType="java.lang.String"/>
+            <arg column="error_code" javaType="java.lang.String"/>
+            <arg column="error_message" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+            <arg column="finished_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+    <sql id="columns">
+        id,repo_id,created_by,client_request_id,task,change_source,base_ref,head_ref,
+        model_config_id,base_commit,head_commit,snapshot_id,worktree_digest,status,
+        result_payload::text AS result_payload,error_code,error_message,created_at,finished_at
+    </sql>
+    <insert id="insertRunning">
+        INSERT INTO task_reviews(
+            id,repo_id,created_by,client_request_id,task,change_source,base_ref,head_ref,
+            model_config_id,snapshot_id,status,created_at
+        ) VALUES(
+            #{id},#{repositoryId},#{createdBy},#{clientRequestId},#{task},#{changeSource},
+            #{baseRef},#{headRef},#{modelConfigId},#{snapshotId},'RUNNING',#{createdAt}
+        ) ON CONFLICT(created_by,repo_id,client_request_id) DO NOTHING
+    </insert>
+    <select id="findByClientRequest" resultMap="row">
+        SELECT <include refid="columns"/> FROM task_reviews
+        WHERE repo_id=#{repositoryId} AND created_by=#{createdBy}
+          AND client_request_id=#{clientRequestId}
+    </select>
+    <select id="findById" resultMap="row">
+        SELECT <include refid="columns"/> FROM task_reviews
+        WHERE repo_id=#{repositoryId} AND id=#{id}
+    </select>
+    <select id="findByRepository" resultMap="row">
+        SELECT <include refid="columns"/> FROM task_reviews
+        WHERE repo_id=#{repositoryId}
+        ORDER BY created_at DESC,id DESC LIMIT #{limit} OFFSET #{offset}
+    </select>
+    <update id="complete">
+        UPDATE task_reviews SET
+            base_commit=#{baseCommit},head_commit=#{headCommit},worktree_digest=#{worktreeDigest},
+            status='COMPLETED',result_payload=CAST(#{resultPayload} AS jsonb),
+            error_code=NULL,error_message=NULL,finished_at=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND repo_id=#{repositoryId} AND status='RUNNING'
+          AND snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})
+    </update>
+    <update id="fail">
+        UPDATE task_reviews SET base_commit=#{baseCommit},head_commit=#{headCommit},
+            worktree_digest=#{worktreeDigest},status='FAILED',error_code=#{errorCode},
+            error_message=#{errorMessage},finished_at=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND repo_id=#{repositoryId} AND status='RUNNING'
+    </update>
+</mapper>

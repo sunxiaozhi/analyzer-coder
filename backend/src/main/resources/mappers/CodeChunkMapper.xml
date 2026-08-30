@@ -77,6 +77,12 @@
             POSITION(LOWER(#{query}) IN LOWER(content))&gt;0 THEN 1 ELSE 0 END DESC,</if>file_path,start_line,id
         <if test="limit != null">LIMIT #{limit} OFFSET #{offset}</if>
     </select>
+    <select id="findByPath" resultMap="row">SELECT
+        <include refid="columns"/>
+        FROM code_chunks WHERE repo_id=#{repositoryId} AND file_path=#{filePath}
+        <include refid="currentSnapshot"/>
+        ORDER BY start_line NULLS LAST,id
+    </select>
     <select id="findModuleSymbols" resultMap="moduleSymbol">
         SELECT DISTINCT ON (symbol_name,file_path)
             symbol_name,symbol_kind,file_path,start_line,end_line,language

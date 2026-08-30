@@ -4,5 +4,6 @@ package com.analyzercoder.domain.indexing;
 public enum IndexJobType {
     FULL,
     INCREMENTAL,
-    CODEGRAPH
+    CODEGRAPH,
+    KNOWLEDGE_DRIFT
 }

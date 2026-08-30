@@ -1,55 +1,59 @@
 package com.analyzercoder.application.indexing;
 
+import com.analyzercoder.application.change.GitChangeRequest;
+import com.analyzercoder.application.change.RepositoryChange;
+import com.analyzercoder.application.change.RepositoryChangeService;
 import com.analyzercoder.domain.repository.CodeRepository;
-import java.io.IOException;
+import com.analyzercoder.infrastructure.git.ProcessGitClient;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** 读取 Git name-status 差异，保留删除和重命名前后的路径语义。 */
 @Component
 public class GitDiffService {
+    private final RepositoryChangeService repositoryChanges;
+
+    @Autowired
+    public GitDiffService(RepositoryChangeService repositoryChanges) {
+        this.repositoryChanges = repositoryChanges;
+    }
+
+    public GitDiffService() {
+        this(new RepositoryChangeService(new ProcessGitClient()));
+    }
+
     public DiffResult diff(CodeRepository repository, String fromCommit) {
         if (fromCommit == null || fromCommit.isBlank() || repository.currentCommit() == null) {
             throw new IllegalArgumentException("增量索引缺少有效提交基线");
         }
-        try {
-            Process process =
-                    new ProcessBuilder(
-                                    "git",
-                                    "-C",
-                                    repository.path().toString(),
-                                    "diff",
-                                    "--name-status",
-                                    "-z",
-                                    "-M",
-                                    "-C",
-                                    fromCommit,
-                                    repository.currentCommit(),
-                                    "--")
-                            .redirectErrorStream(true)
-                            .start();
-            byte[] output = process.getInputStream().readAllBytes();
-            if (!process.waitFor(30, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                throw new IllegalStateException("Git diff 执行超时");
-            }
-            if (process.exitValue() != 0) {
-                String detail = new String(output, StandardCharsets.UTF_8).trim();
-                throw new IllegalStateException(
-                        "Git diff 失败: " + detail.substring(0, Math.min(300, detail.length())));
-            }
-            return parseNameStatus(output);
-        } catch (IOException e) {
-            throw new IllegalStateException("Git diff 不可用", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Git diff 被中断", e);
+        RepositoryChange result =
+                repositoryChanges.analyze(
+                        GitChangeRequest.commitRange(
+                                repository.path(), fromCommit, repository.currentCommit()));
+        if (result.partial()) {
+            throw new IllegalStateException("Git diff 结果不完整，增量索引已拒绝使用");
         }
+        List<FileChange> changes =
+                result.changes().stream()
+                        .map(
+                                change ->
+                                        new FileChange(
+                                                switch (change.type()) {
+                                                    case ADDED -> ChangeType.ADDED;
+                                                    case MODIFIED -> ChangeType.MODIFIED;
+                                                    case DELETED -> ChangeType.DELETED;
+                                                    case RENAMED -> ChangeType.RENAMED;
+                                                    case COPIED -> ChangeType.COPIED;
+                                                },
+                                                change.oldPath(),
+                                                change.newPath()))
+                        .toList();
+        return new DiffResult(changes);
     }
 
     static DiffResult parseNameStatus(byte[] output) {

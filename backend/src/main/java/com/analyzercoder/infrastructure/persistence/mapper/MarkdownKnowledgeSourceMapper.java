@@ -55,6 +55,7 @@ public interface MarkdownKnowledgeSourceMapper {
 
     int reconcileLinkedCards(
             @Param("repositoryId") UUID repositoryId,
+            @Param("snapshotId") UUID snapshotId,
             @Param("commitSha") String commitSha,
             @Param("commitAvailable") boolean commitAvailable);
 }

@@ -38,6 +38,10 @@ function chooseSuggestion(value: string) {
 function generate() {
   if (canGenerate.value) emit('generate', taskValue.value);
 }
+
+function openItem(path: string | null) {
+  if (path) emit('openFile', path);
+}
 </script>
 
 <template>
@@ -105,9 +109,9 @@ function generate() {
         </nav>
       </header>
       <div class="context-items">
-        <button v-for="item in pack.items" :key="item.chunkId" type="button" @click="emit('openFile', item.filePath)">
+        <button v-for="item in pack.items" :key="item.id" type="button" :disabled="!item.filePath" @click="openItem(item.filePath)">
           <span :data-type="item.assetType">{{ item.assetType }}</span>
-          <div><strong>{{ item.filePath }}</strong><p>{{ item.excerpt }}</p></div>
+          <div><strong>{{ item.filePath ?? item.title }}</strong><p>{{ item.excerpt }}</p></div>
           <small>{{ item.startLine ? `L${item.startLine}` : 'FILE' }}</small>
         </button>
       </div>
@@ -158,6 +162,7 @@ function generate() {
 .context-items { max-height: 220px; overflow: auto; }
 .context-items > button { display: grid; grid-template-columns: 58px minmax(0, 1fr) 38px; align-items: start; gap: 9px; width: 100%; padding: 9px 13px; text-align: left; border: 0; border-bottom: 1px solid #ececef; background: transparent; }
 .context-items > button:hover, .context-items > button:focus-visible { outline: none; background: #f1f7fd; }
+.context-items > button:disabled { cursor: default; }
 .context-items > button > span { padding: 3px 4px; color: #5e6670; text-align: center; border-radius: 3px; background: #e9ecef; font: 11px "SFMono-Regular", Consolas, monospace; }
 .context-items > button > span[data-type='RULE'] { color: #78521f; background: #f3e7d6; }
 .context-items > button > span[data-type='TASK'] { color: #654e7a; background: #ede7f3; }

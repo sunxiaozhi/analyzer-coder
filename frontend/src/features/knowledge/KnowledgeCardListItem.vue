@@ -25,19 +25,32 @@ function statusType(status: string): TagProps['type'] {
 function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
+
+const kindLabels: Record<string, string> = {
+  REFERENCE: '参考资料', BUSINESS_RULE: '业务规则', ARCH_DECISION: '架构决策',
+  API_CONTRACT: '接口契约', DATA_CONSTRAINT: '数据约束', TEST_OBLIGATION: '测试义务',
+  SECURITY_POLICY: '安全策略', RUNBOOK: '运行手册', INCIDENT_LESSON: '事故经验',
+  OWNERSHIP: '责任归属', TECH_DEBT: '技术债',
+};
+const enforcementLabels: Record<string, string> = {
+  REFERENCE: '仅参考', ADVISORY: '建议执行', REQUIRED: '必须执行',
+};
 </script>
 
 <template>
   <article class="knowledge-card">
     <header class="card-header">
-      <el-tag effect="plain" size="small">{{ card.cardType || '未分类' }}</el-tag>
+      <el-tag effect="plain" size="small">{{ kindLabels[card.knowledgeKind] }}</el-tag>
+      <el-tag :type="card.enforcement === 'REQUIRED' ? 'danger' : card.enforcement === 'ADVISORY' ? 'warning' : 'info'" size="small">
+        {{ enforcementLabels[card.enforcement] }}
+      </el-tag>
       <el-tag :type="statusType(card.publicationStatus)" size="small">{{ statusLabel(card.publicationStatus) }}</el-tag>
     </header>
 
     <h3 class="card-title">{{ card.title }}</h3>
     <el-alert
-      v-if="card.sourceVersionStatus === 'STALE'"
-      title="来源版本已过期；发布状态不代表内容仍适用于当前代码"
+      v-if="card.sourceVersionStatus === 'STALE' || card.sourceVersionStatus === 'SUSPECT'"
+      :title="card.sourceVersionStatus === 'SUSPECT' ? '代码已变化，知识可能失效，需负责人复核' : '来源版本已过期；发布状态不代表内容仍适用于当前代码'"
       type="warning"
       :closable="false"
       show-icon
@@ -72,7 +85,7 @@ function formatDate(value: string) {
       <template v-if="canManage">
         <el-button v-if="card.reviewStatus !== 'APPROVED'" link type="primary" @click="emit('review', card, 'APPROVED')">通过评审</el-button>
         <el-button v-else link @click="emit('review', card, 'CHANGES_REQUESTED')">要求修改</el-button>
-        <el-button v-if="card.publicationStatus !== 'PUBLISHED' && card.reviewStatus === 'APPROVED' && card.sourceVersionStatus !== 'STALE'" link type="success" @click="emit('publish', card, 'PUBLISHED')">发布</el-button>
+        <el-button v-if="card.publicationStatus !== 'PUBLISHED' && card.reviewStatus === 'APPROVED' && !['SUSPECT', 'STALE'].includes(card.sourceVersionStatus)" link type="success" @click="emit('publish', card, 'PUBLISHED')">发布</el-button>
         <el-button v-if="card.publicationStatus === 'PUBLISHED'" link @click="emit('publish', card, 'DRAFT')">撤回</el-button>
       </template>
     </footer>

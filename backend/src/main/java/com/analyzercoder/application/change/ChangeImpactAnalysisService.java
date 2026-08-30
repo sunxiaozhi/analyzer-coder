@@ -1,6 +1,7 @@
 package com.analyzercoder.application.change;
 
 import com.analyzercoder.application.architecture.ProjectArchitectureMapService;
+import com.analyzercoder.application.evidence.Provenance;
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.application.repository.RegisterRepositoryUseCase;
 import com.analyzercoder.domain.repository.CodeRepository;
@@ -99,7 +100,9 @@ public class ChangeImpactAnalysisService {
                 currentEvidence(testEvidence, analysisSnapshotId, evidenceAudit);
 
         List<CandidateEvidence> candidates =
-                selectedAggregates.stream().map(item -> candidate(item, map)).toList();
+                selectedAggregates.stream()
+                        .map(item -> candidate(item, map, repository.currentCommit()))
+                        .toList();
         Set<String> directModules = new LinkedHashSet<>();
         candidates.stream()
                 .map(CandidateEvidence::moduleId)
@@ -185,7 +188,9 @@ public class ChangeImpactAnalysisService {
             UUID currentSnapshotId,
             EvidenceAudit evidenceAudit) {
         for (IntelligenceService.Evidence evidence : hits) {
-            if (!hasFile(evidence) || !acceptEvidence(evidence, currentSnapshotId, evidenceAudit)) {
+            if (!isCodeEvidence(evidence)
+                    || !hasFile(evidence)
+                    || !acceptEvidence(evidence, currentSnapshotId, evidenceAudit)) {
                 continue;
             }
             String key = evidenceKey(evidence);
@@ -228,7 +233,8 @@ public class ChangeImpactAnalysisService {
 
     private static CandidateEvidence candidate(
             EvidenceAggregate aggregate,
-            ProjectArchitectureMapService.ArchitectureMap map) {
+            ProjectArchitectureMapService.ArchitectureMap map,
+            String commitSha) {
         IntelligenceService.Evidence evidence = aggregate.evidence();
         return new CandidateEvidence(
                 evidence.chunkId(),
@@ -244,7 +250,19 @@ public class ChangeImpactAnalysisService {
                 round(aggregate.aggregateScore()),
                 evidence.channels(),
                 aggregate.matchedQueries(),
-                moduleFor(evidence.filePath(), map));
+                moduleFor(evidence.filePath(), map),
+                Provenance.codeFact(
+                        evidence.repositoryId(),
+                        evidence.snapshotId(),
+                        commitSha,
+                        null,
+                        evidence.filePath(),
+                        evidence.symbolName(),
+                        evidence.symbolKind(),
+                        evidence.startLine(),
+                        evidence.endLine(),
+                        evidence.contentHash(),
+                        "当前发布快照中的检索候选代码；排序只决定调查顺序"));
     }
 
     private static List<String> inferTaskModules(
@@ -590,9 +608,15 @@ public class ChangeImpactAnalysisService {
             UUID currentSnapshotId,
             EvidenceAudit evidenceAudit) {
         return evidence.stream()
+                .filter(ChangeImpactAnalysisService::isCodeEvidence)
                 .filter(ChangeImpactAnalysisService::hasFile)
                 .filter(item -> acceptEvidence(item, currentSnapshotId, evidenceAudit))
                 .toList();
+    }
+
+    private static boolean isCodeEvidence(IntelligenceService.Evidence evidence) {
+        String sourceType = evidence.sourceType();
+        return sourceType != null && sourceType.toUpperCase(Locale.ROOT).startsWith("CODE");
     }
 
     private static boolean acceptEvidence(
@@ -669,7 +693,8 @@ public class ChangeImpactAnalysisService {
             double score,
             List<String> channels,
             List<String> matchedQueries,
-            String moduleId) {}
+            String moduleId,
+            Provenance provenance) {}
 
     public record ModuleImpact(
             String moduleId,

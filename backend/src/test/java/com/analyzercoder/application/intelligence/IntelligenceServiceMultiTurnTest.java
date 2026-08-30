@@ -13,6 +13,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.analyzercoder.application.knowledge.EngineeringKnowledgePolicy;
 import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.infrastructure.persistence.mapper.GraphRetrievalMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
@@ -45,6 +46,7 @@ class IntelligenceServiceMultiTurnTest {
                 new RetrievalQueryAnalyzer(),
                 new RetrievalRanker(),
                 new AnswerCitationValidator(),
+                new EngineeringKnowledgePolicy(),
                 new ObjectMapper().findAndRegisterModules());
     }
 

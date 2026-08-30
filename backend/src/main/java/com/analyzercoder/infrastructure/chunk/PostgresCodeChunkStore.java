@@ -74,6 +74,13 @@ public class PostgresCodeChunkStore implements CodeChunkStore {
     }
 
     @Override
+    public List<CodeChunk> findByRepositoryPath(CodeRepositoryId id, String filePath) {
+        return mapper.findByPath(id.value(), filePath).stream()
+                .map(PostgresCodeChunkStore::domain)
+                .toList();
+    }
+
+    @Override
     public List<CodeChunk> searchByRepositoryId(
             CodeRepositoryId id, String query, int limit, int offset) {
         return mapper.find(id.value(), query, limit, offset).stream()

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.KnowledgeDriftMapper">
+    <resultMap id="candidate" type="com.analyzercoder.infrastructure.persistence.model.KnowledgeDriftCandidateRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="revision" javaType="_int"/>
+            <arg column="scope_payload" javaType="string"/>
+            <arg column="last_verified_snapshot_id" javaType="java.util.UUID"/>
+            <arg column="verified_commit" javaType="string"/>
+            <arg column="source_version_status" javaType="string"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="reference" type="com.analyzercoder.infrastructure.persistence.model.KnowledgeDriftReferenceRow">
+        <constructor>
+            <arg column="file_path" javaType="string"/>
+            <arg column="symbol_name" javaType="string"/>
+            <arg column="start_line" javaType="java.lang.Integer"/>
+            <arg column="end_line" javaType="java.lang.Integer"/>
+            <arg column="content_hash" javaType="string"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="event" type="com.analyzercoder.infrastructure.persistence.model.KnowledgeDriftEventRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="repo_id" javaType="java.util.UUID"/>
+            <arg column="card_id" javaType="java.util.UUID"/>
+            <arg column="card_revision" javaType="_int"/>
+            <arg column="from_snapshot_id" javaType="java.util.UUID"/>
+            <arg column="to_snapshot_id" javaType="java.util.UUID"/>
+            <arg column="from_commit" javaType="string"/>
+            <arg column="to_commit" javaType="string"/>
+            <arg column="previous_status" javaType="string"/>
+            <arg column="result_status" javaType="string"/>
+            <arg column="trigger_type" javaType="string"/>
+            <arg column="reasons_payload" javaType="string"/>
+            <arg column="note" javaType="string"/>
+            <arg column="actor_id" javaType="java.util.UUID"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="candidateColumns">
+        id,revision,scope_payload::text AS scope_payload,last_verified_snapshot_id,
+        verified_commit,source_version_status
+    </sql>
+    <select id="candidates" resultMap="candidate">
+        SELECT <include refid="candidateColumns"/> FROM knowledge_cards
+        WHERE repo_id=#{repositoryId} AND source_version_status='CURRENT'
+          AND verified_commit IS NOT NULL
+        ORDER BY id
+    </select>
+    <select id="findCandidate" resultMap="candidate">
+        SELECT <include refid="candidateColumns"/> FROM knowledge_cards
+        WHERE repo_id=#{repositoryId} AND id=#{cardId}
+    </select>
+    <select id="references" resultMap="reference">
+        SELECT file_path,symbol_name,start_line,end_line,content_hash
+        FROM knowledge_code_refs
+        WHERE repo_id=#{repositoryId} AND card_id=#{cardId} AND revision=#{revision}
+        ORDER BY position
+    </select>
+    <update id="markSuspect">
+        UPDATE knowledge_cards SET source_version_status='SUSPECT',source_version_checked_at=CURRENT_TIMESTAMP,
+            verification_note='代码变化命中知识适用范围，等待人工重新验证',updated_at=CURRENT_TIMESTAMP
+        WHERE repo_id=#{repositoryId} AND id=#{cardId} AND revision=#{expectedRevision}
+          AND source_version_status='CURRENT' AND verified_commit=#{expectedCommit}
+    </update>
+    <update id="touchCurrent">
+        UPDATE knowledge_cards SET source_version_checked_at=CURRENT_TIMESTAMP
+        WHERE repo_id=#{repositoryId} AND id=#{cardId} AND revision=#{expectedRevision}
+          AND source_version_status='CURRENT' AND verified_commit=#{expectedCommit}
+    </update>
+    <update id="reviewSource">
+        UPDATE knowledge_cards SET source_version_status=#{resultStatus},
+            verified_commit=CASE WHEN #{resultStatus}='CURRENT' THEN #{currentCommit} ELSE verified_commit END,
+            last_verified_snapshot_id=CASE WHEN #{resultStatus}='CURRENT' THEN #{currentSnapshotId} ELSE last_verified_snapshot_id END,
+            verification_note=#{note},source_version_checked_at=CURRENT_TIMESTAMP,
+            updated_by=#{actorId},updated_at=CURRENT_TIMESTAMP
+        WHERE repo_id=#{repositoryId} AND id=#{cardId} AND revision=#{expectedRevision}
+    </update>
+    <insert id="insertEvent">
+        INSERT INTO knowledge_drift_events(
+            id,repo_id,card_id,card_revision,from_snapshot_id,to_snapshot_id,from_commit,to_commit,
+            previous_status,result_status,trigger_type,reasons_payload,note,actor_id,created_at
+        ) VALUES(
+            #{id},#{repositoryId},#{cardId},#{cardRevision},#{fromSnapshotId},#{toSnapshotId},
+            #{fromCommit},#{toCommit},#{previousStatus},#{resultStatus},#{triggerType},
+            CAST(#{reasonsPayload} AS jsonb),#{note},#{actorId},#{createdAt}
+        ) ON CONFLICT DO NOTHING
+    </insert>
+    <select id="latestEvent" resultMap="event">
+        SELECT id,repo_id,card_id,card_revision,from_snapshot_id,to_snapshot_id,from_commit,to_commit,
+            previous_status,result_status,trigger_type,reasons_payload::text AS reasons_payload,
+            note,actor_id,created_at
+        FROM knowledge_drift_events
+        WHERE repo_id=#{repositoryId} AND card_id=#{cardId}
+        ORDER BY created_at DESC,id DESC LIMIT 1
+    </select>
+</mapper>

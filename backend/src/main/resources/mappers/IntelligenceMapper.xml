@@ -9,6 +9,14 @@
             <arg column="card_type" javaType="string"/>
             <arg column="content" javaType="string"/>
             <arg column="tags" javaType="[Ljava.lang.String;" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/>
+            <arg column="knowledge_kind" javaType="string"/>
+            <arg column="severity" javaType="string"/>
+            <arg column="enforcement" javaType="string"/>
+            <arg column="owner_account_id" javaType="java.util.UUID"/>
+            <arg column="scope_payload" javaType="string"/>
+            <arg column="obligations_payload" javaType="string"/>
+            <arg column="last_verified_snapshot_id" javaType="java.util.UUID"/>
+            <arg column="verification_note" javaType="string"/>
             <arg column="publication_status" javaType="string"/>
             <arg column="revision" javaType="_int"/>
             <arg column="created_at" javaType="java.time.Instant"/>
@@ -33,7 +41,7 @@
     <sql id="validKnowledge">
         c.repo_id=#{repositoryId} AND c.publication_status='PUBLISHED'
         AND c.review_status='APPROVED'
-        AND c.source_version_status&lt;&gt;'STALE'
+        AND c.source_version_status NOT IN ('SUSPECT','STALE')
         AND NOT EXISTS(
             SELECT 1 FROM knowledge_code_refs r
             LEFT JOIN code_chunks current_chunk
@@ -243,21 +251,36 @@
     </insert>
 
     <select id="cards" resultMap="card">
-        SELECT id,repo_id,title,card_type,content,tags,publication_status,revision,created_at,updated_at,
+        SELECT id,repo_id,title,card_type,content,tags,knowledge_kind,severity,enforcement,
+        owner_account_id,scope_payload::text AS scope_payload,
+        obligations_payload::text AS obligations_payload,last_verified_snapshot_id,verification_note,
+        publication_status,revision,created_at,updated_at,
         verified_commit,source_version_status,source_version_checked_at,review_status,reviewed_by,reviewed_at
         FROM knowledge_cards WHERE repo_id=#{repositoryId}
-        <if test="!includeDraft">AND publication_status='PUBLISHED' AND review_status='APPROVED' AND source_version_status&lt;&gt;'STALE'</if>
+        <if test="!includeDraft">AND publication_status='PUBLISHED' AND review_status='APPROVED' AND source_version_status NOT IN ('SUSPECT','STALE')</if>
         ORDER BY updated_at DESC
     </select>
     <insert id="insertCard">
-        INSERT INTO knowledge_cards(id,repo_id,title,card_type,content,tags,publication_status,review_status,created_by,updated_by)
-        VALUES(#{id},#{repositoryId},#{title},#{cardType},#{content},#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},'DRAFT','UNREVIEWED',#{actorId},#{actorId})
+        INSERT INTO knowledge_cards(
+            id,repo_id,title,card_type,content,tags,knowledge_kind,severity,enforcement,
+            owner_account_id,scope_payload,obligations_payload,publication_status,review_status,
+            created_by,updated_by
+        ) VALUES(
+            #{id},#{repositoryId},#{title},#{cardType},#{content},
+            #{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},#{knowledgeKind},#{severity},
+            #{enforcement},#{ownerAccountId},CAST(#{scopePayload} AS jsonb),
+            CAST(#{obligationsPayload} AS jsonb),'DRAFT','UNREVIEWED',#{actorId},#{actorId}
+        )
     </insert>
     <update id="updateCard">
         UPDATE knowledge_cards SET title=#{title},card_type=#{cardType},content=#{content},
-        tags=#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},publication_status='DRAFT',
+        tags=#{tags,typeHandler=org.apache.ibatis.type.ArrayTypeHandler},knowledge_kind=#{knowledgeKind},
+        severity=#{severity},enforcement=#{enforcement},owner_account_id=#{ownerAccountId},
+        scope_payload=CAST(#{scopePayload} AS jsonb),obligations_payload=CAST(#{obligationsPayload} AS jsonb),
+        publication_status='DRAFT',
         review_status='UNREVIEWED',reviewed_by=NULL,reviewed_at=NULL,
         source_version_status='UNVERIFIED',verified_commit=NULL,source_version_checked_at=CURRENT_TIMESTAMP,
+        last_verified_snapshot_id=NULL,verification_note=NULL,
         revision=revision+1,updated_by=#{actorId},updated_at=CURRENT_TIMESTAMP
         WHERE id=#{id} AND repo_id=#{repositoryId}
     </update>
@@ -271,6 +294,14 @@
                 SELECT 1 FROM knowledge_code_refs ref
                 WHERE ref.card_id=c.id AND ref.revision=c.revision
             ) THEN (SELECT current_commit FROM repositories WHERE id=c.repo_id) ELSE NULL END,
+            last_verified_snapshot_id=CASE WHEN EXISTS(
+                SELECT 1 FROM knowledge_code_refs ref
+                WHERE ref.card_id=c.id AND ref.revision=c.revision
+            ) THEN (SELECT current_snapshot_id FROM repositories WHERE id=c.repo_id) ELSE NULL END,
+            verification_note=CASE WHEN EXISTS(
+                SELECT 1 FROM knowledge_code_refs ref
+                WHERE ref.card_id=c.id AND ref.revision=c.revision
+            ) THEN '关联代码已在当前快照中核验' ELSE NULL END,
             source_version_checked_at=CURRENT_TIMESTAMP
         WHERE c.id=#{id} AND c.repo_id=#{repositoryId}
     </update>

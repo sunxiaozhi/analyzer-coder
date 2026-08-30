@@ -1,4 +1,4 @@
-export type IndexJobType='FULL'|'INCREMENTAL'|'CODEGRAPH';
+export type IndexJobType='FULL'|'INCREMENTAL'|'CODEGRAPH'|'KNOWLEDGE_DRIFT';
 export type IndexJobStatus='QUEUED'|'RUNNING'|'CANCEL_REQUESTED'|'SUCCEEDED'|'FAILED'|'CANCELED';
 export type ChunkType='FILE'|'SYMBOL'|'DOC_SECTION'|'TEST_CASE'|'CONFIG'|'KNOWLEDGE_CARD';
 export type RepositoryAssetType='CODE'|'DOCUMENT'|'RULE'|'TASK'|'CONFIG';

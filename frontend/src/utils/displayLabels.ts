@@ -8,6 +8,7 @@ const statusLabels: Record<string, string> = {
   CHANGES_REQUESTED: '要求修改',
   UNVERIFIED: '未确认',
   CURRENT: '当前有效',
+  SUSPECT: '疑似失效',
   REVIEW_REQUIRED: '待复核',
   STALE: '来源已过期',
   QUEUED: '排队中',

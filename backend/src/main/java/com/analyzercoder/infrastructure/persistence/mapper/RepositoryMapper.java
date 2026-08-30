@@ -128,6 +128,9 @@ public interface RepositoryMapper {
      */
     String findRemoteUrl(@Param("id") UUID id);
 
+    /** 按规范化候选远程地址查找 Webhook 对应仓库；多条结果由应用层拒绝。 */
+    List<UUID> findIdsByRemoteUrls(@Param("remoteUrls") List<String> remoteUrls);
+
     /**
      * 更新符合给定条件的记录状态或内容。
      *

@@ -4,7 +4,6 @@ import { FolderTree } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 import ProjectOverviewSheet from '@/features/overview/ProjectOverviewSheet.vue';
 import { useProjectOverview } from '@/features/overview/useProjectOverview';
-import { useProjectReadme } from '@/features/overview/useProjectReadme';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
 const router = useRouter();
@@ -12,38 +11,24 @@ const repositories = useRepositoryStore();
 const {
   preparation,
   codeFacts,
-  snapshot,
+  health,
   loading,
   preparing,
   error,
   reload,
   prepare,
+  retryStage,
 } = useProjectOverview();
-
-const {
-  selectedFile,
-  loading: readmeLoading,
-  error: readmeError,
-} = useProjectReadme(
-  () => repositories.selectedRepositoryId,
-  snapshot,
-);
 
 const repository = computed(() => repositories.selectedRepository);
 const profile = computed(() => preparation.value?.profile ?? null);
 
-function openFile(path: string) {
-  void router.push({ path: '/search', query: { path } });
+function startReview() {
+  void router.push('/change-impact');
 }
 
-function generateGuide() {
-  const projectName = repository.value?.name ?? '当前项目';
-  void router.push({
-    path: '/ask',
-    query: {
-      q: '请结合 ' + projectName + ' 的 README、其他 Markdown 文档和代码，为我生成一份项目导读。',
-    },
-  });
+function openKnowledge() {
+  void router.push('/knowledge');
 }
 </script>
 
@@ -52,7 +37,7 @@ function generateGuide() {
     <div v-if="!repositories.selectedRepositoryId" class="overview-empty">
       <span><FolderTree :size="26" /></span>
       <h1>选择一个项目</h1>
-      <p>项目总览会优先展示 README，并补充准备状态、核心数据和技术栈。</p>
+      <p>项目总览会展示当前快照、可信知识、索引能力和变更审查状态。</p>
       <el-button type="primary" @click="router.push('/repositories')">前往仓库管理</el-button>
     </div>
 
@@ -67,15 +52,14 @@ function generateGuide() {
       :preparation="preparation"
       :profile="profile"
       :code-facts="codeFacts"
-      :readme-file="selectedFile"
-      :readme-loading="readmeLoading"
-      :readme-error="readmeError"
+      :health="health"
       :loading="loading"
       :preparing="preparing"
       @refresh="reload"
       @prepare="prepare"
-      @open-file="openFile"
-      @generate-guide="generateGuide"
+      @retry-stage="retryStage"
+      @start-review="startReview"
+      @open-knowledge="openKnowledge"
     />
   </section>
 </template>

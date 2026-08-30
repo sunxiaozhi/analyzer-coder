@@ -90,6 +90,10 @@ app:
     poll-interval-ms: ${APP_CODEGRAPH_POLL_INTERVAL_MS:2000}
     # 图谱产物随仓库快照存放，通常无需单独修改。
     artifact-root: ${app.repository.managed-data-root}/repositories
+  provider-webhooks:
+    # 留空时对应 Webhook 明确关闭；生产环境使用高熵独立密钥，不要复用访问令牌。
+    github-secret: ${APP_GITHUB_WEBHOOK_SECRET:}
+    gitlab-secret: ${APP_GITLAB_WEBHOOK_SECRET:}
   llm:
     # 用于加密模型管理中保存的 API Key；至少 24 个字符，保存密钥后不可随意更换。
     master-key: ${APP_LLM_MASTER_KEY}
