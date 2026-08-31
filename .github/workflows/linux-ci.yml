@@ -60,10 +60,11 @@ jobs:
           bash -n scripts/start.sh
           pwsh -NoProfile -File scripts/start.ps1 -Help
 
-      - name: Validate quality gold standard and gate logic
+      - name: Validate quality and deterministic CI clients
         run: |
           node scripts/evaluate-quality.mjs --validate
           node --test scripts/evaluate-quality.test.mjs
+          node --test scripts/ci-task-review.test.mjs
 
       - name: Test MCP thin adapter
         working-directory: mcp-server

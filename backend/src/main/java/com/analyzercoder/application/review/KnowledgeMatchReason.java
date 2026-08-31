@@ -9,12 +9,16 @@ public record KnowledgeMatchReason(
         CODE_REFERENCE,
         PATH_PATTERN,
         SYMBOL,
-        MODULE
+        MODULE,
+        REPOSITORY,
+        SERVICE,
+        CONTRACT
     }
 
     public enum EvidenceSource {
         GIT_FACT,
         CODE_FACT,
+        PLATFORM_FACT,
         GRAPH_INFERENCE
     }
 
@@ -27,5 +31,33 @@ public record KnowledgeMatchReason(
             String symbolName,
             String moduleId,
             UUID knowledgeChunkId,
-            String detail) {}
+            String detail,
+            UUID engineeringProjectId,
+            String serviceName,
+            UUID contractId) {
+        public ScopeEvidence(
+                EvidenceSource sourceType,
+                UUID repositoryId,
+                UUID snapshotId,
+                String commitSha,
+                String filePath,
+                String symbolName,
+                String moduleId,
+                UUID knowledgeChunkId,
+                String detail) {
+            this(
+                    sourceType,
+                    repositoryId,
+                    snapshotId,
+                    commitSha,
+                    filePath,
+                    symbolName,
+                    moduleId,
+                    knowledgeChunkId,
+                    detail,
+                    null,
+                    null,
+                    null);
+        }
+    }
 }

@@ -2,7 +2,7 @@
 
 版本：v1.0  
 日期：2026-08-30  
-状态：待开发  
+状态：REQ-003～REQ-022 已完成开发，待 PostgreSQL、真实仓库与真实任务验收
 适用范围：`analyzer-coder` 当前代码库及后续演进  
 文档性质：产品需求、技术设计、开发顺序和验收基线
 
@@ -152,7 +152,7 @@ UNKNOWN               当前证据无法确认
 | REQ-009 | P0 | 统一真实性与证据 | 已完成 | REQ-003、REQ-005 |
 | REQ-010 | P0 | 真实质量评测 | 开发完成，待人工金标准复核与真实运行 | REQ-001～REQ-009 |
 | REQ-011 | P1 | Agent 任务上下文接口 | 已完成 | P0 |
-| REQ-012 | P1 | MCP 接入 | 开发完成，待 REQ-022 接入结果回报 | REQ-011 |
+| REQ-012 | P1 | MCP 接入 | 已完成 | REQ-011 |
 | REQ-013 | P1 | CodeGraph 真实传播路径 | 开发完成，待 Linux CLI 契约验收 | P0 |
 | REQ-014 | P1 | 带引用的模型总结 | 已完成 | REQ-006、REQ-009 |
 | REQ-015 | P1 | 工程健康项目总览 | 已完成 | P0 |
@@ -160,9 +160,9 @@ UNKNOWN               当前证据无法确认
 | REQ-017 | P1 | 准备流程自动修复 | 已完成 | REQ-008、REQ-013 |
 | REQ-018 | P1 | 导航与权限收敛 | 已完成 | REQ-007、REQ-015、REQ-016 |
 | REQ-019 | P2 | PR/MR 集成 | 已完成 | P1 |
-| REQ-020 | P2 | CI 确定性检查 | 待开发 | REQ-019、REQ-022 |
-| REQ-021 | P2 | 跨仓库工程知识 | 待开发 | P1 真实验证通过 |
-| REQ-022 | P2 | 开发结果与反馈 | 待开发 | REQ-006 |
+| REQ-020 | P2 | CI 确定性检查 | 开发完成，待 PostgreSQL 与真实流水线验收 | REQ-006、REQ-008、REQ-019 |
+| REQ-021 | P2 | 跨仓库工程知识 | 开发完成，待 PostgreSQL 与真实多仓验收 | P1 真实验证通过 |
+| REQ-022 | P2 | 开发结果与反馈 | 开发完成，待 PostgreSQL 与真实任务验收 | REQ-006 |
 
 ## 8. P0 详细需求
 
@@ -549,7 +549,7 @@ REJECTED
 NOT_APPLICABLE
 ```
 
-P0 只产生 `REQUIRED_NOT_REPORTED` 和 `REQUIRED`，结果回报在 REQ-022 实现。
+P0 只产生 `REQUIRED_NOT_REPORTED` 和 `REQUIRED`；实际执行结果现由 REQ-022 以追加式回报保存，不改写原审查状态。
 
 #### 验收
 
@@ -1148,39 +1148,29 @@ GitLabMergeRequestProvider
 
 模型建议、向量候选和单独的图谱推断不得阻断。
 
+实现边界：CI 绑定已经完成的不可变 Task Review 和完整 Head Commit；测试/审批使用显式结构化回报，禁止路径使用仓库相对 Glob，知识同步由服务端核对更高修订是否处于 `PUBLISHED + APPROVED + CURRENT`。退出码 `1` 只表达确定性规则失败，平台/网络/鉴权错误使用 `2`。
+
 ### REQ-021 跨仓库工程知识
 
-新增上层 `engineering_projects`，一个工程项目关联多个仓库。Scope 扩展 `repositoryIds/serviceNames/contractIds`。
+新增上层 `engineering_projects`，一个工程项目关联多个仓库。Scope 扩展 `repositoryIds/serviceNames/contractIds`。当前实现边界如下：
 
-进入开发前必须具备：
-
-1. 两个以上真实关联仓库。
-2. 可识别的服务身份。
-3. 可验证的接口契约或调用关系。
-4. 跨仓库负责人规则。
-5. 单仓库 Task Review 已达到发布门槛。
+1. 项目至少包含两个具有当前 Snapshot 的仓库；仓库与项目内服务名必须唯一，服务身份只允许人工显式登记。
+2. 契约必须登记两个不同成员仓库、双方当前内容索引证据路径及稳定内容指纹；Task Review 使用前重新验证双方指纹。
+3. 项目写操作要求对全部成员仓库具有 MANAGE；读取完整项目及跨仓知识要求创建者能够读取涉及仓库。
+4. 跨仓 Scope 必须显式命中仓库、服务或当前契约；路径、符号、模块仍作为附加 AND 条件。同项目、向量、模型或自由文本不产生关系。
+5. 项目或拓扑仍被知识 Scope 引用时禁止破坏性变更；活动工程项目中的仓库禁止直接删除。
+6. 当前没有独立、持久化的“仓库已达到发布质量门槛”事实，因此不以一次 Task Review 冒充质量通过。当前 Snapshot、权限和双端代码证据已在运行时强校验；质量指标由 REQ-010 评测和真实多仓验收核对。
 
 ### REQ-022 开发结果与反馈
 
-新增：
+新增 `task_review_outcomes` 与 `task_review_feedback`，形成审查后的追加式闭环：
 
-```text
-task_review_outcomes
-task_review_feedback
-```
-
-记录：
-
-```text
-最终 Commit
-执行测试和结果
-审批结果
-人工确认的误报
-人工确认的漏报
-知识是否实际需要更新
-```
-
-反馈只用于评测和规则改进，不自动修改正式知识。
+1. 每条结果绑定已完成 Task Review、仓库、具名报告人和 clientRequestId，记录最终 Commit、结果摘要、实际测试/审批和报告时间；原审查与历史回报均不可覆盖。
+2. 最终 Commit 与审查 Head 相同才标记精确绑定；其他 Commit 只标记为报告人声明，不伪造 Git 祖先验证。
+3. 误报必须指向原审查已有对象；漏报允许记录缺失对象。知识更新判断必须指向原审查中的知识，取值为需要、不需要或未知。
+4. 查询结果按原审查返回必须测试/审批的已回报和缺失覆盖；未回报不自动解释为成功或失败。
+5. 反馈只用于评测和规则改进，不调用知识写服务、不改变发布/审核/来源状态，也不反向修改 CI 结论。
+6. 页面与 MCP `report_task_outcome` 使用同一 HTTP API、READ 权限、Session/CSRF 和幂等校验。
 
 ## 11. 数据库迁移规划
 
@@ -1188,8 +1178,10 @@ task_review_feedback
 | --- | --- | --- |
 | `V9__engineering_knowledge.sql` | 工程知识字段、SUSPECT、修订历史、删除粗粒度失效触发器 | REQ-001、REQ-008 |
 | `V10__task_reviews.sql` | Task Review 持久化与索引 | REQ-006 |
-| `V11__task_review_outcomes.sql` | 任务结果、反馈和审批回报 | REQ-022 |
-| 后续迁移 | PR Provider、工程项目和跨仓库关系 | P2 |
+| `V11__knowledge_drift_audit.sql` | 知识漂移审计与状态回写 | REQ-008 |
+| `V12__ci_knowledge_obligations.sql` | 禁止路径与知识同步义务的卡片/修订迁移 | REQ-020 |
+| `V13__engineering_projects.sql` | 工程项目、成员服务身份、双端契约证据与跨仓知识 Scope | REQ-021 |
+| `V14__task_review_outcomes.sql` | 追加式任务结果、测试/审批回报和具名人工反馈 | REQ-022 |
 
 迁移要求：
 
@@ -1207,7 +1199,11 @@ task_review_feedback
 | `/repositories/{id}/knowledge/{cardId}/source-review` | POST | MAINTAIN | P0 |
 | `/repositories/{id}/task-context` | POST | READ | P1 |
 | `/repositories/{id}/pull-request-reviews` | POST | MAINTAIN | P2 |
-| `/repositories/{id}/task-reviews/{reviewId}/outcomes` | POST | READ | P2 |
+| `/repositories/{id}/task-reviews/{reviewId}/ci-check` | POST | READ | P2 |
+| `/engineering-projects` | GET/POST | 全成员 READ / 全成员 MANAGE | P2 |
+| `/engineering-projects/{id}` | GET/PUT/DELETE | 全成员 READ / 全成员 MANAGE | P2 |
+| `/repositories/{id}/task-reviews/{reviewId}/outcomes` | POST/GET | READ | P2 |
+| `/repositories/{id}/task-reviews/{reviewId}/outcomes/{outcomeId}` | GET | READ | P2 |
 | `/provider-webhooks/github` | POST | GitHub HMAC-SHA256 | P2 |
 | `/provider-webhooks/gitlab` | POST | GitLab Secret Token | P2 |
 
@@ -1367,7 +1363,7 @@ P0 完成前冻结：
 - [ ] README 转知识作为核心能力。
 - [ ] 用节点数量计算风险。
 - [ ] 用检索分数展示影响概率。
-- [ ] PR/CI 阻断。
+- [ ] 模型建议、不完整数据或单独图谱推断驱动的 PR/CI 阻断。
 - [ ] 跨仓库复杂分析。
 - [ ] 大模型直接判断规则违反。
 - [ ] 与任务审查闭环无关的新管理功能。
@@ -1443,7 +1439,7 @@ P0 完成前冻结：
 5. 义务与未知项：只有 `REQUIRED + CURRENT` 的确定性命中产生义务；相同测试命令和审批账号自动去重并保留所有来源知识与证据；Git 限制、符号识别降级、模块图谱不可用、快照/提交缺失和知识版本未验证均转换为带稳定原因的未知项，不判断违规。
 6. 数据库迁移与界面：无数据库迁移、无新增页面；本需求实现无状态规则编排，知识持久化加载和不可变审查结果保存由 REQ-006 统一接入，避免提前形成第二套审查入口。
 7. 验证结果：REQ-005 与 Scope 匹配相关 `11` 项测试通过；后端全量 `152` 项测试通过、`1` 项环境测试跳过；覆盖知识去重、多原因聚合、义务去重、陈旧隔离、纯检索候选、草稿/未审批排除和未知原因传播；本需求 Java 文件 Spotless 检查通过。
-8. 设计差异与限制：P0 不执行模型判断，也不接收模型给出的规则满足状态；测试与审批仅处于 `REQUIRED_NOT_REPORTED/REQUIRED`，执行回报和状态推进留给 REQ-022。
+8. 设计差异与限制：P0 不执行模型判断，也不接收模型给出的规则满足状态；原审查中的测试与审批保持 `REQUIRED_NOT_REPORTED/REQUIRED`，REQ-022 通过独立不可变结果记录补充实际状态，不反向覆盖审查。
 
 ### 18.6 REQ-006 实际实现记录
 
@@ -1518,7 +1514,7 @@ P0 完成前冻结：
 2. 权限边界：本地 MCP 进程必须从环境变量读取后端地址、Analyzer Session 和 CSRF Token；所有工具继续调用原 HTTP Controller，因此仓库 `READ/MAINTAIN` 权限、Snapshot 校验、知识审核状态和错误码与 Web 调用完全一致。凭据只进入 Cookie/Header，不写入工具参数、响应正文或日志。
 3. 默认输出：审查、知识和任务上下文默认只返回稳定 ID、版本、路径、行号、义务、未知代码与来源 ID；调用方显式设置 `includeEvidence/includeContent` 才扩展完整数据，或者使用 `get_evidence` 按 UUID 获取单条来源，避免把整份源码和知识正文塞入 Agent 上下文。
 4. 真实性边界：`get_rules_for_symbol` 只投影不可变审查中的 `applicableKnowledge`，`get_required_tests` 和 `get_stale_knowledge` 也只读取持久化审查结果；检索候选不能被 MCP 提升为正式规则。工具错误保留后端稳定错误码，不把 HTTP 失败包装成模型结论。
-5. 结果回报差异：设计中的 `report_task_outcome` 已注册以固定协议，但当前明确返回 `TASK_OUTCOME_API_NOT_AVAILABLE`，不会伪造保存成功；待 REQ-022 提供不可变结果回报 API 后再接通真实写入，因此 REQ-012 状态为“开发完成，待 REQ-022 接入结果回报”。
+5. 结果回报：`report_task_outcome` 已接通 REQ-022 的不可变结果 API，转发最终 Commit、实际测试/审批以及结构化误报、漏报和知识更新判断；复用同一 Session/CSRF、READ 权限和幂等边界，不保存 MCP 私有副本。
 6. CI 与文档：Linux CI 新增 `mcp-server` 的 `npm ci` 和 `npm test`；模块 README 给出本地启动、三项环境变量、工具边界和凭据安全要求，仓库忽略 MCP 的独立 `node_modules`。
 7. 验证结果：MCP `7` 项测试通过，覆盖 Session/CSRF 转发、安全方法不发送 CSRF、稳定错误码、缺失凭据拒绝启动、注册阶段无后端调用、stdio 协商与工具清单，以及通过 stdio 实际调用 `get_task_context` 后对 HTTP 路径、请求体和权限 Header 的逐项断言。同一工具输入的业务结果直接来自同一 HTTP API。
 8. 数据库与限制：本需求不新增数据库迁移。stdio 适用于本地 Agent 子进程，不实现远程 OAuth；远程部署若需要 Streamable HTTP，应另行接入正式 OAuth/网关，不得复用本地 Session 环境变量方案。
@@ -1601,3 +1597,40 @@ P0 完成前冻结：
 7. 前端：变更审查页对维护者增加“本地 Git / PR·MR”输入切换。PR/MR 表单提供平台、编号、任务、可选模型总结和企业 API Base；提交成功后复用现有证据主线展示完整 Task Review，并显示评论创建/更新状态及提供方链接。READ 用户仍只看到本地只读审查入口，不能调用带凭据的评论同步。
 8. 测试结果：新增统一 Diff、安全路径、目标主机、GitHub/GitLab 本地 HTTP 契约、编排版本拒绝、隐藏评论更新、Webhook 验签、事件映射、远程仓库歧义拒绝、无浏览器会话安全边界和维护权限测试。完成时后端全量 `219` 项测试通过、`2` 项 Linux-only CLI 测试跳过；前端 `19` 项测试、Vue 类型检查和生产构建通过。
 9. 数据库与限制：不新增表或迁移；Task Review 继续使用 V10 不可变存储，Webhook 仓库匹配新增只读 Mapper 查询。GitHub 每次最多扫描 1,000 条评论，GitLab 最多扫描 50 页 Diffs/Notes；Diff 超限显式标记部分结果，评论扫描超限则拒绝发布，避免无法确认 Marker 时制造重复评论。当前没有真实 GitHub/GitLab Token、外部 Webhook 回调和 PostgreSQL 环境，因此自动化验证使用本地 HTTP 契约与 Mapper 静态加载，生产部署仍需配置两个独立 Webhook Secret 并做真实项目验收。
+
+### 18.20 REQ-020 实际实现记录
+
+1. 单一判定入口：新增 `POST /api/repositories/{repositoryId}/task-reviews/{reviewId}/ci-check`，要求仓库 READ 权限。服务只读取已经完成的不可变 Task Review；工作区审查、缺少真实变化或请求 Head 与审查 Head 不一致都会拒绝，不在 CI 时刻重新推断代码。
+2. 固定阻断策略：策略版本为 `deterministic-ci-v1`，只产生五类失败——结构化禁止路径命中、带 Git/代码直接证据的必需测试未报告或未通过、带直接证据的必要审批缺失或拒绝、带直接证据的 CRITICAL + REQUIRED 知识处于 SUSPECT/STALE、明确要求同步但没有真实有效的知识新修订。
+3. 知识同步真实性：调用方不能自报“知识已更新”。服务重新读取当前知识卡，只有同一卡片修订号高于审查版本，并同时处于 `PUBLISHED + APPROVED + CURRENT`，才消除同步阻断。
+4. 非阻断边界：图谱单独推断的测试、审批、失效和知识同步要求，关键词/向量候选、模型总结、未知项与 partial 数据全部进入 Advisory；自由文本开发要求不做规则解析。重复测试/审批回报冲突时取较差状态。
+5. 知识模型与界面：`KnowledgeObligations` 新增 `prohibitedPathPatterns` 和 `knowledgeUpdateRequired`，保留三字段兼容构造。知识编辑器在开发要求区提供禁止路径和知识同步控件，详情页展示原始结构化规则；REFERENCE 知识仍不能携带任何义务。
+6. 数据迁移：新增 `V12__ci_knowledge_obligations.sql`，同时回填知识卡和所有历史修订，更新 JSONB 默认值并约束新增数组/布尔字段。静态迁移契约已覆盖两张表；当前无 PostgreSQL/Docker，仍需在全新库及 V11 实库升级路径验证 Flyway。
+7. 流水线客户端：新增 `scripts/ci-task-review.mjs`，从环境读取 Analyzer 地址、仓库/审查/Head、Session/CSRF 和可选测试/审批 JSON 文件；远端强制 HTTPS，本地允许回环 HTTP，禁止重定向，30 秒超时，不打印凭据。退出码 `0/1/2` 分别表示通过、确定性失败、平台或调用失败。
+8. 自动化验证：服务测试固定五类阻断和全部非阻断边界，另覆盖 Head 拒绝、成功消除义务、READ 权限、V12 与知识规则校验；Node 客户端测试覆盖输入文件、HTTPS 边界、请求契约、凭据不泄漏和退出码。完成时后端全量 `225` 项测试通过、`2` 项 Linux-only CLI 测试跳过；前端 `19` 项测试、Vue 类型检查和生产构建通过；独立 CI 客户端 `4` 项测试通过，并已加入 Linux CI。
+9. 当前限制：CI 客户端复用平台 Session + CSRF，需要受限专用账号和 Secret 轮换，尚未提供长期服务令牌；CI 请求本身仍是一次性判定，如需沉淀实际结果，调用方须再使用 REQ-022 结果回报接口。真实 CI Runner、真实 PostgreSQL V12 升级和长时间会话轮换尚未在当前机器验证，不能宣称生产验收完成。
+
+### 18.21 REQ-021 实际实现记录
+
+1. 工程事实模型：新增 `engineering_projects`、`engineering_project_repositories` 和 `engineering_project_contracts`。项目至少两个成员，仓库和规范化服务名在项目内唯一；契约提供方/消费方必须是两个不同成员。服务身份完全由管理者填写，不读取 README、不调用模型，也不按目录或向量相似度猜测。
+2. 双端契约证据：保存契约时从双方当前 Snapshot 的内容索引精确读取仓库相对路径，按所有当前 Chunk 的 `startLine:contentHash` 生成 SHA-256 指纹。项目读取和 Task Review 都重新计算提供方与消费方指纹；任意一端缺失或变化后 `current=false`，契约范围不再产生确定性命中。
+3. 权限与生命周期：新增 `/api/engineering-projects` 和 `/api/engineering-projects/{id}` 查询与 CRUD。完整项目只有在账号能读取全部成员时可见；创建、更新和删除要求对全部旧/新成员具有 MANAGE。被跨仓 Scope 引用时不得删除项目、移除/改名已有成员服务或删除已有契约；仓库仍属于活动项目时仓库删除被拒绝。
+4. Scope 与迁移：`KnowledgeScope` 新增 `repositoryIds/serviceNames/contractIds` 并保留三字段兼容构造；V13 同时迁移当前卡片和全部修订 JSON，设置默认值、回填和数组类型约束。工程项目表保存登记 Snapshot 作为审计信息，但当前性以实际内容指纹为准，不添加指向历史文件产物的虚假外键。
+5. 匹配语义：跨仓知识只有在目标/来源仓库属于同一可见工程项目，并显式命中目标仓库、目标服务或当前契约时才适用；如果还有路径、符号、模块范围则继续按 AND 收窄。契约只在目标变化路径精确等于登记证据路径时命中。单纯同项目、关键词/向量候选、模型输出和失效契约均不能建立适用性。
+6. 证据与 CI：新增 `REPOSITORY/SERVICE/CONTRACT` 匹配原因和 `PLATFORM_FACT` 真相来源，Provenance 返回项目、服务、契约和目标证据路径，同时保留原知识的来源仓库和修订。REQ-020 的知识同步检查会按该来源仓库读取新修订，不再错误地只查询目标仓库。
+7. 管理界面：项目管理页新增“跨仓工程项目”工作台，在一个对话框中查看项目、成员服务名、契约两端路径、稳定 UUID 和证据当前性。只能管理部分成员时保持只读；新建入口只提供可管理且有当前 Snapshot 的仓库，页面明确说明关系不会自动猜测。
+8. 自动化验证：服务、Mapper Schema、Controller、Scope 匹配、Task Review 跨仓加载、Provenance 和前端项目工作台均新增测试；契约测试覆盖双方当前、任一方内容变化即失效，以及无当前证据拒绝保存。收尾时后端全量 `236` 项测试通过、`2` 项 Linux-only CLI 测试在 Windows 跳过；前端 `20` 项测试、Vue 类型检查和生产构建通过。
+9. 当前限制：当前数据库没有仓库级质量门禁结果，因此只强校验当前 Snapshot、权限、显式服务身份和双端代码证据，不能宣称“单仓库已达到发布门槛”。当前机器没有 PostgreSQL、真实两仓数据和登录后端，V13 全新/升级迁移、多人权限组合、真实跨仓审查及大规模查询性能仍需部署环境验收。
+
+### 18.22 REQ-022 实际实现记录
+
+1. 追加式结果模型：新增 `task_review_outcomes` 与 `task_review_feedback`。结果绑定仓库、不可变审查、具名报告人和 clientRequestId，保存最终 Commit、摘要、测试/审批 JSON、规范化请求 SHA-256 与报告时间；反馈逐条保存误报、漏报或知识更新判断。两表禁止 UPDATE，修正只能追加新回报。
+2. 版本真实性：只接受 40–64 位完整 Git 对象 ID。最终 Commit 与审查 Head 完全相同才标记 `EXACT_REVIEW_HEAD`；其他值标记 `REPORTER_ASSERTED_FINAL`，明确表示平台没有可用证据验证祖先关系，不把报告人声明冒充 Git 事实。
+3. 幂等与权限：新增 `POST/GET /api/repositories/{repositoryId}/task-reviews/{reviewId}/outcomes` 和单条 GET，统一要求仓库 READ。唯一边界为审查、报告人和 clientRequestId；冲突后只有请求摘要哈希完全相同才返回原记录，不同内容返回 `TASK_OUTCOME_IDEMPOTENCY_CONFLICT`。成功写入记录审计事件。
+4. 结构化回报：测试状态限制为 `PASSED/FAILED/SKIPPED`，审批限制为 `APPROVED/REJECTED`，键和账号不得重复，HTTP(S) 证据地址有数量和长度上限。读取时根据原审查计算必须测试/审批的已回报与缺失集合，未回报不会被自动解释为通过或失败。
+5. 人工反馈边界：误报必须精确指向原审查中存在的适用知识、必须测试、必要审批、失效知识、未知项、变化文件或符号；漏报允许描述审查缺失对象但必须保留说明。知识更新判断只允许绑定原审查中的适用/失效知识，并限制为 `NEEDED/NOT_NEEDED/UNKNOWN`。
+6. 不自动学习：结果服务不依赖知识写服务，不修改知识卡内容、发布、审核或来源版本状态，也不反向覆盖 Task Review 或 CI 结果。反馈是具名评测输入，不是自动生效规则。
+7. 前端闭环：变更审查证据主线后新增“开发结果与人工反馈”账本。页面展示报告人、Commit 绑定级别、测试/审批/反馈数量和缺失义务；表单不预选成功状态，误报从现有对象中选择，漏报填写缺失对象，知识更新判断明确提示不会改知识。历史审查同样可以追加结果。
+8. MCP 接通：`report_task_outcome` 不再返回不可用，现已转发同一 REST 结构，支持最终 Commit、测试、审批、误报、漏报和知识更新判断；继续使用 Session/CSRF、READ 权限和稳定错误码，不建立 MCP 私有存储。
+9. 自动化验证：后端全量 `242` 项测试通过、`2` 项 Linux-only CLI 测试在 Windows 跳过；前端 `21` 项测试、Vue 类型检查和生产构建通过；MCP `8` 项测试通过，包含 stdio 实际调用后对 URL、CSRF 和完整请求体的断言。
+10. 当前限制：当前机器没有 PostgreSQL 和登录后端，V14 全新库/V13 升级、触发器、真实多人回报与页面视觉仍需部署环境验收。当前回报按审查逐条读取，已足以形成任务闭环；跨仓库大规模反馈聚合、导出和趋势报表不在本需求中，不能宣传为已实现分析能力。

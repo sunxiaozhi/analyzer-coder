@@ -106,7 +106,7 @@ export interface ChangedSymbol {
 }
 
 export interface KnowledgeEvidence {
-  sourceType: 'GIT_FACT' | 'CODE_FACT' | 'GRAPH_INFERENCE';
+  sourceType: 'GIT_FACT' | 'CODE_FACT' | 'PLATFORM_FACT' | 'GRAPH_INFERENCE';
   repositoryId: string;
   snapshotId: string | null;
   commitSha: string | null;
@@ -115,10 +115,13 @@ export interface KnowledgeEvidence {
   moduleId: string | null;
   knowledgeChunkId: string | null;
   detail: string;
+  engineeringProjectId?: string | null;
+  serviceName?: string | null;
+  contractId?: string | null;
 }
 
 export interface KnowledgeMatchReason {
-  kind: 'CODE_REFERENCE' | 'PATH_PATTERN' | 'SYMBOL' | 'MODULE';
+  kind: 'CODE_REFERENCE' | 'PATH_PATTERN' | 'SYMBOL' | 'MODULE' | 'REPOSITORY' | 'SERVICE' | 'CONTRACT';
   rule: string;
   target: string;
   evidence: KnowledgeEvidence;
@@ -249,6 +252,73 @@ export interface TaskReviewSummary {
   finishedAt: string | null;
 }
 
+export type OutcomeTestStatus = 'PASSED' | 'FAILED' | 'SKIPPED';
+export type OutcomeApprovalStatus = 'APPROVED' | 'REJECTED';
+export type OutcomeFeedbackKind = 'FALSE_POSITIVE' | 'FALSE_NEGATIVE' | 'KNOWLEDGE_UPDATE';
+export type OutcomeFeedbackTarget = 'KNOWLEDGE' | 'REQUIRED_TEST' | 'REQUIRED_APPROVAL'
+  | 'STALE_KNOWLEDGE' | 'UNKNOWN' | 'FILE' | 'SYMBOL' | 'OTHER';
+export type KnowledgeUpdateAssessment = 'NEEDED' | 'NOT_NEEDED' | 'UNKNOWN';
+
+export interface TaskOutcomeTestResult {
+  key: string;
+  status: OutcomeTestStatus;
+  evidenceUrl: string | null;
+}
+
+export interface TaskOutcomeApprovalResult {
+  accountId: string;
+  status: OutcomeApprovalStatus;
+  evidenceUrl: string | null;
+}
+
+export interface TaskOutcomeFeedbackInput {
+  kind: OutcomeFeedbackKind;
+  targetType: OutcomeFeedbackTarget;
+  targetKey: string;
+  knowledgeId: string | null;
+  knowledgeUpdateAssessment: KnowledgeUpdateAssessment | null;
+  comment: string;
+  evidenceUrls: string[];
+}
+
+export interface TaskOutcomeInput {
+  clientRequestId: string;
+  finalCommit: string;
+  summary: string;
+  tests: TaskOutcomeTestResult[];
+  approvals: TaskOutcomeApprovalResult[];
+  feedback: TaskOutcomeFeedbackInput[];
+}
+
+export interface TaskOutcomeFeedback extends TaskOutcomeFeedbackInput {
+  id: string;
+  createdAt: string;
+}
+
+export interface TaskOutcome {
+  id: string;
+  repositoryId: string;
+  reviewId: string;
+  reportedBy: string;
+  reporterDisplayName: string;
+  clientRequestId: string;
+  finalCommit: string;
+  commitBinding: 'EXACT_REVIEW_HEAD' | 'REPORTER_ASSERTED_FINAL';
+  summary: string;
+  tests: TaskOutcomeTestResult[];
+  approvals: TaskOutcomeApprovalResult[];
+  feedback: TaskOutcomeFeedback[];
+  coverage: {
+    requiredTests: string[];
+    reportedRequiredTests: string[];
+    missingRequiredTests: string[];
+    requiredApprovals: string[];
+    reportedRequiredApprovals: string[];
+    missingRequiredApprovals: string[];
+  };
+  createdAt: string;
+}
+
 export function createTaskReview(repositoryId: string, payload: TaskReviewCreatePayload) {
   return request<TaskReviewResult>(`/api/repositories/${repositoryId}/task-reviews`, {
     method: 'POST',
@@ -272,5 +342,18 @@ export function listTaskReviews(repositoryId: string, limit = 20, offset = 0) {
 export function getTaskReview(repositoryId: string, reviewId: string) {
   return request<TaskReviewResult>(
     `/api/repositories/${repositoryId}/task-reviews/${reviewId}`,
+  );
+}
+
+export function listTaskOutcomes(repositoryId: string, reviewId: string, limit = 50, offset = 0) {
+  return request<TaskOutcome[]>(
+    `/api/repositories/${repositoryId}/task-reviews/${reviewId}/outcomes?limit=${limit}&offset=${offset}`,
+  );
+}
+
+export function reportTaskOutcome(repositoryId: string, reviewId: string, payload: TaskOutcomeInput) {
+  return request<TaskOutcome>(
+    `/api/repositories/${repositoryId}/task-reviews/${reviewId}/outcomes`,
+    { method: 'POST', body: JSON.stringify(payload) },
   );
 }

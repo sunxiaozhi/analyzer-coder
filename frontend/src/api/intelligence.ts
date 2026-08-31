@@ -254,6 +254,9 @@ export interface KnowledgeScope {
   pathPatterns: string[];
   symbols: string[];
   modules: string[];
+  repositoryIds: string[];
+  serviceNames: string[];
+  contractIds: string[];
 }
 export interface KnowledgeObligations {
   requiredTests: string[];

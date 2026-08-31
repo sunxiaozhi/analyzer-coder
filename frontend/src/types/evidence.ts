@@ -1,6 +1,7 @@
 export type TruthSource =
   | 'GIT_FACT'
   | 'CODE_FACT'
+  | 'PLATFORM_FACT'
   | 'VERIFIED_KNOWLEDGE'
   | 'GRAPH_INFERENCE'
   | 'RETRIEVAL_CANDIDATE'
@@ -28,4 +29,7 @@ export interface Provenance {
   retrievalChannel: string | null;
   findingId: string | null;
   detail: string;
+  engineeringProjectId?: string | null;
+  serviceName?: string | null;
+  contractId?: string | null;
 }

@@ -23,6 +23,6 @@ npm --prefix mcp-server start
 - `get_required_tests`：读取审查产生的必须测试；
 - `get_stale_knowledge`：读取审查隔离的陈旧知识；
 - `get_evidence`：按来源 ID 获取完整真实性记录；
-- `report_task_outcome`：已注册但在 REQ-022 持久化 API 完成前明确返回不可用。
+- `report_task_outcome`：把最终 Commit、实际测试/审批以及具名误报、漏报和知识更新判断追加为不可变结果；反馈不会自动修改正式知识。
 
 除显式 `includeContent/includeEvidence` 外，工具默认返回精简结构和来源 ID，避免把大量源码或证据直接灌入 Agent 上下文。

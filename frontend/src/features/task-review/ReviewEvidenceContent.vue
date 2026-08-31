@@ -24,6 +24,10 @@ function openSource(source: Provenance) {
     });
   }
 }
+const reasonLabels: Record<string, string> = {
+  CODE_REFERENCE: '绑定代码', PATH_PATTERN: '路径规则', SYMBOL: '代码符号', MODULE: '架构模块',
+  REPOSITORY: '工程仓库', SERVICE: '服务身份', CONTRACT: '跨仓契约',
+};
 </script>
 
 <template>
@@ -53,10 +57,11 @@ function openSource(source: Provenance) {
     <section v-if="selection.evidence.length" class="evidence-list">
       <h3>证据链</h3>
       <article v-for="reason in selection.evidence" :key="`${reason.kind}:${reason.rule}:${reason.target}`">
-        <small>{{ reason.kind }} · {{ reason.rule }}</small>
+        <small>{{ reasonLabels[reason.kind] ?? reason.kind }} · {{ reason.rule }}</small>
         <strong>{{ reason.target }}</strong>
         <p>{{ reason.evidence.detail }}</p>
-        <code>{{ reason.evidence.filePath }}<template v-if="reason.evidence.symbolName"> · {{ reason.evidence.symbolName }}</template></code>
+        <code v-if="reason.evidence.filePath">{{ reason.evidence.filePath }}<template v-if="reason.evidence.symbolName"> · {{ reason.evidence.symbolName }}</template></code>
+        <code v-else-if="reason.evidence.serviceName">服务 {{ reason.evidence.serviceName }}</code>
       </article>
     </section>
 

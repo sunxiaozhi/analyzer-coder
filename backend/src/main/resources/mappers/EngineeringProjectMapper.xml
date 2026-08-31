@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.EngineeringProjectMapper">
+    <resultMap id="projectRow" type="com.analyzercoder.infrastructure.persistence.model.EngineeringProjectRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="name" javaType="java.lang.String"/>
+            <arg column="description" javaType="java.lang.String"/>
+            <arg column="created_by" javaType="java.util.UUID"/>
+            <arg column="version" javaType="_long"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+            <arg column="updated_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="repositoryRow" type="com.analyzercoder.infrastructure.persistence.model.EngineeringProjectRepositoryRow">
+        <constructor>
+            <arg column="project_id" javaType="java.util.UUID"/>
+            <arg column="repository_id" javaType="java.util.UUID"/>
+            <arg column="repository_name" javaType="java.lang.String"/>
+            <arg column="service_name" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="contractRow" type="com.analyzercoder.infrastructure.persistence.model.EngineeringContractRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="project_id" javaType="java.util.UUID"/>
+            <arg column="contract_key" javaType="java.lang.String"/>
+            <arg column="name" javaType="java.lang.String"/>
+            <arg column="provider_repo_id" javaType="java.util.UUID"/>
+            <arg column="consumer_repo_id" javaType="java.util.UUID"/>
+            <arg column="provider_snapshot_id" javaType="java.util.UUID"/>
+            <arg column="consumer_snapshot_id" javaType="java.util.UUID"/>
+            <arg column="provider_evidence_path" javaType="java.lang.String"/>
+            <arg column="consumer_evidence_path" javaType="java.lang.String"/>
+            <arg column="provider_content_fingerprint" javaType="java.lang.String"/>
+            <arg column="consumer_content_fingerprint" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+            <arg column="updated_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="reviewRepositoryRow" type="com.analyzercoder.infrastructure.persistence.model.EngineeringReviewRepositoryRow">
+        <constructor>
+            <arg column="project_id" javaType="java.util.UUID"/>
+            <arg column="source_repository_id" javaType="java.util.UUID"/>
+            <arg column="target_service_name" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="reviewContractRow" type="com.analyzercoder.infrastructure.persistence.model.EngineeringReviewContractRow">
+        <constructor>
+            <arg column="project_id" javaType="java.util.UUID"/>
+            <arg column="contract_id" javaType="java.util.UUID"/>
+            <arg column="target_repository_id" javaType="java.util.UUID"/>
+            <arg column="target_evidence_path" javaType="java.lang.String"/>
+            <arg column="provider_repo_id" javaType="java.util.UUID"/>
+            <arg column="provider_evidence_path" javaType="java.lang.String"/>
+            <arg column="provider_content_fingerprint" javaType="java.lang.String"/>
+            <arg column="consumer_repo_id" javaType="java.util.UUID"/>
+            <arg column="consumer_evidence_path" javaType="java.lang.String"/>
+            <arg column="consumer_content_fingerprint" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="pathChunkRow" type="com.analyzercoder.infrastructure.persistence.model.CurrentPathChunkRow">
+        <constructor>
+            <arg column="snapshot_id" javaType="java.util.UUID"/>
+            <arg column="file_path" javaType="java.lang.String"/>
+            <arg column="start_line" javaType="_int"/>
+            <arg column="content_hash" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="fullyVisible">
+        (#{superAdmin}=TRUE OR NOT EXISTS(
+            SELECT 1 FROM engineering_project_repositories hidden
+            JOIN repositories hidden_repo ON hidden_repo.id=hidden.repo_id
+            WHERE hidden.project_id=p.id AND hidden_repo.deleted_at IS NULL
+            AND hidden_repo.owner_account_id&lt;&gt;#{accountId}
+            AND NOT EXISTS(SELECT 1 FROM repository_permissions permission
+                WHERE permission.repo_id=hidden.repo_id AND permission.account_id=#{accountId})
+        ))
+    </sql>
+    <select id="listVisible" resultMap="projectRow">
+        SELECT p.id,p.name,p.description,p.created_by,p.version,p.created_at,p.updated_at
+        FROM engineering_projects p WHERE p.deleted_at IS NULL AND <include refid="fullyVisible"/>
+        ORDER BY p.updated_at DESC,p.id
+    </select>
+    <select id="findVisible" resultMap="projectRow">
+        SELECT p.id,p.name,p.description,p.created_by,p.version,p.created_at,p.updated_at
+        FROM engineering_projects p WHERE p.id=#{id} AND p.deleted_at IS NULL
+        AND <include refid="fullyVisible"/>
+    </select>
+    <select id="findById" resultMap="projectRow">
+        SELECT id,name,description,created_by,version,created_at,updated_at
+        FROM engineering_projects WHERE id=#{id} AND deleted_at IS NULL
+    </select>
+    <select id="repositories" resultMap="repositoryRow">
+        SELECT membership.project_id,membership.repo_id repository_id,repository.name repository_name,
+        membership.service_name FROM engineering_project_repositories membership
+        JOIN repositories repository ON repository.id=membership.repo_id
+        WHERE membership.project_id=#{projectId} AND repository.deleted_at IS NULL
+        ORDER BY membership.normalized_service_name,membership.repo_id
+    </select>
+    <select id="contracts" resultMap="contractRow">
+        SELECT id,project_id,contract_key,name,provider_repo_id,consumer_repo_id,
+        provider_snapshot_id,consumer_snapshot_id,provider_evidence_path,consumer_evidence_path,
+        provider_content_fingerprint,consumer_content_fingerprint,created_at,updated_at
+        FROM engineering_project_contracts WHERE project_id=#{projectId}
+        ORDER BY normalized_contract_key,id
+    </select>
+    <insert id="insertProject">
+        INSERT INTO engineering_projects(id,name,normalized_name,description,created_by,created_at,updated_at)
+        VALUES(#{id},#{name},#{normalizedName},#{description},#{actorId},#{now},#{now})
+    </insert>
+    <update id="updateProject">
+        UPDATE engineering_projects SET name=#{name},normalized_name=#{normalizedName},
+        description=#{description},version=version+1,updated_at=#{now}
+        WHERE id=#{id} AND deleted_at IS NULL AND version=#{expectedVersion}
+    </update>
+    <update id="softDelete">
+        UPDATE engineering_projects SET deleted_at=#{now},version=version+1,updated_at=#{now}
+        WHERE id=#{id} AND deleted_at IS NULL AND version=#{expectedVersion}
+    </update>
+    <delete id="deleteContracts">DELETE FROM engineering_project_contracts WHERE project_id=#{projectId}</delete>
+    <delete id="deleteRepositories">DELETE FROM engineering_project_repositories WHERE project_id=#{projectId}</delete>
+    <insert id="insertRepository">
+        INSERT INTO engineering_project_repositories(
+            project_id,repo_id,service_name,normalized_service_name,added_by,created_at)
+        VALUES(#{projectId},#{repositoryId},#{serviceName},#{normalizedServiceName},#{actorId},#{now})
+    </insert>
+    <insert id="insertContract">
+        INSERT INTO engineering_project_contracts(
+            id,project_id,contract_key,normalized_contract_key,name,provider_repo_id,consumer_repo_id,
+            provider_snapshot_id,consumer_snapshot_id,provider_evidence_path,consumer_evidence_path,
+            provider_content_fingerprint,consumer_content_fingerprint,created_by,created_at,updated_at)
+        VALUES(#{row.id},#{row.projectId},#{row.contractKey},#{normalizedContractKey},#{row.name},
+            #{row.providerRepositoryId},#{row.consumerRepositoryId},#{row.providerSnapshotId},
+            #{row.consumerSnapshotId},#{row.providerEvidencePath},#{row.consumerEvidencePath},
+            #{row.providerContentFingerprint},#{row.consumerContentFingerprint},#{actorId},#{now},#{now})
+    </insert>
+    <select id="currentPathChunks" resultMap="pathChunkRow">
+        SELECT chunk.snapshot_id,chunk.file_path,chunk.start_line,chunk.content_hash
+        FROM code_chunks chunk JOIN repositories repository ON repository.id=chunk.repo_id
+        WHERE chunk.repo_id=#{repositoryId} AND chunk.snapshot_id=repository.current_snapshot_id
+        AND chunk.file_path=#{filePath}
+        ORDER BY chunk.start_line,chunk.end_line,chunk.id
+    </select>
+    <select id="reviewRepositories" resultMap="reviewRepositoryRow">
+        SELECT DISTINCT project.id project_id,source.repo_id source_repository_id,
+        target.normalized_service_name target_service_name
+        FROM engineering_projects project
+        JOIN engineering_project_repositories target ON target.project_id=project.id
+        JOIN engineering_project_repositories source ON source.project_id=project.id
+        JOIN repositories source_repository ON source_repository.id=source.repo_id
+        WHERE project.deleted_at IS NULL AND target.repo_id=#{targetRepositoryId}
+        AND source_repository.deleted_at IS NULL AND(
+            source_repository.owner_account_id=#{actorId}
+            OR EXISTS(SELECT 1 FROM repository_permissions permission
+                WHERE permission.repo_id=source.repo_id AND permission.account_id=#{actorId})
+            OR EXISTS(SELECT 1 FROM accounts account
+                WHERE account.id=#{actorId} AND account.role='SUPER_ADMIN'))
+        ORDER BY project.id,source.repo_id
+    </select>
+    <select id="reviewContracts" resultMap="reviewContractRow">
+        SELECT contract.project_id,contract.id contract_id,#{targetRepositoryId} target_repository_id,
+        CASE WHEN contract.provider_repo_id=#{targetRepositoryId}
+            THEN contract.provider_evidence_path ELSE contract.consumer_evidence_path END target_evidence_path,
+        contract.provider_repo_id,contract.provider_evidence_path,contract.provider_content_fingerprint,
+        contract.consumer_repo_id,contract.consumer_evidence_path,contract.consumer_content_fingerprint
+        FROM engineering_project_contracts contract
+        JOIN engineering_projects project ON project.id=contract.project_id AND project.deleted_at IS NULL
+        WHERE (contract.provider_repo_id=#{targetRepositoryId} OR contract.consumer_repo_id=#{targetRepositoryId})
+        AND(
+            EXISTS(SELECT 1 FROM accounts account
+                WHERE account.id=#{actorId} AND account.role='SUPER_ADMIN')
+            OR(
+                EXISTS(SELECT 1 FROM repositories provider
+                    WHERE provider.id=contract.provider_repo_id AND provider.deleted_at IS NULL
+                    AND(provider.owner_account_id=#{actorId} OR EXISTS(
+                        SELECT 1 FROM repository_permissions permission
+                        WHERE permission.repo_id=provider.id AND permission.account_id=#{actorId})))
+                AND EXISTS(SELECT 1 FROM repositories consumer
+                    WHERE consumer.id=contract.consumer_repo_id AND consumer.deleted_at IS NULL
+                    AND(consumer.owner_account_id=#{actorId} OR EXISTS(
+                        SELECT 1 FROM repository_permissions permission
+                        WHERE permission.repo_id=consumer.id AND permission.account_id=#{actorId})))
+            )
+        )
+        ORDER BY contract.project_id,contract.id
+    </select>
+    <select id="crossScopedKnowledgeCount" resultType="int">
+        SELECT COUNT(*) FROM knowledge_cards card
+        JOIN engineering_project_repositories membership ON membership.repo_id=card.repo_id
+        WHERE membership.project_id=#{projectId} AND card.publication_status&lt;&gt;'ARCHIVED' AND(
+            jsonb_array_length(card.scope_payload->'repositoryIds')&gt;0
+            OR jsonb_array_length(card.scope_payload->'serviceNames')&gt;0
+            OR jsonb_array_length(card.scope_payload->'contractIds')&gt;0)
+    </select>
+    <select id="activeProjectCountForRepository" resultType="int">
+        SELECT COUNT(*) FROM engineering_project_repositories membership
+        JOIN engineering_projects project ON project.id=membership.project_id
+        WHERE membership.repo_id=#{repositoryId} AND project.deleted_at IS NULL
+    </select>
+</mapper>

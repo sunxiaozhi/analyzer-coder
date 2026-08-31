@@ -121,7 +121,13 @@ public class TaskContextMatcher {
             KnowledgeScopeMatcher.ChangeTarget target =
                     target(input, commitSha, file, input.changedSymbols());
             KnowledgeScopeMatcher.MatchResult result =
-                    scopeMatcher.match(knowledge.scope(), knowledge.codeReferences(), target);
+                    scopeMatcher.match(
+                            knowledge.scope(),
+                            input.repositoryId().equals(knowledge.repositoryId())
+                                    ? knowledge.codeReferences()
+                                    : List.of(),
+                            target,
+                            knowledge.crossRepositoryBindings());
             reasons.addAll(result.reasons());
             unknowns.addAll(result.unknowns());
         }
@@ -175,7 +181,8 @@ public class TaskContextMatcher {
         for (KnowledgeMatch.Candidate candidate : input.knowledge()) {
             if (candidate == null
                     || candidate.knowledgeId() == null
-                    || !input.repositoryId().equals(candidate.repositoryId())
+                    || (!input.repositoryId().equals(candidate.repositoryId())
+                            && candidate.crossRepositoryBindings().isEmpty())
                     || !"PUBLISHED".equals(normalizedStatus(candidate.publicationStatus()))
                     || !"APPROVED".equals(normalizedStatus(candidate.reviewStatus()))) {
                 continue;
@@ -386,6 +393,17 @@ public class TaskContextMatcher {
                     graphArtifactId,
                     path,
                     evidence.filePath(),
+                    evidence.detail());
+        }
+        if (evidence.sourceType() == KnowledgeMatchReason.EvidenceSource.PLATFORM_FACT) {
+            return Provenance.platformFact(
+                    evidence.repositoryId(),
+                    evidence.snapshotId(),
+                    evidence.commitSha(),
+                    evidence.filePath(),
+                    evidence.engineeringProjectId(),
+                    evidence.serviceName(),
+                    evidence.contractId(),
                     evidence.detail());
         }
         return Provenance.codeFact(

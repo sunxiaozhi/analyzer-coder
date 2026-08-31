@@ -14,6 +14,7 @@ import com.analyzercoder.application.change.RepositoryChange;
 import com.analyzercoder.application.change.RepositoryChangeService;
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.application.knowledge.RepositoryGlobMatcher;
+import com.analyzercoder.application.project.EngineeringProjectService;
 import com.analyzercoder.domain.knowledge.KnowledgeEnforcement;
 import com.analyzercoder.domain.knowledge.KnowledgeKind;
 import com.analyzercoder.domain.knowledge.KnowledgeObligations;
@@ -47,6 +48,8 @@ class TaskReviewServiceTest {
     private final RepositoryChangeService changes = mock(RepositoryChangeService.class);
     private final ChangedSymbolResolver symbols = mock(ChangedSymbolResolver.class);
     private final IntelligenceService intelligence = mock(IntelligenceService.class);
+    private final EngineeringProjectService engineeringProjects =
+            mock(EngineeringProjectService.class);
     private final ProjectArchitectureMapService architecture =
             mock(ProjectArchitectureMapService.class);
     private final TaskReviewModelSummaryService modelSummaries =
@@ -86,6 +89,7 @@ class TaskReviewServiceTest {
                         new TaskContextMatcher(
                                 new KnowledgeScopeMatcher(new RepositoryGlobMatcher())),
                         intelligence,
+                        engineeringProjects,
                         architecture,
                         modelSummaries,
                         mapper,
@@ -106,6 +110,8 @@ class TaskReviewServiceTest {
         when(changes.analyze(org.mockito.ArgumentMatchers.any())).thenReturn(change());
         when(symbols.resolve(repository, change())).thenReturn(changedSymbols());
         when(intelligence.cards(repository.id().value(), true)).thenReturn(List.of(card()));
+        when(engineeringProjects.reviewTopology(repository.id().value(), actorId))
+                .thenReturn(new EngineeringProjectService.ReviewTopology(List.of()));
         when(intelligence.reviewKnowledgeReferences(repository.id().value(), "增加退款审批", 10))
                 .thenReturn(List.of());
         when(architecture.map(repository.id())).thenReturn(architectureMap());
@@ -297,6 +303,50 @@ class TaskReviewServiceTest {
     }
 
     @Test
+    void loadsVisibleKnowledgeFromAConfiguredSharedEngineeringProject() {
+        UUID sourceRepositoryId = UUID.randomUUID();
+        UUID engineeringProjectId = UUID.randomUUID();
+        IntelligenceService.KnowledgeCard crossCard = crossRepositoryCard(sourceRepositoryId);
+        when(engineeringProjects.reviewTopology(repository.id().value(), actorId))
+                .thenReturn(
+                        new EngineeringProjectService.ReviewTopology(
+                                List.of(
+                                        new EngineeringProjectService.RepositoryBinding(
+                                                engineeringProjectId,
+                                                sourceRepositoryId,
+                                                "refund-service",
+                                                List.of()))));
+        when(intelligence.cards(sourceRepositoryId, true)).thenReturn(List.of(crossCard));
+
+        TaskReviewResult result =
+                service.create(
+                        repository.id(),
+                        actorId,
+                        new TaskReviewRequest(
+                                UUID.randomUUID(),
+                                "增加退款审批",
+                                GitChangeRequest.Source.COMMIT_RANGE,
+                                "base",
+                                "head",
+                                null));
+
+        assertThat(result.applicableKnowledge())
+                .filteredOn(item -> item.knowledgeId().equals(crossCard.id()))
+                .singleElement()
+                .satisfies(
+                        match -> {
+                            assertThat(match.reasons())
+                                    .extracting(KnowledgeMatchReason::kind)
+                                    .contains(
+                                            KnowledgeMatchReason.MatchKind.SERVICE,
+                                            KnowledgeMatchReason.MatchKind.PATH_PATTERN);
+                            assertThat(match.sources())
+                                    .extracting(source -> source.sourceType().name())
+                                    .contains("PLATFORM_FACT");
+                        });
+    }
+
+    @Test
     void findsOnlyDeterministicReferencesForTheRequestedRepositoryRelativeFile() {
         service.create(
                 repository.id(),
@@ -392,6 +442,44 @@ class TaskReviewServiceTest {
                 "verified",
                 "PUBLISHED",
                 1,
+                now,
+                now,
+                commit,
+                "CURRENT",
+                now,
+                "APPROVED",
+                actorId,
+                now,
+                List.of(),
+                List.of());
+    }
+
+    private IntelligenceService.KnowledgeCard crossRepositoryCard(UUID sourceRepositoryId) {
+        Instant now = Instant.now();
+        return new IntelligenceService.KnowledgeCard(
+                UUID.randomUUID(),
+                sourceRepositoryId,
+                "跨仓退款契约",
+                "API",
+                "退款服务变更必须执行契约测试",
+                "退款服务变更必须执行契约测试",
+                List.of("refund"),
+                KnowledgeKind.API_CONTRACT,
+                KnowledgeSeverity.CRITICAL,
+                KnowledgeEnforcement.REQUIRED,
+                UUID.randomUUID(),
+                new KnowledgeScope(
+                        List.of("src/refund/**"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of("refund-service"),
+                        List.of()),
+                new KnowledgeObligations(List.of("contract-test"), List.of(), List.of()),
+                UUID.randomUUID(),
+                "verified",
+                "PUBLISHED",
+                3,
                 now,
                 now,
                 commit,

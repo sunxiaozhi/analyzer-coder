@@ -190,14 +190,63 @@ export function createAnalyzerMcpServer(api = clientFromEnvironment()) {
     'report_task_outcome',
     {
       title: 'Report task outcome',
-      description: 'Reserved for the immutable task outcome API delivered by REQ-022.',
-      inputSchema: z.object({ repositoryId, reviewId: uuid, summary: z.string().min(1).max(4000) }),
+      description: 'Appends an immutable, attributed delivery result and human feedback to a completed task review.',
+      inputSchema: z.object({
+        repositoryId,
+        reviewId: uuid,
+        clientRequestId: uuid.optional(),
+        finalCommit: z.string().regex(/^[0-9a-fA-F]{40,64}$/),
+        summary: z.string().min(1).max(4000),
+        tests: z.array(z.object({
+          key: z.string().min(1).max(500),
+          status: z.enum(['PASSED', 'FAILED', 'SKIPPED']),
+          evidenceUrl: z.url().nullable().optional(),
+        })).max(200).default([]),
+        approvals: z.array(z.object({
+          accountId: uuid,
+          status: z.enum(['APPROVED', 'REJECTED']),
+          evidenceUrl: z.url().nullable().optional(),
+        })).max(100).default([]),
+        feedback: z.array(z.object({
+          kind: z.enum(['FALSE_POSITIVE', 'FALSE_NEGATIVE', 'KNOWLEDGE_UPDATE']),
+          targetType: z.enum([
+            'KNOWLEDGE', 'REQUIRED_TEST', 'REQUIRED_APPROVAL', 'STALE_KNOWLEDGE',
+            'UNKNOWN', 'FILE', 'SYMBOL', 'OTHER',
+          ]),
+          targetKey: z.string().min(1).max(500),
+          knowledgeId: uuid.nullable().optional(),
+          knowledgeUpdateAssessment: z.enum(['NEEDED', 'NOT_NEEDED', 'UNKNOWN']).nullable().optional(),
+          comment: z.string().min(1).max(2000),
+          evidenceUrls: z.array(z.url()).max(20).default([]),
+        })).max(200).default([]),
+      }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async () => ({
-      content: [{ type: 'text', text: 'TASK_OUTCOME_API_NOT_AVAILABLE: this tool becomes writable with REQ-022.' }],
-      structuredContent: { code: 'TASK_OUTCOME_API_NOT_AVAILABLE', available: false },
-      isError: true,
+    async input => toolCall(async () => {
+      const outcome = await api.request(
+        `/api/repositories/${input.repositoryId}/task-reviews/${input.reviewId}/outcomes`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            clientRequestId: input.clientRequestId ?? randomUUID(),
+            finalCommit: input.finalCommit.toLowerCase(),
+            summary: input.summary,
+            tests: input.tests.map(item => ({ ...item, evidenceUrl: item.evidenceUrl ?? null })),
+            approvals: input.approvals.map(item => ({ ...item, evidenceUrl: item.evidenceUrl ?? null })),
+            feedback: input.feedback.map(item => ({
+              ...item,
+              knowledgeId: item.knowledgeId ?? null,
+              knowledgeUpdateAssessment: item.knowledgeUpdateAssessment ?? null,
+            })),
+          }),
+        },
+      );
+      return response(
+        outcome,
+        `Outcome ${outcome.id} recorded at ${outcome.finalCommit}: `
+          + `${outcome.tests?.length ?? 0} tests, ${outcome.approvals?.length ?? 0} approvals, `
+          + `${outcome.feedback?.length ?? 0} feedback items.`,
+      );
     }),
   );
 

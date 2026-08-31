@@ -22,23 +22,180 @@ public class KnowledgeScopeMatcher {
             KnowledgeScope requestedScope,
             List<BoundCodeReference> requestedReferences,
             ChangeTarget target) {
+        return match(requestedScope, requestedReferences, target, List.of());
+    }
+
+    public MatchResult match(
+            KnowledgeScope requestedScope,
+            List<BoundCodeReference> requestedReferences,
+            ChangeTarget target,
+            List<KnowledgeMatch.CrossRepositoryBinding> requestedBindings) {
         KnowledgeScope scope = requestedScope == null ? KnowledgeScope.empty() : requestedScope;
         List<BoundCodeReference> references =
                 requestedReferences == null ? List.of() : requestedReferences;
+        List<KnowledgeMatch.CrossRepositoryBinding> bindings =
+                requestedBindings == null ? List.of() : requestedBindings;
         if (target == null) {
             throw new IllegalArgumentException("变更目标不能为空");
         }
 
-        LinkedHashSet<KnowledgeMatchReason> reasons = new LinkedHashSet<>();
         LinkedHashSet<ScopeUnknown> unknowns = new LinkedHashSet<>();
         List<String> paths = paths(target, unknowns);
+        LinkedHashSet<KnowledgeMatchReason> crossReasons = new LinkedHashSet<>();
+        matchCrossRepository(scope, target, paths, bindings, crossReasons, unknowns);
+        boolean foreignKnowledge =
+                bindings.stream()
+                        .anyMatch(binding -> !target.repositoryId().equals(binding.sourceRepositoryId()));
+        boolean crossScoped = hasCrossScope(scope);
+        if ((foreignKnowledge || crossScoped) && crossReasons.isEmpty()) {
+            return new MatchResult(List.of(), List.copyOf(unknowns));
+        }
 
-        matchCodeReferences(references, target, paths, reasons, unknowns);
-        matchPaths(scope, target, paths, reasons, unknowns);
-        matchSymbols(scope, target, paths, reasons);
-        matchModules(scope, target, paths, reasons, unknowns);
+        LinkedHashSet<KnowledgeMatchReason> localReasons = new LinkedHashSet<>();
+        matchCodeReferences(references, target, paths, localReasons, unknowns);
+        matchPaths(scope, target, paths, localReasons, unknowns);
+        matchSymbols(scope, target, paths, localReasons);
+        matchModules(scope, target, paths, localReasons, unknowns);
+        if (hasLocalScope(scope, references) && localReasons.isEmpty()) {
+            return new MatchResult(List.of(), List.copyOf(unknowns));
+        }
+
+        LinkedHashSet<KnowledgeMatchReason> reasons = new LinkedHashSet<>(crossReasons);
+        reasons.addAll(localReasons);
 
         return new MatchResult(List.copyOf(reasons), List.copyOf(unknowns));
+    }
+
+    private static void matchCrossRepository(
+            KnowledgeScope scope,
+            ChangeTarget target,
+            List<String> paths,
+            List<KnowledgeMatch.CrossRepositoryBinding> bindings,
+            Set<KnowledgeMatchReason> reasons,
+            Set<ScopeUnknown> unknowns) {
+        if (!hasCrossScope(scope) || paths.isEmpty()) {
+            return;
+        }
+        String path = paths.get(paths.size() - 1);
+        if (scope.repositoryIds().contains(target.repositoryId())) {
+            if (bindings.isEmpty()) {
+                reasons.add(
+                        crossReason(
+                                KnowledgeMatchReason.MatchKind.REPOSITORY,
+                                target.repositoryId().toString(),
+                                target.repositoryId().toString(),
+                                target,
+                                path,
+                                null,
+                                null,
+                                null,
+                                "目标仓库 ID 与知识的显式仓库范围一致"));
+            } else {
+                bindings.forEach(
+                        binding ->
+                                reasons.add(
+                                        crossReason(
+                                                KnowledgeMatchReason.MatchKind.REPOSITORY,
+                                                target.repositoryId().toString(),
+                                                target.repositoryId().toString(),
+                                                target,
+                                                path,
+                                                binding.engineeringProjectId(),
+                                                binding.targetServiceName(),
+                                                null,
+                                                "同一工程项目中的目标仓库 ID 与显式范围一致")));
+            }
+        }
+        for (KnowledgeMatch.CrossRepositoryBinding binding : bindings) {
+            String targetService = normalized(binding.targetServiceName());
+            if (scope.serviceNames().stream()
+                    .map(KnowledgeScopeMatcher::normalized)
+                    .anyMatch(targetService::equals)) {
+                reasons.add(
+                        crossReason(
+                                KnowledgeMatchReason.MatchKind.SERVICE,
+                                targetService,
+                                targetService,
+                                target,
+                                path,
+                                binding.engineeringProjectId(),
+                                targetService,
+                                null,
+                                "工程项目成员中记录的目标服务身份与知识范围一致"));
+            }
+            for (KnowledgeMatch.ContractScopeBinding contract : binding.contracts()) {
+                if (!scope.contractIds().contains(contract.contractId())
+                        || !paths.contains(contract.targetEvidencePath())) {
+                    continue;
+                }
+                if (!contract.current()) {
+                    unknowns.add(
+                            new ScopeUnknown(
+                                    "CONTRACT_EVIDENCE_STALE",
+                                    contract.contractId().toString(),
+                                    "契约证据路径已变化或不在当前内容索引，不能扩大为跨仓库结论"));
+                    continue;
+                }
+                reasons.add(
+                        crossReason(
+                                KnowledgeMatchReason.MatchKind.CONTRACT,
+                                contract.contractId().toString(),
+                                contract.targetEvidencePath(),
+                                target,
+                                contract.targetEvidencePath(),
+                                binding.engineeringProjectId(),
+                                targetService,
+                                contract.contractId(),
+                                "变更路径与经过两端当前代码指纹验证的契约证据一致"));
+            }
+        }
+    }
+
+    private static KnowledgeMatchReason crossReason(
+            KnowledgeMatchReason.MatchKind kind,
+            String rule,
+            String resolvedTarget,
+            ChangeTarget target,
+            String filePath,
+            UUID engineeringProjectId,
+            String serviceName,
+            UUID contractId,
+            String detail) {
+        return new KnowledgeMatchReason(
+                kind,
+                rule,
+                resolvedTarget,
+                new KnowledgeMatchReason.ScopeEvidence(
+                        KnowledgeMatchReason.EvidenceSource.PLATFORM_FACT,
+                        target.repositoryId(),
+                        target.snapshotId(),
+                        target.commitSha(),
+                        filePath,
+                        null,
+                        null,
+                        null,
+                        detail,
+                        engineeringProjectId,
+                        serviceName,
+                        contractId));
+    }
+
+    private static boolean hasCrossScope(KnowledgeScope scope) {
+        return !scope.repositoryIds().isEmpty()
+                || !scope.serviceNames().isEmpty()
+                || !scope.contractIds().isEmpty();
+    }
+
+    private static boolean hasLocalScope(
+            KnowledgeScope scope, List<BoundCodeReference> references) {
+        return !references.isEmpty()
+                || !scope.pathPatterns().isEmpty()
+                || !scope.symbols().isEmpty()
+                || !scope.modules().isEmpty();
+    }
+
+    private static String normalized(String value) {
+        return value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private void matchCodeReferences(

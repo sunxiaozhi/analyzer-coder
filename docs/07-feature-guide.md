@@ -73,6 +73,16 @@
 
 项目画像展示当前已发布快照的文件数量、语言构成、一级目录、常见入口文件、代码片段、向量覆盖、知识卡片及图谱规模。它不调用模型，也不把推测结果标记为架构事实。画像底部可直接进入源码检索、调用图谱或知识问答。
 
+### 3.5 配置跨仓工程知识
+
+在“项目管理”点击“跨仓工程项目”。选择至少两个已有当前快照且当前账号可管理的仓库，为每个仓库填写项目内唯一的服务名。服务名是人工确认的工程身份，不会从 README 或模型自动生成。
+
+如果知识需要由接口关系限定，再添加契约：选择提供方和消费方，并分别填写双方当前内容索引中真实存在的仓库相对路径。保存后平台记录两端内容指纹；代码变化导致任一指纹不一致时，项目会显示“证据待刷新”，该契约不会继续形成确定性跨仓命中。
+
+编辑知识卡时可填写适用仓库 UUID、服务名或契约 UUID。三类跨仓范围任一明确命中后，还要同时满足该卡片已有的路径、符号和模块范围。只有 Task Review 创建者能读取来源仓库时，来源知识才会进入审查；同一工程项目、关键词相似或模型建议本身都不会产生跨仓规则。
+
+项目被知识 Scope 引用时不能删除关联成员、改名服务、删除契约或删除整个项目。仓库仍属于活动工程项目时也不能删除，应先清理知识 Scope，再解除工程关系。
+
 ## 4. 索引任务（系统管理员）
 
 “索引任务”页面包含两个 Tab：
@@ -128,6 +138,36 @@
 PR/MR 审查要求远端 Head 与平台当前 Snapshot Commit 相同。不一致时先到“项目管理”同步远端，再回“项目总览”完成准备；系统不会拿旧快照分析新 Patch。评论中的测试和审批表示“知识规则要求但尚未报告完成”，不是已失败状态；首版不会设置阻断 Check、Pipeline 状态或合并失败。
 
 Webhook 需要部署者分别配置 `APP_GITHUB_WEBHOOK_SECRET` 或 `APP_GITLAB_WEBHOOK_SECRET`。GitHub 使用 HMAC-SHA256 验签，GitLab 使用 Secret Token；事件必须能按 HTTPS Remote URL 唯一映射到已接入仓库。未配置密钥时 Webhook 保持关闭，手动 PR/MR 审查入口仍可使用。
+
+### 7.1 在 CI 中执行确定性检查
+
+先创建绑定目标 Head Commit 的 Commit/PR/MR 审查，再把审查 ID、仓库 ID 和流水线产生的结构化回报交给脚本。Session 和 CSRF 只通过 CI Secret 环境变量传入，不写在命令行、报告文件或日志中：
+
+```bash
+export ANALYZER_BASE_URL=https://analyzer.example.com
+export ANALYZER_REPOSITORY_ID=00000000-0000-4000-8000-000000000001
+export ANALYZER_REVIEW_ID=00000000-0000-4000-8000-000000000002
+export ANALYZER_HEAD_COMMIT="$CI_COMMIT_SHA"
+export ANALYZER_SESSION_COOKIE="$ANALYZER_CI_SESSION"
+export ANALYZER_CSRF_TOKEN="$ANALYZER_CI_CSRF"
+export ANALYZER_TEST_REPORTS_FILE=ci-tests.json
+export ANALYZER_APPROVAL_REPORTS_FILE=ci-approvals.json
+node scripts/ci-task-review.mjs
+```
+
+测试文件格式为 `[ { "key": "backend-tests", "status": "PASSED", "evidenceUrl": "..." } ]`，状态支持 `PASSED/FAILED/SKIPPED`；审批文件格式为 `[ { "accountId": "账号 UUID", "status": "APPROVED", "evidenceUrl": "..." } ]`，状态支持 `APPROVED/REJECTED`。没有文件时表示没有回报，不等于通过。
+
+脚本退出码 `0` 表示确定性规则通过，`1` 只表示明确规则失败，`2` 表示配置、网络、鉴权或接口契约错误。模型建议、向量/关键词候选、仅图谱推断、未知项和 partial 数据只打印 `[INFO]`，不会变成退出码 `1`。当前脚本复用受限平台账号的会话 Secret；应使用只有目标仓库 READ 权限的专用账号并按会话有效期轮换，后续服务令牌能力未实现前不要长期复用个人浏览器会话。
+
+### 7.2 回报实际开发结果
+
+打开任一已完成审查，在证据主线下方点击“回报开发结果”。填写最终完整 Commit 和实际结果摘要；测试、审批都必须选择真实状态，未选择的必需项会保留为“尚未回报”，不会被自动当作通过。
+
+最终 Commit 与审查 Head 完全一致时显示“精确绑定审查 Head”；不同 Commit 显示“报告人声明的最终 Commit”，表示平台只保存了具名声明，并未伪造 Git 祖先验证。每份回报保存后不可编辑，如需纠正应提交一份新的回报。
+
+误报必须从本次审查已有结论中选择；漏报填写缺失的知识、测试、审批、文件、符号或其他对象。知识是否实际需要更新可选择“需要、不需要、仍不确定”并说明依据。这些反馈只供质量评测与规则改进，不会自动修改、审核或发布知识卡。
+
+Coding Agent 可通过 MCP `report_task_outcome` 提交同样的结构化内容；工具复用 HTTP Session/CSRF 和仓库 READ 权限，相同 clientRequestId 的相同内容幂等返回，不同内容会被拒绝。
 
 ## 8. CodeGraph 关系上下文
 

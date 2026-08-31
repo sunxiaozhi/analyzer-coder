@@ -30,6 +30,7 @@ import ImpactEstimatePanel from '@/features/task-review/ImpactEstimatePanel.vue'
 import PullRequestReviewForm, { type PullRequestReviewDraft } from '@/features/task-review/PullRequestReviewForm.vue';
 import ReviewEvidenceDrawer from '@/features/task-review/ReviewEvidenceDrawer.vue';
 import TaskReviewForm, { type TaskReviewDraft } from '@/features/task-review/TaskReviewForm.vue';
+import TaskOutcomePanel from '@/features/task-review/TaskOutcomePanel.vue';
 import type { ReviewEvidenceSelection } from '@/features/task-review/types';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
@@ -410,6 +411,12 @@ onMounted(async () => {
               @open-knowledge="openKnowledge"
             />
           </div>
+          <TaskOutcomePanel
+            v-if="result.status === 'COMPLETED'"
+            :key="result.reviewId"
+            :repository-id="result.repositoryId"
+            :review="result"
+          />
         </template>
       </template>
     </template>

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** GitHub Pull Request REST 适配器；评论使用 Issue comments API 幂等更新。 */
@@ -17,6 +18,7 @@ public class GitHubPullRequestProvider extends PullRequestHttpSupport
         implements PullRequestProvider {
     private static final int MAX_COMMENT_PAGES = 10;
 
+    @Autowired
     public GitHubPullRequestProvider(ObjectMapper json) {
         super(json);
     }

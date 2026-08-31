@@ -18,6 +18,9 @@ public class EngineeringKnowledgePolicy {
     private static final int MAX_PATH_PATTERNS = 50;
     private static final int MAX_SYMBOLS = 50;
     private static final int MAX_MODULES = 20;
+    private static final int MAX_REPOSITORIES = 30;
+    private static final int MAX_SERVICES = 30;
+    private static final int MAX_CONTRACTS = 50;
     private static final int MAX_REQUIRED_TESTS = 50;
     private static final int MAX_APPROVERS = 20;
     private static final int MAX_INSTRUCTIONS = 50;
@@ -89,7 +92,16 @@ public class EngineeringKnowledgePolicy {
                 normalizeStrings(value.symbols(), MAX_SYMBOLS, 200, "适用符号", String::trim);
         List<String> modules =
                 normalizeStrings(value.modules(), MAX_MODULES, 200, "适用模块", String::trim);
-        return new KnowledgeScope(paths, symbols, modules);
+        List<UUID> repositories = normalizeIds(value.repositoryIds(), MAX_REPOSITORIES, "适用仓库");
+        List<String> services =
+                normalizeStrings(
+                        value.serviceNames(),
+                        MAX_SERVICES,
+                        100,
+                        "适用服务",
+                        item -> normalizeName(item, "服务名"));
+        List<UUID> contracts = normalizeIds(value.contractIds(), MAX_CONTRACTS, "适用契约");
+        return new KnowledgeScope(paths, symbols, modules, repositories, services, contracts);
     }
 
     private static KnowledgeObligations normalizeObligations(KnowledgeObligations obligations) {
@@ -135,6 +147,7 @@ public class EngineeringKnowledgePolicy {
                 (values == null ? List.<String>of() : values)
                         .stream()
                                 .filter(Objects::nonNull)
+                                .filter(value -> !value.isBlank())
                                 .map(normalizer)
                                 .filter(value -> !value.isBlank())
                                 .distinct()
@@ -145,6 +158,27 @@ public class EngineeringKnowledgePolicy {
         }
         if (normalized.stream().anyMatch(value -> value.length() > maximumLength)) {
             throw new IllegalArgumentException(label + "单项长度不能超过 " + maximumLength + " 个字符");
+        }
+        return normalized;
+    }
+
+    private static List<UUID> normalizeIds(List<UUID> values, int maximum, String label) {
+        List<UUID> normalized =
+                (values == null ? List.<UUID>of() : values).stream()
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .limit(maximum + 1L)
+                        .toList();
+        if (normalized.size() > maximum) {
+            throw new IllegalArgumentException(label + "最多允许 " + maximum + " 项");
+        }
+        return normalized;
+    }
+
+    private static String normalizeName(String value, String label) {
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        if (!normalized.matches("[a-z0-9][a-z0-9._-]{0,99}")) {
+            throw new IllegalArgumentException(label + "只能包含小写字母、数字、点、下划线和连字符");
         }
         return normalized;
     }

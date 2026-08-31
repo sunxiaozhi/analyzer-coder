@@ -33,7 +33,8 @@ const auth = useAuthStore();
 const expanded = ref<string[]>([]);
 const form = reactive<CardInput>(emptyForm());
 const engineeringText = reactive({
-  paths: '', symbols: '', modules: '', tests: '', approvers: '', instructions: '', prohibitedPaths: '',
+  paths: '', symbols: '', modules: '', repositories: '', services: '', contracts: '',
+  tests: '', approvers: '', instructions: '', prohibitedPaths: '',
 });
 const tagText = shallowRef('');
 const items = shallowRef<KnowledgeAttachment[]>([]);
@@ -67,6 +68,8 @@ const enforcementOptions: { value: KnowledgeEnforcement; label: string; hint: st
 const invalidApprovers = computed(() => lines(engineeringText.approvers).some(value =>
   !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
 ));
+const invalidScopeIds = computed(() => [...lines(engineeringText.repositories), ...lines(engineeringText.contracts)]
+  .some(value => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)));
 const referenceHasObligations = computed(() => form.enforcement === 'REFERENCE'
   && Boolean(engineeringText.tests.trim() || engineeringText.approvers.trim()
     || engineeringText.instructions.trim() || engineeringText.prohibitedPaths.trim()
@@ -90,6 +93,9 @@ watch(() => [props.modelValue, props.card] as const, () => {
       pathPatterns: [...props.card.scope.pathPatterns],
       symbols: [...props.card.scope.symbols],
       modules: [...props.card.scope.modules],
+      repositoryIds: [...(props.card.scope.repositoryIds ?? [])],
+      serviceNames: [...(props.card.scope.serviceNames ?? [])],
+      contractIds: [...(props.card.scope.contractIds ?? [])],
     },
     obligations: {
       requiredTests: [...props.card.obligations.requiredTests],
@@ -107,6 +113,9 @@ watch(() => [props.modelValue, props.card] as const, () => {
   engineeringText.paths = form.scope.pathPatterns.join('\n');
   engineeringText.symbols = form.scope.symbols.join('\n');
   engineeringText.modules = form.scope.modules.join('\n');
+  engineeringText.repositories = form.scope.repositoryIds.join('\n');
+  engineeringText.services = form.scope.serviceNames.join('\n');
+  engineeringText.contracts = form.scope.contractIds.join('\n');
   engineeringText.tests = form.obligations.requiredTests.join('\n');
   engineeringText.approvers = form.obligations.requiredApproverAccountIds.join('\n');
   engineeringText.instructions = form.obligations.instructions.join('\n');
@@ -119,7 +128,7 @@ function emptyForm(): CardInput {
     title: '', cardType: '模块说明', content: '', tags: [],
     knowledgeKind: 'REFERENCE', severity: 'INFO', enforcement: 'REFERENCE',
     ownerAccountId: auth.account?.id ?? null,
-    scope: { pathPatterns: [], symbols: [], modules: [] },
+    scope: { pathPatterns: [], symbols: [], modules: [], repositoryIds: [], serviceNames: [], contractIds: [] },
     obligations: {
       requiredTests: [], requiredApproverAccountIds: [], instructions: [],
       prohibitedPathPatterns: [], knowledgeUpdateRequired: false,
@@ -134,7 +143,8 @@ function lines(value: string) {
 
 function hasScope() {
   return Boolean(engineeringText.paths.trim() || engineeringText.symbols.trim()
-    || engineeringText.modules.trim());
+    || engineeringText.modules.trim() || engineeringText.repositories.trim()
+    || engineeringText.services.trim() || engineeringText.contracts.trim());
 }
 
 function useCurrentAccount() {
@@ -182,6 +192,9 @@ function save() {
     pathPatterns: lines(engineeringText.paths),
     symbols: lines(engineeringText.symbols),
     modules: lines(engineeringText.modules),
+    repositoryIds: lines(engineeringText.repositories),
+    serviceNames: lines(engineeringText.services),
+    contractIds: lines(engineeringText.contracts),
   };
   form.obligations = {
     requiredTests: lines(engineeringText.tests),
@@ -279,6 +292,21 @@ function save() {
                     <el-input v-model="engineeringText.modules" type="textarea" :rows="4" placeholder="backend" />
                   </el-form-item>
                 </div>
+                <div class="form-grid three-columns cross-scope-grid">
+                  <el-form-item label="工程项目仓库 ID">
+                    <el-input v-model="engineeringText.repositories" type="textarea" :rows="3"
+                      placeholder="每行一个已关联仓库 UUID" />
+                  </el-form-item>
+                  <el-form-item label="工程服务名">
+                    <el-input v-model="engineeringText.services" type="textarea" :rows="3"
+                      placeholder="order-service" />
+                  </el-form-item>
+                  <el-form-item label="已验证契约 ID">
+                    <el-input v-model="engineeringText.contracts" type="textarea" :rows="3"
+                      placeholder="每行一个契约 UUID" />
+                    <small v-if="invalidScopeIds" class="field-error">仓库或契约 ID 不是有效 UUID</small>
+                  </el-form-item>
+                </div>
               </div>
             </section>
 
@@ -365,7 +393,7 @@ function save() {
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
       <el-button type="primary" :loading="busy"
-        :disabled="uploading || invalidApprovers || referenceHasObligations || !form.title.trim() || !form.content.trim()"
+        :disabled="uploading || invalidApprovers || invalidScopeIds || referenceHasObligations || !form.title.trim() || !form.content.trim()"
         @click="save">{{ card ? '保存新修订' : '创建草稿' }}</el-button>
     </template>
   </el-dialog>
@@ -389,6 +417,7 @@ function save() {
 .title-grid { grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); }
 .policy-grid { grid-template-columns: minmax(180px, .8fr) minmax(230px, 1fr) minmax(200px, 1fr); }
 .three-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cross-scope-grid { margin-top: 14px; padding-top: 14px; border-top: 1px dashed #d4e0e7; }
 .ci-policy-grid { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); margin-top: 14px; }
 .full-width { width: 100%; }
 .enforcement-option { display: grid; line-height: 1.35; }

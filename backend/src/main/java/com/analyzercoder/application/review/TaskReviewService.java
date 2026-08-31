@@ -7,6 +7,7 @@ import com.analyzercoder.application.change.RepositoryChange;
 import com.analyzercoder.application.change.RepositoryChangeException;
 import com.analyzercoder.application.change.RepositoryChangeService;
 import com.analyzercoder.application.intelligence.IntelligenceService;
+import com.analyzercoder.application.project.EngineeringProjectService;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
@@ -36,6 +37,7 @@ public class TaskReviewService {
     private final ChangedSymbolResolver symbols;
     private final TaskContextMatcher contextMatcher;
     private final IntelligenceService intelligence;
+    private final EngineeringProjectService engineeringProjects;
     private final ProjectArchitectureMapService architecture;
     private final TaskReviewModelSummaryService modelSummaries;
     private final TaskReviewMapper mapper;
@@ -47,6 +49,7 @@ public class TaskReviewService {
             ChangedSymbolResolver symbols,
             TaskContextMatcher contextMatcher,
             IntelligenceService intelligence,
+            EngineeringProjectService engineeringProjects,
             ProjectArchitectureMapService architecture,
             TaskReviewModelSummaryService modelSummaries,
             TaskReviewMapper mapper,
@@ -56,6 +59,7 @@ public class TaskReviewService {
         this.symbols = symbols;
         this.contextMatcher = contextMatcher;
         this.intelligence = intelligence;
+        this.engineeringProjects = engineeringProjects;
         this.architecture = architecture;
         this.modelSummaries = modelSummaries;
         this.mapper = mapper;
@@ -129,7 +133,7 @@ public class TaskReviewService {
                                     repository.currentSnapshotId().value(),
                                     change,
                                     changedSymbols,
-                                    knowledge(repository.id().value()),
+                                    knowledge(repository.id().value(), createdBy),
                                     references(repository.id().value(), request.task()),
                                     modules.modulesByPath(),
                                     modules.available(),
@@ -357,8 +361,37 @@ public class TaskReviewService {
         }
     }
 
-    private List<KnowledgeMatch.Candidate> knowledge(UUID repositoryId) {
-        return intelligence.cards(repositoryId, true).stream()
+    private List<KnowledgeMatch.Candidate> knowledge(UUID repositoryId, UUID actorId) {
+        EngineeringProjectService.ReviewTopology topology =
+                engineeringProjects.reviewTopology(repositoryId, actorId);
+        Map<UUID, List<KnowledgeMatch.CrossRepositoryBinding>> bindingsByRepository =
+                topology.repositories().stream()
+                        .collect(
+                                java.util.stream.Collectors.groupingBy(
+                                        EngineeringProjectService.RepositoryBinding::sourceRepositoryId,
+                                        LinkedHashMap::new,
+                                        java.util.stream.Collectors.mapping(
+                                                binding ->
+                                                        new KnowledgeMatch.CrossRepositoryBinding(
+                                                                binding.engineeringProjectId(),
+                                                                binding.sourceRepositoryId(),
+                                                                binding.targetServiceName(),
+                                                                binding.contracts().stream()
+                                                                        .map(
+                                                                                contract ->
+                                                                                        new KnowledgeMatch
+                                                                                                .ContractScopeBinding(
+                                                                                                contract.contractId(),
+                                                                                                contract.targetEvidencePath(),
+                                                                                                contract.current()))
+                                                                        .toList()),
+                                                java.util.stream.Collectors.toList())));
+        LinkedHashSet<UUID> sourceRepositories = new LinkedHashSet<>();
+        sourceRepositories.add(repositoryId);
+        sourceRepositories.addAll(bindingsByRepository.keySet());
+        return sourceRepositories.stream()
+                .flatMap(sourceRepositoryId ->
+                        intelligence.cards(sourceRepositoryId, true).stream()
                 .map(
                         card ->
                                 new KnowledgeMatch.Candidate(
@@ -384,7 +417,9 @@ public class TaskReviewService {
                                                                         reference.filePath(),
                                                                         reference.symbolName(),
                                                                         reference.contentHash()))
-                                                .toList()))
+                                                .toList(),
+                                        bindingsByRepository.getOrDefault(
+                                                sourceRepositoryId, List.of()))))
                 .toList();
     }
 

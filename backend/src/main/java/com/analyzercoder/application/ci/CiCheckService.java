@@ -1,6 +1,7 @@
 package com.analyzercoder.application.ci;
 
 import com.analyzercoder.application.evidence.Provenance;
+import com.analyzercoder.application.evidence.TruthSource;
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.application.knowledge.RepositoryGlobMatcher;
 import com.analyzercoder.application.review.KnowledgeMatch;
@@ -228,8 +229,17 @@ public class CiCheckService {
         if (requiredUpdates.isEmpty()) {
             return;
         }
+        LinkedHashSet<UUID> knowledgeRepositories = new LinkedHashSet<>();
+        knowledgeRepositories.add(repositoryId.value());
+        requiredUpdates.stream()
+                .flatMap(knowledge -> knowledge.sources().stream())
+                .filter(source -> source.sourceType() == TruthSource.VERIFIED_KNOWLEDGE)
+                .map(Provenance::repositoryId)
+                .filter(Objects::nonNull)
+                .forEach(knowledgeRepositories::add);
         Map<UUID, IntelligenceService.KnowledgeCard> current =
-                intelligence.cards(repositoryId.value(), true).stream()
+                knowledgeRepositories.stream()
+                        .flatMap(sourceRepositoryId -> intelligence.cards(sourceRepositoryId, true).stream())
                         .collect(
                                 java.util.stream.Collectors.toMap(
                                         IntelligenceService.KnowledgeCard::id,
@@ -379,7 +389,10 @@ public class CiCheckService {
         return reasons.stream()
                 .anyMatch(
                         reason ->
-                                reason.evidence().sourceType()
+                                reason != null
+                                        && reason.evidence() != null
+                                        && reason.evidence().sourceType() != null
+                                        && reason.evidence().sourceType()
                                         != KnowledgeMatchReason.EvidenceSource.GRAPH_INFERENCE);
     }
 

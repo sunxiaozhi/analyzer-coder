@@ -65,4 +65,26 @@ class ProvenanceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Finding");
     }
+
+    @Test
+    void platformFactKeepsTheGovernedProjectServiceAndContractIdentity() {
+        UUID projectId = UUID.randomUUID();
+        UUID contractId = UUID.randomUUID();
+
+        Provenance provenance =
+                Provenance.platformFact(
+                        repositoryId,
+                        snapshotId,
+                        "b".repeat(40),
+                        "openapi/order.yaml",
+                        projectId,
+                        "order-service",
+                        contractId,
+                        "契约证据当前");
+
+        assertThat(provenance.sourceType()).isEqualTo(TruthSource.PLATFORM_FACT);
+        assertThat(provenance.engineeringProjectId()).isEqualTo(projectId);
+        assertThat(provenance.serviceName()).isEqualTo("order-service");
+        assertThat(provenance.contractId()).isEqualTo(contractId);
+    }
 }

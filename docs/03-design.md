@@ -14,7 +14,7 @@
 3. CodeGraph 提供静态结构关系；LLM 只处理检索证据，不生成结构事实。
 4. 普通账号只能访问 OWNER 或被授权仓库；超级管理员拥有全局管理入口。
 5. 当前系统是单实例、单数据库、后台轮询 Worker 架构。
-6. 当前没有 QuickStart、Onboarding、Backup/Restore、SSE QA 和多仓检索服务。
+6. 当前没有 QuickStart、Onboarding、Backup/Restore、SSE QA 和任意多仓检索服务；跨仓只用于受治理的 Task Review 知识匹配。
 
 ## 2. 技术栈与运行拓扑
 
@@ -535,7 +535,7 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 1. QuickStartApplicationService 和 `/quick-start` API。
 2. OnboardingApplicationService、路径、进度、笔记和投影表。
 3. 问答 SSE 事件流、停止/断线恢复和流式 message 状态机。
-4. 多仓检索和版本化内容索引指针。
+4. 任意多仓检索、跨仓图聚合和版本化内容索引指针。
 5. 仓库级外发策略、SSH 凭据和 GitLab 项目 API/Webhook。
 6. 备份、恢复、维护模式、RPO/RTO。
 7. 统一任务对导入、附件、删除、备份的完整覆盖。
@@ -546,5 +546,33 @@ LOCAL_HASH 不需要端点或密钥并固定为 64 维；OPENAI_COMPATIBLE 需�
 ## 19. 验证与测试
 
 默认验证分成三层：`mvn test` 执行无外部依赖的单元/组件测试；`APP_RUN_POSTGRES_IT=true mvn -pl backend -Dtest='*IT' test` 在 PostgreSQL 17 + pgvector 上执行 Flyway、真实 MyBatis SQL、快照切换和仓库导入到问答链路；`npm test && npm run build` 执行关键路由测试、Vue 类型检查和生产构建。Linux CI 默认启动健康的 pgvector 服务并执行三层验证，另在 Linux 上以假可执行文件检查 CodeGraph CLI 参数和产物契约。
+
+### 19.1 Task Review 的确定性 CI 投影
+
+`CiCheckService` 不调用模型，也不重新读取可能已经变化的工作区。它读取已经完成并持久化的不可变 Task Review，先校验请求 Head 与审查 Head 完全一致，再把显式测试/审批回报投影成 `deterministic-ci-v1` 结果。
+
+阻断集合固定为结构化禁止路径、直接证据产生的测试/审批义务、直接证据关联的 CRITICAL + REQUIRED 失效知识，以及经当前知识卡真实状态核对后仍缺失的必需知识新修订。图谱单独推断、检索候选、模型总结、未知项和 partial 标记只生成 Advisory。证据地址仅作为回报元数据，不替代状态判断；相同测试或审批存在冲突回报时采用较差状态。
+
+知识同步不是调用方传入的布尔声明：服务端重新读取当前知识卡，只有修订号更高且同时为 `PUBLISHED + APPROVED + CURRENT` 才视为已处理。这样 CI 结果可以重复计算，也不会因模型措辞或调用方自报“已更新”发生漂移。
+
+### 19.2 跨仓工程事实与知识匹配
+
+`EngineeringProjectService` 管理工程项目、成员服务身份和双端契约证据。项目读取要求账号能够读取全部成员仓库，写操作要求对全部旧成员和新成员具有 MANAGE；仓库删除前也会检查活动工程项目。知识仍归属于原仓库，工程项目只提供受治理的适用边界，不复制知识正文。
+
+契约不是自然语言声明。保存时，服务从双方当前 Snapshot 的内容 Chunk 精确读取登记路径，将全部 `startLine:contentHash` 排序后计算 SHA-256；Task Review 匹配时重新计算双方指纹，任一端缺失或变化都会把契约事实降为非当前。Snapshot UUID 保留为登记审计信息，但当前性由实际 Chunk 指纹决定。
+
+`TaskReviewService` 先按创建者权限读取目标仓库可见的工程拓扑，再加载其中来源仓库的已发布知识。`KnowledgeScopeMatcher` 对跨仓字段使用显式 OR（仓库、服务、契约任一命中），并与仓库内路径/符号/模块范围做 AND；契约还要求目标变化路径精确等于登记证据路径。匹配原因使用 `REPOSITORY/SERVICE/CONTRACT`，来源使用 `PLATFORM_FACT`，与 Git、代码、CodeGraph、知识修订证据分开。
+
+该链路不提供任意多仓搜索，也不从模型、README、向量或同项目成员关系自动生成服务/契约。当前数据库没有仓库级发布质量结果，因此 V13 准入只验证可证明的 Snapshot、权限和代码证据；真实 PostgreSQL 升级、多人权限和多仓数据规模仍属于部署验收。
+
+### 19.3 追加式开发结果与反馈
+
+`TaskReviewOutcomeService` 只接受已经完成且包含真实变化的不可变 Task Review。`task_review_outcomes` 保存一次具名回报的最终 Commit、摘要、测试/审批 JSON、请求摘要哈希和时间；`task_review_feedback` 逐条保存误报、漏报或知识更新判断。两张表禁止 UPDATE，允许随仓库生命周期级联删除；修正通过新的 clientRequestId 追加，不提供覆盖接口。
+
+幂等边界是 `review_id + reported_by + client_request_id`。服务先对规范化请求序列化并计算 SHA-256，唯一冲突后只有哈希完全相同才返回原结果，否则返回稳定冲突。最终 Commit 只有与审查 Head 字符串完全相同时才标记精确绑定；其他 Commit 保留为报告人声明，不执行不可证明的祖先关系推断。
+
+误报验证会回到原审查的结构化集合，目标不存在则拒绝；漏报因为描述的是缺失项，允许新增目标键但要求说明。知识更新判断必须绑定原审查中的适用/失效知识。查询时按原审查计算必须测试和审批的回报覆盖，反馈不调用知识服务、不改卡片状态，也不参与既有 CI 结果判定。
+
+页面和 MCP 都使用同一 REST 服务。页面在审查证据主线后展示不可变结果账本和回报表单；MCP `report_task_outcome` 转发相同结构化字段、Session 与 CSRF，不创建第二套规则。
 
 完成定义：接口、权限、持久化、失败路径、UI 状态和自动化测试同时与 `01-requirements.md` 当前基线一致。

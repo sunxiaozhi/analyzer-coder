@@ -4,7 +4,9 @@ import com.analyzercoder.application.ci.CiCheckException;
 import com.analyzercoder.application.intelligence.CodeGraphException;
 import com.analyzercoder.application.knowledge.KnowledgeDriftException;
 import com.analyzercoder.application.memory.TaskContextException;
+import com.analyzercoder.application.outcome.TaskReviewOutcomeException;
 import com.analyzercoder.application.pullrequest.PullRequestIntegrationException;
+import com.analyzercoder.application.project.EngineeringProjectException;
 import com.analyzercoder.application.review.TaskReviewException;
 import com.analyzercoder.security.ApiSecurityException;
 import java.time.Instant;
@@ -81,6 +83,32 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> ciCheck(CiCheckException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiErrorResponse.of(e.code(), e.getMessage()));
+    }
+
+    @ExceptionHandler(TaskReviewOutcomeException.class)
+    public ResponseEntity<ApiErrorResponse> taskOutcome(TaskReviewOutcomeException e) {
+        HttpStatus status =
+                switch (e.code()) {
+                    case "TASK_OUTCOME_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+                    case "TASK_OUTCOME_REVIEW_NOT_COMPLETED",
+                                    "TASK_OUTCOME_IDEMPOTENCY_CONFLICT" ->
+                            HttpStatus.CONFLICT;
+                    default -> HttpStatus.BAD_REQUEST;
+                };
+        return ResponseEntity.status(status).body(ApiErrorResponse.of(e.code(), e.getMessage()));
+    }
+
+    @ExceptionHandler(EngineeringProjectException.class)
+    public ResponseEntity<ApiErrorResponse> engineeringProject(EngineeringProjectException e) {
+        HttpStatus status =
+                switch (e.code()) {
+                    case "ENGINEERING_PROJECT_NOT_FOUND", "REPOSITORY_NOT_FOUND" ->
+                            HttpStatus.NOT_FOUND;
+                    case "ENGINEERING_PROJECT_VERSION_CONFLICT", "ENGINEERING_PROJECT_IN_USE" ->
+                            HttpStatus.CONFLICT;
+                    default -> HttpStatus.BAD_REQUEST;
+                };
+        return ResponseEntity.status(status).body(ApiErrorResponse.of(e.code(), e.getMessage()));
     }
 
     @ExceptionHandler(TaskContextException.class)

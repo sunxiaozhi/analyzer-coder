@@ -182,7 +182,102 @@ class KnowledgeScopeMatcherTest {
                 .containsExactly(
                         KnowledgeMatchReason.EvidenceSource.GIT_FACT,
                         KnowledgeMatchReason.EvidenceSource.CODE_FACT,
+                        KnowledgeMatchReason.EvidenceSource.PLATFORM_FACT,
                         KnowledgeMatchReason.EvidenceSource.GRAPH_INFERENCE);
+    }
+
+    @Test
+    void crossRepositoryServiceRequiresSharedProjectBindingAndLocalPathMatch() {
+        UUID projectId = UUID.randomUUID();
+        UUID sourceRepositoryId = UUID.randomUUID();
+        KnowledgeScope scope =
+                new KnowledgeScope(
+                        List.of("src/contracts/**"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of("order-service"),
+                        List.of());
+        KnowledgeMatch.CrossRepositoryBinding binding =
+                new KnowledgeMatch.CrossRepositoryBinding(
+                        projectId, sourceRepositoryId, "order-service", List.of());
+
+        KnowledgeScopeMatcher.MatchResult matched =
+                matcher.match(
+                        scope,
+                        List.of(),
+                        target("src/contracts/OrderApi.java", Set.of(), Set.of(), true, null, null),
+                        List.of(binding));
+        KnowledgeScopeMatcher.MatchResult wrongPath =
+                matcher.match(
+                        scope,
+                        List.of(),
+                        target("src/internal/OrderJob.java", Set.of(), Set.of(), true, null, null),
+                        List.of(binding));
+
+        assertThat(matched.reasons())
+                .extracting(KnowledgeMatchReason::kind)
+                .containsExactly(
+                        KnowledgeMatchReason.MatchKind.SERVICE,
+                        KnowledgeMatchReason.MatchKind.PATH_PATTERN);
+        assertThat(matched.reasons().get(0).evidence().engineeringProjectId())
+                .isEqualTo(projectId);
+        assertThat(matched.reasons().get(0).evidence().sourceType())
+                .isEqualTo(KnowledgeMatchReason.EvidenceSource.PLATFORM_FACT);
+        assertThat(wrongPath.matched()).isFalse();
+    }
+
+    @Test
+    void contractScopeMatchesOnlyItsCurrentVerifiedEvidencePath() {
+        UUID projectId = UUID.randomUUID();
+        UUID contractId = UUID.randomUUID();
+        UUID sourceRepositoryId = UUID.randomUUID();
+        KnowledgeScope scope =
+                new KnowledgeScope(
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(contractId));
+        KnowledgeMatch.CrossRepositoryBinding current =
+                new KnowledgeMatch.CrossRepositoryBinding(
+                        projectId,
+                        sourceRepositoryId,
+                        "order-service",
+                        List.of(
+                                new KnowledgeMatch.ContractScopeBinding(
+                                        contractId, "openapi/order.yaml", true)));
+        KnowledgeMatch.CrossRepositoryBinding stale =
+                new KnowledgeMatch.CrossRepositoryBinding(
+                        projectId,
+                        sourceRepositoryId,
+                        "order-service",
+                        List.of(
+                                new KnowledgeMatch.ContractScopeBinding(
+                                        contractId, "openapi/order.yaml", false)));
+
+        KnowledgeScopeMatcher.MatchResult matched =
+                matcher.match(
+                        scope,
+                        List.of(),
+                        target("openapi/order.yaml", Set.of(), Set.of(), true, null, null),
+                        List.of(current));
+        KnowledgeScopeMatcher.MatchResult rejected =
+                matcher.match(
+                        scope,
+                        List.of(),
+                        target("openapi/order.yaml", Set.of(), Set.of(), true, null, null),
+                        List.of(stale));
+
+        assertThat(matched.reasons())
+                .extracting(KnowledgeMatchReason::kind)
+                .containsExactly(KnowledgeMatchReason.MatchKind.CONTRACT);
+        assertThat(matched.reasons().get(0).evidence().contractId()).isEqualTo(contractId);
+        assertThat(rejected.matched()).isFalse();
+        assertThat(rejected.unknowns())
+                .extracting(KnowledgeScopeMatcher.ScopeUnknown::code)
+                .containsExactly("CONTRACT_EVIDENCE_STALE");
     }
 
     private KnowledgeScopeMatcher.ChangeTarget target(

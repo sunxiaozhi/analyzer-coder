@@ -43,13 +43,64 @@ public record KnowledgeMatch(
             String publicationStatus,
             String reviewStatus,
             String sourceVersionStatus,
-            List<KnowledgeScopeMatcher.BoundCodeReference> codeReferences) {
+            List<KnowledgeScopeMatcher.BoundCodeReference> codeReferences,
+            List<CrossRepositoryBinding> crossRepositoryBindings) {
         public Candidate {
             scope = scope == null ? KnowledgeScope.empty() : scope;
             obligations = obligations == null ? KnowledgeObligations.empty() : obligations;
             codeReferences = codeReferences == null ? List.of() : List.copyOf(codeReferences);
+            crossRepositoryBindings =
+                    crossRepositoryBindings == null
+                            ? List.of()
+                            : List.copyOf(crossRepositoryBindings);
+        }
+
+        public Candidate(
+                UUID knowledgeId,
+                UUID repositoryId,
+                String title,
+                KnowledgeKind kind,
+                KnowledgeSeverity severity,
+                KnowledgeEnforcement enforcement,
+                UUID ownerAccountId,
+                KnowledgeScope scope,
+                KnowledgeObligations obligations,
+                int revision,
+                String publicationStatus,
+                String reviewStatus,
+                String sourceVersionStatus,
+                List<KnowledgeScopeMatcher.BoundCodeReference> codeReferences) {
+            this(
+                    knowledgeId,
+                    repositoryId,
+                    title,
+                    kind,
+                    severity,
+                    enforcement,
+                    ownerAccountId,
+                    scope,
+                    obligations,
+                    revision,
+                    publicationStatus,
+                    reviewStatus,
+                    sourceVersionStatus,
+                    codeReferences,
+                    List.of());
         }
     }
+
+    public record CrossRepositoryBinding(
+            UUID engineeringProjectId,
+            UUID sourceRepositoryId,
+            String targetServiceName,
+            List<ContractScopeBinding> contracts) {
+        public CrossRepositoryBinding {
+            contracts = contracts == null ? List.of() : List.copyOf(contracts);
+        }
+    }
+
+    public record ContractScopeBinding(
+            UUID contractId, String targetEvidencePath, boolean current) {}
 
     /** 仅由关键词或向量召回的参考候选，永远不产生测试或审批义务。 */
     public record RetrievalReference(UUID knowledgeId, String source, String detail) {}

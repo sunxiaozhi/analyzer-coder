@@ -30,6 +30,8 @@ class EngineeringKnowledgePolicyTest {
 
     @Test
     void normalizesRepositoryRelativeScopeWithoutLosingMeaning() {
+        UUID repositoryId = UUID.randomUUID();
+        UUID contractId = UUID.randomUUID();
         EngineeringKnowledgePolicy.ValidatedKnowledge result =
                 policy.validate(
                         "business_rule",
@@ -41,13 +43,19 @@ class EngineeringKnowledgePolicyTest {
                                         " backend\\src\\**\\refund\\** ",
                                         "backend/src/**/refund/**"),
                                 List.of(" RefundService "),
-                                List.of(" backend ")),
+                                List.of(" backend "),
+                                List.of(repositoryId),
+                                List.of(" ", "Order-Service"),
+                                List.of(contractId)),
                         new KnowledgeObligations(
                                 List.of(" ./mvnw test "), List.of(), List.of("检查退款边界")));
 
         assertThat(result.kind()).isEqualTo(KnowledgeKind.BUSINESS_RULE);
         assertThat(result.scope().pathPatterns()).containsExactly("backend/src/**/refund/**");
         assertThat(result.scope().symbols()).containsExactly("RefundService");
+        assertThat(result.scope().repositoryIds()).containsExactly(repositoryId);
+        assertThat(result.scope().serviceNames()).containsExactly("order-service");
+        assertThat(result.scope().contractIds()).containsExactly(contractId);
         assertThat(result.obligations().requiredTests()).containsExactly("./mvnw test");
     }
 
@@ -76,6 +84,22 @@ class EngineeringKnowledgePolicyTest {
                                         new KnowledgeObligations(
                                                 List.of("npm test"), List.of(), List.of())))
                 .hasMessageContaining("参考知识不能设置");
+
+        assertThatThrownBy(
+                        () ->
+                                policy.validate(
+                                        "BUSINESS_RULE",
+                                        "WARNING",
+                                        "REQUIRED",
+                                        UUID.randomUUID(),
+                                        new KnowledgeScope(List.of("src/**"), List.of(), List.of()),
+                                        new KnowledgeObligations(
+                                                List.of(),
+                                                List.of(),
+                                                List.of(),
+                                                List.of("../production.env"),
+                                                false)))
+                .hasMessageContaining("仓库相对路径");
     }
 
     @Test

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.TaskReviewOutcomeMapper">
+    <resultMap id="outcomeRow" type="com.analyzercoder.infrastructure.persistence.model.TaskReviewOutcomeRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="repo_id" javaType="java.util.UUID"/>
+            <arg column="review_id" javaType="java.util.UUID"/>
+            <arg column="reported_by" javaType="java.util.UUID"/>
+            <arg column="reporter_display_name" javaType="java.lang.String"/>
+            <arg column="client_request_id" javaType="java.util.UUID"/>
+            <arg column="final_commit" javaType="java.lang.String"/>
+            <arg column="commit_binding" javaType="java.lang.String"/>
+            <arg column="summary" javaType="java.lang.String"/>
+            <arg column="tests_payload" javaType="java.lang.String"/>
+            <arg column="approvals_payload" javaType="java.lang.String"/>
+            <arg column="payload_hash" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+    <resultMap id="feedbackRow" type="com.analyzercoder.infrastructure.persistence.model.TaskReviewFeedbackRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID"/>
+            <arg column="outcome_id" javaType="java.util.UUID"/>
+            <arg column="kind" javaType="java.lang.String"/>
+            <arg column="target_type" javaType="java.lang.String"/>
+            <arg column="target_key" javaType="java.lang.String"/>
+            <arg column="knowledge_id" javaType="java.util.UUID"/>
+            <arg column="knowledge_update_assessment" javaType="java.lang.String"/>
+            <arg column="comment" javaType="java.lang.String"/>
+            <arg column="evidence_urls" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+    <sql id="outcomeColumns">
+        outcome.id,outcome.repo_id,outcome.review_id,outcome.reported_by,
+        account.display_name AS reporter_display_name,outcome.client_request_id,
+        outcome.final_commit,outcome.commit_binding,outcome.summary,
+        outcome.tests_payload::text AS tests_payload,
+        outcome.approvals_payload::text AS approvals_payload,
+        outcome.payload_hash,outcome.created_at
+    </sql>
+    <insert id="insertOutcome">
+        INSERT INTO task_review_outcomes(
+            id,repo_id,review_id,reported_by,client_request_id,final_commit,
+            commit_binding,summary,tests_payload,approvals_payload,payload_hash,created_at
+        ) VALUES(
+            #{id},#{repositoryId},#{reviewId},#{reportedBy},#{clientRequestId},#{finalCommit},
+            #{commitBinding},#{summary},CAST(#{testsPayload} AS jsonb),
+            CAST(#{approvalsPayload} AS jsonb),#{payloadHash},#{createdAt}
+        ) ON CONFLICT(review_id,reported_by,client_request_id) DO NOTHING
+    </insert>
+    <select id="findByClientRequest" resultMap="outcomeRow">
+        SELECT <include refid="outcomeColumns"/>
+        FROM task_review_outcomes outcome
+        JOIN accounts account ON account.id=outcome.reported_by
+        WHERE outcome.review_id=#{reviewId} AND outcome.reported_by=#{reportedBy}
+          AND outcome.client_request_id=#{clientRequestId}
+    </select>
+    <select id="findById" resultMap="outcomeRow">
+        SELECT <include refid="outcomeColumns"/>
+        FROM task_review_outcomes outcome
+        JOIN accounts account ON account.id=outcome.reported_by
+        WHERE outcome.repo_id=#{repositoryId} AND outcome.review_id=#{reviewId} AND outcome.id=#{id}
+    </select>
+    <select id="findByReview" resultMap="outcomeRow">
+        SELECT <include refid="outcomeColumns"/>
+        FROM task_review_outcomes outcome
+        JOIN accounts account ON account.id=outcome.reported_by
+        WHERE outcome.repo_id=#{repositoryId} AND outcome.review_id=#{reviewId}
+        ORDER BY outcome.created_at DESC,outcome.id DESC LIMIT #{limit} OFFSET #{offset}
+    </select>
+    <insert id="insertFeedback">
+        INSERT INTO task_review_feedback(
+            id,outcome_id,kind,target_type,target_key,knowledge_id,
+            knowledge_update_assessment,comment,evidence_urls,created_at
+        ) VALUES(
+            #{id},#{outcomeId},#{kind},#{targetType},#{targetKey},#{knowledgeId},
+            #{knowledgeUpdateAssessment},#{comment},CAST(#{evidenceUrlsPayload} AS jsonb),#{createdAt}
+        )
+    </insert>
+    <select id="feedback" resultMap="feedbackRow">
+        SELECT id,outcome_id,kind,target_type,target_key,knowledge_id,
+               knowledge_update_assessment,comment,evidence_urls::text AS evidence_urls,created_at
+        FROM task_review_feedback WHERE outcome_id=#{outcomeId}
+        ORDER BY created_at,id
+    </select>
+</mapper>

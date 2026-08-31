@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** GitLab Merge Request REST 适配器；逐页读取 Diff，并用 Notes API 幂等更新评论。 */
@@ -16,6 +17,7 @@ public class GitLabMergeRequestProvider extends PullRequestHttpSupport
         implements PullRequestProvider {
     private static final int MAX_PAGES = 50;
 
+    @Autowired
     public GitLabMergeRequestProvider(ObjectMapper json) {
         super(json);
     }

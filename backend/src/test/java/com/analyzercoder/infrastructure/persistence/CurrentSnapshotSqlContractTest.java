@@ -26,6 +26,8 @@ class CurrentSnapshotSqlContractTest {
         parseMapper(configuration, "mappers/TaskReviewMapper.xml");
         parseMapper(configuration, "mappers/KnowledgeDriftMapper.xml");
         parseMapper(configuration, "mappers/ProjectHealthMapper.xml");
+        parseMapper(configuration, "mappers/EngineeringProjectMapper.xml");
+        parseMapper(configuration, "mappers/TaskReviewOutcomeMapper.xml");
     }
 
     @Test
@@ -170,6 +172,63 @@ class CurrentSnapshotSqlContractTest {
                 .contains("source_version_status='CURRENT'")
                 .contains("revision=#{expectedRevision}")
                 .contains("ON CONFLICT DO NOTHING");
+    }
+
+    @Test
+    void ciKnowledgeObligationsAreBackfilledAndVersioned() throws Exception {
+        String migration = resource("db/migration/V12__ci_knowledge_obligations.sql");
+
+        assertThat(migration)
+                .contains("UPDATE knowledge_cards")
+                .contains("UPDATE knowledge_card_revisions")
+                .contains("prohibitedPathPatterns")
+                .contains("knowledgeUpdateRequired")
+                .contains("jsonb_typeof(obligations_payload->'knowledgeUpdateRequired')='boolean'")
+                .contains("chk_knowledge_revision_obligations_payload");
+    }
+
+    @Test
+    void engineeringProjectsKeepCrossRepositoryScopeAndContractEvidenceVersioned()
+            throws Exception {
+        String migration = resource("db/migration/V13__engineering_projects.sql");
+        String mapper = resource("mappers/EngineeringProjectMapper.xml");
+
+        assertThat(migration)
+                .contains("CREATE TABLE engineering_projects")
+                .contains("CREATE TABLE engineering_project_repositories")
+                .contains("CREATE TABLE engineering_project_contracts")
+                .contains("provider_content_fingerprint", "consumer_content_fingerprint")
+                .contains("UPDATE knowledge_cards")
+                .contains("UPDATE knowledge_card_revisions")
+                .contains("repositoryIds", "serviceNames", "contractIds")
+                .contains("chk_knowledge_revision_scope_payload");
+        assertThat(mapper)
+                .contains("source_repository.owner_account_id=#{actorId}")
+                .contains("chunk.snapshot_id=repository.current_snapshot_id")
+                .contains("target.normalized_service_name target_service_name")
+                .contains("provider_content_fingerprint")
+                .contains("consumer_content_fingerprint");
+    }
+
+    @Test
+    void taskOutcomesAreAppendOnlyIdempotentAndKeepHumanFeedbackSeparate() throws Exception {
+        String migration = resource("db/migration/V14__task_review_outcomes.sql");
+        String mapper = compact(resource("mappers/TaskReviewOutcomeMapper.xml"));
+
+        assertThat(migration)
+                .contains("CREATE TABLE task_review_outcomes")
+                .contains("CREATE TABLE task_review_feedback")
+                .contains("uq_task_review_outcomes_client_request")
+                .contains("EXACT_REVIEW_HEAD", "REPORTER_ASSERTED_FINAL")
+                .contains("FALSE_POSITIVE", "FALSE_NEGATIVE", "KNOWLEDGE_UPDATE")
+                .contains("trg_task_review_outcomes_immutable")
+                .contains("trg_task_review_feedback_immutable")
+                .contains("只供评测和改进，不触发知识修改");
+        assertThat(mapper)
+                .contains("ONCONFLICT(review_id,reported_by,client_request_id)DONOTHING")
+                .contains("tests_payload::textAStests_payload")
+                .contains("approvals_payload::textASapprovals_payload")
+                .contains("FROMtask_review_feedbackWHEREoutcome_id=#{outcomeId}");
     }
 
     @Test

@@ -1,12 +1,18 @@
 UPDATE knowledge_cards
 SET obligations_payload = obligations_payload
-    || '{"prohibitedPathPatterns":[],"knowledgeUpdateRequired":false}'::jsonb
+    || CASE WHEN NOT (obligations_payload ? 'prohibitedPathPatterns')
+        THEN '{"prohibitedPathPatterns":[]}'::jsonb ELSE '{}'::jsonb END
+    || CASE WHEN NOT (obligations_payload ? 'knowledgeUpdateRequired')
+        THEN '{"knowledgeUpdateRequired":false}'::jsonb ELSE '{}'::jsonb END
 WHERE NOT (obligations_payload ? 'prohibitedPathPatterns')
    OR NOT (obligations_payload ? 'knowledgeUpdateRequired');
 
 UPDATE knowledge_card_revisions
 SET obligations_payload = obligations_payload
-    || '{"prohibitedPathPatterns":[],"knowledgeUpdateRequired":false}'::jsonb
+    || CASE WHEN NOT (obligations_payload ? 'prohibitedPathPatterns')
+        THEN '{"prohibitedPathPatterns":[]}'::jsonb ELSE '{}'::jsonb END
+    || CASE WHEN NOT (obligations_payload ? 'knowledgeUpdateRequired')
+        THEN '{"knowledgeUpdateRequired":false}'::jsonb ELSE '{}'::jsonb END
 WHERE NOT (obligations_payload ? 'prohibitedPathPatterns')
    OR NOT (obligations_payload ? 'knowledgeUpdateRequired');
 

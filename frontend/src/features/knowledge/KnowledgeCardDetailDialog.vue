@@ -34,6 +34,8 @@ const enforcementLabels: Record<string, string> = {
 const severityLabels: Record<string, string> = { INFO: '提示', WARNING: '警告', CRITICAL: '严重' };
 const hasScope = computed(() => Boolean(props.card && (
   props.card.scope.pathPatterns.length || props.card.scope.symbols.length || props.card.scope.modules.length
+  || props.card.scope.repositoryIds?.length || props.card.scope.serviceNames?.length
+  || props.card.scope.contractIds?.length
 )));
 const hasObligations = computed(() => Boolean(props.card && (
   props.card.obligations.requiredTests.length
@@ -93,6 +95,9 @@ const hasObligations = computed(() => Boolean(props.card && (
         <div v-if="card.scope.pathPatterns.length"><b>路径</b><code v-for="item in card.scope.pathPatterns" :key="item">{{ item }}</code></div>
         <div v-if="card.scope.symbols.length"><b>符号</b><code v-for="item in card.scope.symbols" :key="item">{{ item }}</code></div>
         <div v-if="card.scope.modules.length"><b>模块</b><code v-for="item in card.scope.modules" :key="item">{{ item }}</code></div>
+        <div v-if="card.scope.repositoryIds?.length"><b>跨仓库</b><code v-for="item in card.scope.repositoryIds" :key="item">{{ item }}</code></div>
+        <div v-if="card.scope.serviceNames?.length"><b>服务</b><code v-for="item in card.scope.serviceNames" :key="item">{{ item }}</code></div>
+        <div v-if="card.scope.contractIds?.length"><b>契约</b><code v-for="item in card.scope.contractIds" :key="item">{{ item }}</code></div>
       </section>
       <section v-if="hasObligations" class="engineering-detail">
         <h3>开发要求</h3>

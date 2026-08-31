@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, Search } from '@element-plus/icons-vue';
+import { Connection, Plus, Search } from '@element-plus/icons-vue';
 import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -8,6 +8,7 @@ import RepositoryFormDialog from '@/features/repositories/RepositoryFormDialog.v
 import RepositoryEditDialog from '@/features/repositories/RepositoryEditDialog.vue';
 import RepositoryGovernanceDialog from '@/features/repositories/RepositoryGovernanceDialog.vue';
 import RepositoryTable from '@/features/repositories/RepositoryTable.vue';
+import EngineeringProjectsDialog from '@/features/repositories/EngineeringProjectsDialog.vue';
 import { sourceImportsApi } from '@/api/sourceImports';
 import { listRepositoryPage, syncRemoteRepository, updateRepository } from '@/api/repositories';
 import { intelligenceApi } from '@/api/intelligence';
@@ -32,6 +33,7 @@ const importing = shallowRef(false);
 const editOpen = shallowRef(false);
 const editing = shallowRef<Repository | null>(null);
 const editBusy = shallowRef(false);
+const engineeringProjectsOpen = shallowRef(false);
 let searchTimer: number | undefined;
 
 type Input = { sourceType: 'LOCAL_GIT' | 'REMOTE_GIT' | 'GITLAB' | 'ZIP'; name: string; path: string; url: string; branch: string; credentialId: string; file: File | null };
@@ -100,7 +102,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
   <section class="page repository-design">
     <div class="surface repository-list-surface">
       <div class="repository-list-header">
-        <div class="toolbar"><el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索仓库名称、描述、所有者或分支" clearable /><span class="spacer" /><el-button type="primary" :icon="Plus" :loading="importing" @click="dialogOpen=true">接入仓库</el-button></div>
+        <div class="toolbar"><el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索仓库名称、描述、所有者或分支" clearable /><span class="spacer" /><el-button :icon="Connection" @click="engineeringProjectsOpen=true">跨仓工程项目</el-button><el-button type="primary" :icon="Plus" :loading="importing" @click="dialogOpen=true">接入仓库</el-button></div>
         <el-alert v-if="pageError || store.error" :title="pageError ?? store.error ?? ''" type="error" :closable="false" />
       </div>
       <div class="repository-table-region">
@@ -111,6 +113,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
     <RepositoryFormDialog v-model="dialogOpen" :busy="importing" @submit="create" />
     <RepositoryEditDialog v-model="editOpen" :repository="editing" :busy="editBusy" @submit="saveEdit" />
     <RepositoryGovernanceDialog v-model="governanceOpen" :repository="governedRepository" @changed="governanceChanged" />
+    <EngineeringProjectsDialog v-model="engineeringProjectsOpen" :repositories="store.repositories" />
   </section>
 </template>
 <style scoped>

@@ -239,6 +239,65 @@ class TaskContextMatcherTest {
                         });
     }
 
+    @Test
+    void crossRepositoryKnowledgeProducesObligationsOnlyThroughExplicitServiceScope() {
+        UUID sourceRepositoryId = UUID.randomUUID();
+        UUID projectId = UUID.randomUUID();
+        KnowledgeMatch.Candidate crossRepository =
+                new KnowledgeMatch.Candidate(
+                        UUID.randomUUID(),
+                        sourceRepositoryId,
+                        "跨仓退款约束",
+                        KnowledgeKind.API_CONTRACT,
+                        KnowledgeSeverity.CRITICAL,
+                        KnowledgeEnforcement.REQUIRED,
+                        UUID.randomUUID(),
+                        new KnowledgeScope(
+                                List.of("src/refund/**"),
+                                List.of(),
+                                List.of(),
+                                List.of(),
+                                List.of("refund-service"),
+                                List.of()),
+                        obligations(),
+                        2,
+                        "PUBLISHED",
+                        "APPROVED",
+                        "CURRENT",
+                        List.of(),
+                        List.of(
+                                new KnowledgeMatch.CrossRepositoryBinding(
+                                        projectId,
+                                        sourceRepositoryId,
+                                        "refund-service",
+                                        List.of())));
+
+        TaskContextMatcher.TaskContextResult result =
+                matcher.match(input(List.of(crossRepository), List.of(), true));
+
+        assertThat(result.applicableKnowledge())
+                .singleElement()
+                .satisfies(
+                        match -> {
+                            assertThat(match.knowledgeId())
+                                    .isEqualTo(crossRepository.knowledgeId());
+                            assertThat(match.reasons())
+                                    .extracting(KnowledgeMatchReason::kind)
+                                    .containsExactly(
+                                            KnowledgeMatchReason.MatchKind.SERVICE,
+                                            KnowledgeMatchReason.MatchKind.PATH_PATTERN);
+                            assertThat(match.sources())
+                                    .extracting(source -> source.sourceType().name())
+                                    .contains("PLATFORM_FACT", "GIT_FACT");
+                        });
+        assertThat(result.requiredTests())
+                .extracting(TaskReviewFinding::key)
+                .containsExactly("./mvnw test");
+        assertThat(result.requiredApprovals())
+                .extracting(TaskReviewFinding::key)
+                .containsExactly(approverId.toString());
+    }
+
     private TaskContextMatcher.MatchInput input(
             List<KnowledgeMatch.Candidate> knowledge,
             List<KnowledgeMatch.RetrievalReference> references,
