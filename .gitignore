@@ -25,3 +25,4 @@ deploy/.env.production
 /.run
 /.runtime
 /release/*.gz
+/.local-data

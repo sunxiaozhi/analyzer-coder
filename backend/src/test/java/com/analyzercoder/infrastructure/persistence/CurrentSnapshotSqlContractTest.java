@@ -236,6 +236,8 @@ class CurrentSnapshotSqlContractTest {
         String mapper = resource("mappers/ProjectHealthMapper.xml");
 
         assertThat(mapper)
+                .contains("column=\"total\" javaType=\"_long\"")
+                .doesNotContain("javaType=\"long\"")
                 .contains("source_version_status='CURRENT'")
                 .contains("source_version_status='SUSPECT'")
                 .contains("source_version_status='STALE'")

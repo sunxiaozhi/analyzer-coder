@@ -3,14 +3,14 @@
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.ProjectHealthMapper">
     <resultMap id="knowledgeHealth" type="com.analyzercoder.infrastructure.persistence.model.ProjectKnowledgeHealthRow">
         <constructor>
-            <arg column="total" javaType="long"/>
-            <arg column="current_count" javaType="long"/>
-            <arg column="suspect_count" javaType="long"/>
-            <arg column="stale_count" javaType="long"/>
-            <arg column="unverified_count" javaType="long"/>
-            <arg column="trusted_count" javaType="long"/>
-            <arg column="required_without_owner" javaType="long"/>
-            <arg column="unreviewed_count" javaType="long"/>
+            <arg column="total" javaType="_long"/>
+            <arg column="current_count" javaType="_long"/>
+            <arg column="suspect_count" javaType="_long"/>
+            <arg column="stale_count" javaType="_long"/>
+            <arg column="unverified_count" javaType="_long"/>
+            <arg column="trusted_count" javaType="_long"/>
+            <arg column="required_without_owner" javaType="_long"/>
+            <arg column="unreviewed_count" javaType="_long"/>
         </constructor>
     </resultMap>
 

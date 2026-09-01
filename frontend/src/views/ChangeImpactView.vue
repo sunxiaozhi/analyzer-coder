@@ -424,7 +424,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.review-page { --paper: #fff; --ink: #1f2a33; display: grid; gap: 14px; max-width: 1440px; margin: 0 auto; padding: 18px 22px 36px; color: var(--ink); font-family: Inter, "Microsoft YaHei", sans-serif; }
+.review-page { --paper: #fff; --ink: #1f2a33; display: grid; gap: 14px; width: 100%; max-width: 1440px; min-height: 0; height: 100%; margin: 0 auto; padding: 18px 22px 36px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; color: var(--ink); font-family: Inter, "Microsoft YaHei", sans-serif; }
 .dossier-header { display: flex; align-items: end; justify-content: space-between; gap: 26px; padding: 19px 20px; border: 1px solid #d8e0e5; border-top: 3px solid #2b6cb0; border-radius: 9px; background: var(--paper); }
 .title-block { display: grid; gap: 4px; }
 .title-block small { color: #2b6cb0; font: 700 9px "SFMono-Regular", Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; }
@@ -499,6 +499,9 @@ onMounted(async () => {
   .review-workbench { grid-template-columns: 1fr; }
   .result-ledger { grid-template-columns: 1fr; gap: 8px; }
   .ledger-version { flex-wrap: wrap; }
+}
+@media (max-width: 760px) {
+  .review-page { height: auto; min-height: 100%; overflow: visible; }
 }
 @media (max-width: 600px) {
   .dossier-header { padding: 15px; }
