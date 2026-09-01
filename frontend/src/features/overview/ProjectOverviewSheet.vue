@@ -351,12 +351,16 @@ function canResolveIssue(issue: ProjectHealthIssue) {
   --amber: #b66a0b;
   --red: #b74942;
   --violet: #6d5db5;
-  min-height: 100%;
-  padding: 30px clamp(20px, 3vw, 46px) 56px;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 14px 2px 32px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   color: var(--ink);
   background: #f4f7f9;
   font-family: Inter, "Microsoft YaHei", sans-serif;
-  overflow-y: auto;
 }
 .overview-sheet button { font: inherit; }
 .overview-sheet button:disabled { cursor: not-allowed; opacity: .45; }
@@ -470,7 +474,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
   .overview-body { grid-template-columns: minmax(0, 1fr) 290px; }
 }
 @media (max-width: 820px) {
-  .overview-sheet { padding: 18px 14px 36px; }
+  .overview-sheet { padding: 12px 0 28px; }
   .project-hero { padding: 22px 20px; }
   .capability-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .capability-strip article:nth-child(2) { border-right: 0; }

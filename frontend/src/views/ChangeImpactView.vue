@@ -424,7 +424,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.review-page { --paper: #fff; --ink: #1f2a33; display: grid; gap: 14px; width: 100%; max-width: 1440px; min-height: 0; height: 100%; margin: 0 auto; padding: 18px 22px 36px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; color: var(--ink); font-family: Inter, "Microsoft YaHei", sans-serif; }
+.review-page { --paper: #fff; --ink: #1f2a33; display: grid; gap: 14px; width: 100%; min-width: 0; min-height: 0; height: 100%; margin: 0; padding: 14px 2px 32px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; color: var(--ink); font-family: Inter, "Microsoft YaHei", sans-serif; }
 .dossier-header { display: flex; align-items: end; justify-content: space-between; gap: 26px; padding: 19px 20px; border: 1px solid #d8e0e5; border-top: 3px solid #2b6cb0; border-radius: 9px; background: var(--paper); }
 .title-block { display: grid; gap: 4px; }
 .title-block small { color: #2b6cb0; font: 700 9px "SFMono-Regular", Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; }
@@ -492,7 +492,7 @@ onMounted(async () => {
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 980px) {
-  .review-page { padding: 13px 12px 30px; }
+  .review-page { padding: 12px 0 28px; }
   .dossier-header { display: grid; align-items: start; }
   .dossier-header dl { width: 100%; }
   .dossier-header dl div { flex: 1; min-width: 0; }
