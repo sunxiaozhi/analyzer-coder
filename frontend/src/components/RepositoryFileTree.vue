@@ -160,12 +160,12 @@ watch(treeData, () => revealSelected(props.selectedPath));
 
 .tree-pane-head b {
   color: #303036;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .tree-pane-head span {
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .repository-tree-scroll {
@@ -178,7 +178,7 @@ watch(treeData, () => revealSelected(props.selectedPath));
 .repository-tree-scroll :deep(.el-tree) {
   min-width: max-content;
   color: #3d3d43;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .repository-tree-scroll :deep(.el-tree-node__content) {
@@ -192,7 +192,7 @@ watch(treeData, () => revealSelected(props.selectedPath));
 
 .repository-tree-scroll :deep(.el-tree-node.is-current > .el-tree-node__content) {
   color: #005eb8;
-  background: #eaf3fd;
+  background: var(--app-color-action-soft);
 }
 
 .tree-node {

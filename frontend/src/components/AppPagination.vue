@@ -57,7 +57,7 @@ const rangeEnd = computed(() => Math.min(currentPage.value * props.pageSize, pro
   padding: 12px 4px 0;
   border-top: 1px solid var(--el-border-color-lighter);
   color: var(--el-text-color-secondary);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .app-pagination {

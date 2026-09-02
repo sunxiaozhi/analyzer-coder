@@ -205,9 +205,9 @@ onMounted(() => {
 .nav-list { align-content: start; overflow-y: auto; }
 .nav-section { display: grid; gap: 3px; }
 .nav-section + .nav-section { margin-top: 11px; padding-top: 11px; border-top: 1px solid #ededf0; }
-.nav-section-label { padding: 0 12px 4px; color: #8a8a92; font-size: 9px; font-weight: 750; letter-spacing: .11em; }
+.nav-section-label { padding: 0 12px 4px; color: #8a8a92; font-size: 12px; font-weight: 750; letter-spacing: .11em; }
 .nav-section-links { display: grid; gap: 3px; }
-.system-toggle { display: grid; grid-template-columns: 16px minmax(0, 1fr) 14px; align-items: center; gap: 10px; height: 32px; padding: 0 12px; color: #65656c; border: 0; border-radius: 6px; background: transparent; text-align: left; font-size: 11px; font-weight: 700; }
+.system-toggle { display: grid; grid-template-columns: 16px minmax(0, 1fr) 14px; align-items: center; gap: 10px; height: 32px; padding: 0 12px; color: #65656c; border: 0; border-radius: 6px; background: transparent; text-align: left; font-size: 13px; font-weight: 700; }
 .system-toggle:hover { color: #1d1d1f; background: #f5f7fa; }
 .system-chevron { transition: transform .16s ease; }
 .system-chevron.open { transform: rotate(180deg); }

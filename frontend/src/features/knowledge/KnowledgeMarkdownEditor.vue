@@ -26,7 +26,7 @@ const html = computed(() => renderMarkdown(props.modelValue, props.repositoryId)
 .editor-tabs{display:flex;align-items:center;gap:4px;padding:7px 10px;background:var(--el-fill-color-light);border-bottom:1px solid var(--el-border-color)}
 .editor-tabs button{border:0;background:transparent;padding:6px 12px;border-radius:7px;cursor:pointer;color:var(--el-text-color-secondary)}
 .editor-tabs button.active{background:var(--el-bg-color);color:var(--el-color-primary);box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.editor-tabs span{margin-left:auto;font-size:12px;color:var(--el-text-color-placeholder)}
+.editor-tabs span{margin-left:auto;font-size:14px;color:var(--el-text-color-placeholder)}
 .markdown-editor :deep(.el-textarea__inner){border:0;box-shadow:none;border-radius:0;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
 .markdown-preview{min-height:304px;max-height:440px;overflow:auto;padding:16px 20px;line-height:1.7;background:var(--el-bg-color)}
 .markdown-preview :deep(img){max-width:100%;border-radius:8px}

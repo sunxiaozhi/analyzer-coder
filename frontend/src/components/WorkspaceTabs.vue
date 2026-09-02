@@ -174,11 +174,11 @@ onBeforeUnmount(() => {
   padding: 0 12px 0 9px;
   color: #526170;
   border-right: 1px solid #e3e7eb;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   white-space: nowrap;
 }
-.workspace-tabs-label svg { color: #0066cc; }
+.workspace-tabs-label svg { color: var(--app-color-action); }
 .tab-track { display: flex; gap: 4px; min-width: 0; padding-left: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
 .workspace-tab {
   position: relative;
@@ -194,14 +194,14 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
-  font-size: 12px;
+  font-size: 14px;
 }
 .workspace-tab > span { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-tab i { display: grid; flex: none; width: 20px; height: 20px; place-items: center; color: var(--app-text-muted); border-radius: 4px; font-style: normal; }
 .workspace-tab:hover { color: #263746; border-color: #dbe5ef; background: #f6f9fc; }
 .workspace-tab i:hover,
 .workspace-tab i:focus-visible { color: #263746; background: #e7eaed; outline: none; }
-.workspace-tab.active { color: #fff; border-color: #0066cc; background: #0066cc; box-shadow: 0 2px 5px #0066cc2b; font-weight: 650; }
+.workspace-tab.active { color: #fff; border-color: var(--app-color-action); background: var(--app-color-action); box-shadow: 0 2px 5px var(--app-focus-ring); font-weight: 650; }
 .workspace-tab.active i { color: #dceeff; }
 .workspace-tab.active i:hover,
 .workspace-tab.active i:focus-visible { color: #fff; background: #ffffff26; }
@@ -240,13 +240,13 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  font-size: 11px;
+  font-size: 13px;
 }
 .tab-context-menu button svg { color: #687886; }
 .tab-context-menu button:hover,
 .tab-context-menu button:focus-visible { color: #005eb8; background: #edf5fd; outline: none; }
 .tab-context-menu button:hover svg,
-.tab-context-menu button:focus-visible svg { color: #0066cc; }
+.tab-context-menu button:focus-visible svg { color: var(--app-color-action); }
 .tab-context-menu button:disabled { color: #a6adb4; background: transparent; cursor: not-allowed; }
 .tab-context-menu button:disabled svg { color: #b9bfc5; }
 .tab-context-menu .menu-divider { height: 1px; margin: 5px 3px; background: #e7eaed; }

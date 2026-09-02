@@ -616,7 +616,7 @@ onMounted(() => void load());
   border: 0;
   border-radius: 4px;
   background: transparent;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 550;
 }
 .knowledge-mode-switch button:hover { color: #1d1d1f; }
@@ -638,11 +638,11 @@ onMounted(() => void load());
   color: #66717c;
   border-radius: 9px;
   background: #e7eaed;
-  font-size: 11px;
+  font-size: 13px;
 }
 .knowledge-mode-switch button.active span {
   color: #005eb8;
-  background: #eaf3fd;
+  background: var(--app-color-action-soft);
 }
 .knowledge-scroll .knowledge-grid {
   padding-top: 0;

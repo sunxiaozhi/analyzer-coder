@@ -144,33 +144,33 @@ function submit() {
 <style scoped>
 .review-form { display: grid; gap: 16px; padding: 20px; border: 1px solid #dbe2e7; border-radius: 10px; background: #fff; }
 .review-form > header { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 14px; border-bottom: 1px solid #e7ecef; }
-.review-form > header span, legend, label > span { color: #687782; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.review-form > header span, legend, label > span { color: #687782; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .review-form h2 { margin: 4px 0 0; color: #1f2a33; font-size: 18px; font-weight: 680; }
-.review-form > header p { max-width: 490px; margin: 0; color: #687782; font-size: 12px; line-height: 1.55; text-align: right; }
+.review-form > header p { max-width: 490px; margin: 0; color: #687782; font-size: 14px; line-height: 1.55; text-align: right; }
 .task-field { display: grid; gap: 7px; }
 .task-field small { margin-left: 5px; color: #98a3ab; font-weight: 500; text-transform: none; }
 textarea, input, select { width: 100%; color: #1f2a33; border: 1px solid #cfd8de; border-radius: 7px; outline: none; background: #fbfcfd; transition: border-color .16s, box-shadow .16s; }
 textarea { min-height: 68px; padding: 11px 12px; resize: vertical; line-height: 1.55; }
 input, select { height: 38px; padding: 0 10px; }
-textarea:focus, input:focus, select:focus { border-color: #2b6cb0; box-shadow: 0 0 0 3px #2b6cb01a; }
+textarea:focus, input:focus, select:focus { border-color: var(--app-color-action); box-shadow: 0 0 0 3px var(--app-focus-ring); }
 .model-field { display: grid; gap: 7px; }
-.model-field > small { color: #7b8790; font-size: 10px; line-height: 1.45; }
+.model-field > small { color: #7b8790; font-size: 13px; line-height: 1.45; }
 .model-field span small { margin-left: 5px; color: #98a3ab; font-weight: 500; text-transform: none; }
 .source-field { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; padding: 19px 0 0; border: 0; border-top: 1px solid #edf0f2; }
 .source-field legend { position: relative; top: 8px; padding: 0; }
 .source-field button { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; min-height: 60px; padding: 10px; color: #687782; text-align: left; border: 1px solid #d9e0e5; border-radius: 7px; background: #fff; }
 .source-field button span { display: grid; gap: 3px; }
-.source-field button strong { color: #2d3942; font-size: 12px; }
-.source-field button small { font-size: 10px; line-height: 1.35; }
-.source-field button.active { color: #2b6cb0; border-color: #2b6cb0; box-shadow: inset 3px 0 #2b6cb0; background: #f4f8fc; }
-.source-field button:focus-visible { outline: 3px solid #2b6cb033; outline-offset: 2px; }
+.source-field button strong { color: #2d3942; font-size: 14px; }
+.source-field button small { font-size: 13px; line-height: 1.35; }
+.source-field button.active { color: var(--app-color-action); border-color: var(--app-color-action); box-shadow: inset 3px 0 var(--app-color-action); background: #f4f8fc; }
+.source-field button:focus-visible { outline: 3px solid var(--app-focus-ring); outline-offset: 2px; }
 .ref-fields { display: grid; grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr); align-items: end; gap: 8px; }
 .ref-fields label { display: grid; gap: 7px; }
 .ref-arrow { padding-bottom: 10px; color: #84919a; text-align: center; }
-.worktree-note { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; padding: 10px 12px; color: #7b541f; border-left: 3px solid #b96a19; background: #fff8ee; font-size: 11px; line-height: 1.5; }
+.worktree-note { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; padding: 10px 12px; color: #7b541f; border-left: 3px solid var(--app-color-warning); background: #fff8ee; font-size: 13px; line-height: 1.5; }
 .worktree-note span { display: grid; gap: 1px; }
 .review-form > footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
-.review-form > footer > span { color: #929da5; font: 10px "SFMono-Regular", Consolas, monospace; }
+.review-form > footer > span { color: #929da5; font: 13px "SFMono-Regular", Consolas, monospace; }
 @media (max-width: 760px) {
   .review-form { padding: 15px; }
   .review-form > header { display: grid; gap: 6px; }

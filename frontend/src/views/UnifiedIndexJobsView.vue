@@ -141,7 +141,7 @@ onMounted(async () => {
   border-bottom: 2px solid transparent;
   background: none;
   color: #65656c;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .index-view-tabs button:hover {
@@ -149,7 +149,7 @@ onMounted(async () => {
 }
 
 .index-view-tabs button.active {
-  border-color: #0066cc;
+  border-color: var(--app-color-action);
   color: #005eb8;
   font-weight: 600;
 }

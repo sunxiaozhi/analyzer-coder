@@ -228,7 +228,7 @@ watch(
   padding: 9px;
   color: #71717a;
   background: #fff;
-  font-size: 10px;
+  font-size: 13px;
 }
 .propagation-summary b { color: #232329; font: 650 16px "SFMono-Regular", Consolas, monospace; }
 .coverage-line {
@@ -239,9 +239,9 @@ watch(
   color: #8d5c24;
   border-left: 3px solid #c4852d;
   background: #fbf5ec;
-  font-size: 11px;
+  font-size: 13px;
 }
-.coverage-line[data-complete='true'] { color: #166347; border-color: #16855b; background: #eff8f4; }
+.coverage-line[data-complete='true'] { color: #166347; border-color: var(--app-color-success); background: #eff8f4; }
 .coverage-line span { color: #65656c; line-height: 1.45; }
 .impact-paths {
   display: grid;
@@ -257,22 +257,22 @@ watch(
   border: 1px solid #eceef1;
   border-radius: 6px;
   background: #fafbfc;
-  font-size: 11px;
+  font-size: 13px;
 }
 .path-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #65656c; }
-.path-head b { color: #0066cc; font-size: 10px; text-transform: uppercase; }
+.path-head b { color: var(--app-color-action); font-size: 13px; text-transform: uppercase; }
 .path-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .path-chain { display: flex; align-items: stretch; gap: 5px; overflow-x: auto; padding-bottom: 3px; }
 .path-node { display: grid; flex: 0 0 150px; gap: 3px; padding: 6px 7px; border-left: 2px solid #8292a3; background: #fff; }
-.path-node.focus { border-color: #0066cc; background: #edf6ff; }
+.path-node.focus { border-color: var(--app-color-action); background: #edf6ff; }
 .path-node strong,
 .path-node small { overflow: hidden; font-family: "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.path-node strong { color: #242428; font-size: 10px; }
-.path-node small { color: #71717a; font-size: 9px; }
-.path-arrow { align-self: center; flex: 0 0 auto; color: #0066cc; font: 10px "SFMono-Regular", Consolas, monospace; }
-.empty-paths { margin: 0 14px 12px; color: #71717a; font-size: 11px; line-height: 1.5; }
+.path-node strong { color: #242428; font-size: 13px; }
+.path-node small { color: #71717a; font-size: 12px; }
+.path-arrow { align-self: center; flex: 0 0 auto; color: var(--app-color-action); font: 13px "SFMono-Regular", Consolas, monospace; }
+.empty-paths { margin: 0 14px 12px; color: #71717a; font-size: 13px; line-height: 1.5; }
 .impact-panel :deep(.el-alert) { margin: 8px 14px; width: auto; }
-.graph-provenance { margin: 0 14px 10px; color: var(--app-text-muted); font: 10px "SFMono-Regular", Consolas, monospace; }
+.graph-provenance { margin: 0 14px 10px; color: var(--app-text-muted); font: 13px "SFMono-Regular", Consolas, monospace; }
 
 @media (max-width: 760px) {
   .graph-toolbar { flex-wrap: wrap; min-height: 112px; padding: 10px; }

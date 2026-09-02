@@ -99,7 +99,7 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? 'æœªå
   inset: 0 auto 0 0;
   width: 7px;
   content: '';
-  background: linear-gradient(180deg, #0066cc 0 58%, #1d8a65 58% 100%);
+  background: linear-gradient(180deg, var(--app-color-action) 0 58%, #1d8a65 58% 100%);
 }
 
 .hero-copy {
@@ -114,7 +114,7 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? 'æœªå
   gap: 8px;
   margin-bottom: 18px;
   color: #69737e;
-  font: 600 11px "SFMono-Regular", Consolas, monospace;
+  font: 600 13px "SFMono-Regular", Consolas, monospace;
 }
 
 .source-line > span:first-child {
@@ -169,14 +169,14 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? 'æœªå
   gap: 7px;
   padding: 8px 13px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 650;
 }
 
 .primary-action {
   color: #fff;
-  border: 1px solid #0066cc;
-  background: #0066cc;
+  border: 1px solid var(--app-color-action);
+  background: var(--app-color-action);
 }
 
 .primary-action:hover,
@@ -193,7 +193,7 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? 'æœªå
 
 .guide-action:hover,
 .guide-action:focus-visible {
-  color: #0066cc;
+  color: var(--app-color-action);
   border-color: #91bce1;
   outline: none;
   background: #f2f8fd;
@@ -217,7 +217,7 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? 'æœªå
   padding-bottom: 13px;
   color: #8facbf;
   border-bottom: 1px solid rgb(255 255 255 / 14%);
-  font: 700 10px "SFMono-Regular", Consolas, monospace;
+  font: 700 13px "SFMono-Regular", Consolas, monospace;
   letter-spacing: .12em;
 }
 
@@ -251,7 +251,7 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? 'æœªå
 .stamp-version strong {
   overflow: hidden;
   color: #f2f7fa;
-  font: 600 12px "SFMono-Regular", Consolas, monospace;
+  font: 600 14px "SFMono-Regular", Consolas, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -268,7 +268,7 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? 'æœªå
   border: 1px solid rgb(255 255 255 / 13%);
   border-radius: 4px;
   background: rgb(255 255 255 / 5%);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .language-strip b {
@@ -279,7 +279,7 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? 'æœªå
 .project-stamp > p {
   margin: 18px 0 0;
   color: #8facbf;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .spinning { animation: spin .9s linear infinite; }
@@ -294,7 +294,7 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? 'æœªå
 @media (max-width: 600px) {
   .hero-copy { padding: 30px 24px 32px 30px; }
   .hero-copy h1 { font-size: 32px; }
-  .hero-copy p { font-size: 13px; }
+  .hero-copy p { font-size: 15px; }
   .project-stamp { padding: 24px; }
 }
 

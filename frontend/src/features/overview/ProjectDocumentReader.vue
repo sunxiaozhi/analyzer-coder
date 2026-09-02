@@ -118,7 +118,7 @@ function openRepositoryPath(path: string) {
   overflow: hidden;
   margin: 0;
   color: #80909b;
-  font: 500 10px/1.4 "SFMono-Regular", Consolas, monospace;
+  font: 500 13px/1.4 "SFMono-Regular", Consolas, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -134,7 +134,7 @@ function openRepositoryPath(path: string) {
   border: 1px solid #bfd0db;
   border-radius: 4px;
   background: #fff;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   cursor: pointer;
 }
@@ -207,12 +207,12 @@ function openRepositoryPath(path: string) {
   max-width: 430px;
   margin: 0 0 18px;
   color: #697580;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.65;
 }
 
 .reader-state.is-error {
-  color: #b54708;
+  color: var(--app-color-warning);
 }
 
 @media (max-width: 820px) {

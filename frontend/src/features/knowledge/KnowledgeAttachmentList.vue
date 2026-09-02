@@ -22,5 +22,5 @@ const formatSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.ceil(bytes /
 
 <style scoped>
 .attachment-list{display:grid;gap:8px}.attachment-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--el-border-color-lighter);border-radius:9px;background:var(--el-fill-color-extra-light)}
-.attachment-row>div{display:grid;min-width:0;flex:1}.attachment-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.attachment-row span{font-size:12px;color:var(--el-text-color-secondary)}.attachment-row a{font-size:13px;color:var(--el-color-primary);text-decoration:none}
+.attachment-row>div{display:grid;min-width:0;flex:1}.attachment-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}.attachment-row span{font-size:14px;color:var(--el-text-color-secondary)}.attachment-row a{font-size:15px;color:var(--el-color-primary);text-decoration:none}
 </style>

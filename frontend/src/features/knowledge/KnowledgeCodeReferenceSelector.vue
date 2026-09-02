@@ -207,16 +207,16 @@ function excerpt(content: string) {
   place-items: center;
   width: 36px;
   height: 36px;
-  color: #0066cc;
+  color: var(--app-color-action);
   border: 1px solid #bed7ef;
   border-radius: 6px;
   background: #fff;
 }
 
 .reference-intro-icon :deep(svg) { width: 17px; }
-.reference-intro b { font-size: 13px; }
-.reference-intro p { margin: 3px 0 0; color: #66717c; font-size: 11px; line-height: 1.5; }
-.reference-intro > span { color: #005eb8; font-size: 11px; font-weight: 650; white-space: nowrap; }
+.reference-intro b { font-size: 15px; }
+.reference-intro p { margin: 3px 0 0; color: #66717c; font-size: 13px; line-height: 1.5; }
+.reference-intro > span { color: #005eb8; font-size: 13px; font-weight: 650; white-space: nowrap; }
 
 .search-guide {
   display: grid;
@@ -224,19 +224,19 @@ function excerpt(content: string) {
   gap: 5px 10px;
   padding: 10px 12px;
   border-left: 3px solid #f0b429;
-  background: #fffaf0;
+  background: var(--app-color-warning-soft);
 }
 
 .search-guide-label {
   grid-row: 1 / 3;
   color: #7a5300;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 
-.search-guide p { margin: 0; color: #5f5a50; font-size: 11px; line-height: 1.55; }
+.search-guide p { margin: 0; color: #5f5a50; font-size: 13px; line-height: 1.55; }
 .search-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.search-examples span { color: #6b604f; font-size: 11px; }
+.search-examples span { color: #6b604f; font-size: 13px; }
 .search-examples code,
 .reference-empty code {
   padding: 2px 5px;
@@ -244,7 +244,7 @@ function excerpt(content: string) {
   border: 1px solid #e6dac1;
   border-radius: 3px;
   background: #fff;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .reference-search {
@@ -270,8 +270,8 @@ function excerpt(content: string) {
   background: #f8f9fa;
 }
 
-.group-heading b { font-size: 11px; }
-.group-heading span { color: var(--app-text-muted); font-size: 11px; }
+.group-heading b { font-size: 13px; }
+.group-heading span { color: var(--app-text-muted); font-size: 13px; }
 
 .selected-references,
 .reference-results {
@@ -299,15 +299,15 @@ function excerpt(content: string) {
   left: 7px;
   width: 3px;
   border-radius: 2px;
-  background: #0066cc;
+  background: var(--app-color-action);
 }
 
 .reference-copy { display: grid; min-width: 0; gap: 2px; }
 .reference-copy b,
 .reference-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reference-copy b { font-size: 12px; }
-.reference-copy span { color: #59636e; font-size: 11px; }
-.reference-copy small { color: var(--app-text-muted); font-size: 11px; }
+.reference-copy b { font-size: 14px; }
+.reference-copy span { color: #59636e; font-size: 13px; }
+.reference-copy small { color: var(--app-text-muted); font-size: 13px; }
 .reference-actions { display: flex; align-items: center; }
 
 .reference-results {
@@ -327,27 +327,27 @@ function excerpt(content: string) {
 .reference-results article:hover { background: #f7fbff; }
 .result-main { display: grid; min-width: 0; gap: 4px; }
 .result-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.result-title b { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.result-title b { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .result-title span {
   padding: 2px 5px;
   color: #65717d;
   border-radius: 3px;
   background: #eef1f4;
-  font-size: 11px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .result-main p {
   overflow: hidden;
   margin: 0;
   color: #576574;
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .result-main small {
   overflow: hidden;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -361,8 +361,8 @@ function excerpt(content: string) {
   color: var(--app-text-muted);
 }
 .reference-empty > svg { width: 24px; color: #a8b0b8; }
-.reference-empty b { color: #454c54; font-size: 12px; }
-.reference-empty p { margin: 4px 0 0; font-size: 11px; }
+.reference-empty b { color: #454c54; font-size: 14px; }
+.reference-empty p { margin: 4px 0 0; font-size: 13px; }
 
 @media (max-width: 760px) {
   .reference-intro { grid-template-columns: 36px minmax(0, 1fr); }

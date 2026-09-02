@@ -77,7 +77,7 @@ function fallbackLabel(reason: string | null) {
 .terminal-note {
   margin: 12px 16px 0;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.55;
 }
 

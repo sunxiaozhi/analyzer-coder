@@ -162,13 +162,13 @@ function nodeLabel(nodeId: string) {
 .call-graph-title {
   gap: 7px;
   color: #26262a;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 650;
 }
 
-.call-graph-title .el-icon { color: #0066cc; font-size: 15px; }
-.call-graph-stats { gap: 12px; color: #71717a; font-size: 11px; }
-.scroll-hint { padding-left: 12px; border-left: 1px solid #dedee3; color: #0066cc; }
+.call-graph-title .el-icon { color: var(--app-color-action); font-size: 15px; }
+.call-graph-stats { gap: 12px; color: #71717a; font-size: 13px; }
+.scroll-hint { padding-left: 12px; border-left: 1px solid #dedee3; color: var(--app-color-action); }
 
 .call-graph-viewport {
   min-width: 0;
@@ -210,10 +210,10 @@ function nodeLabel(nodeId: string) {
   stroke-width: 4px;
   paint-order: stroke;
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.02em;
 }
-.call-edge.active { color: #0066cc; }
+.call-edge.active { color: var(--app-color-action); }
 .call-edge.active path { stroke-width: 2.25; opacity: 1; }
 .call-edge.active text { fill: #005eb8; font-weight: 700; }
 
@@ -246,8 +246,8 @@ function nodeLabel(nodeId: string) {
   transform: translateY(-2px);
 }
 .call-node.focus {
-  border-color: #0066cc;
-  border-left-color: #0066cc;
+  border-color: var(--app-color-action);
+  border-left-color: var(--app-color-action);
   background: linear-gradient(135deg, #ffffff 0%, #edf6ff 100%);
   box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.12), 0 7px 20px rgba(0, 77, 153, 0.12);
 }
@@ -256,17 +256,17 @@ function nodeLabel(nodeId: string) {
   align-items: center;
   gap: 5px;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
-.call-node.focus .call-node-kind { color: #0066cc; }
+.call-node.focus .call-node-kind { color: var(--app-color-action); }
 .call-node strong {
   display: block;
   overflow: hidden;
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.45;
   text-overflow: ellipsis;
@@ -277,7 +277,7 @@ function nodeLabel(nodeId: string) {
   overflow: hidden;
   color: #71717a;
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 10px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

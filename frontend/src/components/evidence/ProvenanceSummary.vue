@@ -30,9 +30,9 @@ const emit = defineEmits<{ open: [source: Provenance] }>();
 
 <style scoped>
 .provenance-summary { display: grid; gap: 7px; }
-.provenance-summary h3 { margin: 0 0 2px; color: #33424c; font-size: 11px; }
+.provenance-summary h3 { margin: 0 0 2px; color: #33424c; font-size: 13px; }
 .provenance-summary article { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start; gap: 8px; padding: 8px; border: 1px solid #e0e6ea; border-radius: 7px; background: #fafcfd; }
 .provenance-summary article > div { display: grid; min-width: 0; gap: 3px; }
-.provenance-summary p { margin: 0; color: #5d6972; font-size: 10px; line-height: 1.5; }
-.provenance-summary small { color: #7b8790; font: 9px "SFMono-Regular", Consolas, monospace; }
+.provenance-summary p { margin: 0; color: #5d6972; font-size: 13px; line-height: 1.5; }
+.provenance-summary small { color: #7b8790; font: 12px "SFMono-Regular", Consolas, monospace; }
 </style>

@@ -130,9 +130,9 @@ async function copyCommand(command: string) {
 }
 
 .ai-guide > div { min-width: 0; }
-.eyebrow { color: #8fb0c6; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.eyebrow { color: #8fb0c6; font-size: 13px; font-weight: 700; letter-spacing: .08em; }
 .ai-guide h2 { margin: 5px 0 4px; color: #fff; font-size: 15px; }
-.ai-guide p { margin: 0; color: #a9c0d0; font-size: 11px; line-height: 1.55; }
+.ai-guide p { margin: 0; color: #a9c0d0; font-size: 13px; line-height: 1.55; }
 .ai-guide button {
   grid-column: 1 / -1;
   display: flex;
@@ -144,7 +144,7 @@ async function copyCommand(command: string) {
   border: 0;
   border-radius: 5px;
   background: #eaf7f1;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
 }
 .ai-guide button:hover, .ai-guide button:focus-visible { outline: 2px solid #7fd0ae; outline-offset: 2px; background: #fff; }
@@ -157,7 +157,7 @@ async function copyCommand(command: string) {
   border-bottom: 1px solid #e9ecef;
 }
 
-.guide-card > header span { display: flex; align-items: center; gap: 6px; color: #3d4e5b; font-size: 11px; font-weight: 650; }
+.guide-card > header span { display: flex; align-items: center; gap: 6px; color: #3d4e5b; font-size: 13px; font-weight: 650; }
 
 .command-list { display: grid; padding: 6px; }
 .command-list button {
@@ -174,16 +174,16 @@ async function copyCommand(command: string) {
 }
 .command-list button + button { margin-top: 4px; }
 .command-list button:hover, .command-list button:focus-visible { color: #fff; outline: 2px solid rgb(0 102 204 / 30%); background: #182832; }
-.command-list code { overflow: hidden; font: 10px/1.5 "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.commands-card footer { padding: 7px 10px; color: #7d8790; border-top: 1px solid #eceff1; background: #fafbfc; font-size: 10px; line-height: 1.45; }
+.command-list code { overflow: hidden; font: 13px/1.5 "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.commands-card footer { padding: 7px 10px; color: #7d8790; border-top: 1px solid #eceff1; background: #fafbfc; font-size: 13px; line-height: 1.45; }
 
 .language-list { display: grid; gap: 10px; padding: 12px; }
 .language-list > div { display: grid; gap: 5px; }
 .language-list span { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.language-list strong { color: #3a4c59; font: 600 11px "SFMono-Regular", Consolas, monospace; }
-.language-list small { color: #7c8791; font-size: 10px; }
+.language-list strong { color: #3a4c59; font: 600 13px "SFMono-Regular", Consolas, monospace; }
+.language-list small { color: #7c8791; font-size: 13px; }
 .language-list i { height: 3px; overflow: hidden; border-radius: 2px; background: #e6ebef; }
-.language-list b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #0066cc, #70a9d7); }
+.language-list b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--app-color-action), #70a9d7); }
 
 .path-list { display: grid; padding: 6px; }
 .path-list button {
@@ -198,10 +198,10 @@ async function copyCommand(command: string) {
   border-radius: 4px;
   background: transparent;
 }
-.path-list button:hover, .path-list button:focus-visible { color: #0066cc; outline: none; background: #f1f7fc; }
-.path-list button span { overflow: hidden; font: 10px "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.path-list button small { color: #8b949c; font: 10px Consolas, monospace; text-align: right; }
-.empty-copy { margin: 0; padding: 14px; color: #7b858e; font-size: 11px; line-height: 1.5; }
+.path-list button:hover, .path-list button:focus-visible { color: var(--app-color-action); outline: none; background: #f1f7fc; }
+.path-list button span { overflow: hidden; font: 13px "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.path-list button small { color: #8b949c; font: 13px Consolas, monospace; text-align: right; }
+.empty-copy { margin: 0; padding: 14px; color: #7b858e; font-size: 13px; line-height: 1.5; }
 
 @media (max-width: 980px) {
   .guide-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }

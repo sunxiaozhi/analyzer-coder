@@ -109,22 +109,22 @@ function kindLabel(kind: string | null) {
 
 <style scoped>
 .drawer-heading { display: grid; gap: 4px; }
-.drawer-heading span { color: var(--app-text-muted); font-size: 11px; font-weight: 650; letter-spacing: .04em; }
+.drawer-heading span { color: var(--app-text-muted); font-size: 13px; font-weight: 650; letter-spacing: .04em; }
 .drawer-heading strong { color: #263b48; font: 650 16px Consolas, monospace; }
-.drawer-heading small { color: var(--app-text-muted); font-size: 11px; }
+.drawer-heading small { color: var(--app-text-muted); font-size: 13px; }
 .symbol-tools { display: grid; gap: 7px; padding-bottom: 12px; border-bottom: 1px solid #e3e9ed; }
-.symbol-tools > span { color: var(--app-text-muted); font-size: 11px; }
+.symbol-tools > span { color: var(--app-text-muted); font-size: 13px; }
 .symbol-tools em { margin-left: 6px; color: #9a672e; font-style: normal; }
 .symbol-list { display: grid; align-content: start; gap: 7px; min-height: 220px; padding-top: 12px; }
 .symbol-card { display: grid; grid-template-columns: minmax(0, 1fr) 68px; align-items: stretch; overflow: hidden; border: 1px solid #dce4e8; border-radius: 5px; background: #fff; }
 .symbol-card:hover { border-color: #99b5c5; box-shadow: 0 4px 12px rgb(42 72 88 / 7%); }
 .symbol-source { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 5px 8px; min-width: 0; padding: 10px 11px; text-align: left; border: 0; background: transparent; }
 .symbol-source:focus-visible, .graph-action:focus-visible { outline: 2px solid rgb(0 102 204 / 28%); outline-offset: -2px; }
-.symbol-kind { padding: 2px 5px; color: #0066cc; border-radius: 3px; background: #eaf3fd; font: 700 11px Consolas, monospace; }
-.symbol-source strong { overflow: hidden; color: #2d414e; font: 600 12px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.symbol-source small { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; overflow: hidden; color: var(--app-text-muted); font: 500 11px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.graph-action { display: flex; align-items: center; justify-content: center; gap: 3px; color: #0066cc; border: 0; border-left: 1px solid #dedee3; background: #f3f8fc; font-size: 11px; }
-.graph-action:hover { color: #0066cc; background: #edf5fa; }
+.symbol-kind { padding: 2px 5px; color: var(--app-color-action); border-radius: 3px; background: var(--app-color-action-soft); font: 700 13px Consolas, monospace; }
+.symbol-source strong { overflow: hidden; color: #2d414e; font: 600 14px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.symbol-source small { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; overflow: hidden; color: var(--app-text-muted); font: 500 13px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.graph-action { display: flex; align-items: center; justify-content: center; gap: 3px; color: var(--app-color-action); border: 0; border-left: 1px solid #dedee3; background: #f3f8fc; font-size: 13px; }
+.graph-action:hover { color: var(--app-color-action); background: #edf5fa; }
 @media (max-width: 600px) {
   .symbol-card { grid-template-columns: 1fr; }
   .graph-action { min-height: 34px; border-top: 1px solid #e0e7e9; border-left: 0; }

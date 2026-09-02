@@ -145,11 +145,11 @@ function openCode(item: VectorIndexChunk) {
   border-bottom: 2px solid transparent;
   background: none;
   color: #65656c;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .source-tabs button.active {
-  border-color: #0066cc;
+  border-color: var(--app-color-action);
   color: #005eb8;
   font-weight: 600;
 }
@@ -159,7 +159,7 @@ function openCode(item: VectorIndexChunk) {
   border-radius: 4px;
   background: #f1f3f5;
   color: #71717a;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .vector-filters {

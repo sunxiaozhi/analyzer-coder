@@ -134,7 +134,7 @@ function handleClick(event: MouseEvent) {
 }
 
 .markdown-body :deep(a) {
-  color: #0066cc;
+  color: var(--app-color-action);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -167,7 +167,7 @@ function handleClick(event: MouseEvent) {
   border-radius: 4px;
   background: #f3f5f7;
   color: #b42318;
-  font: 12px/1.5 "SFMono-Regular", Consolas, monospace;
+  font: 14px/1.5 "SFMono-Regular", Consolas, monospace;
 }
 
 .markdown-body :deep(pre) {
@@ -193,7 +193,7 @@ function handleClick(event: MouseEvent) {
   margin: 18px 0;
   border-spacing: 0;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .markdown-body :deep(th),

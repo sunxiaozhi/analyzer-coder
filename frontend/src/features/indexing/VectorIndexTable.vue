@@ -111,18 +111,18 @@ function formatTime(value: string | null) {
 
 .item-identity b {
   color: #1d1d1f;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .vector-model b {
   color: #1d1d1f;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .item-identity span,
 .vector-model small {
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .content-excerpt {
@@ -130,7 +130,7 @@ function formatTime(value: string | null) {
   margin: 0;
   overflow: hidden;
   color: #5f5f66;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -138,6 +138,6 @@ function formatTime(value: string | null) {
 
 .vector-model code {
   color: #4a4a4f;
-  font-size: 11px;
+  font-size: 13px;
 }
 </style>

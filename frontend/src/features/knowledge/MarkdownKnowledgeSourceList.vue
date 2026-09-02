@@ -170,8 +170,8 @@ function formatBytes(value: number) {
 
 .source-ledger-copy { min-width: 0; }
 .source-eyebrow {
-  color: #0066cc;
-  font-size: 11px;
+  color: var(--app-color-action);
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: .08em;
 }
@@ -184,7 +184,7 @@ function formatBytes(value: number) {
 .source-ledger-copy p {
   margin: 0;
   color: var(--app-text-muted);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -205,14 +205,14 @@ function formatBytes(value: number) {
   border-right: 1px solid #e6e8eb;
 }
 .source-counts > div:last-child { border-right: 0; }
-.source-counts dt { color: var(--app-text-muted); font-size: 11px; }
+.source-counts dt { color: var(--app-text-muted); font-size: 13px; }
 .source-counts dd { margin: 0; color: #30363d; font-size: 14px; font-weight: 650; }
-.source-counts .attention dd { color: #b54708; }
+.source-counts .attention dd { color: var(--app-color-warning); }
 
 .snapshot-note {
   padding: 0 2px;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 .snapshot-note span { color: #4f5b66; }
 
@@ -241,7 +241,7 @@ function formatBytes(value: number) {
   background: #a8b1ba;
   content: "";
 }
-.source-row.is-current::before { background: #16855b; }
+.source-row.is-current::before { background: var(--app-color-success); }
 .source-row.is-stale::before { background: #d97706; }
 .source-row:hover { background: #fbfcfd; }
 
@@ -257,7 +257,7 @@ function formatBytes(value: number) {
   width: 34px;
   height: 34px;
   place-items: center;
-  color: #0066cc;
+  color: var(--app-color-action);
   border: 1px solid #d5e4f2;
   border-radius: 6px;
   background: #f0f7fd;
@@ -266,7 +266,7 @@ function formatBytes(value: number) {
   margin: 0 0 3px;
   overflow: hidden;
   color: #252b31;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 650;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -276,7 +276,7 @@ function formatBytes(value: number) {
   margin: 0;
   overflow: hidden;
   color: #63707c;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -286,12 +286,12 @@ function formatBytes(value: number) {
   margin: 4px 0 2px;
   overflow: hidden;
   color: #596570;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
-.source-identity small { color: var(--app-text-muted); font-size: 11px; }
+.source-identity small { color: var(--app-text-muted); font-size: 13px; }
 
 .source-status,
 .source-card-link {
@@ -303,10 +303,10 @@ function formatBytes(value: number) {
 .source-status span,
 .source-card-link span {
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.4;
 }
-.source-card-link b { color: #44515d; font-size: 12px; font-weight: 600; }
+.source-card-link b { color: #44515d; font-size: 14px; font-weight: 600; }
 .source-card-link .muted-link { color: var(--app-text-muted); font-weight: 500; }
 
 .source-actions {

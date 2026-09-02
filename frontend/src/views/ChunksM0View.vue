@@ -403,7 +403,7 @@ watch(
   align-items: center;
   gap: 8px;
   color: #73737a;
-  font-size: 11px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -411,7 +411,7 @@ watch(
   max-width: 180px;
   overflow: hidden;
   color: #303036;
-  font-size: 13px;
+  font-size: 15px;
   text-overflow: ellipsis;
 }
 
@@ -440,7 +440,7 @@ watch(
   padding-top: 6px;
   color: #356d57;
   border-top: 1px solid #eef0f2;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .retrieval-diagnostics > span {
@@ -512,12 +512,12 @@ watch(
 
 .results-head b {
   color: #303036;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .results-head span {
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .search-hit-list {
@@ -544,7 +544,7 @@ watch(
 
 .search-hit-list > button.active {
   background: #edf5fd;
-  box-shadow: inset 3px 0 #0066cc;
+  box-shadow: inset 3px 0 var(--app-color-action);
 }
 
 .hit-title {
@@ -556,7 +556,7 @@ watch(
 
 .hit-title b {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -567,20 +567,20 @@ watch(
   color: #5c6d78;
   border-radius: 3px;
   background: #e8edf0;
-  font: 11px Consolas, monospace;
+  font: 13px Consolas, monospace;
 }
 
 .hit-title em {
   flex: none;
-  color: #16855b;
-  font-size: 11px;
+  color: var(--app-color-success);
+  font-size: 13px;
   font-style: normal;
 }
 
 .search-hit-list small {
   overflow: hidden;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -590,7 +590,7 @@ watch(
   margin: 0;
   overflow: hidden;
   color: #5d5d64;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.5;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -598,7 +598,7 @@ watch(
 
 .hit-channels {
   color: #356d57;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -667,7 +667,7 @@ watch(
     background: transparent;
     border: 0;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .mobile-pane-switch button.active {

@@ -411,7 +411,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
   border-bottom: 2px solid transparent;
   background: none;
   color: #65656c;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .registry-tabs button:hover {
@@ -419,7 +419,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
 }
 
 .registry-tabs button.active {
-  border-color: #0066cc;
+  border-color: var(--app-color-action);
   color: #005eb8;
   font-weight: 600;
 }
@@ -429,7 +429,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
   border-radius: 4px;
   background: #f1f3f5;
   color: #5e6670;
-  font: 11px Consolas, monospace;
+  font: 13px Consolas, monospace;
 }
 
 .registry-body {
@@ -497,7 +497,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
   margin-top: 6px;
   overflow: hidden;
   color: #71717a;
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -519,14 +519,14 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
 .model-card dt {
   margin-bottom: 4px;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .model-card dd {
   margin: 0;
   overflow: hidden;
   color: #4a4a4f;
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -555,7 +555,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
 
 .empty-registry p {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .dialog-form {

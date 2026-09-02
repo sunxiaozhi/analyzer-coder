@@ -401,17 +401,17 @@ function save() {
 
 <style scoped>
 .editor-thesis { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; margin: -8px 0 18px; padding: 12px 14px; color: #25313c; border-left: 4px solid #2f6f94; background: #f2f7fa; }
-.editor-thesis > span { color: #2f6f94; font: 700 11px/1.2 Consolas, monospace; letter-spacing: .1em; }
-.editor-thesis p { margin: 0; font-size: 13px; }
-.editor-thesis b { padding: 4px 9px; color: #50606d; border: 1px solid #aebdc8; border-radius: 999px; font-size: 12px; }
+.editor-thesis > span { color: #2f6f94; font: 700 13px/1.2 Consolas, monospace; letter-spacing: .1em; }
+.editor-thesis p { margin: 0; font-size: 15px; }
+.editor-thesis b { padding: 4px 9px; color: #50606d; border: 1px solid #aebdc8; border-radius: 999px; font-size: 14px; }
 .editor-thesis b[data-enforcement='ADVISORY'] { color: #8a5a1d; border-color: #d5a258; background: #fff8e9; }
 .editor-thesis b[data-enforcement='REQUIRED'] { color: #983d32; border-color: #d78a7f; background: #fff2f0; }
 .knowledge-card-form { max-height: calc(94vh - 176px); padding-right: 8px; overflow: auto; overscroll-behavior: contain; }
 .form-section { display: grid; grid-template-columns: 58px minmax(0, 1fr); }
 .section-marker { position: relative; display: flex; align-items: center; flex-direction: column; gap: 2px; color: #2f6f94; }
 .section-marker::after { position: absolute; top: 42px; bottom: 0; width: 1px; background: #cbd9e2; content: ''; }
-.section-marker span { font: 700 12px/1 Consolas, monospace; }
-.section-marker small { color: #768794; font-size: 10px; letter-spacing: .12em; }
+.section-marker span { font: 700 14px/1 Consolas, monospace; }
+.section-marker small { color: #768794; font-size: 13px; letter-spacing: .12em; }
 .section-body { min-width: 0; padding: 0 0 20px 12px; }
 .form-grid { display: grid; gap: 14px; }
 .title-grid { grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); }
@@ -421,18 +421,18 @@ function save() {
 .ci-policy-grid { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); margin-top: 14px; }
 .full-width { width: 100%; }
 .enforcement-option { display: grid; line-height: 1.35; }
-.enforcement-option span { color: var(--el-text-color-secondary); font-size: 11px; }
+.enforcement-option span { color: var(--el-text-color-secondary); font-size: 13px; }
 .engineering-collapse { margin: 2px 0 16px 58px; border-top-color: #cbd9e2; border-bottom-color: #cbd9e2; }
 .collapse-title { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; padding-right: 12px; }
-.collapse-title > span { color: #2f6f94; font: 700 11px/1 Consolas, monospace; }
+.collapse-title > span { color: #2f6f94; font: 700 13px/1 Consolas, monospace; }
 .collapse-title > div { display: grid; line-height: 1.3; }
 .collapse-title small { color: var(--el-text-color-secondary); font-weight: 400; }
-.collapse-title em { color: #667784; font-size: 12px; font-style: normal; }
+.collapse-title em { color: #667784; font-size: 14px; font-style: normal; }
 .engineering-spine { padding-top: 18px; }
 .engineering-spine .form-section:last-child .section-marker::after { display: none; }
 .section-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
 .section-heading h3 { margin: 0; color: #25313c; font-size: 15px; }
-.section-heading p { margin: 0; color: #768794; font-size: 12px; }
+.section-heading p { margin: 0; color: #768794; font-size: 14px; }
 .owner-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, .75fr); column-gap: 20px; }
 .owner-row .section-heading { display: block; }
 .owner-row .section-heading p { margin-top: 4px; }
@@ -441,7 +441,7 @@ function save() {
 .attachment-field { margin-top: 20px; }
 .attachment-field :deep(.el-form-item__content) { display: grid; gap: 10px; }
 .upload-area { display: flex; align-items: center; gap: 12px; }
-.upload-area > span { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.5; }
+.upload-area > span { color: var(--el-text-color-secondary); font-size: 14px; line-height: 1.5; }
 .upload-button { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 7px 13px; color: #2f6f94; border: 1px solid #2f6f94; border-radius: 6px; cursor: pointer; }
 .upload-button input { display: none; }
 @media (max-width: 760px) {

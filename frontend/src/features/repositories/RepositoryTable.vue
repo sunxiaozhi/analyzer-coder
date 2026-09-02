@@ -166,6 +166,6 @@ function command(action: string, row: Repository) {
 .dropdown-indicator {
   width: 12px;
   height: 12px;
-  font-size: 12px;
+  font-size: 14px;
 }
 </style>

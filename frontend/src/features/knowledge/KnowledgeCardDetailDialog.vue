@@ -131,7 +131,7 @@ const hasObligations = computed(() => Boolean(props.card && (
   gap: 10px;
   margin-bottom: 20px;
   color: var(--el-text-color-secondary);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .detail-content {
@@ -140,13 +140,13 @@ const hasObligations = computed(() => Boolean(props.card && (
 }
 .engineering-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 0 20px; border-top: 1px solid #dce4ea; border-bottom: 1px solid #dce4ea; }
 .engineering-facts > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; padding: 9px 4px; }
-.engineering-facts dt { color: #71808b; font-size: 12px; }
-.engineering-facts dd { min-width: 0; margin: 0; overflow: hidden; color: #283640; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.engineering-facts dt { color: #71808b; font-size: 14px; }
+.engineering-facts dd { min-width: 0; margin: 0; overflow: hidden; color: #283640; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .engineering-detail { display: grid; gap: 8px; margin-top: 18px; padding: 14px 0 2px; border-top: 1px solid #dce4ea; }
 .engineering-detail h3 { margin: 0 0 2px; color: #283640; font-size: 14px; }
 .engineering-detail > div { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; }
-.engineering-detail b { width: 54px; color: #71808b; font-size: 12px; }
-.engineering-detail code, .engineering-detail span { padding: 3px 6px; color: #31566d; border-radius: 4px; background: #eef5f8; font-size: 12px; }
+.engineering-detail b { width: 54px; color: #71808b; font-size: 14px; }
+.engineering-detail code, .engineering-detail span { padding: 3px 6px; color: #31566d; border-radius: 4px; background: #eef5f8; font-size: 14px; }
 
 .detail-content :deep(img) {
   max-width: 100%;
@@ -167,7 +167,7 @@ const hasObligations = computed(() => Boolean(props.card && (
   gap: 10px;
   margin: 20px 0 12px;
   color: var(--el-color-primary);
-  font-size: 13px;
+  font-size: 15px;
 }
 .detail-code-links {
   display: grid;
@@ -177,7 +177,7 @@ const hasObligations = computed(() => Boolean(props.card && (
   border-top: 1px solid #eceef1;
 }
 
-.detail-code-links h3 { margin: 0 0 2px; font-size: 13px; }
+.detail-code-links h3 { margin: 0 0 2px; font-size: 15px; }
 
 .detail-code-links article {
   display: grid;
@@ -193,7 +193,7 @@ const hasObligations = computed(() => Boolean(props.card && (
 .detail-code-links article > div { display: grid; min-width: 0; }
 .detail-code-links b,
 .detail-code-links span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.detail-code-links span { color: #71717a; font-size: 11px; }
+.detail-code-links span { color: #71717a; font-size: 13px; }
 
 @media (max-width: 760px) {
   .detail-code-links article { grid-template-columns: minmax(0, 1fr) auto; }

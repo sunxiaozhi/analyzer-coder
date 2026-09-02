@@ -103,7 +103,7 @@ function citationReference(citation: Citation): CodeReference | null {
   cursor: pointer;
   list-style-position: inside;
 }
-.answer-evidence > summary b { font-size: 11px; }
+.answer-evidence > summary b { font-size: 13px; }
 .evidence-card {
   display: grid;
   gap: 10px;
@@ -121,15 +121,15 @@ function citationReference(citation: Citation): CodeReference | null {
   gap: 5px;
   padding: 3px 7px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
 }
-.source-badge.code { color: #005eb8; background: #eaf3fd; }
+.source-badge.code { color: #005eb8; background: var(--app-color-action-soft); }
 .source-badge.knowledge { color: #6d4a00; background: #fff3ce; }
-.evidence-card > p { margin: 0; color: #666; font-size: 11px; line-height: 1.55; }
+.evidence-card > p { margin: 0; color: #666; font-size: 13px; line-height: 1.55; }
 .evidence-title { display: grid; gap: 4px; }
-.evidence-title b { overflow-wrap: anywhere; color: #242426; font-size: 13px; line-height: 1.45; }
-.evidence-title span { color: #8a6a24; font-size: 11px; letter-spacing: .04em; }
+.evidence-title b { overflow-wrap: anywhere; color: #242426; font-size: 15px; line-height: 1.45; }
+.evidence-title span { color: #8a6a24; font-size: 13px; letter-spacing: .04em; }
 .code-location {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -140,14 +140,14 @@ function citationReference(citation: Citation): CodeReference | null {
   border-radius: 4px;
   background: #f6f9fc;
 }
-.code-location span { overflow-wrap: anywhere; color: #4f5e6c; font-size: 11px; line-height: 1.55; }
-.code-location small { color: #005eb8; font-size: 11px; font-weight: 650; white-space: nowrap; }
+.code-location span { overflow-wrap: anywhere; color: #4f5e6c; font-size: 13px; line-height: 1.55; }
+.code-location small { color: #005eb8; font-size: 13px; font-weight: 650; white-space: nowrap; }
 .evidence-excerpt { max-height:84px; padding:9px 10px; overflow:hidden; border:1px solid #e4e7ea; border-radius:4px; background:#fafbfc; white-space:pre-wrap; }
 .evidence-actions { gap: 6px; }
 .knowledge-code-links { display: grid; gap: 7px; padding-top: 10px; border-top: 1px dashed #dde3e9; }
 .linked-code-heading { display: flex; align-items: center; justify-content: space-between; }
-.linked-code-heading > span { color: #3f4852; font-size: 11px; font-weight: 650; }
-.linked-code-heading > small { color: var(--app-text-muted); font-size: 11px; }
+.linked-code-heading > span { color: #3f4852; font-size: 13px; font-weight: 650; }
+.linked-code-heading > small { color: var(--app-text-muted); font-size: 13px; }
 .knowledge-code-links button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -165,10 +165,10 @@ function citationReference(citation: Citation): CodeReference | null {
 .knowledge-code-links button:hover,
 .knowledge-code-links button:focus-visible { border-color: #8cb9e4; background: #eef6fd; outline: none; }
 .code-reference-main { display: grid; min-width: 0; gap: 3px; }
-.code-reference-main b { overflow-wrap: anywhere; color: #005eb8; font-size: 11px; }
-.code-reference-main small { overflow-wrap: anywhere; color: var(--app-text-muted); font-size: 11px; line-height: 1.45; }
+.code-reference-main b { overflow-wrap: anywhere; color: #005eb8; font-size: 13px; }
+.code-reference-main small { overflow-wrap: anywhere; color: var(--app-text-muted); font-size: 13px; line-height: 1.45; }
 .code-reference-meta { display: grid; justify-items: end; gap: 3px; color: var(--app-text-muted); white-space: nowrap; }
-.code-reference-meta small { font-size: 11px; }
-.code-reference-meta em { padding: 2px 5px; color: #a44b20; border-radius: 3px; background: #fff0e8; font-size: 11px; font-style: normal; }
+.code-reference-meta small { font-size: 13px; }
+.code-reference-meta em { padding: 2px 5px; color: #a44b20; border-radius: 3px; background: #fff0e8; font-size: 13px; font-style: normal; }
 @media (max-width:760px) { .answer-evidence>summary span { display:none; } }
 </style>

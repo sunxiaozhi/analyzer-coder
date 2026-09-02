@@ -38,7 +38,7 @@ function actionable() {
 </template>
 
 <style scoped>
-.evidence-link { display: inline-flex; min-width: 0; align-items: center; gap: 4px; padding: 0; overflow: hidden; color: #346b98; border: 0; background: transparent; font: 10px "SFMono-Regular", Consolas, monospace; text-align: left; }
+.evidence-link { display: inline-flex; min-width: 0; align-items: center; gap: 4px; padding: 0; overflow: hidden; color: #346b98; border: 0; background: transparent; font: 13px "SFMono-Regular", Consolas, monospace; text-align: left; }
 button.evidence-link { cursor: pointer; }
 button.evidence-link:hover { color: #174f7d; text-decoration: underline; }
 .evidence-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

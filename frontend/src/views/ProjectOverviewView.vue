@@ -104,7 +104,7 @@ function openKnowledge() {
   max-width: 430px;
   margin: 0 0 18px;
   color: #7d8992;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.6;
 }
 </style>

@@ -74,12 +74,12 @@ function shortHash(value: string | null) {
   place-items: center;
   border-radius: 6px;
   background: #edf5fd;
-  color: #0066cc;
+  color: var(--app-color-action);
 }
 
 .summary-icon.success {
-  background: #eaf6f0;
-  color: #16855b;
+  background: var(--app-color-success-soft);
+  color: var(--app-color-success);
 }
 
 .summary-icon.warning {
@@ -104,13 +104,13 @@ function shortHash(value: string | null) {
 
 .vector-summary .model-name {
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .vector-summary small,
 .vector-summary footer {
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .vector-summary footer {

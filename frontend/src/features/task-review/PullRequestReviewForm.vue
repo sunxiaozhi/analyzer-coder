@@ -122,23 +122,23 @@ function submit() {
 <style scoped>
 .provider-form { display: grid; gap: 15px; padding: 20px; border: 1px solid #d8e2df; border-radius: 10px; background: #fff; }
 .provider-form > header { display: grid; grid-template-columns: 36px minmax(190px, auto) minmax(260px, 1fr); align-items: center; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid #e5ece9; }
-.provider-mark { display: grid; width: 34px; height: 34px; place-items: center; color: #176b55; border: 1px solid #bcd8cf; border-radius: 8px; background: #edf8f4; }
-.provider-form header span, label > span { color: #687782; font-size: 10px; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; }
+.provider-mark { display: grid; width: 34px; height: 34px; place-items: center; color: var(--app-color-success); border: 1px solid #bcd8cf; border-radius: 8px; background: #edf8f4; }
+.provider-form header span, label > span { color: #687782; font-size: 13px; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; }
 .provider-form h2 { margin: 3px 0 0; color: #21322d; font-size: 17px; }
-.provider-form header p { justify-self: end; max-width: 540px; margin: 0; color: #687b74; font-size: 11px; line-height: 1.55; text-align: right; }
+.provider-form header p { justify-self: end; max-width: 540px; margin: 0; color: #687b74; font-size: 13px; line-height: 1.55; text-align: right; }
 .provider-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 label { display: grid; gap: 7px; }
 label small { color: #98a3ab; font-weight: 500; text-transform: none; }
 input, select, textarea, .api-toggle button { width: 100%; color: #22312d; border: 1px solid #ccd9d5; border-radius: 7px; outline: none; background: #fbfdfc; }
 input, select, .api-toggle button { height: 38px; padding: 0 10px; }
 textarea { min-height: 68px; padding: 10px 11px; resize: vertical; line-height: 1.5; }
-input:focus, select:focus, textarea:focus, .api-toggle button:focus-visible { border-color: #27836a; box-shadow: 0 0 0 3px #27836a1a; }
+input:focus, select:focus, textarea:focus, .api-toggle button:focus-visible { border-color: var(--app-color-success); box-shadow: 0 0 0 3px rgb(33 138 96 / 12%); }
 .api-toggle button { color: #4f645d; text-align: left; cursor: pointer; }
-.api-toggle button[aria-pressed="true"] { color: #176b55; border-color: #85b9aa; background: #f1faf7; }
-aside { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 10px 12px; color: #46645b; border-left: 3px solid #27836a; background: #f0f8f5; font-size: 11px; line-height: 1.5; }
+.api-toggle button[aria-pressed="true"] { color: var(--app-color-success); border-color: #85b9aa; background: #f1faf7; }
+aside { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 10px 12px; color: #46645b; border-left: 3px solid var(--app-color-success); background: #f0f8f5; font-size: 13px; line-height: 1.5; }
 aside span { display: grid; gap: 1px; }
 footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-footer > span { color: #82918b; font-size: 10px; }
+footer > span { color: #82918b; font-size: 13px; }
 @media (max-width: 760px) {
   .provider-form { padding: 15px; }
   .provider-form > header, .provider-row { grid-template-columns: 1fr; }

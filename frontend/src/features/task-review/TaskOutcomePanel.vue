@@ -277,32 +277,32 @@ function date(value: string) {
 .outcome-header { display: grid; grid-template-columns: minmax(220px, auto) minmax(0, 1fr) auto; align-items: center; gap: 14px; }
 .outcome-title { display: flex; align-items: center; gap: 8px; color: #236d5c; }
 .outcome-title span { display: grid; }
-.outcome-title small { color: #6f857e; font: 700 9px Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.outcome-title small { color: #6f857e; font: 700 12px Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .outcome-title strong { color: #203832; font-size: 14px; }
-.outcome-header > p { margin: 0; color: #657770; font-size: 11px; }
+.outcome-header > p { margin: 0; color: #657770; font-size: 13px; }
 .outcome-ledger { display: grid; gap: 7px; }
 .outcome-ledger article { padding: 11px 12px; border: 1px solid #dce7e3; border-radius: 6px; background: #fbfdfc; }
-.outcome-meta { display: flex; align-items: center; gap: 7px; color: #60736d; font-size: 11px; }
+.outcome-meta { display: flex; align-items: center; gap: 7px; color: #60736d; font-size: 13px; }
 .outcome-meta b { color: #2b443d; }
-.outcome-ledger article > p { margin: 8px 0; color: #344740; font-size: 12px; }
-.outcome-ledger footer { display: flex; flex-wrap: wrap; gap: 10px; color: #71817c; font-size: 10px; }
+.outcome-ledger article > p { margin: 8px 0; color: #344740; font-size: 14px; }
+.outcome-ledger footer { display: flex; flex-wrap: wrap; gap: 10px; color: #71817c; font-size: 13px; }
 .outcome-ledger footer em { color: #a45a35; font-style: normal; }
-.outcome-ledger ul { display: grid; gap: 3px; margin: 8px 0 0; padding: 8px 0 0 18px; color: #5e6e69; font-size: 10px; border-top: 1px solid #e2eae7; }
-.outcome-empty { margin: 0; padding: 12px; color: #73817d; font-size: 11px; text-align: center; border: 1px dashed #cfdbd7; }
+.outcome-ledger ul { display: grid; gap: 3px; margin: 8px 0 0; padding: 8px 0 0 18px; color: #5e6e69; font-size: 13px; border-top: 1px solid #e2eae7; }
+.outcome-empty { margin: 0; padding: 12px; color: #73817d; font-size: 13px; text-align: center; border: 1px dashed #cfdbd7; }
 .outcome-form { display: grid; gap: 16px; padding-top: 14px; border-top: 1px solid #dce6e2; }
 .form-lead { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.2fr); gap: 10px; }
-.form-lead label { display: grid; gap: 5px; color: #52655f; font-size: 11px; }
+.form-lead label { display: grid; gap: 5px; color: #52655f; font-size: 13px; }
 .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .result-grid section, .feedback-editor, .knowledge-assessment { display: grid; align-content: start; gap: 7px; padding: 10px; border: 1px solid #dde6e3; border-radius: 6px; }
-.result-grid header, .feedback-editor header, .knowledge-assessment header { display: flex; align-items: center; justify-content: space-between; color: #354c45; font-size: 11px; }
+.result-grid header, .feedback-editor header, .knowledge-assessment header { display: flex; align-items: center; justify-content: space-between; color: #354c45; font-size: 13px; }
 .feedback-editor header > div, .knowledge-assessment header { gap: 3px; }
 .feedback-editor header > div { display: grid; }
-.feedback-editor small, .knowledge-assessment small { color: #75847f; font-size: 9px; font-weight: 400; }
+.feedback-editor small, .knowledge-assessment small { color: #75847f; font-size: 12px; font-weight: 400; }
 .result-row { display: grid; grid-template-columns: minmax(120px, 1fr) 100px minmax(130px, 1fr) 28px; gap: 6px; }
 .feedback-row { display: grid; grid-template-columns: auto minmax(150px, .8fr) minmax(160px, 1fr) 28px; align-items: center; gap: 7px; }
 .feedback-row.is-missed { grid-template-columns: auto 120px minmax(140px, .8fr) minmax(160px, 1fr) 28px; }
-.knowledge-assessment > div { display: grid; grid-template-columns: minmax(150px, .7fr) 140px minmax(180px, 1.3fr); align-items: center; gap: 7px; color: #475c55; font-size: 11px; }
-.form-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #71817c; font-size: 10px; }
+.knowledge-assessment > div { display: grid; grid-template-columns: minmax(150px, .7fr) 140px minmax(180px, 1.3fr); align-items: center; gap: 7px; color: #475c55; font-size: 13px; }
+.form-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #71817c; font-size: 13px; }
 @media (max-width: 900px) {
   .outcome-header, .form-lead, .result-grid { grid-template-columns: 1fr; }
   .result-row, .feedback-row, .knowledge-assessment > div { grid-template-columns: 1fr; }

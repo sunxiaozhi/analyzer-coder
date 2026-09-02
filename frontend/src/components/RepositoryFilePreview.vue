@@ -209,7 +209,7 @@ watch(
   width: 62px;
   height: 62px;
   place-items: center;
-  color: #0066cc;
+  color: var(--app-color-action);
   background: #edf5fd;
   border: 1px solid #c9dff3;
   border-radius: 16px;
@@ -233,7 +233,7 @@ watch(
 .preview-empty-copy p {
   margin: 0;
   color: var(--app-text-muted);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -249,7 +249,7 @@ watch(
   background: rgb(255 255 255 / 78%);
   border: 1px solid #dce4eb;
   border-radius: 7px;
-  font-size: 11px;
+  font-size: 13px;
   box-shadow: 0 3px 12px rgb(30 54 78 / 5%);
 }
 
@@ -265,9 +265,9 @@ watch(
   height: 18px;
   place-items: center;
   color: #005eb8;
-  background: #eaf3fd;
+  background: var(--app-color-action-soft);
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .preview-empty-steps i {
@@ -276,7 +276,7 @@ watch(
 }
 
 .preview-empty.is-error .preview-empty-icon {
-  color: #b54708;
+  color: var(--app-color-warning);
   background: #fff4e8;
   border-color: #f2d0ad;
 }
@@ -321,7 +321,7 @@ watch(
   margin: 4px 0 0;
   overflow: hidden;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -331,7 +331,7 @@ watch(
   flex-wrap: wrap;
   gap: 7px 16px;
   color: #66666d;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .focus-badge {
@@ -345,7 +345,7 @@ watch(
   overflow: auto;
   color: #e6edf3;
   background: #202124;
-  font: 12px/1.8 "SFMono-Regular", Consolas, monospace;
+  font: 14px/1.8 "SFMono-Regular", Consolas, monospace;
   overscroll-behavior: contain;
 }
 

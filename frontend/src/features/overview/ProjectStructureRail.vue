@@ -82,9 +82,9 @@ const moduleRows = computed(() => props.modules.map((module, index) => ({
   border-bottom: 1px solid #e5eaef;
 }
 
-.eyebrow { color: var(--app-text-muted); font-size: 11px; font-weight: 650; letter-spacing: .04em; }
+.eyebrow { color: var(--app-text-muted); font-size: 13px; font-weight: 650; letter-spacing: .04em; }
 .panel-head h2 { margin: 5px 0 0; color: #23313d; font-size: 15px; }
-.module-total { color: var(--app-text-muted); font-size: 11px; }
+.module-total { color: var(--app-text-muted); font-size: 13px; }
 
 .structure-map {
   position: relative;
@@ -107,7 +107,7 @@ const moduleRows = computed(() => props.modules.map((module, index) => ({
   min-height: 58px;
   padding: 11px 13px;
   border: 1px solid #aec1d0;
-  border-left: 4px solid #0066cc;
+  border-left: 4px solid var(--app-color-action);
   border-radius: 6px;
   background: #fff;
   box-shadow: 0 7px 18px rgb(30 58 77 / 9%);
@@ -123,10 +123,10 @@ const moduleRows = computed(() => props.modules.map((module, index) => ({
   content: '';
 }
 
-.root-icon { display: grid; width: 32px; height: 32px; place-items: center; color: #fff; border-radius: 5px; background: #0066cc; }
+.root-icon { display: grid; width: 32px; height: 32px; place-items: center; color: #fff; border-radius: 5px; background: var(--app-color-action); }
 .repository-root div { display: grid; min-width: 0; gap: 3px; }
-.repository-root strong { overflow: hidden; color: #273745; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.repository-root small { color: var(--app-text-muted); font-size: 11px; }
+.repository-root strong { overflow: hidden; color: #273745; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.repository-root small { color: var(--app-text-muted); font-size: 13px; }
 
 .module-rail { position: relative; display: grid; align-content: start; gap: 9px; padding-left: 18px; }
 .module-rail::before { position: absolute; top: 28px; bottom: 28px; left: 0; width: 1px; background: #91a6b7; content: ''; }
@@ -143,19 +143,19 @@ const moduleRows = computed(() => props.modules.map((module, index) => ({
   background: rgb(255 255 255 / 94%);
 }
 .module-row::before { position: absolute; top: 50%; left: -19px; width: 18px; height: 1px; background: #91a6b7; content: ''; }
-.module-order { color: var(--app-text-muted); font: 11px Consolas, monospace; }
+.module-order { color: var(--app-text-muted); font: 13px Consolas, monospace; }
 .module-track { height: 4px; overflow: hidden; border-radius: 3px; background: #e7edf1; }
-.module-bar { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #0066cc, #90bde5); }
-.module-row strong { overflow: hidden; color: #344653; font: 600 12px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.module-row small { color: var(--app-text-muted); font-size: 11px; text-align: right; }
+.module-bar { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--app-color-action), #90bde5); }
+.module-row strong { overflow: hidden; color: #344653; font: 600 14px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.module-row small { color: var(--app-text-muted); font-size: 13px; text-align: right; }
 
 .entry-strip { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 10px; padding: 13px 16px; border-top: 1px solid #e5eaef; }
-.entry-label { display: flex; align-items: center; gap: 6px; color: #5e6d78; font-size: 12px; font-weight: 650; }
+.entry-label { display: flex; align-items: center; gap: 6px; color: #5e6d78; font-size: 14px; font-weight: 650; }
 .entry-list { display: flex; min-width: 0; flex-wrap: wrap; gap: 6px; }
-.entry-list button { display: flex; max-width: 220px; align-items: center; gap: 5px; padding: 5px 7px; color: #315870; border: 1px solid #dbe4ea; border-radius: 4px; background: #f8fafb; font: 11px Consolas, monospace; }
-.entry-list button:hover, .entry-list button:focus-visible { color: #0066cc; border-color: #9cc2e4; outline: none; background: #f0f7fd; }
+.entry-list button { display: flex; max-width: 220px; align-items: center; gap: 5px; padding: 5px 7px; color: #315870; border: 1px solid #dbe4ea; border-radius: 4px; background: #f8fafb; font: 13px Consolas, monospace; }
+.entry-list button:hover, .entry-list button:focus-visible { color: var(--app-color-action); border-color: #9cc2e4; outline: none; background: #f0f7fd; }
 .entry-list button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.entry-empty { color: var(--app-text-muted); font-size: 11px; }
+.entry-empty { color: var(--app-text-muted); font-size: 13px; }
 
 @media (max-width: 860px) {
   .structure-map { grid-template-columns: 1fr; }

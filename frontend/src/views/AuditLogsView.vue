@@ -55,7 +55,7 @@ onMounted(() => void load());
 .audit-heading { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 13px 16px; }
 .audit-mark { display: grid; width: 34px; height: 34px; place-items: center; color: #175d86; border-radius: 6px; background: #eaf3f8; }
 .audit-heading h1 { margin: 0; font-size: 16px; }
-.audit-heading p { margin: 4px 0 0; color: var(--app-text-muted); font-size: 11px; }
+.audit-heading p { margin: 4px 0 0; color: var(--app-text-muted); font-size: 13px; }
 .audit-surface { min-height: 0; padding-top: 2px; }
 @media (max-width: 760px) {
   .audit-page { display: block; overflow: visible; }

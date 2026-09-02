@@ -238,29 +238,29 @@ async function remove(project: EngineeringProject) {
 </template>
 
 <style scoped>
-.project-thesis { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; margin: -4px 0 16px; padding: 12px 14px; color: #24546b; border-left: 4px solid #2f7892; background: #edf7f8; }
+.project-thesis { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; margin: -4px 0 16px; padding: 12px 14px; color: #24546b; border-left: 4px solid #2f7892; background: var(--app-color-evidence-soft); }
 .project-thesis div { display: grid; gap: 2px; }
-.project-thesis span { color: #637783; font-size: 12px; }
+.project-thesis span { color: #637783; font-size: 14px; }
 .project-workbench { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 560px; max-height: 68vh; border: 1px solid #d7e2e7; }
 .project-index { overflow: auto; padding: 8px; border-right: 1px solid #d7e2e7; background: #f5f8f9; }
 .project-index button { display: grid; gap: 4px; width: 100%; margin-bottom: 6px; padding: 11px; text-align: left; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; }
 .project-index button:hover, .project-index button.active { border-color: #b6d2dc; background: white; }
-.project-index span, .project-index em { color: #71838d; font-size: 11px; font-style: normal; }
+.project-index span, .project-index em { color: #71838d; font-size: 13px; font-style: normal; }
 .project-index em { color: #a45a35; }
 .project-editor { overflow: auto; padding: 18px 20px; }
 .project-title-row { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(0, 1.3fr); gap: 12px; }
 .project-editor section { margin-top: 22px; padding-top: 14px; border-top: 1px solid #dbe5e9; }
 .project-editor header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .project-editor header > div { display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 8px; }
-.project-editor header span { color: #2f7892; font: 700 11px Consolas, monospace; }
+.project-editor header span { color: #2f7892; font: 700 13px Consolas, monospace; }
 .project-editor header small { grid-column: 2; color: #71838d; }
 .member-grid { display: grid; gap: 8px; }
 .member-row { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.2fr) 34px; gap: 8px; }
 .contract-card { display: grid; gap: 8px; margin-bottom: 10px; padding: 12px; border: 1px solid #d7e2e7; border-radius: 7px; background: #fbfcfc; }
 .contract-heading { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(180px, 1fr) auto auto 34px; gap: 8px; align-items: center; }
-.contract-heading code { color: #60727c; font-size: 10px; }
+.contract-heading code { color: #60727c; font-size: 13px; }
 .contract-side { display: grid; grid-template-columns: 54px 180px minmax(0, 1fr); align-items: center; gap: 8px; }
-.contract-side b { color: #5d707a; font-size: 12px; }
+.contract-side b { color: #5d707a; font-size: 14px; }
 .footer-spacer { display: inline-block; width: calc(100% - 310px); }
 @media (max-width: 760px) {
   .project-workbench { grid-template-columns: 1fr; max-height: none; }

@@ -72,23 +72,23 @@ const reasonLabels: Record<string, string> = {
 </template>
 
 <style scoped>
-.drift-panel { display: grid; gap: 9px; margin: 17px 0 4px; padding: 13px; color: #775224; border: 1px solid #ead8c1; border-left: 4px solid #b96a19; border-radius: 7px; background: #fffaf3; }
-.drift-panel[data-state="CURRENT"] { color: #286149; border-color: #cfe3da; border-left-color: #1f7a5a; background: #f5faf7; }
+.drift-panel { display: grid; gap: 9px; margin: 17px 0 4px; padding: 13px; color: #775224; border: 1px solid #ead8c1; border-left: 4px solid var(--app-color-warning); border-radius: 7px; background: var(--app-color-warning-soft); }
+.drift-panel[data-state="CURRENT"] { color: #286149; border-color: #cfe3da; border-left-color: var(--app-color-success); background: #f5faf7; }
 .drift-panel > header { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 7px; }
 .drift-panel > header div { display: grid; gap: 1px; }
-.drift-panel > header small { font: 700 8px "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
-.drift-panel h3 { margin: 0; color: #43382d; font-size: 12px; }
-.drift-version { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 8px; color: #6e665c; border: 1px solid #eadfce; border-radius: 5px; background: #fff; font-size: 9px; }
+.drift-panel > header small { font: 700 12px "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.drift-panel h3 { margin: 0; color: #43382d; font-size: 14px; }
+.drift-version { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 8px; color: #6e665c; border: 1px solid #eadfce; border-radius: 5px; background: #fff; font-size: 12px; }
 .drift-version code, .drift-panel article code { font-family: "SFMono-Regular", Consolas, monospace; }
 .drift-version time { margin-left: auto; }
 .drift-panel article { display: grid; grid-template-columns: minmax(130px, auto) minmax(0, 1fr); gap: 3px 9px; padding: 8px 9px; border-left: 2px solid #d6954d; background: #fff; }
-.drift-panel article b { color: #6f471e; font-size: 10px; }
-.drift-panel article span { color: #6d6255; font-size: 10px; }
-.drift-panel article code, .drift-panel article small { grid-column: 1 / -1; overflow-wrap: anywhere; color: #7c6c59; font-size: 9px; }
-.drift-panel > p { margin: 0; color: #756959; font-size: 10px; line-height: 1.5; }
-.diff-link { display: inline-flex; justify-self: start; align-items: center; gap: 6px; min-height: 32px; padding: 0 9px; color: #365c73; border: 1px solid #bfd0db; border-radius: 5px; background: #f7fafc; font-size: 10px; font-weight: 650; }
-.diff-link:hover { color: #2b6cb0; border-color: #7ca6c7; }
-.diff-link:focus-visible { outline: 3px solid #2b6cb02d; outline-offset: 2px; }
+.drift-panel article b { color: #6f471e; font-size: 13px; }
+.drift-panel article span { color: #6d6255; font-size: 13px; }
+.drift-panel article code, .drift-panel article small { grid-column: 1 / -1; overflow-wrap: anywhere; color: #7c6c59; font-size: 12px; }
+.drift-panel > p { margin: 0; color: #756959; font-size: 13px; line-height: 1.5; }
+.diff-link { display: inline-flex; justify-self: start; align-items: center; gap: 6px; min-height: 32px; padding: 0 9px; color: #365c73; border: 1px solid #bfd0db; border-radius: 5px; background: #f7fafc; font-size: 13px; font-weight: 650; }
+.diff-link:hover { color: var(--app-color-action); border-color: #7ca6c7; }
+.diff-link:focus-visible { outline: 3px solid var(--app-focus-ring); outline-offset: 2px; }
 .drift-panel footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding-top: 3px; border-top: 1px solid #eadfce; }
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

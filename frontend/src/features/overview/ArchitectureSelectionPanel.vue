@@ -92,29 +92,29 @@ const nodeDetail = computed(() => {
 <style scoped>
 .selection-panel { display: flex; min-width: 0; min-height: 100%; flex-direction: column; background: #fff; }
 .selection-title { display: grid; gap: 4px; padding: 15px; border-bottom: 1px solid #ececef; }
-.selection-title span { color: var(--app-text-muted); font-size: 11px; }
-.selection-title strong { overflow-wrap: anywhere; color: #1d1d1f; font: 600 12px "SFMono-Regular", Consolas, monospace; }
-.selection-title small { color: var(--app-text-muted); font-size: 11px; }
+.selection-title span { color: var(--app-text-muted); font-size: 13px; }
+.selection-title strong { overflow-wrap: anywhere; color: #1d1d1f; font: 600 14px "SFMono-Regular", Consolas, monospace; }
+.selection-title small { color: var(--app-text-muted); font-size: 13px; }
 .selection-section { padding: 13px 15px; border-bottom: 1px solid #ececef; }
 .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.section-title h3 { margin: 0; color: #52525b; font-size: 12px; }
-.section-title > span { display: grid; min-width: 20px; height: 20px; place-items: center; color: var(--app-text-muted); border-radius: 999px; background: #f1f1f4; font-size: 11px; }
+.section-title h3 { margin: 0; color: #52525b; font-size: 14px; }
+.section-title > span { display: grid; min-width: 20px; height: 20px; place-items: center; color: var(--app-text-muted); border-radius: 999px; background: #f1f1f4; font-size: 13px; }
 .evidence { display: grid; gap: 4px; }
 .evidence .section-title { margin-bottom: 4px; }
-.evidence button { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 6px; padding: 6px 4px; overflow: hidden; color: #52525b; text-align: left; border: 0; border-radius: 4px; background: transparent; font: 500 11px "SFMono-Regular", Consolas, monospace; }
-.evidence button:hover, .evidence button:focus-visible { color: #0066cc; outline: none; background: #f1f7fd; }
+.evidence button { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 6px; padding: 6px 4px; overflow: hidden; color: #52525b; text-align: left; border: 0; border-radius: 4px; background: transparent; font: 500 13px "SFMono-Regular", Consolas, monospace; }
+.evidence button:hover, .evidence button:focus-visible { color: var(--app-color-action); outline: none; background: #f1f7fd; }
 .evidence button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .risks { display: grid; gap: 6px; }
 .risks article { display: grid; grid-template-columns: 18px 1fr; gap: 7px; padding: 8px; color: #8d4b31; border-left: 2px solid #c4852d; background: #fbf5ec; }
-.risks article[data-severity='HIGH'] { color: #9b3f31; border-color: #bd452f; background: #fbefed; }
+.risks article[data-severity='HIGH'] { color: #9b3f31; border-color: var(--app-color-danger); background: #fbefed; }
 .risks article div { display: grid; gap: 3px; }
-.risks strong { font-size: 12px; }
-.risks small { color: #6f625e; font-size: 12px; line-height: 1.5; }
-.empty-note { margin: 2px 0; color: var(--app-text-muted); font-size: 12px; line-height: 1.55; }
+.risks strong { font-size: 14px; }
+.risks small { color: #6f625e; font-size: 14px; line-height: 1.5; }
+.empty-note { margin: 2px 0; color: var(--app-text-muted); font-size: 14px; line-height: 1.55; }
 .selection-actions { display: grid; gap: 6px; margin-top: auto; padding: 12px 15px 15px; }
-.selection-actions button { display: flex; min-height: 32px; align-items: center; justify-content: center; gap: 5px; border-radius: 4px; font-size: 11px; }
+.selection-actions button { display: flex; min-height: 32px; align-items: center; justify-content: center; gap: 5px; border-radius: 4px; font-size: 13px; }
 .selection-actions button:focus-visible { outline: 2px solid rgb(0 102 204 / 24%); outline-offset: 2px; }
-.symbol-action { color: #fff; border: 1px solid #0066cc; background: #0066cc; }
-.module-action { color: #0066cc; border: 1px solid #d5e2ef; background: #f3f8fc; }
+.symbol-action { color: #fff; border: 1px solid var(--app-color-action); background: var(--app-color-action); }
+.module-action { color: var(--app-color-action); border: 1px solid #d5e2ef; background: #f3f8fc; }
 @media (max-width: 900px) { .selection-panel { min-height: 260px; } }
 </style>

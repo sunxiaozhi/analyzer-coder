@@ -131,7 +131,7 @@ const enforcementLabels: Record<string, string> = {
   border-radius: 4px;
   background: #f1f3f5;
   color: #5e6670;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .card-tags .tag-placeholder {
@@ -156,14 +156,14 @@ const enforcementLabels: Record<string, string> = {
 .card-meta dt {
   margin-bottom: 4px;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .card-meta dd {
   margin: 0;
   overflow: hidden;
   color: #4a4a4f;
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -37,5 +37,5 @@ const snapshotTime = computed(() =>
 .version-cell { display: grid; gap: 7px; }
 .version-main, .version-meta, .snapshot-meta { display: flex; align-items: center; gap: 9px; }
 .branch { color: var(--text-strong, #172033); font-weight: 650; }
-.digest, .snapshot-time { color: var(--text-muted, #748096); font-size: 12px; }
+.digest, .snapshot-time { color: var(--text-muted, #748096); font-size: 14px; }
 </style>
