@@ -181,12 +181,12 @@ describe('ProjectOverviewSheet', () => {
     expect(text).toContain('示例项目');
     expect(text).toContain('可用但有缺口');
     expect(text).toContain('1234567890');
-    expect(text).toContain('Snapshot snapshot');
-    expect(text).toContain('CodeGraph');
+    expect(text).toContain('快照 snapshot');
+    expect(text).toContain('代码图谱');
     expect(text).toContain('120');
     expect(text).toContain('100%');
     expect(text).toContain('知识真实性');
-    expect(text).toContain('CURRENT');
+    expect(text).toContain('当前');
     expect(text).toContain('必需但无负责人');
     expect(text).toContain('代码类型统计');
     expect(text).toContain('应用与服务');

@@ -31,8 +31,8 @@ const modelConfigId = shallowRef(props.initialDraft?.modelConfigId ?? '');
 
 const sourceOptions: { value: ChangeSource; label: string; detail: string; icon: typeof MonitorDot }[] = [
   { value: 'WORKTREE', label: '工作区', detail: '暂存、未暂存和未跟踪文件', icon: MonitorDot },
-  { value: 'SINGLE_COMMIT', label: '单 Commit', detail: '核对一个已提交版本', icon: GitCommitHorizontal },
-  { value: 'COMMIT_RANGE', label: 'Commit Range', detail: '比较两个提交之间的变化', icon: GitBranch },
+  { value: 'SINGLE_COMMIT', label: '单次提交', detail: '核对一个已提交版本', icon: GitCommitHorizontal },
+  { value: 'COMMIT_RANGE', label: '提交范围', detail: '比较两个提交之间的变化', icon: GitBranch },
 ];
 
 const canSubmit = computed(() => {
@@ -97,7 +97,7 @@ function submit() {
         </option>
       </select>
       <small v-if="modelsLoading">正在读取可用模型…</small>
-      <small v-else>模型只能总结已完成审查，并且每条建议必须引用现有证据 ID。</small>
+      <small v-else>模型只能总结已完成审查，并且每条建议必须引用现有证据标识。</small>
     </label>
 
     <fieldset class="source-field">
@@ -117,12 +117,12 @@ function submit() {
 
     <div v-if="source !== 'WORKTREE'" class="ref-fields">
       <label v-if="source === 'COMMIT_RANGE'">
-        <span>Base ref</span>
+        <span>基准引用</span>
         <input v-model="baseRef" class="mono" maxlength="200" placeholder="HEAD~1" />
       </label>
       <span v-if="source === 'COMMIT_RANGE'" class="ref-arrow">→</span>
       <label>
-        <span>{{ source === 'SINGLE_COMMIT' ? 'Commit ref' : 'Head ref' }}</span>
+        <span>{{ source === 'SINGLE_COMMIT' ? '提交引用' : '目标引用' }}</span>
         <input v-model="headRef" class="mono" maxlength="200" placeholder="HEAD" />
       </label>
     </div>
@@ -133,7 +133,7 @@ function submit() {
     </div>
 
     <footer>
-      <span>Ctrl + Enter</span>
+      <span>快捷键：Ctrl + Enter</span>
       <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
         <Play :size="14" />开始审查
       </el-button>

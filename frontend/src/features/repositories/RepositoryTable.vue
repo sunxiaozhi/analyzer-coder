@@ -69,7 +69,7 @@ function command(action: string, row: Repository) {
       <template #default="{ row }">
         <div class="artifact-rail">
           <el-tag effect="plain" :type="row.codeGraphDetected ? 'success' : 'info'">
-            CodeGraph {{ row.codeGraphDetected ? '已发布' : '未构建' }}
+            代码图谱 {{ row.codeGraphDetected ? '已发布' : '未构建' }}
           </el-tag>
           <small>{{ repositoryStatusLabel(row.repositoryStatus) }}</small>
         </div>
@@ -118,7 +118,7 @@ function command(action: string, row: Repository) {
                   command="codegraph"
                   :disabled="buildingId === row.id"
                 >
-                  {{ row.codeGraphDetected ? '重新构建 CodeGraph' : '构建 CodeGraph' }}
+                  {{ row.codeGraphDetected ? '重新构建代码图谱' : '构建代码图谱' }}
                 </el-dropdown-item>
                 <el-dropdown-item v-if="row.capabilities.canGrant" command="govern">成员与所有权</el-dropdown-item>
                 <el-dropdown-item v-if="row.capabilities.canDelete" command="remove" divided>删除仓库</el-dropdown-item>

@@ -2,6 +2,7 @@ package com.analyzercoder.application.pullrequest;
 
 import com.analyzercoder.application.change.GitChangeRequest;
 import com.analyzercoder.application.change.RepositoryChange;
+import com.analyzercoder.application.repository.GitCredentialExecutor;
 import com.analyzercoder.application.repository.RepositoryCredentialService;
 import com.analyzercoder.application.review.TaskReviewRequest;
 import com.analyzercoder.application.review.TaskReviewResult;
@@ -11,6 +12,7 @@ import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryMapper;
 import com.analyzercoder.security.AuthenticatedAccount;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +25,7 @@ public class PullRequestReviewService {
     private final CodeRepositoryStore repositories;
     private final RepositoryMapper repositoryMapper;
     private final RepositoryCredentialService credentials;
+    private final GitCredentialExecutor git;
     private final PullRequestTargetResolver targets;
     private final UnifiedDiffRepositoryChangeParser patches;
     private final TaskReviewService reviews;
@@ -33,6 +36,7 @@ public class PullRequestReviewService {
             CodeRepositoryStore repositories,
             RepositoryMapper repositoryMapper,
             RepositoryCredentialService credentials,
+            GitCredentialExecutor git,
             PullRequestTargetResolver targets,
             UnifiedDiffRepositoryChangeParser patches,
             TaskReviewService reviews,
@@ -41,6 +45,7 @@ public class PullRequestReviewService {
         this.repositories = repositories;
         this.repositoryMapper = repositoryMapper;
         this.credentials = credentials;
+        this.git = git;
         this.targets = targets;
         this.patches = patches;
         this.reviews = reviews;
@@ -121,15 +126,42 @@ public class PullRequestReviewService {
         PullRequestProvider.AccessToken token =
                 new PullRequestProvider.AccessToken(credential.value().secret());
         PullRequestProvider.PullRequestSnapshot source = provider.fetch(reference, token);
-        if (!repository.currentCommit().equalsIgnoreCase(source.headSha())) {
-            throw new PullRequestIntegrationException(
-                    "PR_HEAD_NOT_CURRENT_SNAPSHOT",
-                    "PR/MR Head 与当前发布快照不一致，请先同步仓库并完成准备流程");
-        }
         RepositoryChange change = patches.parse(source);
+        if (!repository.currentCommit().equalsIgnoreCase(source.headSha())) {
+            change =
+                    withLimitation(
+                            change,
+                            "PR_HEAD_NOT_INDEXED",
+                            "PR/MR 头提交未发布为知识快照；代码声明按该提交读取，知识与架构证据仍基于当前发布快照 "
+                                    + repository.currentCommit());
+            try {
+                String fetched =
+                        git.fetchReviewHead(
+                                repository.path(),
+                                source.provider().name(),
+                                source.number(),
+                                credential.value());
+                if (!fetched.equalsIgnoreCase(source.headSha())) {
+                    throw new PullRequestIntegrationException(
+                            "PR_HEAD_FETCH_MISMATCH", "远程审查引用与提供方返回的头提交不一致，已停止审查");
+                }
+            } catch (PullRequestIntegrationException exception) {
+                throw exception;
+            } catch (RuntimeException exception) {
+                change =
+                        withLimitation(
+                                change,
+                                "PR_HEAD_SOURCE_UNAVAILABLE",
+                                "未能把 PR/MR 头提交载入本地对象库；符号定位将按文件级事实降级");
+            }
+        }
         String task =
                 request.task() == null
-                        ? source.provider() + " " + source.externalId() + " · " + source.title()
+                        ? providerLabel(source.provider())
+                                + " "
+                                + source.externalId()
+                                + " · "
+                                + source.title()
                         : request.task();
         TaskReviewRequest taskRequest =
                 new TaskReviewRequest(
@@ -156,6 +188,28 @@ public class PullRequestReviewService {
                 source.fetchedAt(),
                 review,
                 comment);
+    }
+
+    private static RepositoryChange withLimitation(
+            RepositoryChange change, String code, String detail) {
+        RepositoryChange.Limitation limitation = new RepositoryChange.Limitation(code, detail);
+        if (change.limitations().contains(limitation)) {
+            return change;
+        }
+        ArrayList<RepositoryChange.Limitation> limitations = new ArrayList<>(change.limitations());
+        limitations.add(limitation);
+        return new RepositoryChange(
+                change.source(),
+                change.baseCommit(),
+                change.headCommit(),
+                change.worktreeDigest(),
+                change.partial(),
+                change.changes(),
+                List.copyOf(limitations));
+    }
+
+    private static String providerLabel(PullRequestProvider.ProviderKind provider) {
+        return provider == PullRequestProvider.ProviderKind.GITHUB ? "GitHub 拉取请求" : "GitLab 合并请求";
     }
 
     @FunctionalInterface

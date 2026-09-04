@@ -17,6 +17,13 @@ import type {
   TaskReviewFinding,
   TaskReviewResult,
 } from '@/api/taskReviews';
+import {
+  enforcementLabel,
+  knowledgeKindLabel,
+  retrievalSourceLabel,
+  statusLabel,
+  symbolKindLabel,
+} from '@/utils/displayLabels';
 import type { ReviewEvidenceSelection } from './types';
 import KnowledgeFindingList from './KnowledgeFindingList.vue';
 import ObligationPanel from './ObligationPanel.vue';
@@ -25,13 +32,21 @@ const props = defineProps<{ result: TaskReviewResult }>();
 const emit = defineEmits<{ select: [selection: ReviewEvidenceSelection] }>();
 
 const resolutionLabels: Record<string, string> = {
-  CODEGRAPH: 'CodeGraph 节点',
+  CODEGRAPH: '代码图谱节点',
   SOURCE_DECLARATION: '源码声明',
   CHUNK_SYMBOL: '同版本代码片段',
   FILE_LEVEL: '文件级降级',
 };
 const changeLabels: Record<string, string> = {
   ADDED: '新增', MODIFIED: '修改', DELETED: '删除', RENAMED: '重命名', COPIED: '复制',
+};
+const obligationKindLabels: Record<string, string> = {
+  REQUIRED_TEST: '必须执行的测试',
+  REQUIRED_APPROVAL: '必须取得的审批',
+};
+const obligationStatusLabels: Record<string, string> = {
+  REQUIRED_NOT_REPORTED: '尚未回报执行结果',
+  APPROVAL_REQUIRED: '等待审批',
 };
 
 function selectChange(item: ChangedSymbol) {
@@ -40,17 +55,17 @@ function selectChange(item: ChangedSymbol) {
     kind: 'CHANGE',
     eyebrow: '真实 Git 改动',
     title: item.name,
-    status: `${changeLabels[item.changeType] ?? item.changeType} · ${resolutionLabels[item.resolution] ?? item.resolution}`,
+    status: `${changeLabels[item.changeType] ?? '其他变更'} · ${resolutionLabels[item.resolution] ?? '其他定位方式'}`,
     description: provenance?.detail ?? '该对象由真实文件变化和行号映射得到。',
     filePath: item.filePath,
     startLine: item.declarationStartLine,
     endLine: item.declarationEndLine,
     facts: [
-      { label: '对象类型', value: item.kind },
+      { label: '对象类型', value: symbolKindLabel(item.kind) },
       { label: '符号标识', value: item.symbolId, mono: true },
       { label: '旧行号', value: item.oldStartLine == null ? '不适用' : `L${item.oldStartLine}`, mono: true },
       { label: '新行号', value: item.newStartLine == null ? '不适用' : `L${item.newStartLine}`, mono: true },
-      { label: '解析来源', value: resolutionLabels[item.resolution] ?? item.resolution },
+      { label: '解析来源', value: resolutionLabels[item.resolution] ?? '其他定位方式' },
     ],
     evidence: [],
     sources: [],
@@ -63,16 +78,16 @@ function selectKnowledge(item: KnowledgeMatch, stale = false) {
     kind: stale ? 'STALE' : 'KNOWLEDGE',
     eyebrow: stale ? '待重新验证的知识' : '确定性适用知识',
     title: item.title,
-    status: `${item.enforcement} · ${item.sourceVersionStatus}`,
+    status: `${enforcementLabel(item.enforcement)} · ${statusLabel(item.sourceVersionStatus)}`,
     description: stale
       ? '这条知识的适用范围命中了真实改动，但来源版本已经需要重新核对。'
-      : '这条知识已发布、已人工审核，并通过确定性 Scope 规则命中。',
+      : '这条知识已发布、已人工审核，并通过确定性适用范围规则命中。',
     knowledgeId: item.knowledgeId,
     filePath: first?.filePath,
     facts: [
-      { label: '知识类型', value: item.kind },
-      { label: '执行级别', value: item.enforcement },
-      { label: '来源状态', value: item.sourceVersionStatus },
+      { label: '知识类型', value: knowledgeKindLabel(item.kind) },
+      { label: '执行级别', value: enforcementLabel(item.enforcement) },
+      { label: '来源状态', value: statusLabel(item.sourceVersionStatus) },
       { label: '修订', value: `v${item.revision}`, mono: true },
       { label: '负责人', value: item.ownerAccountId ?? '未指定', mono: true },
     ],
@@ -98,9 +113,9 @@ function selectReference(item: KnowledgeReferenceCandidate) {
     description: item.detail,
     knowledgeId: item.knowledgeId,
     facts: [
-      { label: '知识类型', value: item.kind },
-      { label: '检索通道', value: item.retrievalSource },
-      { label: '来源状态', value: item.sourceVersionStatus },
+      { label: '知识类型', value: knowledgeKindLabel(item.kind) },
+      { label: '检索通道', value: retrievalSourceLabel(item.retrievalSource) },
+      { label: '来源状态', value: statusLabel(item.sourceVersionStatus) },
     ],
     evidence: [],
     sources: [item.provenance],
@@ -114,11 +129,11 @@ function selectObligation(item: TaskReviewFinding) {
     eyebrow: item.kind === 'REQUIRED_TEST' ? '必须执行的测试' : '必须取得的审批',
     title: item.key,
     status: item.status === 'REQUIRED_NOT_REPORTED' ? '尚未回报执行结果' : '等待审批',
-    description: `由 ${item.knowledgeIds.length} 条 CURRENT 且 REQUIRED 的工程知识确定性产生。`,
+    description: `由 ${item.knowledgeIds.length} 条与当前代码一致且必须执行的工程知识确定性产生。`,
     filePath: first?.filePath,
     facts: [
-      { label: '要求类型', value: item.kind },
-      { label: '当前状态', value: item.status },
+      { label: '要求类型', value: obligationKindLabels[item.kind] ?? '其他必要动作' },
+      { label: '当前状态', value: obligationStatusLabels[item.status] ?? '等待处理' },
       { label: '来源知识数', value: String(item.knowledgeIds.length) },
     ],
     evidence: item.evidence,
@@ -131,15 +146,15 @@ function selectUnknown(item: TaskReviewFinding) {
   emit('select', {
     kind: 'UNKNOWN',
     eyebrow: '无法确定',
-    title: reason?.code ?? item.key,
+    title: '审查证据不足',
     status: '需要人工处理或补充事实',
     description: reason?.detail ?? '当前证据不足，系统没有扩大为违规结论。',
     filePath: reason?.filePath,
     knowledgeId: reason?.knowledgeId,
     facts: [
-      { label: '原因代码', value: reason?.code ?? item.key, mono: true },
+      { label: '问题类型', value: unknownAction(reason?.code) },
       { label: '相关规则', value: reason?.rule ?? '无' },
-      { label: '处理建议', value: unknownAction(reason?.code) },
+      { label: '处理建议', value: '补充相关事实后重新审查' },
     ],
     evidence: [],
     sources: item.sources,
@@ -150,18 +165,18 @@ function selectModelFinding(item: ModelSummaryFinding) {
   const first = item.evidence[0];
   emit('select', {
     kind: 'MODEL',
-    eyebrow: 'MODEL_SUGGESTION · 非确定性结论',
+    eyebrow: '模型建议 · 非确定性结论',
     title: item.text,
-    status: `已校验 ${item.evidenceIds.length} 个证据 ID`,
+    status: `已校验 ${item.evidenceIds.length} 个证据标识`,
     description: '这是模型对既有审查证据的总结，不会创建文件、符号、规则、测试或审批。',
     filePath: first?.filePath,
     startLine: first?.startLine,
     endLine: first?.endLine,
     knowledgeId: first?.knowledgeId,
     facts: [
-      { label: '来源类型', value: 'MODEL_SUGGESTION', mono: true },
+      { label: '来源类型', value: '模型建议' },
       { label: '证据数量', value: String(item.evidenceIds.length) },
-      { label: '证据 ID', value: item.evidenceIds.join(', '), mono: true },
+      { label: '证据标识', value: item.evidenceIds.join(', '), mono: true },
     ],
     evidence: [],
     sources: item.sources,
@@ -171,7 +186,7 @@ function selectModelFinding(item: ModelSummaryFinding) {
 function unknownAction(code?: string) {
   if (!code) return '检查审查输入与仓库状态后重试';
   if (code.includes('SNAPSHOT')) return '重新扫描并发布仓库快照后重试';
-  if (code.includes('CODEGRAPH') || code.includes('MODULE_GRAPH')) return '重建 CodeGraph 后重新审查';
+  if (code.includes('CODEGRAPH') || code.includes('MODULE_GRAPH')) return '重建代码图谱后重新审查';
   if (code.includes('SOURCE') || code.includes('FILE')) return '打开对应文件，人工核对无法解析的内容';
   if (code.includes('KNOWLEDGE')) return '打开知识卡片并重新验证来源版本';
   return '根据原因代码补充事实后重新审查';
@@ -183,14 +198,14 @@ function unknownAction(code?: string) {
     <section class="spine-stage stage-change">
       <span class="stage-marker"><FileDiff :size="15" /></span>
       <header>
-        <div><small>Git facts</small><h2>真实改动</h2></div>
+        <div><small>变更事实</small><h2>真实改动</h2></div>
         <b>{{ result.change?.changes.length ?? 0 }} 文件 · {{ result.changedSymbols.length }} 对象</b>
       </header>
       <div class="stage-body change-list">
         <button v-for="item in result.changedSymbols" :key="`${item.symbolId}:${item.hunkIndex}:${item.filePath}`" type="button" @click="selectChange(item)">
-          <span :data-change="item.changeType">{{ changeLabels[item.changeType] ?? item.changeType }}</span>
+          <span :data-change="item.changeType">{{ changeLabels[item.changeType] ?? '其他' }}</span>
           <div><strong>{{ item.name }}</strong><code>{{ item.filePath }}:{{ item.newStartLine ?? item.oldStartLine ?? 1 }}</code></div>
-          <small>{{ item.kind }} · {{ resolutionLabels[item.resolution] ?? item.resolution }}</small>
+          <small>{{ symbolKindLabel(item.kind) }} · {{ resolutionLabels[item.resolution] ?? '其他定位方式' }}</small>
           <ChevronRight :size="14" />
         </button>
         <p v-if="!result.changedSymbols.length">Git 没有返回可审查的改动对象。</p>
@@ -200,7 +215,7 @@ function unknownAction(code?: string) {
     <section class="spine-stage stage-knowledge">
       <span class="stage-marker"><BookCheck :size="15" /></span>
       <header>
-        <div><small>Verified knowledge</small><h2>适用知识</h2></div>
+        <div><small>已验证知识</small><h2>适用知识</h2></div>
         <b>{{ result.applicableKnowledge.length }} 正式 · {{ result.referenceCandidates.length }} 参考</b>
       </header>
       <div class="stage-body">
@@ -216,7 +231,7 @@ function unknownAction(code?: string) {
     <section class="spine-stage stage-obligation">
       <span class="stage-marker"><ShieldCheck :size="15" /></span>
       <header>
-        <div><small>Required actions</small><h2>测试与审批</h2></div>
+        <div><small>必须动作</small><h2>测试与审批</h2></div>
         <b>{{ result.requiredTests.length + result.requiredApprovals.length }} 项待处理</b>
       </header>
       <div class="stage-body">
@@ -227,7 +242,7 @@ function unknownAction(code?: string) {
     <section class="spine-stage stage-stale">
       <span class="stage-marker"><RefreshCcw :size="15" /></span>
       <header>
-        <div><small>Knowledge drift</small><h2>知识失效</h2></div>
+        <div><small>知识漂移</small><h2>知识失效</h2></div>
         <b>{{ result.staleKnowledge.length }} 条待重新验证</b>
       </header>
       <div class="stage-body">
@@ -238,13 +253,13 @@ function unknownAction(code?: string) {
     <section class="spine-stage stage-unknown">
       <span class="stage-marker"><CircleHelp :size="15" /></span>
       <header>
-        <div><small>Unknowns</small><h2>未知项</h2></div>
+        <div><small>未确定事项</small><h2>未知项</h2></div>
         <b>{{ result.unknowns.length }} 项没有被猜测</b>
       </header>
       <div class="stage-body unknown-list">
         <button v-for="item in result.unknowns" :key="`${item.key}:${item.unknownReason?.knowledgeId ?? ''}`" type="button" @click="selectUnknown(item)">
           <AlertCircle :size="14" />
-          <span><strong>{{ item.unknownReason?.code ?? item.key }}</strong><small>{{ item.unknownReason?.detail }}</small></span>
+          <span><strong>审查证据不足</strong><small>{{ item.unknownReason?.detail }}</small></span>
           <ChevronRight :size="14" />
         </button>
         <p v-if="!result.unknowns.length">没有未解释的降级或证据缺口。</p>
@@ -254,13 +269,13 @@ function unknownAction(code?: string) {
     <section v-if="result.modelSummaryState.status !== 'NOT_REQUESTED'" class="spine-stage stage-model">
       <span class="stage-marker"><Sparkles :size="15" /></span>
       <header>
-        <div><small>MODEL_SUGGESTION</small><h2>模型引用总结</h2></div>
+        <div><small>模型建议</small><h2>模型引用总结</h2></div>
         <b>{{ result.modelSummaryState.status === 'COMPLETED' ? `${result.modelSummary?.findings.length ?? 0} 条建议` : '未采用模型输出' }}</b>
       </header>
       <div class="stage-body model-summary" :data-status="result.modelSummaryState.status">
         <template v-if="result.modelSummary">
           <div class="model-boundary">
-            <strong>MODEL_SUGGESTION</strong>
+            <strong>模型建议</strong>
             <span>{{ result.modelSummary.provider }}</span>
           </div>
           <p>{{ result.modelSummary.summary }}</p>
@@ -279,7 +294,7 @@ function unknownAction(code?: string) {
           <AlertCircle :size="15" />
           <span>
             <strong>{{ result.modelSummaryState.status === 'REJECTED' ? '模型输出已丢弃' : '模型总结不可用' }}</strong>
-            <small>{{ result.modelSummaryState.code }} · {{ result.modelSummaryState.detail }}</small>
+            <small>{{ result.modelSummaryState.detail || '请稍后重试或检查模型服务配置。' }}</small>
           </span>
         </div>
       </div>

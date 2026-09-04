@@ -68,7 +68,7 @@ cp deploy/OFFLINE-README.md "$PACKAGE_DIR/README.md"
 cp docs/08-linux-git-deployment.md "$PACKAGE_DIR/STARTUP-GUIDE.md"
 
 cat > "$PACKAGE_DIR/MANIFEST.txt" <<EOF
-Analyzer Coder offline package
+代码知识平台离线包
 Version: $VERSION
 Created: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Platform: $PLATFORM

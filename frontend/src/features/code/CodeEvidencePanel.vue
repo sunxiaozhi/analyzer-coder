@@ -8,6 +8,12 @@ import {
   type CodeGraphArtifact,
   type GraphResult,
 } from '@/api/intelligence';
+import {
+  changeSourceLabel,
+  enforcementLabel,
+  knowledgeKindLabel,
+  statusLabel,
+} from '@/utils/displayLabels';
 
 type ContextTab = 'relations' | 'knowledge' | 'reviews';
 
@@ -58,14 +64,14 @@ function roleLabel(role: string) {
     REQUIRED_TEST: '要求测试',
     REQUIRED_APPROVAL: '要求审批',
     UNKNOWN: '未知项证据',
-  } as Record<string, string>)[role] ?? role;
+  } as Record<string, string>)[role] ?? '其他证据';
 }
 
 function limitationLabel(value: string) {
   if (value === 'DIRECT_KNOWLEDGE_BINDINGS_ONLY') return '这里只展示直接绑定到该文件的知识，不把关键词相似结果冒充适用规则。';
   if (value === 'SYMBOL_REQUIRED_FOR_CODEGRAPH') return '关系查询需要明确符号；可从检索结果选择符号，或在下方输入。';
   if (value === 'REVIEW_HISTORY_TRUNCATED') return '审查引用只扫描最近 100 条不可变审查记录。';
-  return value;
+  return '其他限制说明。';
 }
 
 function graphLimitationLabel(value: string) {
@@ -73,7 +79,7 @@ function graphLimitationLabel(value: string) {
   if (value.startsWith('CODEGRAPH_AFFECTED_NODE_UNMAPPED:')) return '部分 CLI 影响记录无法映射到可定位节点。';
   if (value.startsWith('CODEGRAPH_NODE_COUNT_MISMATCH:')) return 'CLI 节点数与可展示节点数不一致。';
   if (value.startsWith('CODEGRAPH_EDGE_COUNT_MISMATCH:')) return 'CLI 边数与可展示真实边数不一致，页面没有补造连线。';
-  return value;
+  return '存在其他无法由静态分析覆盖的情况。';
 }
 
 async function load() {
@@ -115,7 +121,7 @@ async function analyze() {
     return;
   }
   if (!artifact.value) {
-    relationError.value = '当前 Snapshot 尚未发布 CodeGraph，不能生成真实关系路径。';
+    relationError.value = '当前快照尚未发布代码图谱，不能生成真实关系路径。';
     return;
   }
   analyzing.value = true;
@@ -140,10 +146,10 @@ async function buildGraph() {
   building.value = true;
   try {
     const task = await intelligenceApi.buildGraph(props.repositoryId);
-    if (task.status === 'FAILED') ElMessage.error(task.errorMessage ?? 'CodeGraph 构建失败');
-    else ElMessage.info('CodeGraph 构建任务已提交，发布完成后可查询关系。');
+    if (task.status === 'FAILED') ElMessage.error(task.errorMessage ?? '代码图谱构建失败');
+    else ElMessage.info('代码图谱构建任务已提交，发布完成后可查询关系。');
   } catch (exception) {
-    ElMessage.error(exception instanceof Error ? exception.message : 'CodeGraph 构建失败');
+    ElMessage.error(exception instanceof Error ? exception.message : '代码图谱构建失败');
   } finally {
     building.value = false;
   }
@@ -193,8 +199,8 @@ watch(
         <el-button size="small" type="primary" :loading="analyzing" @click="analyze">查询</el-button>
       </div>
       <div class="artifact-line" :data-ready="Boolean(artifact)">
-        <span v-if="artifact">CLI {{ artifact.cliVersion }} · {{ artifact.nodeCount }} 节点 · Snapshot {{ artifact.snapshotId.slice(0, 8) }}</span>
-        <span v-else>当前 Snapshot 没有已发布图谱</span>
+        <span v-if="artifact">工具版本 {{ artifact.cliVersion }} · {{ artifact.nodeCount }} 节点 · 快照 {{ artifact.snapshotId.slice(0, 8) }}</span>
+        <span v-else>当前快照没有已发布图谱</span>
         <button v-if="!artifact" type="button" :disabled="building" @click="buildGraph">{{ building ? '提交中' : '构建' }}</button>
       </div>
       <div v-if="relationError" class="context-error"><AlertTriangle :size="14" />{{ relationError }}</div>
@@ -219,7 +225,7 @@ watch(
             </div>
           </article>
         </div>
-        <p v-if="!relation.paths.length" class="context-empty">没有可由真实 CodeGraph 边解释的传播路径。</p>
+        <p v-if="!relation.paths.length" class="context-empty">没有可由真实代码图谱关系解释的传播路径。</p>
         <p v-for="item in relation.limitations" :key="item" class="limitation">{{ graphLimitationLabel(item) }}</p>
       </template>
       <p v-for="item in context?.limitations.filter(item => item === 'SYMBOL_REQUIRED_FOR_CODEGRAPH')" :key="item" class="limitation">{{ limitationLabel(item) }}</p>
@@ -227,9 +233,9 @@ watch(
 
     <div v-else-if="tab === 'knowledge'" class="context-body reference-list">
       <article v-for="item in context?.knowledgeReferences" :key="item.knowledgeId" :data-trusted="item.trusted">
-        <header><span>{{ item.trusted ? '可信知识' : item.sourceVersionStatus }}</span><b>{{ item.enforcement }}</b></header>
+        <header><span>{{ item.trusted ? '可信知识' : statusLabel(item.sourceVersionStatus) }}</span><b>{{ enforcementLabel(item.enforcement) }}</b></header>
         <button type="button" class="reference-title" @click="emit('openKnowledge', item.knowledgeId)">{{ item.title }}<ArrowRight :size="12" /></button>
-        <small>v{{ item.revision }} · {{ item.kind }} · {{ item.reviewStatus }} · {{ item.publicationStatus }}</small>
+        <small>修订 {{ item.revision }} · {{ knowledgeKindLabel(item.kind) }} · {{ statusLabel(item.reviewStatus) }} · {{ statusLabel(item.publicationStatus) }}</small>
         <button v-for="binding in item.bindings" :key="`${binding.chunkId}:${binding.startLine}`" type="button" class="binding" @click="emit('openFile', filePath!, binding.startLine, binding.endLine)">
           {{ binding.symbolName ?? filePath }}:{{ binding.startLine ?? 1 }}
           <span v-if="binding.stale || !binding.currentSnapshot">旧版本绑定</span>
@@ -241,7 +247,7 @@ watch(
 
     <div v-else class="context-body reference-list review-reference-list">
       <article v-for="item in context?.reviewReferences" :key="item.reviewId" :data-current="item.currentSnapshot">
-        <header><span>{{ item.currentSnapshot ? '当前 Snapshot' : '历史 Snapshot' }}</span><b>{{ item.changeSource }}</b></header>
+        <header><span>{{ item.currentSnapshot ? '当前快照' : '历史快照' }}</span><b>{{ changeSourceLabel(item.changeSource) }}</b></header>
         <strong>{{ item.task || '未填写任务说明' }}</strong>
         <div class="role-list"><span v-for="role in item.roles" :key="role">{{ roleLabel(role) }}</span></div>
         <small v-if="item.symbols.length">符号：{{ item.symbols.join('、') }}</small>

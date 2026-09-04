@@ -95,8 +95,8 @@
 
 .page-frame {
   display: grid;
-  grid-template-rows: 44px minmax(0, 1fr);
-  row-gap: 12px;
+  grid-template-rows: 44px 38px minmax(0, 1fr);
+  row-gap: 8px;
   min-height: 0;
   padding: 10px 16px 20px;
 }

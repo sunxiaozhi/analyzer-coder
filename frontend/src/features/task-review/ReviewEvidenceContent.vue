@@ -57,7 +57,7 @@ const reasonLabels: Record<string, string> = {
     <section v-if="selection.evidence.length" class="evidence-list">
       <h3>证据链</h3>
       <article v-for="reason in selection.evidence" :key="`${reason.kind}:${reason.rule}:${reason.target}`">
-        <small>{{ reasonLabels[reason.kind] ?? reason.kind }} · {{ reason.rule }}</small>
+        <small>{{ reasonLabels[reason.kind] ?? '其他依据' }} · {{ reason.rule }}</small>
         <strong>{{ reason.target }}</strong>
         <p>{{ reason.evidence.detail }}</p>
         <code v-if="reason.evidence.filePath">{{ reason.evidence.filePath }}<template v-if="reason.evidence.symbolName"> · {{ reason.evidence.symbolName }}</template></code>

@@ -45,7 +45,7 @@ function limitationLabel(value: string) {
   if (value.startsWith('CODEGRAPH_NODE_COUNT_MISMATCH:')) return 'CLI 影响节点数与可定位传播节点数不一致，请核对产物版本';
   if (value.startsWith('CODEGRAPH_EDGE_COUNT_MISMATCH:')) return 'CLI 影响边数与可展示真实边数不一致，页面没有补造连线';
   if (value === 'CODEGRAPH_DYNAMIC_RESOURCE_REFERENCES_PRESENT') return '检测到动态资源引用，静态路径可能不完整';
-  return value;
+  return '存在其他无法由静态分析覆盖的情况';
 }
 
 async function loadArtifact() {
@@ -63,10 +63,10 @@ async function build() {
   try {
     const task = await intelligenceApi.buildGraph(repositories.selectedRepositoryId);
     if (task.status === 'FAILED') {
-      ElMessage.error(task.errorMessage ?? 'CodeGraph 构建失败');
+      ElMessage.error(task.errorMessage ?? '代码图谱构建失败');
     } else {
       result.value = null;
-      ElMessage.info('CodeGraph 构建任务已提交，任务完成后刷新页面即可查询');
+      ElMessage.info('代码图谱构建任务已提交，任务完成后刷新页面即可查询');
     }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '构建失败');
@@ -85,7 +85,7 @@ async function analyze() {
     return;
   }
   if (!artifact.value) {
-    ElMessage.warning('当前 Snapshot 尚未发布 CodeGraph，请先提交构建任务并等待完成');
+    ElMessage.warning('当前快照尚未发布代码图谱，请先提交构建任务并等待完成');
     return;
   }
   busy.value = true;
@@ -139,10 +139,10 @@ watch(
         <el-input-number v-model="depth" :min="1" :max="5" size="small" />
       </label>
       <el-tag v-if="artifact" type="success">
-        CodeGraph {{ artifact.cliVersion }} · {{ statusLabel(artifact.status) }}
+        代码图谱 {{ artifact.cliVersion }} · {{ statusLabel(artifact.status) }}
       </el-tag>
       <el-button :loading="building" @click="build">
-        {{ artifact ? '重新构建' : '构建 CodeGraph' }}
+        {{ artifact ? '重新构建' : '构建代码图谱' }}
       </el-button>
       <el-button type="primary" :loading="busy" @click="analyze">影响分析</el-button>
     </div>
@@ -153,7 +153,7 @@ watch(
       <aside class="impact-panel">
         <div class="pane-head">
           <b>真实传播路径</b>
-          <span>CodeGraph CLI · 请求深度 {{ depth }}</span>
+          <span>代码图谱命令行工具 · 请求深度 {{ depth }}</span>
         </div>
         <div v-if="result" class="propagation-summary">
           <span><b>{{ result.affectedNodeCount }}</b>受影响节点</span>
@@ -161,7 +161,7 @@ watch(
           <span><b>{{ result.maxDepthReached }}</b>实际最大深度</span>
         </div>
         <p v-if="result" class="graph-provenance">
-          Snapshot {{ result.snapshotId.slice(0, 8) }} · Artifact {{ result.graphArtifactId.slice(0, 8) }} · CLI {{ result.cliVersion }}
+          快照 {{ result.snapshotId.slice(0, 8) }} · 图谱产物 {{ result.graphArtifactId.slice(0, 8) }} · 工具版本 {{ result.cliVersion }}
         </p>
         <div v-if="result" class="coverage-line" :data-complete="result.coverage.complete">
           <b>{{ result.coverage.complete ? '路径覆盖完整' : '路径覆盖不完整' }}</b>

@@ -6,7 +6,7 @@ import * as z from 'zod/v4';
 import { AnalyzerApiError, clientFromEnvironment } from './api-client.mjs';
 
 const uuid = z.string().uuid();
-const repositoryId = uuid.describe('Repository UUID visible to the authenticated Analyzer Coder account');
+const repositoryId = uuid.describe('已认证的代码知识平台账户可见的仓库 UUID');
 
 export function createAnalyzerMcpServer(api = clientFromEnvironment()) {
   const server = new McpServer(
@@ -368,5 +368,5 @@ async function toolCall(action) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   void serveStdio(() => createAnalyzerMcpServer());
-  console.error('Analyzer Coder MCP server is listening on stdio');
+  console.error('代码知识平台 MCP 服务正在监听 stdio');
 }

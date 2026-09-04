@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue';
 import type { Repository } from '@/types/api';
+import RepositoryCredentialBindingPanel from './RepositoryCredentialBindingPanel.vue';
 
 const props = defineProps<{ modelValue: boolean; repository: Repository | null; busy: boolean }>();
 const emit = defineEmits<{
@@ -20,9 +21,9 @@ watch(() => [props.modelValue, props.repository] as const, () => {
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" title="编辑仓库" width="560"
+  <el-dialog :model-value="modelValue" title="编辑仓库" width="620"
              @update:model-value="emit('update:modelValue', $event)">
-    <el-alert title="来源类型、服务端路径、所有者和凭据不可在此修改。" type="info"
+    <el-alert title="来源类型、服务端路径和所有者不可在此修改；远程仓库凭据可在下方单独维护。" type="info"
               :closable="false" show-icon />
     <el-form label-position="top" class="edit-form">
       <el-form-item label="仓库名称" required>
@@ -38,6 +39,11 @@ watch(() => [props.modelValue, props.repository] as const, () => {
         <el-input :model-value="`${repository?.sourceType ?? ''} · ${repository?.path ?? ''}`" disabled />
       </el-form-item>
     </el-form>
+    <RepositoryCredentialBindingPanel
+      v-if="repository && ['REMOTE_GIT', 'GITLAB'].includes(repository.sourceType) && repository.capabilities.canManageCredential"
+      :repository-id="repository.id"
+      :source-type="repository.sourceType"
+    />
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
       <el-button type="primary" :loading="busy" :disabled="!form.name.trim()"

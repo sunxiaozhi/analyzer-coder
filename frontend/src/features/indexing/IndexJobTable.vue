@@ -19,7 +19,7 @@ function repositoryName(repositoryId: string) {
 function typeLabel(type: Task['type']) {
   if (type === 'FULL') return '全量内容索引';
   if (type === 'INCREMENTAL') return '增量内容索引';
-  if (type === 'CODEGRAPH') return 'CodeGraph 构建';
+  if (type === 'CODEGRAPH') return '代码图谱构建';
   return '知识失效检查';
 }
 </script>

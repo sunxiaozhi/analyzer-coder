@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Plus, Search } from '@element-plus/icons-vue';
+import { BookOpenCheck } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -21,7 +22,7 @@ import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vu
 import MarkdownKnowledgeSourceList from '@/features/knowledge/MarkdownKnowledgeSourceList.vue';
 import { renderMarkdown } from '@/features/knowledge/markdown';
 import { useRepositoryStore } from '@/stores/repositoryStore';
-import { statusLabel } from '@/utils/displayLabels';
+import { enforcementLabel, knowledgeKindLabel, statusLabel } from '@/utils/displayLabels';
 
 const repositories = useRepositoryStore();
 const router = useRouter();
@@ -184,7 +185,7 @@ async function sourceReview(action: 'CONFIRM_CURRENT' | 'MARK_STALE') {
   try {
     const prompt = await ElMessageBox.prompt(
       confirming
-        ? '说明你核对了哪些当前代码事实。确认后将绑定当前 Commit 和 Snapshot。'
+        ? '说明你核对了哪些当前代码事实。确认后将绑定当前提交版本和快照。'
         : '说明知识的哪部分已经不再适用于当前代码。',
       confirming ? '确认知识仍然有效' : '确认知识已经失效',
       {
@@ -420,7 +421,13 @@ onMounted(() => void load());
 
 <template>
   <section class="page knowledge-page">
-    <div class="surface knowledge-surface">
+    <div v-if="!repositories.selectedRepositoryId" class="knowledge-gate">
+      <BookOpenCheck :size="28" />
+      <h1>先选择一个项目</h1>
+      <p>知识卡片必须归属明确仓库，才能绑定代码范围、负责人和当前快照。</p>
+      <el-button type="primary" @click="router.push('/repositories')">前往项目管理</el-button>
+    </div>
+    <div v-else class="surface knowledge-surface">
       <div class="toolbar">
         <div class="knowledge-mode-switch" role="tablist" aria-label="知识内容类型">
           <button
@@ -566,7 +573,7 @@ onMounted(() => void load());
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">
         <el-card shadow="never"><template #header><div class="toolbar"><b>v{{ item.revision }} · {{ statusLabel(item.publicationStatus) }}</b><span class="spacer" /><el-button link type="primary" @click="restore(item.revision)">恢复为新草稿</el-button></div></template>
           <div class="history-markdown" v-html="renderMarkdown(item.content, item.repositoryId)" />
-          <small>{{ item.knowledgeKind }} · {{ item.enforcement }} · {{ item.cardType }} · {{ item.tags.join(', ')||'无标签' }}</small>
+          <small>{{ knowledgeKindLabel(item.knowledgeKind) }} · {{ enforcementLabel(item.enforcement) }} · {{ item.cardType || '未分类' }} · {{ item.tags.join('、')||'无标签' }}</small>
         </el-card>
       </el-timeline-item></el-timeline>
     </el-dialog>
@@ -580,6 +587,9 @@ onMounted(() => void load());
   min-height: 0;
   overflow: hidden;
 }
+.knowledge-gate { display: grid; min-height: 360px; place-content: center; justify-items: center; padding: 32px; color: var(--app-text-muted); border: 1px dashed var(--app-border-strong); border-radius: 8px; background: #fff; text-align: center; }
+.knowledge-gate h1 { margin: 12px 0 4px; color: var(--app-text-primary); font-size: 18px; }
+.knowledge-gate p { max-width: 500px; margin: 0 0 16px; font-size: 13px; line-height: 1.6; }
 .knowledge-surface {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

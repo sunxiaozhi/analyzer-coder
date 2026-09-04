@@ -29,6 +29,7 @@ const selectedPath = shallowRef<string | null>(null);
 const selectedFile = shallowRef<RepositoryFileContent | null>(null);
 const previewError = shallowRef<string | null>(null);
 const filesLoading = shallowRef(false);
+const snapshotError = shallowRef<string | null>(null);
 const fileLoading = shallowRef(false);
 const query = shallowRef('');
 const hits = shallowRef<HybridSearchHit[]>([]);
@@ -48,6 +49,29 @@ let snapshotRequest = 0;
 let fileRequest = 0;
 
 const repository = computed(() => repositories.selectedRepository);
+const workbenchReady = computed(() => Boolean(
+  repository.value && (filesLoading.value || snapshot.value),
+));
+const gateCopy = computed(() => {
+  if (!repository.value) return {
+    title: '先选择一个项目',
+    detail: '代码检索、源码预览和关系证据都需要明确的仓库范围。',
+    action: '前往项目管理',
+    path: '/repositories',
+  };
+  if (snapshotError.value) return {
+    title: '代码快照加载失败',
+    detail: snapshotError.value,
+    action: '重新加载',
+    path: '',
+  };
+  return {
+    title: '项目还没有可浏览的代码快照',
+    detail: '先在项目总览完成扫描和内容索引，再回来检索代码与证据。',
+    action: '去准备项目',
+    path: '/overview',
+  };
+});
 const shortCommit = computed(() => snapshot.value?.commit?.slice(0, 8) ?? '无提交');
 const resultSummary = computed(() => {
   if (!searchPerformed.value) return '输入关键词检索当前代码快照';
@@ -58,6 +82,7 @@ const resultSummary = computed(() => {
 async function loadSnapshot(repositoryId: string | null) {
   const requestId = ++snapshotRequest;
   snapshot.value = null;
+  snapshotError.value = null;
   selectedPath.value = null;
   selectedFile.value = null;
   previewError.value = null;
@@ -94,11 +119,19 @@ async function loadSnapshot(repositoryId: string | null) {
     }
   } catch (error) {
     if (requestId === snapshotRequest) {
-      ElMessage.error(error instanceof Error ? error.message : '代码快照加载失败');
+      snapshotError.value = error instanceof Error ? error.message : '代码快照加载失败';
     }
   } finally {
     if (requestId === snapshotRequest) filesLoading.value = false;
   }
+}
+
+function resolveGate() {
+  if (!gateCopy.value.path) {
+    void loadSnapshot(repositories.selectedRepositoryId);
+    return;
+  }
+  void router.push(gateCopy.value.path);
 }
 
 async function openFile(
@@ -243,6 +276,14 @@ watch(
 
 <template>
   <section class="code-workbench">
+    <section v-if="!workbenchReady" class="workbench-gate">
+      <Search :size="28" />
+      <h1>{{ gateCopy.title }}</h1>
+      <p>{{ gateCopy.detail }}</p>
+      <el-button type="primary" @click="resolveGate">{{ gateCopy.action }}</el-button>
+    </section>
+
+    <template v-else>
     <header class="workbench-command">
       <div class="snapshot-context">
         <strong>{{ repository?.name ?? '未选择仓库' }}</strong>
@@ -278,7 +319,7 @@ watch(
         </el-button>
       </div>
       <div v-if="retrieval" class="retrieval-diagnostics" :data-degraded="retrieval.degraded">
-        <span>Snapshot {{ retrieval.snapshotId?.slice(0, 8) ?? '不可用' }}</span>
+        <span>快照 {{ retrieval.snapshotId?.slice(0, 8) ?? '不可用' }}</span>
         <span>{{ retrieval.retrievalCapability === 'SEMANTIC_EMBEDDING' ? '语义向量' : retrieval.retrievalCapability === 'CHARACTER_HASH' ? '字符相似度' : '无向量能力' }}</span>
         <span v-for="channel in retrieval.enabledChannels" :key="channel">{{ channelLabel(channel) }}</span>
         <strong v-if="retrieval.degraded">降级：{{ retrieval.degradationReasons.join('、') || retrieval.unavailableChannels.map(item => item.reason).join('、') }}</strong>
@@ -370,6 +411,7 @@ watch(
         @open-knowledge="openKnowledge"
       />
     </div>
+    </template>
   </section>
 </template>
 
@@ -382,6 +424,22 @@ watch(
   padding: 0;
   overflow: hidden;
 }
+
+.workbench-gate {
+  display: grid;
+  grid-row: 1 / -1;
+  min-height: 360px;
+  place-content: center;
+  justify-items: center;
+  padding: 32px;
+  color: var(--app-text-muted);
+  border: 1px dashed var(--app-border-strong);
+  border-radius: 8px;
+  background: #fff;
+  text-align: center;
+}
+.workbench-gate h1 { margin: 12px 0 4px; color: var(--app-text-primary); font-size: 18px; }
+.workbench-gate p { max-width: 500px; margin: 0 0 16px; font-size: 13px; line-height: 1.6; }
 
 .workbench-command {
   display: grid;

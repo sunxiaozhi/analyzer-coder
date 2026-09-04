@@ -268,7 +268,7 @@ function askFinding(finding: (typeof findings.value)[number]) {
         </article>
       </div>
       <footer>
-        <span>所有结论绑定当前 Snapshot</span>
+        <span>所有结论绑定当前快照</span>
         <button type="button" @click="emit('navigate', 'assets')">核对事实来源</button>
       </footer>
     </aside>

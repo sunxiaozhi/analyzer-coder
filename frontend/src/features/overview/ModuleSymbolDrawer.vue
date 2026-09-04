@@ -54,7 +54,7 @@ function kindLabel(kind: string | null) {
   >
     <template #header>
       <div class="drawer-heading">
-        <span>MODULE SYMBOLS</span>
+        <span>模块代码符号</span>
         <strong>{{ data?.module ?? '模块代码符号' }}</strong>
         <small>选择当前快照中的真实符号，再进入确定性调用分析</small>
       </div>

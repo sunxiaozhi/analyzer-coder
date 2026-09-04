@@ -101,7 +101,7 @@ function openItem(path: string | null) {
       <header class="result-head">
         <div>
           <span class="result-mark"><Sparkles :size="14" /></span>
-          <div><strong>Agent 上下文已生成</strong><small>{{ pack.items.length }} 条当前版本证据 · {{ pack.commitSha?.slice(0, 10) ?? '无 commit' }}</small></div>
+          <div><strong>编码助手上下文已生成</strong><small>{{ pack.items.length }} 条当前版本证据 · {{ pack.commitSha?.slice(0, 10) ?? '无提交版本' }}</small></div>
         </div>
         <nav aria-label="上下文导出操作">
           <button type="button" @click="emit('copy')"><Clipboard :size="13" />复制</button>
@@ -118,9 +118,9 @@ function openItem(path: string | null) {
     </div>
 
     <footer class="console-foot">
-      <span>关键词匹配当前快照，只生成证据材料，不会启动或执行编码 Agent</span>
-      <span v-if="disabled">完成内容索引后可使用问答和 Agent 上下文</span>
-      <span v-else>Ctrl + Enter 生成 Agent 上下文</span>
+      <span>关键词匹配当前快照，只生成证据材料，不会启动或执行编码助手</span>
+      <span v-if="disabled">完成内容索引后可使用问答和编码助手上下文</span>
+      <span v-else>按 Ctrl + Enter 生成编码助手上下文</span>
     </footer>
   </section>
 </template>

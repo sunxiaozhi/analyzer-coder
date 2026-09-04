@@ -126,7 +126,7 @@ function nodeLabel(nodeId: string) {
       </div>
     </div>
 
-    <el-empty v-else class="call-graph-empty" description="构建 CodeGraph 后输入符号进行分析" />
+    <el-empty v-else class="call-graph-empty" description="构建代码图谱后输入符号进行分析" />
   </section>
 </template>
 

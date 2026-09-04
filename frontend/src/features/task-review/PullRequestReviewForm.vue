@@ -57,18 +57,18 @@ function submit() {
     <header>
       <div class="provider-mark"><GitMerge :size="18" /></div>
       <div>
-        <span>Provider review</span>
-        <h2 id="provider-review-title">同步 PR / MR 提示性审查</h2>
+        <span>托管平台审查</span>
+        <h2 id="provider-review-title">同步拉取请求 / 合并请求提示性审查</h2>
       </div>
-      <p>从已绑定仓库和令牌读取真实 Patch；Head 必须等于当前快照，评论只提示、不阻断合并。</p>
+      <p>头提交作为待审代码，当前发布快照作为知识基线；评论只提示、不阻断合并。</p>
     </header>
 
     <div class="provider-row">
       <label>
         <span>代码托管平台</span>
         <select v-model="provider">
-          <option value="GITHUB">GitHub Pull Request</option>
-          <option value="GITLAB">GitLab Merge Request</option>
+          <option value="GITHUB">GitHub 拉取请求</option>
+          <option value="GITLAB">GitLab 合并请求</option>
         </select>
       </label>
       <label>
@@ -93,7 +93,7 @@ function submit() {
         </select>
       </label>
       <label class="api-toggle">
-        <span>企业版 API</span>
+        <span>企业版接口</span>
         <button type="button" :aria-pressed="customApi" @click="customApi = !customApi">
           {{ customApi ? '使用自定义 HTTPS API' : '按仓库地址自动识别' }}
         </button>
@@ -101,17 +101,17 @@ function submit() {
     </div>
 
     <label v-if="customApi" class="api-field">
-      <span>API Base URL <small>必须与仓库同主机</small></span>
+      <span>接口根地址 <small>必须与仓库同主机</small></span>
       <input v-model="apiBaseUrl" type="url" maxlength="500" placeholder="https://git.example.com/api/v4" />
     </label>
 
     <aside>
       <MessageSquareText :size="16" />
-      <span><strong>幂等评论</strong>系统通过隐藏 Marker 查找已有评论；同一 PR/MR 重跑时更新原评论。</span>
+      <span><strong>幂等评论</strong>系统通过隐藏标记查找已有评论；同一拉取请求或合并请求重跑时更新原评论。</span>
     </aside>
 
     <footer>
-      <span>需要仓库维护权限与已绑定访问令牌</span>
+      <span>需要仓库维护权限与已绑定访问令牌；缺失时可前往项目管理配置</span>
       <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
         <Play :size="14" />读取并同步审查
       </el-button>

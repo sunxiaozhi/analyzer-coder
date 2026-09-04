@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { BookOpen, CornerDownRight, Search } from 'lucide-vue-next';
 import type { KnowledgeMatch, KnowledgeReferenceCandidate } from '@/api/taskReviews';
+import {
+  enforcementLabel,
+  knowledgeKindLabel,
+  retrievalSourceLabel,
+  statusLabel,
+} from '@/utils/displayLabels';
 
 defineProps<{
   matches?: KnowledgeMatch[];
@@ -12,15 +18,6 @@ const emit = defineEmits<{
   selectReference: [candidate: KnowledgeReferenceCandidate];
 }>();
 
-const kindLabels: Record<string, string> = {
-  REFERENCE: '参考', BUSINESS_RULE: '业务规则', ARCH_DECISION: '架构决策',
-  API_CONTRACT: '接口契约', DATA_CONSTRAINT: '数据约束', TEST_OBLIGATION: '测试义务',
-  SECURITY_POLICY: '安全策略', RUNBOOK: '运行手册', INCIDENT_LESSON: '事故经验',
-  OWNERSHIP: '责任归属', TECH_DEBT: '技术债',
-};
-const enforcementLabels: Record<string, string> = {
-  REFERENCE: '仅参考', ADVISORY: '建议执行', REQUIRED: '必须执行',
-};
 </script>
 
 <template>
@@ -35,11 +32,11 @@ const enforcementLabels: Record<string, string> = {
     >
       <BookOpen :size="15" />
       <span>
-        <small>{{ kindLabels[item.kind] ?? item.kind }} · {{ enforcementLabels[item.enforcement] ?? item.enforcement }}</small>
+        <small>{{ knowledgeKindLabel(item.kind) }} · {{ enforcementLabel(item.enforcement) }}</small>
         <strong>{{ item.title }}</strong>
         <em>{{ item.reasons.length }} 条确定性命中原因 · 修订 v{{ item.revision }}</em>
       </span>
-      <b>{{ stale ? item.sourceVersionStatus : '已验证' }}</b>
+      <b>{{ stale ? statusLabel(item.sourceVersionStatus) : '已验证' }}</b>
       <CornerDownRight :size="13" />
     </button>
 
@@ -56,7 +53,7 @@ const enforcementLabels: Record<string, string> = {
     >
       <Search :size="15" />
       <span>
-        <small>{{ kindLabels[item.kind] ?? item.kind }} · {{ item.retrievalSource }}</small>
+        <small>{{ knowledgeKindLabel(item.kind) }} · {{ retrievalSourceLabel(item.retrievalSource) }}</small>
         <strong>{{ item.title }}</strong>
         <em>{{ item.detail }}</em>
       </span>

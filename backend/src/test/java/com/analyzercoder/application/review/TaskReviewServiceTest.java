@@ -282,6 +282,39 @@ class TaskReviewServiceTest {
     }
 
     @Test
+    void externalReviewMayUseAHeadDifferentFromTheKnowledgeSnapshot() {
+        RepositoryChange current = change();
+        RepositoryChange external =
+                new RepositoryChange(
+                        current.source(),
+                        current.baseCommit(),
+                        "c".repeat(40),
+                        current.worktreeDigest(),
+                        current.partial(),
+                        current.changes(),
+                        List.of(
+                                new RepositoryChange.Limitation(
+                                        "PR_HEAD_NOT_INDEXED", "知识证据仍基于当前发布快照")));
+        when(symbols.resolve(repository, external)).thenReturn(changedSymbols());
+        TaskReviewRequest request =
+                new TaskReviewRequest(
+                        UUID.randomUUID(),
+                        "增加退款审批",
+                        GitChangeRequest.Source.COMMIT_RANGE,
+                        external.baseCommit(),
+                        external.headCommit(),
+                        null);
+
+        TaskReviewResult result =
+                service.createExternal(repository.id(), actorId, request, external);
+
+        assertThat(result.status()).isEqualTo(TaskReviewResult.Status.COMPLETED);
+        assertThat(result.snapshotId()).isEqualTo(snapshotId);
+        assertThat(result.change().headCommit()).isEqualTo("c".repeat(40));
+        verifyNoInteractions(changes);
+    }
+
+    @Test
     void externalReviewRejectsMismatchedCommitBoundariesBeforeCreatingARecord() {
         TaskReviewRequest request =
                 new TaskReviewRequest(

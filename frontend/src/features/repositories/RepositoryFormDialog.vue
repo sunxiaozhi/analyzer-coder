@@ -131,7 +131,7 @@ function submit() {
           </div>
         </el-form-item>
         <el-alert
-          title="私有仓库请选择加密凭据；用户名或 Token 不允许嵌入仓库地址。"
+          title="私有仓库请选择加密凭据；用户名或访问令牌不允许嵌入仓库地址。"
           type="info"
           :closable="false"
         />

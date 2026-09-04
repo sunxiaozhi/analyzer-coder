@@ -15,8 +15,11 @@ import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
 import AskHistorySidebar from '@/features/ask/AskHistorySidebar.vue';
 import { useAskConversation } from '@/features/ask/useAskConversation';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useAuthStore } from '@/stores/authStore';
+import { statusLabel } from '@/utils/displayLabels';
 
 const repositories = useRepositoryStore();
+const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const conversation = useAskConversation();
@@ -176,6 +179,14 @@ async function selectTargetRepository(repositoryId: string) {
   if (repositories.selectedRepositoryId !== repositoryId) await repositories.selectRepository(repositoryId);
 }
 
+function openReadinessAction() {
+  void router.push(repository.value ? '/overview' : '/repositories');
+}
+
+function openModelSettings() {
+  void router.push('/settings');
+}
+
 async function openCode(reference: CodeReference) {
   try {
     await selectTargetRepository(reference.repositoryId);
@@ -235,8 +246,15 @@ onMounted(async () => {
         <small>{{ repository?.branch ?? '无分支' }}<template v-if="repository?.commit"> · {{ repository.commit.slice(0, 8) }}</template></small>
       </div>
       <el-tag :type="readinessCopy?.type" effect="plain" round>{{ readinessCopy?.label }}</el-tag>
-      <p v-if="readiness && !canAsk">当前仓库还没有可检索的代码内容，请先完成索引。</p>
-      <p v-else-if="!modelsLoading && !selectedModel">暂无可用问答模型，请让管理员先完成模型检测。</p>
+      <div v-if="!repository || (readiness && !canAsk)" class="command-notice">
+        <span>{{ repository ? '当前仓库还没有可检索的代码内容。' : '先选择项目才能开始问答。' }}</span>
+        <el-button link type="primary" @click="openReadinessAction">{{ repository ? '去准备项目' : '选择项目' }}</el-button>
+      </div>
+      <div v-else-if="!modelsLoading && !selectedModel" class="command-notice">
+        <span>暂无可用问答模型。</span>
+        <el-button v-if="auth.isAdmin" link type="primary" @click="openModelSettings">配置并检测模型</el-button>
+        <small v-else>请联系管理员完成模型检测</small>
+      </div>
       <div class="command-actions">
         <div class="model-selector">
           <span>问答模型</span>
@@ -254,7 +272,7 @@ onMounted(async () => {
               :disabled="!item.available"
             >
               <span>{{ item.name }} · {{ item.model }}</span>
-              <small>{{ item.available ? '可用' : item.availability }}</small>
+              <small>{{ item.available ? '可用' : statusLabel(item.availability) }}</small>
             </el-option>
           </el-select>
         </div>
@@ -273,7 +291,7 @@ onMounted(async () => {
       :pending-question="conversation.pendingQuestion.value"
       :request-state="conversation.requestState.value"
       :error="conversation.error.value"
-      :disabled="!repository || !selectedModel"
+      :disabled="!repository || !canAsk || !selectedModel"
       @send="send" @retry="retry" @select-answer="conversation.selectAnswer"
       @open-knowledge="openKnowledge" @open-code="openCode" @open-graph="openGraph"
     />
@@ -285,8 +303,10 @@ onMounted(async () => {
 .qa-page { display:grid; grid-template-columns:280px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:12px; min-height:0; height:100%; }
 .qa-command { grid-column:1/-1; display:flex; min-height:62px; align-items:center; gap:12px; padding:9px 14px; border:1px solid #dedee3; border-radius:7px; background:#fff; }
 .scope-copy { display:grid; grid-template-columns:auto auto; align-items:baseline; gap:2px 9px; min-width:0; }.scope-copy>span { grid-row:1/3; align-self:center; padding-right:10px; color:var(--app-color-action); border-right:2px solid #90bde5; font-size: 13px; font-weight:700; letter-spacing:.08em; }.scope-copy strong { overflow:hidden; color:#2d3035; font-size:15px; text-overflow:ellipsis; white-space:nowrap; }.scope-copy small { color: var(--app-text-muted); font-size: 13px; }
-.qa-command>p { margin:0; color:#7b5a1b; font-size: 13px; }.command-actions { display:flex; gap:8px; margin-left:auto; }
+.command-notice { display:flex; align-items:center; gap:4px; margin:0; color:#7b5a1b; font-size:13px; }
+.command-notice small { color:var(--app-text-muted); }
+.command-actions { display:flex; gap:8px; margin-left:auto; }
 .model-selector { display:flex; align-items:center; gap:7px; }.model-selector>span { color: var(--app-text-muted); font-size: 13px; white-space:nowrap; }.model-selector :deep(.el-select) { width:240px; }.model-selector :deep(.el-select-dropdown__item) { display:flex; justify-content:space-between; gap:12px; }.model-selector small { color: var(--app-text-muted); }
-@media (max-width:900px) { .qa-page { grid-template-columns:1fr; grid-template-rows:auto auto minmax(620px,1fr); gap:10px; overflow:auto; }.qa-command { grid-column:1; }.qa-command>p { display:none; } }
+@media (max-width:900px) { .qa-page { grid-template-columns:1fr; grid-template-rows:auto auto minmax(620px,1fr); gap:10px; overflow:auto; }.qa-command { grid-column:1; }.command-notice { width:100%; order:3; } }
 @media (max-width:760px) { .qa-page { height:auto; }.qa-command { flex-wrap:wrap; }.scope-copy { flex:1; }.command-actions { width:100%; margin-left:0; }.model-selector { flex:1; }.model-selector :deep(.el-select) { width:100%; }.command-actions .el-button { flex:0 0 auto; } }
 </style>

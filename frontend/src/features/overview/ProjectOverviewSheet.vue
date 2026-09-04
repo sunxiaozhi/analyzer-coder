@@ -86,6 +86,14 @@ const prepareLabel = computed(() => {
   if (props.preparation?.state === 'READY') return '检查更新';
   return '修复准备状态';
 });
+const reviewActionLabel = computed(() => (
+  props.health?.readyForReview ? '开始变更审查' : '准备完成后审查'
+));
+const reviewActionTitle = computed(() => (
+  props.health?.readyForReview
+    ? '基于当前快照和可信知识发起变更审查'
+    : '请先处理右侧准备流程和当前问题'
+));
 
 function short(value: string | null | undefined, length: number) {
   return value ? value.slice(0, length) : '—';
@@ -136,7 +144,6 @@ function canResolveIssue(issue: ProjectHealthIssue) {
       <div class="identity-block">
         <span class="project-mark"><Code2 :size="22" /></span>
         <div class="identity-copy">
-          <div class="eyebrow">PROJECT HEALTH OVERVIEW</div>
           <h1>{{ repository.name }}</h1>
           <p>{{ repository.description || '当前代码快照的工程知识、索引能力与审查状态。' }}</p>
         </div>
@@ -145,7 +152,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
       <div class="version-line" aria-label="项目版本">
         <span><GitBranch :size="13" />{{ repository.branch ?? '无分支' }}</span>
         <span><GitCommit :size="13" />{{ short(repository.commit, 10) }}</span>
-        <span>Snapshot {{ short(repository.snapshotId, 8) }}</span>
+        <span>快照 {{ short(repository.snapshotId, 8) }}</span>
         <span v-if="repository.dirty" class="dirty-flag">工作区有未发布变更</span>
       </div>
 
@@ -165,10 +172,11 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <button
           type="button"
           class="review-action"
+          :title="reviewActionTitle"
           :disabled="loading || preparing || !health?.readyForReview"
           @click="emit('startReview')"
         >
-          开始变更审查
+          {{ reviewActionLabel }}
           <ArrowRight :size="15" />
         </button>
         <button
@@ -195,7 +203,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 
     <section class="capability-strip" aria-label="项目核心数据">
       <article data-accent="blue">
-        <span><Network :size="17" />CodeGraph</span>
+        <span><Network :size="17" />代码图谱</span>
         <strong>{{ profile?.graphNodes ?? 0 }}</strong>
         <small>节点 · {{ profile?.graphEdges ?? 0 }} 条关系</small>
       </article>
@@ -221,7 +229,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <section class="overview-section knowledge-section" aria-labelledby="knowledge-health-title">
           <header class="section-heading">
             <div>
-              <span>KNOWLEDGE RELIABILITY</span>
+              <span>知识可信度</span>
               <h2 id="knowledge-health-title">知识真实性</h2>
               <p>计数直接来自知识卡的审核、发布和代码版本状态。</p>
             </div>
@@ -229,14 +237,14 @@ function canResolveIssue(issue: ProjectHealthIssue) {
           </header>
 
           <div class="knowledge-states">
-            <article data-tone="current"><small>CURRENT</small><strong>{{ knowledge.current }}</strong><span>与当前代码一致</span></article>
-            <article data-tone="suspect"><small>SUSPECT</small><strong>{{ knowledge.suspect }}</strong><span>变化后待复核</span></article>
-            <article data-tone="stale"><small>STALE</small><strong>{{ knowledge.stale }}</strong><span>已排除出可信依据</span></article>
-            <article data-tone="unverified"><small>UNVERIFIED</small><strong>{{ knowledge.unverified }}</strong><span>尚未绑定代码版本</span></article>
+            <article data-tone="current"><small>当前</small><strong>{{ knowledge.current }}</strong><span>与当前代码一致</span></article>
+            <article data-tone="suspect"><small>待复核</small><strong>{{ knowledge.suspect }}</strong><span>变化后待复核</span></article>
+            <article data-tone="stale"><small>已失效</small><strong>{{ knowledge.stale }}</strong><span>已排除出可信依据</span></article>
+            <article data-tone="unverified"><small>未验证</small><strong>{{ knowledge.unverified }}</strong><span>尚未绑定代码版本</span></article>
           </div>
 
           <div class="governance-ledger">
-            <div><span>可信可用</span><strong>{{ knowledge.trusted }}</strong><small>已发布 + 已审核 + CURRENT</small></div>
+            <div><span>可信可用</span><strong>{{ knowledge.trusted }}</strong><small>已发布 + 已审核 + 与当前代码一致</small></div>
             <div><span>未审核</span><strong>{{ knowledge.unreviewed }}</strong><small>不能作为已确认规则</small></div>
             <div><span>必需但无负责人</span><strong>{{ knowledge.requiredWithoutOwner }}</strong><small>审批责任尚未落位</small></div>
           </div>
@@ -245,9 +253,9 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <section class="overview-section code-section" aria-labelledby="code-types-title">
           <header class="section-heading">
             <div>
-              <span>CODE DISTRIBUTION</span>
+              <span>代码分布</span>
               <h2 id="code-types-title">代码类型统计</h2>
-              <p>基于当前 Snapshot 的文件路径和代码内容分类，不读取 README。</p>
+              <p>基于当前快照的文件路径和代码内容分类，不读取项目说明。</p>
             </div>
           </header>
 
@@ -258,15 +266,15 @@ function canResolveIssue(issue: ProjectHealthIssue) {
               <small>{{ category.detail }}<template v-if="category.samples.length"> · {{ category.samples.slice(0, 2).join('、') }}</template></small>
             </article>
           </div>
-          <p v-else class="empty-copy">当前 Snapshot 还没有可用的代码分类结果。</p>
+          <p v-else class="empty-copy">当前快照还没有可用的代码分类结果。</p>
         </section>
 
         <section class="overview-section reviews-section" aria-labelledby="recent-reviews-title">
           <header class="section-heading">
             <div>
-              <span>RECENT TASK REVIEWS</span>
+              <span>最近审查</span>
               <h2 id="recent-reviews-title">最近变更审查</h2>
-              <p>每条记录都绑定创建时的 Snapshot 和 Git 版本。</p>
+              <p>每条记录都绑定创建时的快照和 Git 版本。</p>
             </div>
           </header>
 
@@ -289,7 +297,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 
       <aside class="secondary-column">
         <section class="side-section issue-section" aria-labelledby="issues-title">
-          <header class="side-heading"><span>CURRENT ISSUES</span><h2 id="issues-title">当前阻塞与缺口</h2></header>
+          <header class="side-heading"><span>当前问题</span><h2 id="issues-title">当前阻塞与缺口</h2></header>
           <div v-if="health?.issues.length" class="issue-list">
             <article v-for="issue in health.issues" :key="issue.code" class="issue-row" :data-severity="issue.severity">
               <AlertTriangle :size="15" />
@@ -305,7 +313,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 
         <section class="side-section readiness-section" aria-labelledby="readiness-title">
           <header class="side-heading">
-            <span>PREPARATION</span>
+            <span>准备状态</span>
             <h2 id="readiness-title">准备流程</h2>
             <p>{{ preparation?.message ?? '尚未获取准备状态' }}</p>
           </header>
@@ -330,7 +338,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
               </div>
             </article>
           </div>
-          <p v-else class="empty-copy">准备后会显示 Snapshot、内容、向量和 CodeGraph 状态。</p>
+          <p v-else class="empty-copy">准备后会显示快照、内容、向量和代码图谱状态。</p>
         </section>
       </aside>
     </div>
@@ -364,30 +372,30 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 }
 .overview-sheet button { font: inherit; }
 .overview-sheet button:disabled { cursor: not-allowed; opacity: .45; }
-.project-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px 28px; padding: 29px 31px; border: 1px solid #d6e0e6; border-top: 4px solid var(--navy); border-radius: 8px 8px 4px 4px; background: #fff; box-shadow: 0 8px 28px rgb(20 47 69 / 6%); }
-.identity-block { display: flex; min-width: 0; gap: 15px; }
-.project-mark { display: grid; width: 45px; height: 45px; flex: 0 0 auto; place-items: center; color: #fff; border-radius: 6px; background: var(--navy); }
+.project-hero { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(220px, auto) auto; grid-template-rows: auto auto; align-items: center; gap: 7px 18px; padding: 16px 20px; border: 1px solid #d6e0e6; border-top: 4px solid var(--navy); border-radius: 8px 8px 4px 4px; background: #fff; box-shadow: 0 6px 20px rgb(20 47 69 / 5%); }
+.identity-block { display: flex; min-width: 0; align-items: center; gap: 12px; }
+.project-mark { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; color: #fff; border-radius: 5px; background: var(--navy); }
 .identity-copy { min-width: 0; }
 .eyebrow, .section-heading span, .side-heading > span { color: var(--blue); font: 750 12px/1.2 "SFMono-Regular", Consolas, monospace; letter-spacing: .14em; }
-.identity-copy h1 { overflow: hidden; margin: 4px 0 0; font-size: clamp(24px, 3vw, 33px); letter-spacing: -.035em; text-overflow: ellipsis; white-space: nowrap; }
-.identity-copy p { margin: 7px 0 0; color: var(--text); font-size: 13px; line-height: 1.65; }
-.version-line { display: flex; grid-column: 1; flex-wrap: wrap; align-items: center; gap: 8px 16px; color: #60727e; font: 600 12px/1.4 "SFMono-Regular", Consolas, monospace; }
+.identity-copy h1 { overflow: hidden; margin: 0; font-size: clamp(22px, 2.4vw, 28px); line-height: 1.12; letter-spacing: -.03em; text-overflow: ellipsis; white-space: nowrap; }
+.identity-copy p { overflow: hidden; margin: 3px 0 0; color: var(--text); font-size: 12px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+.version-line { display: flex; grid-column: 1; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-left: 50px; color: #60727e; font: 600 12px/1.35 "SFMono-Regular", Consolas, monospace; }
 .version-line span { display: inline-flex; align-items: center; gap: 5px; }
 .version-line .dirty-flag { color: var(--amber); }
-.health-callout { display: grid; grid-row: 1 / span 2; grid-column: 2; grid-template-columns: 34px minmax(160px, 220px); align-self: start; align-items: center; gap: 8px; padding: 12px 14px; color: var(--green); border: 1px solid rgb(33 138 96 / 25%); border-radius: 5px; background: rgb(33 138 96 / 6%); }
+.health-callout { display: grid; grid-row: 1 / span 2; grid-column: 2; grid-template-columns: 30px minmax(150px, 205px); align-items: center; gap: 8px; padding: 9px 11px; color: var(--green); border: 1px solid rgb(33 138 96 / 25%); border-radius: 5px; background: rgb(33 138 96 / 6%); }
 .health-callout[data-tone='warning'] { color: var(--amber); border-color: rgb(182 106 11 / 25%); background: rgb(182 106 11 / 6%); }
 .health-callout[data-tone='danger'] { color: var(--red); border-color: rgb(183 73 66 / 25%); background: rgb(183 73 66 / 6%); }
 .health-callout[data-tone='running'] { color: var(--blue); border-color: rgb(38 127 184 / 25%); background: rgb(38 127 184 / 6%); }
-.health-icon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: #fff; }
+.health-icon { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: #fff; }
 .health-callout div { display: grid; gap: 2px; }
 .health-callout strong { color: currentColor; font-size: 13px; }
-.health-callout small { color: #6d7a83; font-size: 12px; line-height: 1.5; }
-.hero-actions { display: flex; grid-column: 2; justify-content: flex-end; gap: 8px; }
+.health-callout small { color: #6d7a83; font-size: 12px; line-height: 1.35; }
+.hero-actions { display: flex; grid-row: 1 / span 2; grid-column: 3; justify-content: flex-end; gap: 6px; }
 .hero-actions button, .section-heading button, .reviews-empty button, .issue-row button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
-.hero-actions button { min-height: 36px; padding: 8px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; }
+.hero-actions button { min-height: 34px; padding: 7px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; }
 .review-action { color: #fff; border: 1px solid var(--blue); background: var(--blue); }
 .prepare-action { color: #2d536e; border: 1px solid #c7d4dc; background: #fff; }
-.refresh-action { width: 36px; padding: 0 !important; color: #60727e; border: 1px solid #d1dce2; background: #f8fafb; }
+.refresh-action { width: 34px; padding: 0 !important; color: #60727e; border: 1px solid #d1dce2; background: #f8fafb; }
 .hero-actions button:hover:not(:disabled), .hero-actions button:focus-visible { outline: 2px solid rgb(38 127 184 / 18%); outline-offset: 2px; }
 .capability-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); background: #fff; }
 .capability-strip article { display: grid; min-width: 0; gap: 4px; padding: 18px 21px; border-right: 1px solid var(--line); }
@@ -467,15 +475,18 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 .empty-copy { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .spinning { animation: spin .85s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (max-width: 1080px) {
-  .project-hero { grid-template-columns: minmax(0, 1fr); }
-  .health-callout { grid-row: auto; grid-column: 1; grid-template-columns: 34px minmax(0, 1fr); }
-  .hero-actions { grid-column: 1; justify-content: flex-start; }
+@media (max-width: 1180px) {
+  .project-hero { grid-template-columns: minmax(0, 1fr) auto; }
+  .health-callout { grid-row: 1; grid-column: 2; grid-template-columns: 30px minmax(150px, 205px); }
+  .hero-actions { grid-row: 2; grid-column: 2; }
   .overview-body { grid-template-columns: minmax(0, 1fr) 290px; }
 }
 @media (max-width: 820px) {
   .overview-sheet { padding: 12px 0 28px; }
-  .project-hero { padding: 22px 20px; }
+  .project-hero { grid-template-columns: 1fr; gap: 9px; padding: 15px 16px; }
+  .version-line { padding-left: 0; }
+  .health-callout { grid-row: auto; grid-column: 1; grid-template-columns: 30px minmax(0, 1fr); }
+  .hero-actions { grid-row: auto; grid-column: 1; justify-content: flex-start; }
   .capability-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .capability-strip article:nth-child(2) { border-right: 0; }
   .capability-strip article:nth-child(-n+2) { border-bottom: 1px solid var(--line); }

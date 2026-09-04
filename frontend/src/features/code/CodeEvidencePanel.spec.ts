@@ -82,7 +82,7 @@ describe('CodeEvidencePanel', () => {
 
     expect(api.codeEvidenceContext)
       .toHaveBeenCalledWith('repo-1', 'src/RefundService.java', 'approveRefund');
-    expect(wrapper.text()).toContain('当前 Snapshot 没有已发布图谱');
+    expect(wrapper.text()).toContain('当前快照没有已发布图谱');
 
     await wrapper.findAll('.context-tabs button')[1].trigger('click');
     expect(wrapper.text()).toContain('退款审批规则');

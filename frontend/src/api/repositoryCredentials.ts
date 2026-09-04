@@ -24,6 +24,10 @@ export interface RepositoryCredentialInput {
   secret: string;
 }
 export interface CredentialBinding { repositoryId: string; repositoryName: string; usageType: string; createdAt: string }
+export interface RepositoryCredentialBindingStatus {
+  remoteUrl: string;
+  credential: RepositoryCredential | null;
+}
 
 export const repositoryCredentialsApi = {
   list: () => request<RepositoryCredential[]>('/api/repository-credentials'),
@@ -40,4 +44,9 @@ export const repositoryCredentialsApi = {
   disable: (id: string) => request<RepositoryCredential>(`/api/repository-credentials/${id}/disable`, { method: 'POST' }),
   remove: (id: string) => request<void>(`/api/repository-credentials/${id}`, { method: 'DELETE' }),
   bindings: (id: string) => request<CredentialBinding[]>(`/api/repository-credentials/${id}/bindings`),
+  repositoryBinding: (repositoryId: string) => request<RepositoryCredentialBindingStatus>(`/api/repositories/${repositoryId}/credential`),
+  bindRepository: (repositoryId: string, credentialId: string) => request<RepositoryCredentialBindingStatus>(`/api/repositories/${repositoryId}/credential`, {
+    method: 'PUT', body: JSON.stringify({ credentialId }),
+  }),
+  unbindRepository: (repositoryId: string) => request<void>(`/api/repositories/${repositoryId}/credential`, { method: 'DELETE' }),
 };

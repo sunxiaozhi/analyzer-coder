@@ -270,7 +270,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
       <div v-if="providers.length" class="model-grid">
         <article v-for="item in providers" :key="item.id ?? item.version" class="model-card">
           <header class="card-header">
-            <el-tag effect="plain" size="small">OpenAI-compatible</el-tag>
+            <el-tag effect="plain" size="small">OpenAI 兼容协议</el-tag>
             <el-tag
               :type="item.availability === 'AVAILABLE' ? 'success' : item.availability === 'UNAVAILABLE' ? 'danger' : item.availability === 'DEGRADED' ? 'warning' : 'info'"
               size="small"
@@ -283,10 +283,10 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
             <code>{{ item.model }}</code>
           </div>
           <dl>
-            <div><dt>协议</dt><dd>OpenAI-compatible</dd></div>
+            <div><dt>协议</dt><dd>OpenAI 兼容协议</dd></div>
             <div><dt>服务地址</dt><dd>{{ item.baseUrl }}</dd></div>
             <div><dt>最近成功</dt><dd>{{ formatTime(item.lastSuccessAt) }}</dd></div>
-            <div><dt>输出上限</dt><dd>{{ item.maxOutputTokens }} tokens</dd></div>
+            <div><dt>输出上限</dt><dd>{{ item.maxOutputTokens }} 词元</dd></div>
           </dl>
           <footer class="card-actions">
             <el-button link :loading="checkingId === item.id" @click="testProvider(item)">
@@ -310,13 +310,13 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
       <div v-if="vectorModels.length" class="model-grid vector-grid">
         <article v-for="item in vectorModels" :key="item.id" class="model-card" :class="{ active: item.active }">
           <header class="card-header">
-            <el-tag effect="plain" size="small">{{ item.providerType === 'LOCAL_HASH' ? '字符哈希（非语义）' : 'OpenAI-compatible' }}</el-tag>
+            <el-tag effect="plain" size="small">{{ item.providerType === 'LOCAL_HASH' ? '字符哈希（非语义）' : 'OpenAI 兼容协议' }}</el-tag>
             <el-tag :type="item.active ? 'success' : 'info'" size="small">{{ item.active ? '当前启用' : '已备案' }}</el-tag>
           </header>
           <div class="model-title"><h4>{{ item.name }}</h4><code>{{ item.model }}</code></div>
           <p class="capability-copy"><b>{{ item.capabilityLabel }}</b> · {{ item.limitations.join('；') }}</p>
           <dl>
-            <div><dt>运行方式</dt><dd>{{ item.providerType === 'LOCAL_HASH' ? '本地确定性' : '外部 API' }}</dd></div>
+            <div><dt>运行方式</dt><dd>{{ item.providerType === 'LOCAL_HASH' ? '本地确定性' : '外部接口' }}</dd></div>
             <div><dt>向量维度</dt><dd>{{ item.dimension }}</dd></div>
             <div><dt>数据外发</dt><dd>{{ item.providerType === 'LOCAL_HASH' ? '无' : '索引文本' }}</dd></div>
             <div><dt>备案时间</dt><dd>{{ formatTime(item.createdAt) }}</dd></div>
@@ -339,20 +339,20 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
       <el-form label-position="top" class="dialog-form">
         <div class="form-pair">
           <el-form-item label="备案名称"><el-input v-model="providerForm.name" placeholder="例如：生产问答模型" /></el-form-item>
-          <el-form-item label="协议"><el-select v-model="providerForm.providerType"><el-option label="OpenAI-compatible" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
+          <el-form-item label="协议"><el-select v-model="providerForm.providerType"><el-option label="OpenAI 兼容协议" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
         </div>
         <el-form-item label="服务地址"><el-input v-model="providerForm.baseUrl" placeholder="https://llm.example.com/v1"><template #prefix><Server :size="14" /></template></el-input></el-form-item>
         <div class="form-pair">
           <el-form-item label="模型标识"><el-input v-model="providerForm.model" placeholder="model-name" /></el-form-item>
-          <el-form-item label="API Key"><el-input v-model="apiKey" type="password" show-password :placeholder="editingProviderId ? '留空保留现有密钥' : '可选'" ><template #prefix><KeyRound :size="14" /></template></el-input></el-form-item>
+          <el-form-item label="接口密钥"><el-input v-model="apiKey" type="password" show-password :placeholder="editingProviderId ? '留空保留现有密钥' : '可选'" ><template #prefix><KeyRound :size="14" /></template></el-input></el-form-item>
         </div>
         <div class="form-quad">
-          <el-form-item label="连接超时(ms)"><el-input-number v-model="providerForm.connectTimeoutMs" :min="1000" :max="10000" /></el-form-item>
-          <el-form-item label="请求超时(ms)"><el-input-number v-model="providerForm.requestTimeoutMs" :min="3000" :max="120000" /></el-form-item>
-          <el-form-item label="最大 Token"><el-input-number v-model="providerForm.maxOutputTokens" :min="1" :max="32768" /></el-form-item>
-          <el-form-item label="Temperature"><el-input-number v-model="providerForm.temperature" :min="0" :max="2" :step="0.1" /></el-form-item>
+          <el-form-item label="连接超时（毫秒）"><el-input-number v-model="providerForm.connectTimeoutMs" :min="1000" :max="10000" /></el-form-item>
+          <el-form-item label="请求超时（毫秒）"><el-input-number v-model="providerForm.requestTimeoutMs" :min="3000" :max="120000" /></el-form-item>
+          <el-form-item label="最大输出词元"><el-input-number v-model="providerForm.maxOutputTokens" :min="1" :max="32768" /></el-form-item>
+          <el-form-item label="随机性"><el-input-number v-model="providerForm.temperature" :min="0" :max="2" :step="0.1" /></el-form-item>
         </div>
-        <div class="switch-field"><span><b>检测流式能力</b><small>连接检测会验证 SSE 与首 Token。</small></span><el-switch v-model="providerForm.streamingEnabled" /></div>
+        <div class="switch-field"><span><b>检测流式能力</b><small>连接检测会验证流式响应与首个输出片段。</small></span><el-switch v-model="providerForm.streamingEnabled" /></div>
       </el-form>
       <template #footer><el-button @click="providerDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveProvider"><Save :size="14" />保存备案</el-button></template>
     </el-dialog>
@@ -362,14 +362,14 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
         <el-form-item label="备案名称"><el-input v-model="vectorForm.name" placeholder="例如：默认代码向量" /></el-form-item>
         <el-form-item label="模型标识"><el-input v-model="vectorForm.model" :placeholder="vectorForm.providerType === 'LOCAL_HASH' ? 'local-hash-64' : 'text-embedding-model'" /></el-form-item>
         <div class="form-pair">
-          <el-form-item label="运行方式"><el-select v-model="vectorForm.providerType" @change="changeVectorProvider"><el-option label="本地字符哈希（非语义）" value="LOCAL_HASH" /><el-option label="OpenAI-compatible 语义向量" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
+          <el-form-item label="运行方式"><el-select v-model="vectorForm.providerType" @change="changeVectorProvider"><el-option label="本地字符哈希（非语义）" value="LOCAL_HASH" /><el-option label="OpenAI 兼容语义向量" value="OPENAI_COMPATIBLE" /></el-select></el-form-item>
           <el-form-item label="向量维度"><el-input-number v-model="vectorForm.dimension" :min="vectorForm.providerType === 'LOCAL_HASH' ? 64 : 1" :max="vectorForm.providerType === 'LOCAL_HASH' ? 64 : 4096" :disabled="vectorForm.providerType === 'LOCAL_HASH'" /></el-form-item>
         </div>
         <template v-if="vectorForm.providerType === 'OPENAI_COMPATIBLE'">
           <el-form-item label="服务地址"><el-input v-model="vectorForm.baseUrl" placeholder="https://api.example.com/v1"><template #prefix><Server :size="14" /></template></el-input></el-form-item>
           <div class="form-pair">
-            <el-form-item label="API Key"><el-input v-model="vectorApiKey" type="password" show-password :placeholder="editingVectorId ? '留空保留现有密钥' : '请输入 API Key'"><template #prefix><KeyRound :size="14" /></template></el-input></el-form-item>
-            <el-form-item label="请求超时(ms)"><el-input-number v-model="vectorForm.requestTimeoutMs" :min="3000" :max="120000" /></el-form-item>
+            <el-form-item label="接口密钥"><el-input v-model="vectorApiKey" type="password" show-password :placeholder="editingVectorId ? '留空保留现有密钥' : '请输入接口密钥'"><template #prefix><KeyRound :size="14" /></template></el-input></el-form-item>
+            <el-form-item label="请求超时（毫秒）"><el-input-number v-model="vectorForm.requestTimeoutMs" :min="3000" :max="120000" /></el-form-item>
           </div>
         </template>
         <el-alert
@@ -377,7 +377,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
           :closable="false"
           :title="vectorForm.providerType === 'LOCAL_HASH'
             ? '本地哈希固定为 64 维，仅用于字符相似度；不理解同义词、业务含义或代码语义。'
-            : '请填写模型实际支持的维度；检测会调用 OpenAI-compatible /embeddings 并校验返回长度。'"
+            : '请填写模型实际支持的维度；检测会调用 OpenAI 兼容协议的 /embeddings 接口并校验返回长度。'"
         />
       </el-form>
       <template #footer><el-button @click="vectorDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveVector"><Save :size="14" />保存备案</el-button></template>

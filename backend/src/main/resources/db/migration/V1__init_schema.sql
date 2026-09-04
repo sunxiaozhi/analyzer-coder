@@ -1,7 +1,7 @@
--- Codebase Knowledge Platform database baseline.
--- This file represents the complete current schema. A repository tracks one branch
--- and retains only one published code version; snapshot_id columns are consistency
--- tokens for derived data, not references to retained historical source copies.
+-- 代码知识平台数据库单一初始化基线。
+-- 本文件由原 V1 至 V14 按版本顺序合并，仅支持空库或明确重建后的数据库。
+-- 仓库只保留一个已发布代码版本；snapshot_id 是派生数据一致性令牌，
+-- 不指向可长期保留的历史源码副本。
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -1090,3 +1090,768 @@ CREATE INDEX IF NOT EXISTS idx_code_chunks_repo_path_line
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_refs_current_lookup
     ON knowledge_code_refs(repo_id, file_path, start_line, content_hash);
+
+-- ============================================================================
+-- 合并自 V2__markdown_knowledge_sources.sql
+-- ============================================================================
+
+-- Repository Markdown files discovered from the current managed snapshot. The
+-- source row is stable for a repository path; exact generation provenance is
+-- retained separately for each knowledge-card revision.
+
+CREATE TABLE repository_markdown_sources (
+    id UUID PRIMARY KEY,
+    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    snapshot_id UUID NOT NULL,
+    file_path TEXT NOT NULL,
+    content_hash CHAR(64) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    asset_type VARCHAR(24) NOT NULL,
+    content TEXT NOT NULL,
+    line_count INTEGER NOT NULL,
+    byte_size BIGINT NOT NULL,
+    discovered_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_repository_markdown_source_path UNIQUE (repo_id, file_path),
+    CONSTRAINT chk_repository_markdown_source_hash
+        CHECK (content_hash ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT chk_repository_markdown_source_asset_type
+        CHECK (asset_type IN ('DOCUMENT', 'RULE', 'TASK')),
+    CONSTRAINT chk_repository_markdown_source_line_count CHECK (line_count > 0),
+    CONSTRAINT chk_repository_markdown_source_byte_size CHECK (byte_size > 0),
+    CONSTRAINT chk_repository_markdown_source_path
+        CHECK (BTRIM(file_path) <> '' AND file_path !~ '(^|/)\.\.(/|$)')
+);
+
+COMMENT ON TABLE repository_markdown_sources IS '当前仓库快照中可生成知识卡片的 Markdown 来源';
+COMMENT ON COLUMN repository_markdown_sources.id IS '稳定来源标识，同一仓库相对路径保持不变';
+COMMENT ON COLUMN repository_markdown_sources.repo_id IS '所属仓库';
+COMMENT ON COLUMN repository_markdown_sources.snapshot_id IS '最近发现该 Markdown 的内容版本令牌';
+COMMENT ON COLUMN repository_markdown_sources.file_path IS '仓库内规范化 Markdown 相对路径';
+COMMENT ON COLUMN repository_markdown_sources.content_hash IS '完整 UTF-8 Markdown 原文的 SHA-256';
+COMMENT ON COLUMN repository_markdown_sources.content IS '用于生成知识卡片的完整 Markdown 原文';
+
+CREATE INDEX idx_repository_markdown_sources_snapshot
+    ON repository_markdown_sources(repo_id, snapshot_id, file_path);
+CREATE INDEX idx_repository_markdown_sources_path_hash
+    ON repository_markdown_sources(repo_id, file_path, content_hash);
+
+CREATE TABLE knowledge_card_markdown_source_links (
+    card_id UUID NOT NULL,
+    revision INTEGER NOT NULL,
+    source_id UUID REFERENCES repository_markdown_sources(id) ON DELETE SET NULL,
+    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    source_snapshot_id UUID NOT NULL,
+    source_path TEXT NOT NULL,
+    source_content_hash CHAR(64) NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (card_id, revision),
+    FOREIGN KEY (card_id, revision)
+        REFERENCES knowledge_card_revisions(card_id, revision) ON DELETE CASCADE,
+    CONSTRAINT chk_knowledge_markdown_link_hash
+        CHECK (source_content_hash ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT chk_knowledge_markdown_link_path
+        CHECK (BTRIM(source_path) <> '' AND source_path !~ '(^|/)\.\.(/|$)')
+);
+
+COMMENT ON TABLE knowledge_card_markdown_source_links IS '知识卡片修订与生成时 Markdown 精确版本的来源凭据';
+COMMENT ON COLUMN knowledge_card_markdown_source_links.card_id IS '生成或同步得到的知识卡片';
+COMMENT ON COLUMN knowledge_card_markdown_source_links.revision IS '对应知识卡片修订号';
+COMMENT ON COLUMN knowledge_card_markdown_source_links.source_id IS '当前来源行；来源删除后允许为空';
+COMMENT ON COLUMN knowledge_card_markdown_source_links.source_snapshot_id IS '生成时仓库内容版本令牌';
+COMMENT ON COLUMN knowledge_card_markdown_source_links.source_path IS '生成时 Markdown 相对路径';
+COMMENT ON COLUMN knowledge_card_markdown_source_links.source_content_hash IS '生成时完整 Markdown 原文 SHA-256';
+
+CREATE INDEX idx_knowledge_markdown_links_source
+    ON knowledge_card_markdown_source_links(repo_id, source_path, generated_at DESC);
+CREATE INDEX idx_knowledge_markdown_links_card
+    ON knowledge_card_markdown_source_links(card_id, revision DESC);
+
+-- ============================================================================
+-- 合并自 V3__qa_citation_assessment.sql
+-- ============================================================================
+
+-- Citation status describes mechanical coverage only. It must not imply that
+-- cited evidence semantically entails the answer. SUPPORTED remains readable
+-- for historical rows created before this distinction was introduced.
+
+ALTER TABLE qa_conversations
+    DROP CONSTRAINT IF EXISTS chk_qa_conversations_evidence_status;
+
+ALTER TABLE qa_conversations
+    ADD CONSTRAINT chk_qa_conversations_evidence_status CHECK (
+        evidence_status IN (
+            'CITATION_COMPLETE',
+            'CITATION_INCOMPLETE',
+            'SUPPORTED',
+            'DEGRADED',
+            'MODEL_OUTPUT_REJECTED',
+            'INSUFFICIENT',
+            'UNKNOWN'
+        )
+    );
+
+COMMENT ON COLUMN qa_conversations.evidence_status IS
+    '回答证据状态；CITATION_* 仅表示引用编号与段落覆盖，不表示语义蕴含已验证';
+
+-- ============================================================================
+-- 合并自 V4__rename_heuristic_call_edges.sql
+-- ============================================================================
+
+-- These rows are produced by symbol-token string matching during indexing.
+-- They are deliberately kept separate from published CodeGraph CLI artifacts.
+
+ALTER TABLE code_graph_edges RENAME TO heuristic_call_edges;
+ALTER INDEX idx_code_graph_edges_source RENAME TO idx_heuristic_call_edges_source;
+ALTER INDEX idx_code_graph_edges_target RENAME TO idx_heuristic_call_edges_target;
+
+COMMENT ON TABLE heuristic_call_edges IS
+    '索引阶段按“符号名+左括号”字符串规则推断的启发式调用候选，不是 CodeGraph CLI 关系';
+
+-- ============================================================================
+-- 合并自 V5__embedding_retrieval_capability.sql
+-- ============================================================================
+
+-- A pgvector value does not by itself imply semantic understanding. Persist the
+-- generation capability so LOCAL_HASH can never be presented as an embedding model.
+
+ALTER TABLE chunk_embeddings ADD COLUMN retrieval_capability VARCHAR(32);
+ALTER TABLE knowledge_card_embeddings ADD COLUMN retrieval_capability VARCHAR(32);
+
+UPDATE chunk_embeddings e
+SET retrieval_capability = CASE
+    WHEN e.model='local-hash-64' OR EXISTS (
+        SELECT 1 FROM vector_model_configs vm
+        WHERE vm.model=e.model AND vm.provider_type='LOCAL_HASH'
+    ) THEN 'CHARACTER_HASH'
+    ELSE 'SEMANTIC_EMBEDDING'
+END;
+
+UPDATE knowledge_card_embeddings e
+SET retrieval_capability = CASE
+    WHEN e.model='local-hash-64' OR EXISTS (
+        SELECT 1 FROM vector_model_configs vm
+        WHERE vm.model=e.model AND vm.provider_type='LOCAL_HASH'
+    ) THEN 'CHARACTER_HASH'
+    ELSE 'SEMANTIC_EMBEDDING'
+END;
+
+ALTER TABLE chunk_embeddings ALTER COLUMN retrieval_capability SET NOT NULL;
+ALTER TABLE knowledge_card_embeddings ALTER COLUMN retrieval_capability SET NOT NULL;
+
+ALTER TABLE chunk_embeddings ADD CONSTRAINT chk_chunk_embeddings_capability
+    CHECK (retrieval_capability IN ('CHARACTER_HASH','SEMANTIC_EMBEDDING'));
+ALTER TABLE knowledge_card_embeddings ADD CONSTRAINT chk_knowledge_embeddings_capability
+    CHECK (retrieval_capability IN ('CHARACTER_HASH','SEMANTIC_EMBEDDING'));
+
+COMMENT ON COLUMN chunk_embeddings.retrieval_capability IS
+    'CHARACTER_HASH 为字符哈希相似度；SEMANTIC_EMBEDDING 才表示外部模型语义向量';
+COMMENT ON COLUMN knowledge_card_embeddings.retrieval_capability IS
+    'CHARACTER_HASH 为字符哈希相似度；SEMANTIC_EMBEDDING 才表示外部模型语义向量';
+
+-- ============================================================================
+-- 合并自 V6__index_job_lease_and_failure.sql
+-- ============================================================================
+
+ALTER TABLE index_jobs ADD COLUMN heartbeat_at TIMESTAMPTZ;
+ALTER TABLE index_jobs ADD COLUMN timeout_at TIMESTAMPTZ;
+ALTER TABLE index_jobs ADD COLUMN failure_code VARCHAR(64);
+
+UPDATE index_jobs
+SET heartbeat_at=COALESCE(started_at,created_at)
+WHERE status IN ('RUNNING','CANCEL_REQUESTED');
+
+COMMENT ON COLUMN index_jobs.heartbeat_at IS 'Worker 最近一次存活心跳；只表示进程仍在处理';
+COMMENT ON COLUMN index_jobs.timeout_at IS '任务固定超时截止时间，心跳不会无限延长该截止时间';
+COMMENT ON COLUMN index_jobs.failure_code IS '稳定失败代码，例如 CODEGRAPH_TIMEOUT、CODEGRAPH_BUILD_FAILED';
+
+CREATE INDEX idx_index_jobs_running_timeout
+    ON index_jobs(timeout_at)
+    WHERE status IN ('RUNNING','CANCEL_REQUESTED');
+
+-- ============================================================================
+-- 合并自 V7__split_knowledge_states.sql
+-- ============================================================================
+
+DROP TRIGGER IF EXISTS trg_confirm_knowledge_code_version ON knowledge_cards;
+DROP FUNCTION IF EXISTS confirm_knowledge_code_version();
+DROP TRIGGER IF EXISTS trg_repository_knowledge_stale ON repositories;
+DROP FUNCTION IF EXISTS mark_repository_knowledge_stale();
+DROP TRIGGER IF EXISTS trg_knowledge_card_revision ON knowledge_cards;
+DROP FUNCTION IF EXISTS capture_knowledge_card_revision();
+
+ALTER TABLE knowledge_cards RENAME COLUMN status TO publication_status;
+ALTER TABLE knowledge_cards DROP CONSTRAINT chk_knowledge_code_review_status;
+ALTER TABLE knowledge_cards RENAME COLUMN code_review_status TO source_version_status;
+ALTER TABLE knowledge_cards RENAME COLUMN code_reviewed_at TO source_version_checked_at;
+ALTER TABLE knowledge_cards ADD COLUMN review_status VARCHAR(32) NOT NULL DEFAULT 'UNREVIEWED';
+ALTER TABLE knowledge_cards ADD COLUMN reviewed_by UUID REFERENCES accounts(id) ON DELETE SET NULL;
+ALTER TABLE knowledge_cards ADD COLUMN reviewed_at TIMESTAMPTZ;
+
+UPDATE knowledge_cards
+SET publication_status=CASE
+        WHEN publication_status='PUBLISHED' THEN 'PUBLISHED'
+        WHEN publication_status='ARCHIVED' THEN 'ARCHIVED'
+        ELSE 'DRAFT'
+    END,
+    source_version_status=CASE
+        WHEN source_version_status='CURRENT' THEN 'CURRENT'
+        WHEN source_version_status='REVIEW_REQUIRED' THEN 'STALE'
+        ELSE 'UNVERIFIED'
+    END,
+    review_status='UNREVIEWED',reviewed_by=NULL,reviewed_at=NULL;
+
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_publication_status
+    CHECK (publication_status IN ('DRAFT','PUBLISHED','ARCHIVED'));
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_source_version_status
+    CHECK (source_version_status IN ('UNVERIFIED','CURRENT','STALE'));
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_review_status
+    CHECK (review_status IN ('UNREVIEWED','APPROVED','CHANGES_REQUESTED'));
+
+ALTER TABLE knowledge_card_revisions RENAME COLUMN status TO publication_status;
+
+COMMENT ON COLUMN knowledge_cards.publication_status IS '发布状态：草稿、已发布或已归档';
+COMMENT ON COLUMN knowledge_cards.source_version_status IS '来源版本状态：未验证、当前或已过期；不表示人工认可内容';
+COMMENT ON COLUMN knowledge_cards.source_version_checked_at IS '最近一次自动核对来源版本的时间';
+COMMENT ON COLUMN knowledge_cards.review_status IS '人工评审状态，与来源版本及发布状态独立';
+COMMENT ON COLUMN knowledge_cards.reviewed_by IS '最近一次人工评审账号';
+COMMENT ON COLUMN knowledge_cards.reviewed_at IS '最近一次人工评审时间';
+COMMENT ON COLUMN knowledge_card_revisions.publication_status IS '该历史修订保存时的发布状态';
+
+CREATE OR REPLACE FUNCTION capture_knowledge_card_revision() RETURNS trigger AS $$
+BEGIN
+    INSERT INTO knowledge_card_revisions(
+        card_id,revision,repo_id,title,card_type,content,tags,publication_status,changed_by,changed_at
+    ) VALUES(
+        NEW.id,NEW.revision,NEW.repo_id,NEW.title,NEW.card_type,NEW.content,NEW.tags,
+        NEW.publication_status,NEW.updated_by,NEW.updated_at
+    )
+    ON CONFLICT(card_id,revision) DO UPDATE SET
+        title=EXCLUDED.title,card_type=EXCLUDED.card_type,content=EXCLUDED.content,
+        tags=EXCLUDED.tags,publication_status=EXCLUDED.publication_status,
+        changed_by=EXCLUDED.changed_by,changed_at=EXCLUDED.changed_at;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_knowledge_card_revision
+AFTER INSERT OR UPDATE OF title,card_type,content,tags,publication_status,revision ON knowledge_cards
+FOR EACH ROW EXECUTE FUNCTION capture_knowledge_card_revision();
+
+CREATE OR REPLACE FUNCTION mark_repository_knowledge_stale() RETURNS trigger AS $$
+BEGIN
+    IF OLD.current_commit IS DISTINCT FROM NEW.current_commit THEN
+        UPDATE knowledge_cards
+        SET source_version_status='STALE',source_version_checked_at=CURRENT_TIMESTAMP
+        WHERE repo_id=NEW.id AND verified_commit IS NOT NULL
+          AND verified_commit IS DISTINCT FROM NEW.current_commit;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_repository_knowledge_stale
+AFTER UPDATE OF current_commit ON repositories
+FOR EACH ROW EXECUTE FUNCTION mark_repository_knowledge_stale();
+
+-- ============================================================================
+-- 合并自 V8__index_execution_plan.sql
+-- ============================================================================
+
+ALTER TABLE index_jobs ADD COLUMN execution_mode VARCHAR(20);
+ALTER TABLE index_jobs ADD COLUMN fallback_reason VARCHAR(64);
+
+ALTER TABLE index_jobs ADD CONSTRAINT chk_index_jobs_execution_mode
+    CHECK (execution_mode IS NULL OR execution_mode IN ('FULL','INCREMENTAL'));
+
+COMMENT ON COLUMN index_jobs.execution_mode IS '实际执行模式；可能与请求的 job_type 不同';
+COMMENT ON COLUMN index_jobs.fallback_reason IS '增量请求回退全量的稳定原因代码';
+
+-- ============================================================================
+-- 合并自 V9__engineering_knowledge.sql
+-- ============================================================================
+
+ALTER TABLE knowledge_cards
+    ADD COLUMN knowledge_kind VARCHAR(40) NOT NULL DEFAULT 'REFERENCE',
+    ADD COLUMN severity VARCHAR(20) NOT NULL DEFAULT 'INFO',
+    ADD COLUMN enforcement VARCHAR(20) NOT NULL DEFAULT 'REFERENCE',
+    ADD COLUMN owner_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    ADD COLUMN scope_payload JSONB NOT NULL DEFAULT '{"pathPatterns":[],"symbols":[],"modules":[]}'::jsonb,
+    ADD COLUMN obligations_payload JSONB NOT NULL DEFAULT '{"requiredTests":[],"requiredApproverAccountIds":[],"instructions":[]}'::jsonb,
+    ADD COLUMN last_verified_snapshot_id UUID,
+    ADD COLUMN verification_note TEXT;
+
+ALTER TABLE knowledge_card_revisions
+    ADD COLUMN knowledge_kind VARCHAR(40) NOT NULL DEFAULT 'REFERENCE',
+    ADD COLUMN severity VARCHAR(20) NOT NULL DEFAULT 'INFO',
+    ADD COLUMN enforcement VARCHAR(20) NOT NULL DEFAULT 'REFERENCE',
+    ADD COLUMN owner_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    ADD COLUMN scope_payload JSONB NOT NULL DEFAULT '{"pathPatterns":[],"symbols":[],"modules":[]}'::jsonb,
+    ADD COLUMN obligations_payload JSONB NOT NULL DEFAULT '{"requiredTests":[],"requiredApproverAccountIds":[],"instructions":[]}'::jsonb,
+    ADD COLUMN last_verified_snapshot_id UUID,
+    ADD COLUMN verification_note TEXT;
+
+ALTER TABLE knowledge_cards DROP CONSTRAINT chk_knowledge_source_version_status;
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_source_version_status
+    CHECK (source_version_status IN ('UNVERIFIED','CURRENT','SUSPECT','STALE'));
+
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_kind
+    CHECK (knowledge_kind IN (
+        'REFERENCE','BUSINESS_RULE','ARCH_DECISION','API_CONTRACT','DATA_CONSTRAINT',
+        'TEST_OBLIGATION','SECURITY_POLICY','RUNBOOK','INCIDENT_LESSON','OWNERSHIP','TECH_DEBT'
+    ));
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_severity
+    CHECK (severity IN ('INFO','WARNING','CRITICAL'));
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_enforcement
+    CHECK (enforcement IN ('REFERENCE','ADVISORY','REQUIRED'));
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_scope_payload
+    CHECK (
+        jsonb_typeof(scope_payload)='object'
+        AND jsonb_typeof(scope_payload->'pathPatterns')='array'
+        AND jsonb_typeof(scope_payload->'symbols')='array'
+        AND jsonb_typeof(scope_payload->'modules')='array'
+    );
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_obligations_payload
+    CHECK (
+        jsonb_typeof(obligations_payload)='object'
+        AND jsonb_typeof(obligations_payload->'requiredTests')='array'
+        AND jsonb_typeof(obligations_payload->'requiredApproverAccountIds')='array'
+        AND jsonb_typeof(obligations_payload->'instructions')='array'
+    );
+
+ALTER TABLE knowledge_card_revisions ADD CONSTRAINT chk_knowledge_revision_kind
+    CHECK (knowledge_kind IN (
+        'REFERENCE','BUSINESS_RULE','ARCH_DECISION','API_CONTRACT','DATA_CONSTRAINT',
+        'TEST_OBLIGATION','SECURITY_POLICY','RUNBOOK','INCIDENT_LESSON','OWNERSHIP','TECH_DEBT'
+    ));
+ALTER TABLE knowledge_card_revisions ADD CONSTRAINT chk_knowledge_revision_severity
+    CHECK (severity IN ('INFO','WARNING','CRITICAL'));
+ALTER TABLE knowledge_card_revisions ADD CONSTRAINT chk_knowledge_revision_enforcement
+    CHECK (enforcement IN ('REFERENCE','ADVISORY','REQUIRED'));
+
+CREATE INDEX idx_knowledge_cards_engineering_policy
+    ON knowledge_cards(repo_id,knowledge_kind,enforcement,publication_status);
+
+COMMENT ON COLUMN knowledge_cards.knowledge_kind IS '可参与开发检查的工程知识类型';
+COMMENT ON COLUMN knowledge_cards.severity IS '知识不满足时的业务严重程度';
+COMMENT ON COLUMN knowledge_cards.enforcement IS '参考、建议或必须执行';
+COMMENT ON COLUMN knowledge_cards.owner_account_id IS '工程知识负责人';
+COMMENT ON COLUMN knowledge_cards.scope_payload IS '仓库内适用路径、符号和模块';
+COMMENT ON COLUMN knowledge_cards.obligations_payload IS '命中知识后要求的测试、审批和开发动作';
+COMMENT ON COLUMN knowledge_cards.last_verified_snapshot_id IS '最近完成人工或代码证据验证的仓库快照';
+COMMENT ON COLUMN knowledge_cards.verification_note IS '最近验证说明';
+
+DROP TRIGGER IF EXISTS trg_knowledge_card_revision ON knowledge_cards;
+DROP FUNCTION IF EXISTS capture_knowledge_card_revision();
+
+CREATE OR REPLACE FUNCTION capture_knowledge_card_revision() RETURNS trigger AS $$
+BEGIN
+    INSERT INTO knowledge_card_revisions(
+        card_id,revision,repo_id,title,card_type,content,tags,publication_status,
+        knowledge_kind,severity,enforcement,owner_account_id,scope_payload,obligations_payload,
+        last_verified_snapshot_id,verification_note,changed_by,changed_at
+    ) VALUES(
+        NEW.id,NEW.revision,NEW.repo_id,NEW.title,NEW.card_type,NEW.content,NEW.tags,
+        NEW.publication_status,NEW.knowledge_kind,NEW.severity,NEW.enforcement,NEW.owner_account_id,
+        NEW.scope_payload,NEW.obligations_payload,NEW.last_verified_snapshot_id,
+        NEW.verification_note,NEW.updated_by,NEW.updated_at
+    )
+    ON CONFLICT(card_id,revision) DO UPDATE SET
+        title=EXCLUDED.title,card_type=EXCLUDED.card_type,content=EXCLUDED.content,
+        tags=EXCLUDED.tags,publication_status=EXCLUDED.publication_status,
+        knowledge_kind=EXCLUDED.knowledge_kind,severity=EXCLUDED.severity,
+        enforcement=EXCLUDED.enforcement,owner_account_id=EXCLUDED.owner_account_id,
+        scope_payload=EXCLUDED.scope_payload,obligations_payload=EXCLUDED.obligations_payload,
+        last_verified_snapshot_id=EXCLUDED.last_verified_snapshot_id,
+        verification_note=EXCLUDED.verification_note,changed_by=EXCLUDED.changed_by,
+        changed_at=EXCLUDED.changed_at;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_knowledge_card_revision
+AFTER INSERT OR UPDATE OF title,card_type,content,tags,publication_status,knowledge_kind,
+    severity,enforcement,owner_account_id,scope_payload,obligations_payload,
+    last_verified_snapshot_id,verification_note,revision ON knowledge_cards
+FOR EACH ROW EXECUTE FUNCTION capture_knowledge_card_revision();
+
+-- ============================================================================
+-- 合并自 V10__task_reviews.sql
+-- ============================================================================
+
+CREATE TABLE task_reviews (
+    id UUID PRIMARY KEY,
+    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES accounts(id),
+    client_request_id UUID NOT NULL,
+    task TEXT,
+    change_source VARCHAR(24) NOT NULL,
+    base_ref VARCHAR(200),
+    head_ref VARCHAR(200),
+    model_config_id UUID REFERENCES llm_provider_configs(id) ON DELETE SET NULL,
+    base_commit VARCHAR(64),
+    head_commit VARCHAR(64),
+    snapshot_id UUID NOT NULL,
+    worktree_digest VARCHAR(64),
+    status VARCHAR(20) NOT NULL,
+    result_payload JSONB,
+    error_code VARCHAR(80),
+    error_message VARCHAR(500),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMPTZ,
+    CONSTRAINT chk_task_reviews_source
+        CHECK (change_source IN ('WORKTREE','SINGLE_COMMIT','COMMIT_RANGE')),
+    CONSTRAINT chk_task_reviews_status
+        CHECK (status IN ('RUNNING','COMPLETED','FAILED')),
+    CONSTRAINT chk_task_reviews_terminal
+        CHECK (
+            (status='RUNNING' AND finished_at IS NULL AND result_payload IS NULL)
+            OR (status='COMPLETED' AND finished_at IS NOT NULL AND result_payload IS NOT NULL
+                AND error_code IS NULL AND error_message IS NULL)
+            OR (status='FAILED' AND finished_at IS NOT NULL AND error_code IS NOT NULL)
+        )
+);
+
+CREATE UNIQUE INDEX uq_task_reviews_client_request
+    ON task_reviews(created_by,repo_id,client_request_id);
+CREATE INDEX idx_task_reviews_repo_created
+    ON task_reviews(repo_id,created_at DESC,id DESC);
+
+COMMENT ON TABLE task_reviews IS '绑定 Git 版本、仓库快照和确定性知识事实的不可变任务审查';
+COMMENT ON COLUMN task_reviews.client_request_id IS '调用方提供的幂等请求标识';
+COMMENT ON COLUMN task_reviews.model_config_id IS '预留的模型配置，本阶段只保存且不调用模型';
+COMMENT ON COLUMN task_reviews.result_payload IS '完成后不可变的完整审查结果 JSON';
+
+CREATE OR REPLACE FUNCTION prevent_terminal_task_review_update() RETURNS trigger AS $$
+BEGIN
+    IF OLD.status IN ('COMPLETED','FAILED') THEN
+        RAISE EXCEPTION 'terminal task review is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_task_reviews_immutable
+BEFORE UPDATE ON task_reviews
+FOR EACH ROW EXECUTE FUNCTION prevent_terminal_task_review_update();
+
+-- ============================================================================
+-- 合并自 V11__knowledge_drift_audit.sql
+-- ============================================================================
+
+DROP TRIGGER IF EXISTS trg_repository_knowledge_stale ON repositories;
+DROP FUNCTION IF EXISTS mark_repository_knowledge_stale();
+
+CREATE TABLE knowledge_drift_events (
+    id UUID PRIMARY KEY,
+    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    card_id UUID NOT NULL REFERENCES knowledge_cards(id) ON DELETE CASCADE,
+    card_revision INTEGER NOT NULL CHECK (card_revision > 0),
+    from_snapshot_id UUID,
+    to_snapshot_id UUID NOT NULL,
+    from_commit VARCHAR(128),
+    to_commit VARCHAR(128),
+    previous_status VARCHAR(32) NOT NULL,
+    result_status VARCHAR(32) NOT NULL,
+    trigger_type VARCHAR(40) NOT NULL,
+    reasons_payload JSONB NOT NULL DEFAULT '[]'::jsonb,
+    note TEXT,
+    actor_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_knowledge_drift_previous_status
+        CHECK (previous_status IN ('UNVERIFIED','CURRENT','SUSPECT','STALE')),
+    CONSTRAINT chk_knowledge_drift_result_status
+        CHECK (result_status IN ('CURRENT','SUSPECT','STALE')),
+    CONSTRAINT chk_knowledge_drift_trigger_type
+        CHECK (trigger_type IN ('AUTOMATIC_DIFF','MANUAL_CONFIRM_CURRENT','MANUAL_MARK_STALE')),
+    CONSTRAINT chk_knowledge_drift_reasons_payload CHECK (jsonb_typeof(reasons_payload)='array')
+);
+
+CREATE UNIQUE INDEX uq_knowledge_drift_automatic_snapshot
+    ON knowledge_drift_events(card_id,card_revision,to_snapshot_id,trigger_type)
+    WHERE trigger_type='AUTOMATIC_DIFF';
+CREATE INDEX idx_knowledge_drift_card_created
+    ON knowledge_drift_events(repo_id,card_id,created_at DESC,id DESC);
+
+COMMENT ON TABLE knowledge_drift_events IS '知识来源版本的自动漂移与人工复核审计';
+COMMENT ON COLUMN knowledge_drift_events.reasons_payload IS '触发状态变化的结构化 Git、代码引用或符号证据';
+
+-- ============================================================================
+-- 合并自 V12__ci_knowledge_obligations.sql
+-- ============================================================================
+
+UPDATE knowledge_cards
+SET obligations_payload = obligations_payload
+    || CASE WHEN NOT (obligations_payload ? 'prohibitedPathPatterns')
+        THEN '{"prohibitedPathPatterns":[]}'::jsonb ELSE '{}'::jsonb END
+    || CASE WHEN NOT (obligations_payload ? 'knowledgeUpdateRequired')
+        THEN '{"knowledgeUpdateRequired":false}'::jsonb ELSE '{}'::jsonb END
+WHERE NOT (obligations_payload ? 'prohibitedPathPatterns')
+   OR NOT (obligations_payload ? 'knowledgeUpdateRequired');
+
+UPDATE knowledge_card_revisions
+SET obligations_payload = obligations_payload
+    || CASE WHEN NOT (obligations_payload ? 'prohibitedPathPatterns')
+        THEN '{"prohibitedPathPatterns":[]}'::jsonb ELSE '{}'::jsonb END
+    || CASE WHEN NOT (obligations_payload ? 'knowledgeUpdateRequired')
+        THEN '{"knowledgeUpdateRequired":false}'::jsonb ELSE '{}'::jsonb END
+WHERE NOT (obligations_payload ? 'prohibitedPathPatterns')
+   OR NOT (obligations_payload ? 'knowledgeUpdateRequired');
+
+ALTER TABLE knowledge_cards ALTER COLUMN obligations_payload SET DEFAULT
+    '{"requiredTests":[],"requiredApproverAccountIds":[],"instructions":[],"prohibitedPathPatterns":[],"knowledgeUpdateRequired":false}'::jsonb;
+ALTER TABLE knowledge_card_revisions ALTER COLUMN obligations_payload SET DEFAULT
+    '{"requiredTests":[],"requiredApproverAccountIds":[],"instructions":[],"prohibitedPathPatterns":[],"knowledgeUpdateRequired":false}'::jsonb;
+
+ALTER TABLE knowledge_cards DROP CONSTRAINT chk_knowledge_obligations_payload;
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_obligations_payload CHECK (
+    jsonb_typeof(obligations_payload)='object'
+    AND jsonb_typeof(obligations_payload->'requiredTests')='array'
+    AND jsonb_typeof(obligations_payload->'requiredApproverAccountIds')='array'
+    AND jsonb_typeof(obligations_payload->'instructions')='array'
+    AND jsonb_typeof(obligations_payload->'prohibitedPathPatterns')='array'
+    AND jsonb_typeof(obligations_payload->'knowledgeUpdateRequired')='boolean'
+);
+
+ALTER TABLE knowledge_card_revisions ADD CONSTRAINT chk_knowledge_revision_obligations_payload CHECK (
+    jsonb_typeof(obligations_payload)='object'
+    AND jsonb_typeof(obligations_payload->'requiredTests')='array'
+    AND jsonb_typeof(obligations_payload->'requiredApproverAccountIds')='array'
+    AND jsonb_typeof(obligations_payload->'instructions')='array'
+    AND jsonb_typeof(obligations_payload->'prohibitedPathPatterns')='array'
+    AND jsonb_typeof(obligations_payload->'knowledgeUpdateRequired')='boolean'
+);
+
+COMMENT ON COLUMN knowledge_cards.obligations_payload IS
+    '命中知识后要求的测试、审批、禁止路径、知识同步和补充开发动作';
+
+-- ============================================================================
+-- 合并自 V13__engineering_projects.sql
+-- ============================================================================
+
+CREATE TABLE engineering_projects (
+    id UUID PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    normalized_name VARCHAR(120) NOT NULL,
+    description VARCHAR(500) NOT NULL DEFAULT '',
+    created_by UUID NOT NULL REFERENCES accounts(id),
+    version BIGINT NOT NULL DEFAULT 1,
+    deleted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_engineering_project_version CHECK (version > 0)
+);
+
+CREATE UNIQUE INDEX uq_engineering_projects_name
+    ON engineering_projects(normalized_name) WHERE deleted_at IS NULL;
+
+CREATE TABLE engineering_project_repositories (
+    project_id UUID NOT NULL REFERENCES engineering_projects(id) ON DELETE CASCADE,
+    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE RESTRICT,
+    service_name VARCHAR(100) NOT NULL,
+    normalized_service_name VARCHAR(100) NOT NULL,
+    added_by UUID NOT NULL REFERENCES accounts(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(project_id,repo_id),
+    CONSTRAINT uq_engineering_project_service UNIQUE(project_id,normalized_service_name)
+);
+
+CREATE INDEX idx_engineering_project_repositories_repo
+    ON engineering_project_repositories(repo_id,project_id);
+
+CREATE TABLE engineering_project_contracts (
+    id UUID PRIMARY KEY,
+    project_id UUID NOT NULL REFERENCES engineering_projects(id) ON DELETE CASCADE,
+    contract_key VARCHAR(120) NOT NULL,
+    normalized_contract_key VARCHAR(120) NOT NULL,
+    name VARCHAR(160) NOT NULL,
+    provider_repo_id UUID NOT NULL,
+    consumer_repo_id UUID NOT NULL,
+    provider_snapshot_id UUID NOT NULL,
+    consumer_snapshot_id UUID NOT NULL,
+    provider_evidence_path VARCHAR(1000) NOT NULL,
+    consumer_evidence_path VARCHAR(1000) NOT NULL,
+    provider_content_fingerprint VARCHAR(64) NOT NULL,
+    consumer_content_fingerprint VARCHAR(64) NOT NULL,
+    created_by UUID NOT NULL REFERENCES accounts(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_engineering_project_contract UNIQUE(project_id,normalized_contract_key),
+    CONSTRAINT chk_engineering_contract_repositories CHECK(provider_repo_id<>consumer_repo_id),
+    CONSTRAINT fk_engineering_contract_provider FOREIGN KEY(project_id,provider_repo_id)
+        REFERENCES engineering_project_repositories(project_id,repo_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_engineering_contract_consumer FOREIGN KEY(project_id,consumer_repo_id)
+        REFERENCES engineering_project_repositories(project_id,repo_id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_engineering_project_contracts_provider
+    ON engineering_project_contracts(provider_repo_id,project_id);
+CREATE INDEX idx_engineering_project_contracts_consumer
+    ON engineering_project_contracts(consumer_repo_id,project_id);
+
+COMMENT ON TABLE engineering_projects IS '把多个真实仓库组织为一个可治理的工程项目';
+COMMENT ON TABLE engineering_project_repositories IS '工程项目中的仓库及其显式服务身份';
+COMMENT ON TABLE engineering_project_contracts IS '以两端当前代码路径和内容指纹验证的跨仓接口契约';
+COMMENT ON COLUMN engineering_project_contracts.provider_content_fingerprint IS
+    '创建或更新时对提供方当前路径全部 Chunk 内容哈希生成的稳定指纹';
+COMMENT ON COLUMN engineering_project_contracts.consumer_content_fingerprint IS
+    '创建或更新时对消费方当前路径全部 Chunk 内容哈希生成的稳定指纹';
+
+UPDATE knowledge_cards
+SET scope_payload = scope_payload
+    || CASE WHEN NOT (scope_payload ? 'repositoryIds')
+        THEN '{"repositoryIds":[]}'::jsonb ELSE '{}'::jsonb END
+    || CASE WHEN NOT (scope_payload ? 'serviceNames')
+        THEN '{"serviceNames":[]}'::jsonb ELSE '{}'::jsonb END
+    || CASE WHEN NOT (scope_payload ? 'contractIds')
+        THEN '{"contractIds":[]}'::jsonb ELSE '{}'::jsonb END
+WHERE NOT (scope_payload ? 'repositoryIds')
+   OR NOT (scope_payload ? 'serviceNames')
+   OR NOT (scope_payload ? 'contractIds');
+
+UPDATE knowledge_card_revisions
+SET scope_payload = scope_payload
+    || CASE WHEN NOT (scope_payload ? 'repositoryIds')
+        THEN '{"repositoryIds":[]}'::jsonb ELSE '{}'::jsonb END
+    || CASE WHEN NOT (scope_payload ? 'serviceNames')
+        THEN '{"serviceNames":[]}'::jsonb ELSE '{}'::jsonb END
+    || CASE WHEN NOT (scope_payload ? 'contractIds')
+        THEN '{"contractIds":[]}'::jsonb ELSE '{}'::jsonb END
+WHERE NOT (scope_payload ? 'repositoryIds')
+   OR NOT (scope_payload ? 'serviceNames')
+   OR NOT (scope_payload ? 'contractIds');
+
+ALTER TABLE knowledge_cards ALTER COLUMN scope_payload SET DEFAULT
+    '{"pathPatterns":[],"symbols":[],"modules":[],"repositoryIds":[],"serviceNames":[],"contractIds":[]}'::jsonb;
+ALTER TABLE knowledge_card_revisions ALTER COLUMN scope_payload SET DEFAULT
+    '{"pathPatterns":[],"symbols":[],"modules":[],"repositoryIds":[],"serviceNames":[],"contractIds":[]}'::jsonb;
+
+ALTER TABLE knowledge_cards DROP CONSTRAINT chk_knowledge_scope_payload;
+ALTER TABLE knowledge_cards ADD CONSTRAINT chk_knowledge_scope_payload CHECK (
+    jsonb_typeof(scope_payload)='object'
+    AND jsonb_typeof(scope_payload->'pathPatterns')='array'
+    AND jsonb_typeof(scope_payload->'symbols')='array'
+    AND jsonb_typeof(scope_payload->'modules')='array'
+    AND jsonb_typeof(scope_payload->'repositoryIds')='array'
+    AND jsonb_typeof(scope_payload->'serviceNames')='array'
+    AND jsonb_typeof(scope_payload->'contractIds')='array'
+);
+
+ALTER TABLE knowledge_card_revisions ADD CONSTRAINT chk_knowledge_revision_scope_payload CHECK (
+    jsonb_typeof(scope_payload)='object'
+    AND jsonb_typeof(scope_payload->'pathPatterns')='array'
+    AND jsonb_typeof(scope_payload->'symbols')='array'
+    AND jsonb_typeof(scope_payload->'modules')='array'
+    AND jsonb_typeof(scope_payload->'repositoryIds')='array'
+    AND jsonb_typeof(scope_payload->'serviceNames')='array'
+    AND jsonb_typeof(scope_payload->'contractIds')='array'
+);
+
+COMMENT ON COLUMN knowledge_cards.scope_payload IS
+    '仓库内路径/符号/模块及工程项目中的仓库/服务/契约适用范围';
+
+-- ============================================================================
+-- 合并自 V14__task_review_outcomes.sql
+-- ============================================================================
+
+ALTER TABLE task_reviews
+    ADD CONSTRAINT uq_task_reviews_id_repo UNIQUE (id, repo_id);
+
+CREATE TABLE task_review_outcomes (
+    id UUID PRIMARY KEY,
+    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    review_id UUID NOT NULL,
+    reported_by UUID NOT NULL REFERENCES accounts(id),
+    client_request_id UUID NOT NULL,
+    final_commit VARCHAR(64) NOT NULL,
+    commit_binding VARCHAR(40) NOT NULL,
+    summary VARCHAR(4000) NOT NULL,
+    tests_payload JSONB NOT NULL DEFAULT '[]'::jsonb,
+    approvals_payload JSONB NOT NULL DEFAULT '[]'::jsonb,
+    payload_hash CHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_task_review_outcomes_review
+        FOREIGN KEY (review_id, repo_id) REFERENCES task_reviews(id, repo_id) ON DELETE CASCADE,
+    CONSTRAINT chk_task_review_outcomes_commit
+        CHECK (final_commit ~ '^[0-9a-f]{40,64}$'),
+    CONSTRAINT chk_task_review_outcomes_binding
+        CHECK (commit_binding IN ('EXACT_REVIEW_HEAD','REPORTER_ASSERTED_FINAL')),
+    CONSTRAINT chk_task_review_outcomes_summary
+        CHECK (length(trim(summary)) BETWEEN 1 AND 4000),
+    CONSTRAINT chk_task_review_outcomes_tests
+        CHECK (jsonb_typeof(tests_payload)='array'),
+    CONSTRAINT chk_task_review_outcomes_approvals
+        CHECK (jsonb_typeof(approvals_payload)='array'),
+    CONSTRAINT chk_task_review_outcomes_hash
+        CHECK (payload_hash ~ '^[0-9a-f]{64}$')
+);
+
+CREATE UNIQUE INDEX uq_task_review_outcomes_client_request
+    ON task_review_outcomes(review_id, reported_by, client_request_id);
+CREATE INDEX idx_task_review_outcomes_review_created
+    ON task_review_outcomes(review_id, created_at DESC, id DESC);
+CREATE INDEX idx_task_review_outcomes_repo_created
+    ON task_review_outcomes(repo_id, created_at DESC, id DESC);
+
+CREATE TABLE task_review_feedback (
+    id UUID PRIMARY KEY,
+    outcome_id UUID NOT NULL REFERENCES task_review_outcomes(id) ON DELETE CASCADE,
+    kind VARCHAR(30) NOT NULL,
+    target_type VARCHAR(30) NOT NULL,
+    target_key VARCHAR(500) NOT NULL,
+    knowledge_id UUID,
+    knowledge_update_assessment VARCHAR(20),
+    comment VARCHAR(2000) NOT NULL,
+    evidence_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_task_review_feedback_kind
+        CHECK (kind IN ('FALSE_POSITIVE','FALSE_NEGATIVE','KNOWLEDGE_UPDATE')),
+    CONSTRAINT chk_task_review_feedback_target
+        CHECK (target_type IN (
+            'KNOWLEDGE','REQUIRED_TEST','REQUIRED_APPROVAL','STALE_KNOWLEDGE',
+            'UNKNOWN','FILE','SYMBOL','OTHER'
+        )),
+    CONSTRAINT chk_task_review_feedback_key
+        CHECK (length(trim(target_key)) BETWEEN 1 AND 500),
+    CONSTRAINT chk_task_review_feedback_comment
+        CHECK (length(trim(comment)) BETWEEN 1 AND 2000),
+    CONSTRAINT chk_task_review_feedback_evidence
+        CHECK (jsonb_typeof(evidence_urls)='array'),
+    CONSTRAINT chk_task_review_feedback_knowledge_update
+        CHECK (
+            (kind='KNOWLEDGE_UPDATE'
+                AND target_type='KNOWLEDGE'
+                AND knowledge_id IS NOT NULL
+                AND knowledge_update_assessment IN ('NEEDED','NOT_NEEDED','UNKNOWN'))
+            OR
+            (kind IN ('FALSE_POSITIVE','FALSE_NEGATIVE')
+                AND knowledge_update_assessment IS NULL)
+        )
+);
+
+CREATE INDEX idx_task_review_feedback_outcome
+    ON task_review_feedback(outcome_id, created_at, id);
+CREATE INDEX idx_task_review_feedback_knowledge
+    ON task_review_feedback(knowledge_id)
+    WHERE knowledge_id IS NOT NULL;
+
+COMMENT ON TABLE task_review_outcomes IS
+    '对不可变 Task Review 的追加式开发结果回报；每条保留报告人和幂等请求';
+COMMENT ON COLUMN task_review_outcomes.commit_binding IS
+    '仅完全等于审查 Head 时为精确绑定；其他 Commit 只是报告人声明';
+COMMENT ON TABLE task_review_feedback IS
+    '具名人工误报、漏报和知识更新判断；只供评测和改进，不触发知识修改';
+
+CREATE OR REPLACE FUNCTION prevent_task_review_outcome_update() RETURNS trigger AS $$
+BEGIN
+    RAISE EXCEPTION 'task review outcomes and feedback are immutable';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_task_review_outcomes_immutable
+BEFORE UPDATE ON task_review_outcomes
+FOR EACH ROW EXECUTE FUNCTION prevent_task_review_outcome_update();
+
+CREATE TRIGGER trg_task_review_feedback_immutable
+BEFORE UPDATE ON task_review_feedback
+FOR EACH ROW EXECUTE FUNCTION prevent_task_review_outcome_update();

@@ -45,6 +45,7 @@ const reviewInput = shallowRef<ReviewInput>('local');
 const loading = shallowRef(false);
 const historyLoading = shallowRef(false);
 const error = shallowRef<string | null>(null);
+const credentialRequired = shallowRef(false);
 const result = shallowRef<TaskReviewResult | null>(null);
 const providerResult = shallowRef<PullRequestReviewResult | null>(null);
 const history = shallowRef<TaskReviewSummary[]>([]);
@@ -61,12 +62,12 @@ const shortCommit = computed(() => repository.value?.commit?.slice(0, 8) ?? '无
 const resultState = computed(() => {
   if (!result.value) return null;
   if (result.value.status === 'FAILED') return 'failed';
-  if (result.value.change?.partial || result.value.unknowns.length) return 'degraded';
+  if (result.value.change?.partial || result.value.change?.limitations.length || result.value.unknowns.length) return 'degraded';
   return 'complete';
 });
 const resultStateLabel = computed(() => ({
   failed: '审查失败',
-  degraded: '已完成，存在未知项',
+  degraded: '已完成，存在限制',
   complete: '证据完整',
 }[resultState.value ?? 'complete']));
 const initialDraft = computed<Partial<TaskReviewDraft>>(() => {
@@ -95,8 +96,11 @@ function failureMessage(exception: unknown, fallback: string) {
   if (exception instanceof ApiError && exception.code === 'CURRENT_SNAPSHOT_REQUIRED') {
     return '仓库还没有当前代码快照，请先在项目总览完成准备。';
   }
-  if (exception instanceof ApiError && exception.code === 'PR_HEAD_NOT_CURRENT_SNAPSHOT') {
-    return 'PR/MR 的 Head 不是当前已发布快照。请先在项目管理同步远端，再完成项目准备。';
+  if (exception instanceof ApiError && exception.code === 'PROVIDER_CREDENTIAL_REQUIRED') {
+    return '当前仓库没有可用的远程访问凭据，配置后即可继续读取并评论拉取请求 / 合并请求。';
+  }
+  if (exception instanceof ApiError && exception.code === 'PR_HEAD_FETCH_MISMATCH') {
+    return '托管平台返回的头提交与远程审查引用不一致。为避免审错版本，本次操作已停止。';
   }
   return exception instanceof Error ? exception.message : fallback;
 }
@@ -135,6 +139,7 @@ async function submit(draft: TaskReviewDraft) {
   const version = contextVersion;
   loading.value = true;
   error.value = null;
+  credentialRequired.value = false;
   selection.value = null;
   historyReadOnly.value = false;
   try {
@@ -162,6 +167,7 @@ async function submitProvider(draft: PullRequestReviewDraft) {
   const version = contextVersion;
   loading.value = true;
   error.value = null;
+  credentialRequired.value = false;
   selection.value = null;
   historyReadOnly.value = false;
   providerResult.value = null;
@@ -176,7 +182,10 @@ async function submitProvider(draft: PullRequestReviewDraft) {
     ElMessage.success(response.comment.action === 'UPDATED' ? '已有 PR/MR 评论已更新' : 'PR/MR 提示性评论已创建');
     await loadHistory(repositoryId, version);
   } catch (exception) {
-    if (version === contextVersion) error.value = failureMessage(exception, 'PR/MR 审查同步失败');
+    if (version === contextVersion) {
+      credentialRequired.value = exception instanceof ApiError && exception.code === 'PROVIDER_CREDENTIAL_REQUIRED';
+      error.value = failureMessage(exception, '拉取请求 / 合并请求审查同步失败');
+    }
   } finally {
     if (version === contextVersion) loading.value = false;
   }
@@ -207,6 +216,12 @@ function resetResult() {
   historyReadOnly.value = false;
   providerResult.value = null;
   error.value = null;
+  credentialRequired.value = false;
+}
+
+function configureCredential() {
+  if (!repository.value) return;
+  void router.push({ name: 'repositories', query: { edit: repository.value.id } });
 }
 
 function selectEvidence(item: ReviewEvidenceSelection) {
@@ -242,7 +257,7 @@ function shortDate(value: string | null) {
 }
 
 function sourceLabel(source: TaskReviewSummary['changeSource']) {
-  return { WORKTREE: '工作区', SINGLE_COMMIT: '单 Commit', COMMIT_RANGE: 'Commit Range' }[source];
+  return { WORKTREE: '工作区', SINGLE_COMMIT: '单次提交', COMMIT_RANGE: '提交范围' }[source];
 }
 
 watch(
@@ -281,23 +296,23 @@ onMounted(async () => {
   <main class="review-page">
     <header class="dossier-header">
       <div class="title-block">
-        <small>Engineering change dossier</small>
+        <small>工程变更审查</small>
         <h1>变更审查</h1>
         <p>把真实 Git 改动、适用工程知识、必须动作与未知项收在同一份审查卷宗中。</p>
       </div>
       <dl>
         <div><dt>仓库</dt><dd>{{ repository?.name ?? '未选择' }}</dd></div>
-        <div><dt>快照</dt><dd class="mono">{{ shortSnapshot }}</dd></div>
-        <div><dt>Commit</dt><dd class="mono">{{ shortCommit }}</dd></div>
+        <div><dt>知识基线快照</dt><dd class="mono">{{ shortSnapshot }}</dd></div>
+        <div><dt>基线提交</dt><dd class="mono">{{ shortCommit }}</dd></div>
       </dl>
     </header>
 
     <nav class="mode-switch" aria-label="变更工具模式">
       <button type="button" :class="{ active: mode === 'review' }" @click="mode = 'review'">
-        <FileSearch :size="15" /><span><strong>真实变更审查</strong><small>读取 Git Diff 与正式知识</small></span>
+        <FileSearch :size="15" /><span><strong>真实变更审查</strong><small>读取 Git 差异与正式知识</small></span>
       </button>
       <button type="button" :class="{ active: mode === 'estimate' }" @click="mode = 'estimate'">
-        <FlaskConical :size="15" /><span><strong>需求影响预估</strong><small>未读取真实 Git Diff</small></span>
+        <FlaskConical :size="15" /><span><strong>需求影响预估</strong><small>未读取真实 Git 差异</small></span>
       </button>
     </nav>
 
@@ -308,38 +323,45 @@ onMounted(async () => {
         <FileSearch :size="30" />
         <h2>先选择一个仓库</h2>
         <p>变更审查只能基于你有权读取的仓库和已发布快照运行。</p>
+        <el-button type="primary" @click="router.push('/repositories')">前往项目管理</el-button>
       </section>
 
       <template v-else>
-        <nav v-if="repository?.capabilities.canUpdate" class="review-input-switch" aria-label="审查输入来源">
-          <button type="button" :class="{ active: reviewInput === 'local' }" @click="reviewInput = 'local'; resetResult()">
-            <GitCommitHorizontal :size="14" /><span><strong>本地 Git</strong><small>工作区 / Commit / Range</small></span>
-          </button>
-          <button type="button" :class="{ active: reviewInput === 'provider' }" @click="reviewInput = 'provider'; resetResult()">
-            <GitPullRequest :size="14" /><span><strong>PR / MR</strong><small>读取提供方 Patch 并同步评论</small></span>
-          </button>
-        </nav>
+        <section v-if="!repository?.snapshotId" class="precondition-banner">
+          <AlertTriangle :size="18" />
+          <div><strong>当前项目还不能发起变更审查</strong><p>先生成代码快照和内容索引，系统才能把改动与知识证据绑定到同一版本。</p></div>
+          <el-button type="primary" @click="router.push('/overview')">去准备项目</el-button>
+        </section>
 
-        <TaskReviewForm
-          v-if="reviewInput === 'local' || !repository?.capabilities.canUpdate"
-          :key="formKey"
-          :loading="loading"
-          :disabled="!repository?.snapshotId"
-          :initial-draft="initialDraft"
-          :models="summaryModels"
-          :models-loading="summaryModelsLoading"
-          @submit="submit"
-        />
-        <PullRequestReviewForm
-          v-else
-          :key="`provider-${formKey}`"
-          :loading="loading"
-          :disabled="!repository?.snapshotId"
-          :default-provider="repository?.sourceType === 'GITLAB' ? 'GITLAB' : 'GITHUB'"
-          :models="summaryModels"
-          :models-loading="summaryModelsLoading"
-          @submit="submitProvider"
-        />
+        <template v-else>
+          <nav v-if="repository.capabilities.canUpdate" class="review-input-switch" aria-label="审查输入来源">
+            <button type="button" :class="{ active: reviewInput === 'local' }" @click="reviewInput = 'local'; resetResult()">
+              <GitCommitHorizontal :size="14" /><span><strong>本地 Git</strong><small>工作区 / 提交版本 / 版本范围</small></span>
+            </button>
+            <button type="button" :class="{ active: reviewInput === 'provider' }" @click="reviewInput = 'provider'; resetResult()">
+              <GitPullRequest :size="14" /><span><strong>拉取请求 / 合并请求</strong><small>读取托管平台补丁并同步评论</small></span>
+            </button>
+          </nav>
+
+          <TaskReviewForm
+            v-if="reviewInput === 'local' || !repository.capabilities.canUpdate"
+            :key="formKey"
+            :loading="loading"
+            :initial-draft="initialDraft"
+            :models="summaryModels"
+            :models-loading="summaryModelsLoading"
+            @submit="submit"
+          />
+          <PullRequestReviewForm
+            v-else
+            :key="`provider-${formKey}`"
+            :loading="loading"
+            :default-provider="repository.sourceType === 'GITLAB' ? 'GITLAB' : 'GITHUB'"
+            :models="summaryModels"
+            :models-loading="summaryModelsLoading"
+            @submit="submitProvider"
+          />
+        </template>
 
         <section class="history-strip" aria-labelledby="history-title">
           <header>
@@ -364,6 +386,7 @@ onMounted(async () => {
 
         <section v-if="error" class="state-banner error-state" role="alert">
           <AlertTriangle :size="17" /><div><strong>无法完成当前操作</strong><p>{{ error }}</p></div>
+          <el-button v-if="credentialRequired && repository?.capabilities.canManageCredential" type="primary" plain @click="configureCredential">去绑定凭据</el-button>
         </section>
 
         <section v-if="loading && !result" class="state-banner loading-state" aria-live="polite">
@@ -378,9 +401,19 @@ onMounted(async () => {
             </div>
             <p>{{ result.summary || result.error?.message || '审查已经完成，所有可确认内容均附带事实来源。' }}</p>
             <div class="ledger-version">
-              <span><Archive :size="12" />Snapshot <code>{{ result.snapshotId.slice(0, 8) }}</code></span>
-              <span><GitCommitHorizontal :size="12" />{{ result.change?.headCommit?.slice(0, 8) ?? shortCommit }}</span>
+              <span><Archive :size="12" />知识基线 <code>{{ result.snapshotId.slice(0, 8) }}</code></span>
+              <span><GitCommitHorizontal :size="12" />待审提交 {{ result.change?.headCommit?.slice(0, 8) ?? shortCommit }}</span>
               <span><Clock3 :size="12" />{{ shortDate(result.finishedAt) }}</span>
+            </div>
+          </section>
+
+          <section v-if="result.change?.limitations.length" class="review-limitations">
+            <AlertTriangle :size="16" />
+            <div>
+              <strong>本次审查的事实边界</strong>
+              <ul>
+                <li v-for="item in result.change.limitations" :key="`${item.code}:${item.detail}`">{{ item.detail }}</li>
+              </ul>
             </div>
           </section>
 
@@ -399,7 +432,7 @@ onMounted(async () => {
           </section>
 
           <section v-if="result.status === 'FAILED'" class="page-empty compact">
-            <AlertTriangle :size="26" /><h2>{{ result.error?.code ?? 'TASK_REVIEW_FAILED' }}</h2><p>{{ result.error?.message }}</p>
+            <AlertTriangle :size="26" /><h2>变更审查失败</h2><p>{{ result.error?.message }}</p>
           </section>
 
           <div v-else class="review-workbench">
@@ -453,7 +486,12 @@ onMounted(async () => {
 .page-empty { display: grid; place-items: center; min-height: 270px; padding: 30px; color: #71808a; border: 1px dashed #ccd6dc; border-radius: 9px; background: #fafbfc; text-align: center; }
 .page-empty h2 { margin: 11px 0 2px; color: #34434d; font-size: 16px; }
 .page-empty p { margin: 0; font-size: 13px; }
+.page-empty .el-button { margin-top: 14px; }
 .page-empty.compact { min-height: 150px; }
+.precondition-banner { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 13px 15px; color: #8b5a20; border: 1px solid #ead8bd; border-left: 4px solid var(--app-color-warning); border-radius: 7px; background: var(--app-color-warning-soft); }
+.precondition-banner div { display: grid; gap: 2px; }
+.precondition-banner strong { color: #67451d; font-size: 14px; }
+.precondition-banner p { margin: 0; color: #76624a; font-size: 13px; }
 .history-strip { border: 1px solid #dbe2e6; border-radius: 9px; overflow: hidden; background: #fff; }
 .history-strip > header { display: flex; align-items: center; justify-content: space-between; min-height: 38px; padding: 0 12px; color: #52616b; border-bottom: 1px solid #e6ebee; background: #f8fafb; }
 .history-strip > header div { display: flex; align-items: center; gap: 7px; }
@@ -466,7 +504,7 @@ onMounted(async () => {
 .history-list button > span { display: flex; align-items: center; gap: 4px; color: #567182; font-size: 12px; }
 .history-list strong { overflow: hidden; color: #33424c; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .history-list small { color: #7c8992; font-size: 12px; }
-.state-banner { display: grid; grid-template-columns: 23px minmax(0, 1fr); gap: 8px; padding: 11px 13px; border-left: 3px solid #76838f; background: #f3f5f6; }
+.state-banner { display: grid; grid-template-columns: 23px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 13px; border-left: 3px solid #76838f; background: #f3f5f6; }
 .state-banner div { display: grid; gap: 2px; }
 .state-banner strong { font-size: 13px; }
 .state-banner p { margin: 0; font-size: 13px; line-height: 1.45; }
@@ -483,6 +521,9 @@ onMounted(async () => {
 .ledger-version { display: flex; gap: 10px; color: #6f7d76; font-size: 12px; }
 .ledger-version span { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .worktree-result-note { padding: 8px 11px; color: #73562f; border-left: 3px solid var(--app-color-warning); background: var(--app-color-warning-soft); font-size: 13px; }
+.review-limitations { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; padding: 10px 12px; color: #76552f; border-left: 3px solid var(--app-color-warning); background: var(--app-color-warning-soft); font-size: 13px; }
+.review-limitations div { display: grid; gap: 4px; }
+.review-limitations ul { display: grid; gap: 3px; margin: 0; padding-left: 18px; line-height: 1.45; }
 .provider-result-note { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px 11px; color: #47655c; border-left: 3px solid var(--app-color-success); background: #f0f8f5; font-size: 13px; }
 .provider-result-note span { display: grid; gap: 1px; }
 .provider-result-note strong { color: #264a3f; }
@@ -514,5 +555,7 @@ onMounted(async () => {
   .review-input-switch button { min-width: 0; }
   .provider-result-note { grid-template-columns: 20px minmax(0, 1fr); }
   .provider-result-note a { grid-column: 2; }
+  .precondition-banner { grid-template-columns: 24px minmax(0, 1fr); }
+  .precondition-banner .el-button { grid-column: 2; justify-self: start; margin-left: 0; }
 }
 </style>

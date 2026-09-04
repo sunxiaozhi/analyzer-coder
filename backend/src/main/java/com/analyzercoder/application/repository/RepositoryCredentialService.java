@@ -198,6 +198,15 @@ public class RepositoryCredentialService {
         mapper.bind(repositoryId, credentialId, actorId);
     }
 
+    CredentialView boundView(UUID repositoryId) {
+        Map<String, Object> row = mapper.findBound(repositoryId);
+        return row == null ? null : view(row);
+    }
+
+    void unbindForRepository(UUID repositoryId) {
+        mapper.unbind(repositoryId);
+    }
+
     private Map<String, Object> requireOwned(AuthenticatedAccount actor, UUID id) {
         Map<String, Object> row = mapper.find(id);
         if (row == null) {

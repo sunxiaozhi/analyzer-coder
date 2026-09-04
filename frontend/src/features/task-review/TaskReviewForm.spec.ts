@@ -58,6 +58,6 @@ describe('TaskReviewForm', () => {
     await wrapper.get('.review-form > footer el-button').trigger('click');
 
     expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ modelConfigId: 'model-1' });
-    expect(wrapper.text()).toContain('每条建议必须引用现有证据 ID');
+    expect(wrapper.text()).toContain('每条建议必须引用现有证据标识');
   });
 });

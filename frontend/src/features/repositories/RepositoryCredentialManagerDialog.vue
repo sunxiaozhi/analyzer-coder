@@ -85,7 +85,7 @@ function select(item: RepositoryCredential) { if (item.status !== 'ACTIVE') retu
         </button>
       </section>
       <el-form class="credential-form" label-position="top">
-        <el-form-item label="凭据类型"><el-select v-model="form.type"><el-option label="通用 Git HTTPS Token" value="GIT_HTTP_TOKEN"/><el-option label="GitLab PAT" value="GITLAB_PAT"/></el-select></el-form-item>
+        <el-form-item label="凭据类型"><el-select v-model="form.type"><el-option label="通用 Git HTTPS 访问令牌" value="GIT_HTTP_TOKEN"/><el-option label="GitLab 个人访问令牌" value="GITLAB_PAT"/></el-select></el-form-item>
         <el-form-item label="凭据名称" required><el-input v-model="form.displayName" maxlength="100" /></el-form-item>
         <el-form-item label="Git 服务地址" required><el-input v-model="form.serverUrl" placeholder="https://gitlab.example.com" /></el-form-item>
         <el-form-item label="用户名"><el-input v-model="form.username" :placeholder="form.type === 'GITLAB_PAT' ? 'oauth2' : 'Git 用户名'" /></el-form-item>

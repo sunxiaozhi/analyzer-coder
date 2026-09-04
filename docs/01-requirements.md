@@ -1,4 +1,4 @@
-# 代码智库系统需求规格
+# 代码知识平台需求规格
 
 版本：v3.1
 日期：2026-07-31
@@ -323,7 +323,7 @@
 
 ## 6. 数据与存储要求
 
-1. PostgreSQL 为唯一运行期业务数据库；新环境由 Flyway 依次执行 `V1__init_schema.sql` 至当前版本迁移，已有环境按迁移历史向前升级。
+1. PostgreSQL 为唯一运行期业务数据库；新环境或明确重建后的环境由 Flyway 执行单一合并基线 `V1__init_schema.sql`。该基线不兼容保留旧 Flyway 历史的数据库，升级前必须先完成数据备份与迁移方案评估。
 2. pgvector 扩展必须可用，代码和知识使用可变维度 `vector` 字段；查询按当前模型和维度隔离。
 3. 当前核心表包括账号/会话/验证码、仓库/权限/治理/墓碑、任务、chunk/向量、CodeGraph、问答、知识/附件、系统设置和模型配置。
 4. `git_credentials/repository_credential_bindings` 提供 Git/GitLab HTTPS 凭据与仓库绑定；问答记录由 `qa_conversations/qa_citations` 唯一持久化。

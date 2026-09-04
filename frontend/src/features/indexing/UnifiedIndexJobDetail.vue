@@ -17,7 +17,7 @@ function repositoryName(repositoryId: string) {
 function typeLabel(type: Task['type']) {
   if (type === 'FULL') return '全量内容索引';
   if (type === 'INCREMENTAL') return '增量内容索引';
-  if (type === 'CODEGRAPH') return 'CodeGraph 构建';
+  if (type === 'CODEGRAPH') return '代码图谱构建';
   return '知识失效检查';
 }
 
@@ -44,7 +44,7 @@ function fallbackLabel(reason: string | null) {
     <template v-if="job">
       <div class="section-head"><h2>任务详情</h2><TaskStatusTag :status="job.status" /></div>
       <dl class="meta-grid">
-        <div><dt>任务 ID</dt><dd class="mono">{{ job.id }}</dd></div>
+        <div><dt>任务编号</dt><dd class="mono">{{ job.id }}</dd></div>
         <div><dt>仓库</dt><dd>{{ repositoryName(job.repositoryId) }}</dd></div>
         <div><dt>请求类型</dt><dd>{{ typeLabel(job.type) }}</dd></div>
         <div v-if="job.type === 'FULL' || job.type === 'INCREMENTAL'"><dt>实际模式</dt><dd>{{ modeLabel(job.executionMode) }}</dd></div>
@@ -56,7 +56,7 @@ function fallbackLabel(reason: string | null) {
         <div><dt>超时截止</dt><dd>{{ job.timeoutAt ? new Date(job.timeoutAt).toLocaleString() : '—' }}</dd></div>
         <div><dt>结束时间</dt><dd>{{ job.finishedAt ? new Date(job.finishedAt).toLocaleString() : '—' }}</dd></div>
       </dl>
-      <el-alert v-if="job.errorMessage" :title="job.errorMessage" :description="job.failureCode ?? undefined" type="error" :closable="false" show-icon />
+      <el-alert v-if="job.errorMessage" :title="job.errorMessage" type="error" :closable="false" show-icon />
       <el-alert
         v-else-if="job.status === 'CANCEL_REQUESTED'"
         title="取消请求已受理，任务将在下一个安全检查点停止。"

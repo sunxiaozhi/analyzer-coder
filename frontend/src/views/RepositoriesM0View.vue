@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Connection, Plus, Search } from '@element-plus/icons-vue';
 import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import AppPagination from '@/components/AppPagination.vue';
 import RepositoryFormDialog from '@/features/repositories/RepositoryFormDialog.vue';
@@ -17,6 +17,7 @@ import type { Repository } from '@/types/api';
 
 const store = useRepositoryStore();
 const router = useRouter();
+const route = useRoute();
 const rows = shallowRef<Repository[]>([]);
 const query = shallowRef('');
 const pageNum = shallowRef(1);
@@ -79,9 +80,43 @@ async function saveEdit(input: { name: string; description: string; defaultBranc
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存失败'); }
   finally { editBusy.value = false; }
 }
-async function rescan(id: string) { rescanningId.value = id; try { const repository=rows.value.find(item=>item.id===id); const result=repository&&['REMOTE_GIT','GITLAB'].includes(repository.sourceType)?await syncRemoteRepository(id):await store.rescanRepository(id); await reloadAll(); ElMessage.success(result.changed ? '已同步远端更新并排队增量索引' : '代码版本无变化'); } finally { rescanningId.value = null; } }
-async function startIndex(id: string) { await store.createIndexJob(id, 'FULL'); ElMessage.success('全量内容索引任务已进入队列'); }
-async function buildCodeGraph(repository: Repository) { buildingId.value = repository.id; try { await intelligenceApi.buildGraph(repository.id); await reloadAll(); ElMessage.success('CodeGraph 产物已发布'); } finally { buildingId.value = null; } }
+async function rescan(id: string) {
+  rescanningId.value = id;
+  try {
+    const repository = rows.value.find(item => item.id === id);
+    const result = repository && ['REMOTE_GIT', 'GITLAB'].includes(repository.sourceType)
+      ? await syncRemoteRepository(id)
+      : await store.rescanRepository(id);
+    await reloadAll();
+    ElMessage.success(result.changed ? '已同步更新；增量索引正在后台执行' : '代码版本无变化');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '仓库同步失败，请检查代码源和凭据');
+  } finally {
+    rescanningId.value = null;
+  }
+}
+async function startIndex(id: string) {
+  try {
+    await store.createIndexJob(id, 'FULL');
+    await store.selectRepository(id);
+    ElMessage.success('全量内容索引已进入队列；可在项目总览查看准备进度');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '内容索引创建失败');
+  }
+}
+async function buildCodeGraph(repository: Repository) {
+  buildingId.value = repository.id;
+  try {
+    const task = await intelligenceApi.buildGraph(repository.id);
+    await reloadAll();
+    if (task.status === 'FAILED') ElMessage.error(task.errorMessage ?? '代码图谱构建失败');
+    else ElMessage.success('代码图谱构建任务已提交；完成后会自动发布到当前快照');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '代码图谱构建任务提交失败');
+  } finally {
+    buildingId.value = null;
+  }
+}
 async function openOverview(repository: Repository) {
   await store.selectRepository(repository.id);
   await router.push({ name: 'overview' });
@@ -94,7 +129,16 @@ watch(query, () => {
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(() => { pageNum.value = 1; void loadPage(); }, 300);
 });
-onMounted(() => void reloadAll());
+onMounted(async () => {
+  await reloadAll();
+  const requestedId = typeof route.query.edit === 'string' ? route.query.edit : null;
+  if (!requestedId) return;
+  const requested = rows.value.find(item => item.id === requestedId)
+    ?? store.repositories.find(item => item.id === requestedId);
+  if (requested && (requested.capabilities.canEditRepository ?? requested.capabilities.canConfigure)) {
+    openEdit(requested);
+  }
+});
 onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 

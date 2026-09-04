@@ -1,6 +1,6 @@
-# Analyzer Coder MCP Server
+# 代码知识平台 MCP 服务
 
-这是本地 stdio MCP 适配器。它不复制仓库权限、知识审核、版本校验或任务审查逻辑，所有工具都调用 Analyzer Coder 后端 HTTP API。
+这是本地 stdio MCP 适配器。它不复制仓库权限、知识审核、版本校验或任务审查逻辑，所有工具都调用代码知识平台后端 HTTP API。
 
 ## 启动
 

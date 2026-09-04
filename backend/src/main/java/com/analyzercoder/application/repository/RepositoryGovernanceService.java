@@ -41,7 +41,7 @@ public class RepositoryGovernanceService {
     }
 
     public List<RepositoryMemberRow> members(AuthenticatedAccount actor, UUID repositoryId) {
-        access.requireOwner(actor, CodeRepositoryId.of(repositoryId));
+        access.require(actor, CodeRepositoryId.of(repositoryId), RepositoryPermission.MAINTAIN);
         return mapper.findMembers(repositoryId);
     }
 

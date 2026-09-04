@@ -20,7 +20,7 @@ const emit = defineEmits<{ openAsset: [path: string] }>();
 const assetMeta: Record<RepositoryAssetType, { label: string; description: string; icon: typeof Braces }> = {
   CODE: { label: '代码', description: '实现事实', icon: Braces },
   DOCUMENT: { label: '文档', description: '设计与说明', icon: BookOpenText },
-  RULE: { label: '规则', description: 'Agent 与团队约束', icon: FileKey2 },
+  RULE: { label: '规则', description: '编码助手与团队约束', icon: FileKey2 },
   TASK: { label: '任务', description: '目标与验收门禁', icon: CheckSquare },
   CONFIG: { label: '配置', description: '运行与交付边界', icon: Settings2 },
 };

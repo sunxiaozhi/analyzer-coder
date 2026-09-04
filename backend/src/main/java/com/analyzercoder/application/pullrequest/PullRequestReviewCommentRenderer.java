@@ -13,7 +13,7 @@ public class PullRequestReviewCommentRenderer {
 
     public String render(String marker, PullRequestProvider.PullRequestSnapshot source, TaskReviewResult review) {
         StringBuilder markdown = new StringBuilder(marker).append('\n');
-        markdown.append("## Analyzer Coder · 提示性审查\n\n");
+        markdown.append("## 代码知识平台 · 提示性审查\n\n");
         markdown.append("> 这是一份基于当前已发布代码快照与正式工程知识的提示，不是合并门禁，也不会提交失败状态。\n\n");
         markdown.append("- 提供方：").append(source.provider()).append(" · ").append(escape(source.externalId())).append('\n');
         markdown.append("- 版本：`").append(shortCommit(source.baseSha())).append("` → `").append(shortCommit(source.headSha())).append("`\n");

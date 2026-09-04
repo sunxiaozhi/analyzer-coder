@@ -111,7 +111,7 @@ describe('ChangeEvidenceSpine', () => {
     };
     const wrapper = mount(ChangeEvidenceSpine, { props: { result: modelResult } });
 
-    expect(wrapper.text()).toContain('MODEL_SUGGESTION');
+    expect(wrapper.text()).toContain('模型建议');
     expect(wrapper.text()).toContain('这是一段引用总结');
     await wrapper.get('.model-findings button').trigger('click');
     expect(wrapper.emitted('select')?.[0]?.[0]).toMatchObject({

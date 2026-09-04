@@ -82,7 +82,7 @@ function shortcut(event: KeyboardEvent) {
           :class="['message', 'assistant', { selected: turn.conversationId === activeAnswerId }]"
           @click="emit('selectAnswer', turn.conversationId)"
         >
-          <span>AI</span>
+          <span>助手</span>
           <div class="assistant-content">
             <div class="answer-markdown" v-html="renderedAnswer(turn.answer)"></div>
             <div class="answer-trust">
@@ -133,13 +133,13 @@ function shortcut(event: KeyboardEvent) {
         <span>你</span><p>{{ pendingQuestion }}</p>
       </article>
       <article v-if="requestState === 'sending'" class="message assistant pending">
-        <span>AI</span>
+        <span>助手</span>
         <div class="answer-loading">
           <i></i><div><b>正在结合上下文检索当前仓库</b><small>正在核对代码和知识证据…</small></div>
         </div>
       </article>
       <article v-if="requestState === 'failed'" class="message assistant failed">
-        <span>AI</span>
+        <span>助手</span>
         <el-alert type="error" :closable="false" show-icon>
           <template #title>本轮提问未完成</template>
           <p>{{ error }}</p>

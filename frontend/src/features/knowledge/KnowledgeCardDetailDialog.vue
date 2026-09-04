@@ -105,7 +105,7 @@ const hasObligations = computed(() => Boolean(props.card && (
         <div v-if="card.obligations.requiredApproverAccountIds.length"><b>审批人</b><code v-for="item in card.obligations.requiredApproverAccountIds" :key="item">{{ item }}</code></div>
         <div v-if="card.obligations.instructions.length"><b>要求</b><span v-for="item in card.obligations.instructions" :key="item">{{ item }}</span></div>
         <div v-if="card.obligations.prohibitedPathPatterns?.length"><b>CI 禁止路径</b><code v-for="item in card.obligations.prohibitedPathPatterns" :key="item">{{ item }}</code></div>
-        <div v-if="card.obligations.knowledgeUpdateRequired"><b>CI 知识同步</b><span>命中代码变化时，必须发布更高修订且保持 CURRENT</span></div>
+        <div v-if="card.obligations.knowledgeUpdateRequired"><b>持续集成知识同步</b><span>命中代码变化时，必须发布更高修订且保持与当前代码一致</span></div>
       </section>
     </template>
       <section v-if="card?.codeReferences.length" class="detail-code-links">

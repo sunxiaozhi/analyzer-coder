@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import AppPagination from '@/components/AppPagination.vue';
 import CurrentVectorIndexPanel from '@/features/indexing/CurrentVectorIndexPanel.vue';
@@ -9,6 +10,7 @@ import { useIndexJobs } from '@/features/indexing/useIndexJobs';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
 const repositoryStore = useRepositoryStore();
+const router = useRouter();
 const section = shallowRef<'jobs' | 'vectors'>('jobs');
 const actionPending = shallowRef(false);
 const {
@@ -73,8 +75,10 @@ onMounted(async () => {
       <div class="split detail-split index-jobs-split">
         <div class="surface index-jobs-list">
           <div class="toolbar">
+            <span class="index-guidance">索引任务由项目管理或项目总览发起</span>
             <span class="spacer" />
             <span class="muted">成功 {{ counts.SUCCEEDED }} · 已取消 {{ counts.CANCELED }}</span>
+            <el-button type="primary" plain @click="router.push('/repositories')">创建索引任务</el-button>
             <el-button :loading="loading" @click="refresh()">刷新</el-button>
           </div>
           <div class="index-jobs-table-region">
@@ -177,6 +181,7 @@ onMounted(async () => {
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
 }
+.index-guidance { color: var(--app-text-muted); font-size: 13px; }
 
 .index-jobs-table-region,
 .index-jobs-detail {

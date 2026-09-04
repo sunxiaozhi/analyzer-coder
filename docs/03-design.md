@@ -1,4 +1,4 @@
-# 代码智库系统设计文档
+# 代码知识平台设计文档
 
 版本：v3.1
 日期：2026-07-31
@@ -22,7 +22,7 @@
 
 - Java 17、Spring Boot 3.5。
 - Spring MVC Controller + 应用服务 + 领域端口 + MyBatis Mapper。
-- PostgreSQL 17 与 pgvector；Flyway 按版本执行初始化、多轮问答和可变向量维度迁移。
+- PostgreSQL 17 与 pgvector；Flyway 在空库或明确重建后的环境执行单一合并初始化基线。
 - PageHelper 提供分页。
 - `HttpClient` 调用 OpenAI-compatible completion/embedding。
 - `ProcessBuilder` 调用 Git 和 CodeGraph CLI。

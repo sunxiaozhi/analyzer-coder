@@ -188,7 +188,7 @@ function date(value: string) {
 <template>
   <section class="outcome-panel" v-loading="loading">
     <header class="outcome-header">
-      <div class="outcome-title"><ClipboardCheck :size="18" /><span><small>Delivery evidence</small><strong>开发结果与人工反馈</strong></span></div>
+      <div class="outcome-title"><ClipboardCheck :size="18" /><span><small>交付证据</small><strong>开发结果与人工反馈</strong></span></div>
       <p>追加事实，不改写原审查；反馈只进入评测与规则改进，不会自动修改正式知识。</p>
       <el-button type="primary" plain @click="editing = !editing">{{ editing ? '取消回报' : '回报开发结果' }}</el-button>
     </header>
@@ -222,7 +222,7 @@ function date(value: string) {
 
     <form v-if="editing" class="outcome-form" @submit.prevent="save">
       <div class="form-lead">
-        <label><span>最终 Commit</span><el-input v-model="form.finalCommit" maxlength="64" placeholder="完整 40–64 位 Git 对象 ID"><template #prefix><GitCommitHorizontal :size="14" /></template></el-input></label>
+        <label><span>最终提交版本</span><el-input v-model="form.finalCommit" maxlength="64" placeholder="完整 40–64 位 Git 对象标识"><template #prefix><GitCommitHorizontal :size="14" /></template></el-input></label>
         <label><span>结果摘要</span><el-input v-model="form.summary" maxlength="4000" type="textarea" :rows="2" placeholder="实际完成了什么、还保留哪些限制" /></label>
       </div>
 
@@ -232,16 +232,16 @@ function date(value: string) {
           <div v-for="(item, index) in form.tests" :key="index" class="result-row">
             <el-input v-model="item.key" placeholder="测试标识或命令" />
             <el-select v-model="item.status" placeholder="实际状态"><el-option label="通过" value="PASSED" /><el-option label="失败" value="FAILED" /><el-option label="跳过" value="SKIPPED" /></el-select>
-            <el-input v-model="item.evidenceUrl" placeholder="证据 URL（可选）" />
+            <el-input v-model="item.evidenceUrl" placeholder="证据链接（可选）" />
             <el-button link :icon="Trash2" @click="form.tests.splice(index, 1)" />
           </div>
         </section>
         <section>
           <header><b>审批结果</b><el-button link :icon="Plus" @click="addApproval">添加</el-button></header>
           <div v-for="(item, index) in form.approvals" :key="index" class="result-row">
-            <el-input v-model="item.key" placeholder="审批账号 UUID" />
+            <el-input v-model="item.key" placeholder="审批账号标识" />
             <el-select v-model="item.status" placeholder="实际状态"><el-option label="已批准" value="APPROVED" /><el-option label="已拒绝" value="REJECTED" /></el-select>
-            <el-input v-model="item.evidenceUrl" placeholder="证据 URL（可选）" />
+            <el-input v-model="item.evidenceUrl" placeholder="证据链接（可选）" />
             <el-button link :icon="Trash2" @click="form.approvals.splice(index, 1)" />
           </div>
         </section>

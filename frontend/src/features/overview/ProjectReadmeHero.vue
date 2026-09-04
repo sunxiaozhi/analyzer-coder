@@ -59,7 +59,7 @@ const shortCommit = computed(() => props.snapshot?.commit?.slice(0, 10) ?? '未�
 
     <aside class="project-stamp" aria-label="当前项目版本">
       <div class="stamp-top">
-        <span>PROJECT SNAPSHOT</span>
+        <span>当前项目快照</span>
         <button type="button" title="刷新项目内容" :disabled="loading" @click="emit('refresh')">
           <RefreshCw :size="14" :class="{ spinning: loading }" />
         </button>

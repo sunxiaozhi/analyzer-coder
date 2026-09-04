@@ -68,7 +68,7 @@ public class TaskReviewService {
 
     public TaskReviewResult create(
             CodeRepositoryId repositoryId, UUID createdBy, TaskReviewRequest request) {
-        return create(repositoryId, createdBy, request, null);
+        return create(repositoryId, createdBy, request, null, true);
     }
 
     /** 使用提供方已经获取并解析的 PR/MR Patch，避免再从本地工作区推断另一份变化。 */
@@ -87,14 +87,15 @@ public class TaskReviewService {
             throw new TaskReviewException(
                     "EXTERNAL_CHANGE_VERSION_MISMATCH", "PR/MR Patch 与审查请求的提交边界不一致");
         }
-        return create(repositoryId, createdBy, request, () -> externalChange);
+        return create(repositoryId, createdBy, request, () -> externalChange, false);
     }
 
     private TaskReviewResult create(
             CodeRepositoryId repositoryId,
             UUID createdBy,
             TaskReviewRequest request,
-            Supplier<RepositoryChange> externalChange) {
+            Supplier<RepositoryChange> externalChange,
+            boolean requireSnapshotHead) {
         if (createdBy == null) {
             throw new IllegalArgumentException("创建账号不能为空");
         }
@@ -122,7 +123,9 @@ public class TaskReviewService {
                     externalChange == null
                             ? changes.analyze(request.gitRequest(repository.path()))
                             : externalChange.get();
-            requireCurrentSnapshotCommit(repository, change);
+            if (requireSnapshotHead) {
+                requireCurrentSnapshotCommit(repository, change);
+            }
             ChangedSymbolResolver.ResolutionResult changedSymbols =
                     symbols.resolve(repository, change);
             ModuleContext modules = moduleContext(repository, change);

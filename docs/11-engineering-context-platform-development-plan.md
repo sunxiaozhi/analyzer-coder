@@ -174,7 +174,7 @@ UNKNOWN               当前证据无法确认
 
 #### 数据库
 
-新增迁移 `V9__engineering_knowledge.sql`。
+原实现新增独立迁移 `V9__engineering_knowledge.sql`，现已合并至 `V1__init_schema.sql`。
 
 `knowledge_cards` 和 `knowledge_card_revisions` 同步增加：
 
@@ -567,7 +567,7 @@ P0 只产生 `REQUIRED_NOT_REPORTED` 和 `REQUIRED`；实际执行结果现由 R
 
 #### 数据库
 
-新增迁移 `V10__task_reviews.sql`，创建 `task_reviews`：
+原实现新增独立迁移 `V10__task_reviews.sql`，现已合并至 `V1__init_schema.sql`，其中创建 `task_reviews`：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -1176,12 +1176,7 @@ GitLabMergeRequestProvider
 
 | 迁移 | 内容 | 阶段 |
 | --- | --- | --- |
-| `V9__engineering_knowledge.sql` | 工程知识字段、SUSPECT、修订历史、删除粗粒度失效触发器 | REQ-001、REQ-008 |
-| `V10__task_reviews.sql` | Task Review 持久化与索引 | REQ-006 |
-| `V11__knowledge_drift_audit.sql` | 知识漂移审计与状态回写 | REQ-008 |
-| `V12__ci_knowledge_obligations.sql` | 禁止路径与知识同步义务的卡片/修订迁移 | REQ-020 |
-| `V13__engineering_projects.sql` | 工程项目、成员服务身份、双端契约证据与跨仓知识 Scope | REQ-021 |
-| `V14__task_review_outcomes.sql` | 追加式任务结果、测试/审批回报和具名人工反馈 | REQ-022 |
+| `V1__init_schema.sql` | 合并原 V1 至 V14：完整结构、工程知识、任务审查、漂移审计、CI 义务、工程项目与结果反馈 | REQ-001、REQ-006、REQ-008、REQ-020、REQ-021、REQ-022 |
 
 迁移要求：
 
@@ -1392,7 +1387,7 @@ P0 完成前冻结：
 1. 实际实现：新增 11 种工程知识类型、3 级严重程度、3 级执行策略、负责人、Scope、Obligations、最近验证快照和验证说明；旧知识默认迁移为 `REFERENCE + INFO + REFERENCE`，不产生强制义务。
 2. 规则实现：`EngineeringKnowledgePolicy` 统一校验枚举、路径安全、集合数量和单项长度；`REQUIRED` 发布前必须具备负责人、非空 Scope、人工审核和 `CURRENT` 来源状态。
 3. 历史与真实性：所有新增字段进入知识修订触发器；历史恢复后强制回到 `DRAFT + UNREVIEWED + UNVERIFIED`，并清空最近验证快照和说明；`SUSPECT/STALE` 不进入正式检索和向量统计。
-4. 数据库迁移：新增 `V9__engineering_knowledge.sql`；静态迁移契约和 MyBatis XML 解析通过，实库迁移因本机无 PostgreSQL/Docker 环境待 CI 或可用数据库验证。
+4. 数据库迁移：原独立迁移 `V9__engineering_knowledge.sql` 已合并至 `V1__init_schema.sql`；静态迁移契约和 MyBatis XML 解析通过。
 5. 前端实现：知识编辑器采用“内容—范围—要求—负责人—代码证据”结构；高级字段默认折叠，普通参考知识保持快速创建；列表、详情和历史展示结构化字段及来源状态。
 6. 验证结果：后端 `122` 项测试通过、`1` 项环境测试跳过；前端 `4` 项测试通过；Vue 类型检查和生产构建通过；`git diff --check` 通过。
 7. 遗留限制：负责人和审批人当前以账号 UUID 编辑，后续应在权限收敛需求中替换为仓库成员选择器；PostgreSQL 全新库与 V8 升级验证通过前，不将 REQ-001 标记为完成。
@@ -1448,7 +1443,7 @@ P0 完成前冻结：
 3. 版本一致性：创建前要求当前发布快照，审查 Git Head 必须与快照提交一致；完成更新同时校验数据库当前快照 ID，快照切换时只保存 `SNAPSHOT_CHANGED_DURING_REVIEW` 失败状态，不写入结果 Payload；CodeGraph 返回不一致节点时排除并产生 `CODEGRAPH_VERSION_MISMATCH` 未知项。
 4. 知识与检索：生产编排加载同仓库知识卡及代码引用，Scope 决策继续由 REQ-005 过滤 `PUBLISHED + APPROVED`；任务描述只执行数据库知识关键词召回并丢弃分数，作为参考候选，不调用 LLM。`modelConfigId` 仅随请求和结果保存，为后续模型摘要预留。
 5. 权限与历史：创建、列表、详情均重新校验仓库 `READ` 权限；列表返回计数摘要，详情从不可变 JSON 完整恢复；失败记录持久化稳定错误码和截断后的安全信息，不记录完整 Patch 或源码。
-6. 数据库迁移：新增 `V10__task_reviews.sql`，包括请求字段、解析后的 Commit、Snapshot、Worktree Digest、状态、完整 JSON、错误和时间字段，以及幂等唯一索引、历史索引、终态约束和不可变触发器；新增 `TaskReviewMapper.xml` 并通过 MyBatis 解析契约。
+6. 数据库迁移：原独立迁移 `V10__task_reviews.sql` 已合并至 `V1__init_schema.sql`，包括请求字段、解析后的 Commit、Snapshot、Worktree Digest、状态、完整 JSON、错误和时间字段，以及幂等唯一索引、历史索引、终态约束和不可变触发器；新增 `TaskReviewMapper.xml` 并通过 MyBatis 解析契约。
 7. 验证结果：REQ-006 编排、API、快照、CodeGraph 与 SQL 契约相关 `25` 项测试通过；后端全量 `159` 项测试通过、`1` 项环境测试跳过；覆盖幂等重放、幂等冲突、JSON 恢复、READ 权限和快照切换拒绝发布；本需求 Java 文件 Spotless 检查通过。
 8. 设计差异与限制：REQ-009 已完成统一来源模型并进入不可变审查结果 Payload；本机没有 PostgreSQL/Docker，V10 仍需在 CI 或可用 PostgreSQL 上完成迁移、唯一索引竞争和不可变触发器集成验收后再标记最终完成。
 
@@ -1468,7 +1463,7 @@ P0 完成前冻结：
 1. 实际实现：新增 `KnowledgeDriftService`，在当前快照代码片段写入、向量准备完成后执行来源漂移检查；只扫描状态为 `CURRENT`、存在验证提交且验证提交不同于当前提交的知识，并按验证 Commit 分组复用真实 `COMMIT_RANGE` Diff 和改动符号解析。
 2. 精准规则：绑定代码引用仅在对应路径真实变化且当前快照不存在相同内容哈希时命中；路径 Scope 使用安全仓库 Glob 与真实旧/新路径匹配；符号 Scope 只接受非文件级降级的真实符号名称或 ID 精确命中。Commit 改变但三类规则均未命中的知识保持 `CURRENT`，仅刷新检查时间。
 3. 降级边界：Git Diff、符号识别或知识结构数据无法形成完整事实时不猜测具体卡片受影响，索引完成信息标记 `drift-degraded` 供重试；部分 Diff 只使用已返回事实，同时报告降级，不把未观察到的路径扩大为命中。
-4. 数据库迁移：新增 `V11__knowledge_drift_audit.sql`，明确删除 V7 遗留的 `trg_repository_knowledge_stale` 和 `mark_repository_knowledge_stale()`；新增 `knowledge_drift_events`，保存知识修订、旧/新 Snapshot 与 Commit、前后状态、触发类型、结构化原因、说明、操作者和时间，并对自动检查建立幂等唯一索引。
+4. 数据库迁移：原独立迁移 `V11__knowledge_drift_audit.sql` 已合并至 `V1__init_schema.sql`，明确删除原 V7 遗留的 `trg_repository_knowledge_stale` 和 `mark_repository_knowledge_stale()`；新增 `knowledge_drift_events`，保存知识修订、旧/新 Snapshot 与 Commit、前后状态、触发类型、结构化原因、说明、操作者和时间，并对自动检查建立幂等唯一索引。
 5. 人工复核：新增 `GET .../source-drift` 和 `POST .../source-review`；`CONFIRM_CURRENT` 与 `MARK_STALE` 均要求 `MAINTAIN` 权限、正整数 `expectedRevision` 和非空说明。确认当前会原子更新当前 Commit、Snapshot、状态和检查时间，修订冲突返回稳定 `KNOWLEDGE_REVISION_CONFLICT`，不会覆盖新修订。
 6. 审查隔离：自动命中先把知识标为 `SUSPECT` 并写审计；REQ-005/REQ-006 已将 `SUSPECT/STALE` 隔离到陈旧知识，向量和关键词正式检索也排除这两种状态，因此不会产生强制测试或审批义务。
 7. 前端闭环：知识详情新增来源漂移区，展示命中类型、规则或旧哈希、文件、行号、变更类型、旧/新 Commit 和复核说明；维护者可输入说明后确认当前或标记失效。点击 Drift 证据会把精确 Base/Head 和知识标题带到“变更审查”的 Commit Range 表单，不自动制造审查结果。
@@ -1605,7 +1600,7 @@ P0 完成前冻结：
 3. 知识同步真实性：调用方不能自报“知识已更新”。服务重新读取当前知识卡，只有同一卡片修订号高于审查版本，并同时处于 `PUBLISHED + APPROVED + CURRENT`，才消除同步阻断。
 4. 非阻断边界：图谱单独推断的测试、审批、失效和知识同步要求，关键词/向量候选、模型总结、未知项与 partial 数据全部进入 Advisory；自由文本开发要求不做规则解析。重复测试/审批回报冲突时取较差状态。
 5. 知识模型与界面：`KnowledgeObligations` 新增 `prohibitedPathPatterns` 和 `knowledgeUpdateRequired`，保留三字段兼容构造。知识编辑器在开发要求区提供禁止路径和知识同步控件，详情页展示原始结构化规则；REFERENCE 知识仍不能携带任何义务。
-6. 数据迁移：新增 `V12__ci_knowledge_obligations.sql`，同时回填知识卡和所有历史修订，更新 JSONB 默认值并约束新增数组/布尔字段。静态迁移契约已覆盖两张表；当前无 PostgreSQL/Docker，仍需在全新库及 V11 实库升级路径验证 Flyway。
+6. 数据迁移：原独立迁移 `V12__ci_knowledge_obligations.sql` 已合并至 `V1__init_schema.sql`，同时回填知识卡和所有历史修订，更新 JSONB 默认值并约束新增数组/布尔字段。静态迁移契约已覆盖两张表，并以全新空库验证合并基线。
 7. 流水线客户端：新增 `scripts/ci-task-review.mjs`，从环境读取 Analyzer 地址、仓库/审查/Head、Session/CSRF 和可选测试/审批 JSON 文件；远端强制 HTTPS，本地允许回环 HTTP，禁止重定向，30 秒超时，不打印凭据。退出码 `0/1/2` 分别表示通过、确定性失败、平台或调用失败。
 8. 自动化验证：服务测试固定五类阻断和全部非阻断边界，另覆盖 Head 拒绝、成功消除义务、READ 权限、V12 与知识规则校验；Node 客户端测试覆盖输入文件、HTTPS 边界、请求契约、凭据不泄漏和退出码。完成时后端全量 `225` 项测试通过、`2` 项 Linux-only CLI 测试跳过；前端 `19` 项测试、Vue 类型检查和生产构建通过；独立 CI 客户端 `4` 项测试通过，并已加入 Linux CI。
 9. 当前限制：CI 客户端复用平台 Session + CSRF，需要受限专用账号和 Secret 轮换，尚未提供长期服务令牌；CI 请求本身仍是一次性判定，如需沉淀实际结果，调用方须再使用 REQ-022 结果回报接口。真实 CI Runner、真实 PostgreSQL V12 升级和长时间会话轮换尚未在当前机器验证，不能宣称生产验收完成。

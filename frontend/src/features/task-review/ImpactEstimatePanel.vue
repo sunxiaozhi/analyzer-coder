@@ -27,6 +27,7 @@ import {
 } from '@/api/changeAnalysis';
 import { intelligenceApi, type AskModel } from '@/api/intelligence';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { symbolKindLabel } from '@/utils/displayLabels';
 
 const route = useRoute();
 const router = useRouter();
@@ -38,6 +39,8 @@ const askModels = shallowRef<AskModel[]>([]);
 const selectedModelId = shallowRef<string | null>(null);
 const analysis = shallowRef<ChangeImpactAnalysis | null>(null);
 const candidateStates = reactive<Record<string, ChangeAnalysisCandidateState>>({});
+const severityLabels: Record<string, string> = { HIGH: '高', MEDIUM: '中', LOW: '低' };
+const dependencyLabels: Record<string, string> = { DEPENDS_ON: '依赖', CONNECTS_TO: '连接' };
 
 const repository = computed(() => repositories.selectedRepository);
 const taskValue = computed(() => task.value.trim());
@@ -156,12 +159,12 @@ async function copyScope() {
     ``,
     `- 任务：${analysis.value.task}`,
     `- Commit：${analysis.value.commitSha ?? 'unknown'}`,
-    `- Snapshot：${analysis.value.snapshotId}`,
+    `- 快照：${analysis.value.snapshotId}`,
     `- 证据覆盖等级：${analysis.value.evidenceCoverage.label}`,
     ``,
     `## 已确认相关`,
     ...confirmedCandidates.value.map(item =>
-      `- ${item.filePath}${item.startLine ? `:${item.startLine}` : ''} · Snapshot ${item.snapshotId} · SHA-256 ${item.contentHash}`,
+      `- ${item.filePath}${item.startLine ? `:${item.startLine}` : ''} · 快照 ${item.snapshotId} · 内容摘要 ${item.contentHash}`,
     ),
     ``,
     `## 已排除`,
@@ -203,7 +206,7 @@ watch(
       <div>
         <span class="eyebrow">需求影响预估</span>
         <h1>从任务描述形成调查线索</h1>
-        <p>未读取真实 Git Diff。结果来自当前仓库快照的检索与一跳模块依赖，只用于提前调查。</p>
+        <p>未读取真实 Git 差异。结果来自当前仓库快照的检索与一跳模块依赖，只用于提前调查。</p>
       </div>
       <div v-if="repository" class="repository-stamp">
         <GitCommitHorizontal :size="17" />
@@ -313,11 +316,11 @@ watch(
               <button type="button" class="candidate-source" @click="openEvidence(item)">
                 <span class="file-icon"><FileCode2 :size="15" /></span>
                 <span class="candidate-copy">
-                  <small>{{ item.moduleId ?? '未映射模块' }} · {{ item.symbolKind ?? 'FILE' }}</small>
+                  <small>{{ item.moduleId ?? '未映射模块' }} · {{ symbolKindLabel(item.symbolKind) }}</small>
                   <strong>{{ item.symbolName || item.filePath.split('/').pop() }}</strong>
                   <code>{{ item.filePath }}{{ item.startLine ? `:${item.startLine}` : '' }}</code>
                   <p>{{ item.excerpt }}</p>
-                  <small class="provenance">Snapshot {{ item.snapshotId.slice(0, 8) }} · SHA {{ item.contentHash.slice(0, 12) }}</small>
+                  <small class="provenance">快照 {{ item.snapshotId.slice(0, 8) }} · 内容摘要 {{ item.contentHash.slice(0, 12) }}</small>
                   <small v-if="item.matchedQueries.length > 1">{{ item.matchedQueries.length }} 个检索角度共同命中</small>
                 </span>
                 <span class="score">排序 {{ index + 1 }}</span>
@@ -347,8 +350,8 @@ watch(
                 <Network :size="14" />
                 <span>
                   <strong>{{ edge.source }} → {{ edge.target }}</strong>
-                  <small>{{ edge.relation }} · {{ edge.weight }} 条关系 · {{ edge.samples.length }} 条可核验样例</small>
-                  <small v-if="edge.samples[0]">Snapshot {{ edge.samples[0].snapshotId.slice(0, 8) }} · SHA {{ edge.samples[0].contentHash.slice(0, 12) }}</small>
+                  <small>{{ dependencyLabels[edge.relation] ?? '关联' }} · {{ edge.weight }} 条关系 · {{ edge.samples.length }} 条可核验样例</small>
+                  <small v-if="edge.samples[0]">快照 {{ edge.samples[0].snapshotId.slice(0, 8) }} · 内容摘要 {{ edge.samples[0].contentHash.slice(0, 12) }}</small>
                 </span>
                 <ArrowRight :size="12" />
               </button>
@@ -362,14 +365,14 @@ watch(
         <section class="ledger-block unknowns" :data-blocking="hasBlockingUnknowns">
           <header><ShieldQuestion :size="16" /><div><span>未知项</span><strong>{{ analysis.unknowns.length }}</strong></div></header>
           <article v-for="item in analysis.unknowns" :key="item.code" :data-severity="item.severity">
-            <span>{{ item.severity }}</span><p>{{ item.detail }}</p>
+            <span>{{ severityLabels[item.severity] ?? '未知' }}</span><p>{{ item.detail }}</p>
           </article>
         </section>
 
         <section class="ledger-block risks">
           <header><AlertTriangle :size="16" /><div><span>关联风险</span><strong>{{ analysis.risks.length }}</strong></div></header>
           <article v-for="risk in analysis.risks" :key="risk.id">
-            <span>{{ risk.severity }}</span><div><strong>{{ risk.title }}</strong><p>{{ risk.detail }}</p></div>
+            <span>{{ severityLabels[risk.severity] ?? '未知' }}</span><div><strong>{{ risk.title }}</strong><p>{{ risk.detail }}</p></div>
           </article>
           <p v-if="!analysis.risks.length" class="ledger-empty">当前候选范围没有匹配到已知架构风险。</p>
         </section>
@@ -380,7 +383,7 @@ watch(
             <span :data-existing="item.existing">{{ item.existing ? '现有' : '缺口' }}</span>
             <div>
               <strong>{{ item.filePath ?? '未找到直接相关测试' }}</strong><p>{{ item.reason }}</p>
-              <small v-if="item.snapshotId && item.contentHash">Snapshot {{ item.snapshotId.slice(0, 8) }} · SHA {{ item.contentHash.slice(0, 12) }}</small>
+              <small v-if="item.snapshotId && item.contentHash">快照 {{ item.snapshotId.slice(0, 8) }} · 内容摘要 {{ item.contentHash.slice(0, 12) }}</small>
             </div>
             <ArrowRight v-if="item.filePath" :size="12" />
           </button>
@@ -395,7 +398,7 @@ watch(
           <button type="button" :disabled="!reviewedCount" @click="copyScope"><Clipboard :size="13" />复制核验范围</button>
         </section>
 
-        <footer class="snapshot-note">Analysis {{ analysis.analysisId.slice(0, 8) }} · Snapshot {{ analysis.snapshotId.slice(0, 8) }}</footer>
+        <footer class="snapshot-note">分析记录 {{ analysis.analysisId.slice(0, 8) }} · 快照 {{ analysis.snapshotId.slice(0, 8) }}</footer>
       </aside>
     </div>
 

@@ -13,6 +13,7 @@ import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.Test;
 
 class CurrentSnapshotSqlContractTest {
+    private static final String BASELINE_MIGRATION = "db/migration/V1__init_schema.sql";
 
     @Test
     void changedMapperXmlRemainsLoadableByMyBatis() throws Exception {
@@ -81,7 +82,7 @@ class CurrentSnapshotSqlContractTest {
 
     @Test
     void embeddingCapabilityIsPersistedAndRequiredByRetrievalQueries() throws Exception {
-        String migration = resource("db/migration/V5__embedding_retrieval_capability.sql");
+        String migration = resource(BASELINE_MIGRATION);
         String intelligence = resource("mappers/IntelligenceMapper.xml");
         String vectors = resource("mappers/VectorIndexQueryMapper.xml");
 
@@ -94,7 +95,7 @@ class CurrentSnapshotSqlContractTest {
 
     @Test
     void knowledgePublicationReviewAndSourceVersionAreIndependent() throws Exception {
-        String migration = resource("db/migration/V7__split_knowledge_states.sql");
+        String migration = resource(BASELINE_MIGRATION);
         String intelligence = resource("mappers/IntelligenceMapper.xml");
 
         assertThat(migration)
@@ -109,7 +110,7 @@ class CurrentSnapshotSqlContractTest {
 
     @Test
     void taskReviewsAreIdempotentImmutableAndCompleteOnlyOnTheCapturedSnapshot() throws Exception {
-        String migration = resource("db/migration/V10__task_reviews.sql");
+        String migration = resource(BASELINE_MIGRATION);
         String mapper = compact(resource("mappers/TaskReviewMapper.xml"));
 
         assertThat(migration)
@@ -128,7 +129,7 @@ class CurrentSnapshotSqlContractTest {
 
     @Test
     void engineeringKnowledgeFieldsAreVersionedAndRestoresLoseTrustState() throws Exception {
-        String migration = resource("db/migration/V9__engineering_knowledge.sql");
+        String migration = resource(BASELINE_MIGRATION);
         String intelligence = resource("mappers/IntelligenceMapper.xml");
         String history = resource("mappers/KnowledgeHistoryMapper.xml");
 
@@ -159,7 +160,7 @@ class CurrentSnapshotSqlContractTest {
 
     @Test
     void knowledgeDriftRemovesRepositoryWideTriggerAndPersistsEvidence() throws Exception {
-        String migration = resource("db/migration/V11__knowledge_drift_audit.sql");
+        String migration = resource(BASELINE_MIGRATION);
         String mapper = resource("mappers/KnowledgeDriftMapper.xml");
 
         assertThat(migration)
@@ -176,7 +177,7 @@ class CurrentSnapshotSqlContractTest {
 
     @Test
     void ciKnowledgeObligationsAreBackfilledAndVersioned() throws Exception {
-        String migration = resource("db/migration/V12__ci_knowledge_obligations.sql");
+        String migration = resource(BASELINE_MIGRATION);
 
         assertThat(migration)
                 .contains("UPDATE knowledge_cards")
@@ -190,7 +191,7 @@ class CurrentSnapshotSqlContractTest {
     @Test
     void engineeringProjectsKeepCrossRepositoryScopeAndContractEvidenceVersioned()
             throws Exception {
-        String migration = resource("db/migration/V13__engineering_projects.sql");
+        String migration = resource(BASELINE_MIGRATION);
         String mapper = resource("mappers/EngineeringProjectMapper.xml");
 
         assertThat(migration)
@@ -212,7 +213,7 @@ class CurrentSnapshotSqlContractTest {
 
     @Test
     void taskOutcomesAreAppendOnlyIdempotentAndKeepHumanFeedbackSeparate() throws Exception {
-        String migration = resource("db/migration/V14__task_review_outcomes.sql");
+        String migration = resource(BASELINE_MIGRATION);
         String mapper = compact(resource("mappers/TaskReviewOutcomeMapper.xml"));
 
         assertThat(migration)
@@ -251,7 +252,7 @@ class CurrentSnapshotSqlContractTest {
 
     @Test
     void indexExecutionModeAndFallbackReasonArePersisted() throws Exception {
-        String migration = resource("db/migration/V8__index_execution_plan.sql");
+        String migration = resource(BASELINE_MIGRATION);
         String mapper = resource("mappers/IndexJobMapper.xml");
 
         assertThat(migration)

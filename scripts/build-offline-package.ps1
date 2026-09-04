@@ -73,7 +73,7 @@ try {
     Copy-Item -LiteralPath 'docs\08-linux-git-deployment.md' -Destination (Join-Path $packageDir 'STARTUP-GUIDE.md')
 
     $manifest = @"
-Analyzer Coder offline package
+代码知识平台离线包
 Version: $Version
 Created: $([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))
 Platform: $Platform

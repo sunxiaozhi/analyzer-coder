@@ -21,6 +21,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useWorkspaceTabsStore, type WorkspaceTab } from '@/stores/workspaceTabs';
 import WorkspaceTabs from '@/components/WorkspaceTabs.vue';
+import WorkspaceJourneyBar from '@/components/WorkspaceJourneyBar.vue';
 import ProductLogo from '@/components/ProductLogo.vue';
 import {
   workspaceNavigation,
@@ -127,6 +128,9 @@ function closeAllTabs() {
     workspaceTabs.open({ name: 'overview', title: '项目总览', fullPath: route.fullPath });
   }
 }
+function navigateJourney(path: string) {
+  if (path !== route.path) void router.push(path);
+}
 watch(() => route.fullPath, () => {
   if (!route.meta.public && typeof route.name === 'string') {
     workspaceTabs.open({
@@ -149,7 +153,7 @@ onMounted(() => {
 </script>
 
 <template><div class="app-shell">
-  <aside class="sidebar"><RouterLink class="brand" to="/overview"><span class="brand-mark"><ProductLogo /></span><span>项目知识平台</span></RouterLink>
+  <aside class="sidebar"><RouterLink class="brand" to="/overview"><span class="brand-mark"><ProductLogo /></span><span>代码知识平台</span></RouterLink>
     <nav class="nav-list" aria-label="主导航">
       <section v-for="group in navGroups" :key="group.key" class="nav-section" :data-group="group.key">
         <button
@@ -173,7 +177,7 @@ onMounted(() => {
       </section>
     </nav>
   </aside>
-  <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" clearable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
+  <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
     <div class="page-frame">
       <WorkspaceTabs
         :tabs="workspaceTabs.tabs"
@@ -186,6 +190,14 @@ onMounted(() => {
         @close-right="closeRightTabs"
         @close-all="closeAllTabs"
         @copy-link="copyTabLink"
+      />
+      <WorkspaceJourneyBar
+        :active-route="activeRouteName"
+        :has-repository="Boolean(repositoryStore.selectedRepository)"
+        :has-snapshot="Boolean(repositoryStore.selectedRepository?.snapshotId)"
+        :can-manage-projects="canManageProjects"
+        :can-maintain-knowledge="canMaintainSelectedRepository"
+        @navigate="navigateJourney"
       />
       <div class="route-view">
         <RouterView v-slot="{ Component, route: viewRoute }">

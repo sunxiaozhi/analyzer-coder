@@ -233,5 +233,5 @@
 - 删除 5 个路由不可达的静态/旧版页面、1 个旧 App 壳层和 2 个随旧任务页遗留的孤立组件；关键路由测试固定真实页面映射。
 - 删除永远返回空结果的 `NoopVectorSearchAdapter`、`SqliteCodeGraphAdapter`、只暴露 getter 的旧混合检索服务及无调用领域端口，避免 Spring 容器呈现虚假能力。
 - 移除不再使用的 SQLite JDBC 依赖；运行时持久化边界统一为 PostgreSQL/pgvector、受管文件系统和 CodeGraph CLI 产物。
-- 同步需求、技术选型、设计、功能 UI、使用指南、Linux 升级说明和后端 README，修正增量索引、引用状态、知识三状态、检索诊断、Flyway V1–V8 与测试基线。
+- 同步需求、技术选型、设计、功能 UI、使用指南、Linux 升级说明和后端 README，修正增量索引、引用状态、知识三状态、检索诊断、合并后的 Flyway V1 与测试基线。
 - 运行代码中不再保留“尚未交付”假页面；历史视觉原型只作为归档参考，不作为功能存在性证据。

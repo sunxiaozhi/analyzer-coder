@@ -1,5 +1,5 @@
 [Unit]
-Description=Analyzer Coder backend
+Description=代码知识平台后端服务
 After=network-online.target
 Wants=network-online.target
 

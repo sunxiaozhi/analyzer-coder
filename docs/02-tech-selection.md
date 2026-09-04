@@ -1,4 +1,4 @@
-# 代码智库系统技术选型基线
+# 代码知识平台技术选型基线
 
 版本：v1.1
 日期：2026-07-31
@@ -15,7 +15,7 @@
 | Web | Spring MVC、Bean Validation、Actuator | Cookie 会话，自定义权限校验 |
 | 数据访问 | MyBatis、Mapper XML、PageHelper | PostgreSQL 方言，复杂查询使用显式 SQL |
 | 数据库 | PostgreSQL 17、pgvector | 业务数据、任务、图谱投影和可变维度向量统一存储 |
-| 迁移 | Flyway | 当前迁移基线为 `V1__baseline.sql` |
+| 迁移 | Flyway | 当前迁移基线为 `V1__init_schema.sql` |
 | 后台任务 | Spring Scheduler + 数据库任务表 | 无 Redis、MQ、Spring Batch 运行依赖 |
 | Git/图谱 | Git CLI、CodeGraph CLI、`ProcessBuilder` | CodeGraph 为可选外部命令，产物登记后再发布 |
 | LLM/Embedding | JDK `HttpClient` + OpenAI-compatible HTTP | 未引入 Spring AI 或 LangChain4j |
@@ -51,7 +51,7 @@
 
 ### 2.3 Flyway
 
-Flyway 默认启用。`V1__init_schema.sql` 创建基础结构，后续版本迁移依次补充 Markdown 来源、引用评估、启发式关系隔离、检索能力、任务租约、知识三状态与索引执行计划。空库和已有环境都以实际 Flyway 历史顺序向前迁移，禁止手工跳过版本。
+Flyway 默认启用。`V1__init_schema.sql` 是由原 V1 至 V14 按顺序折叠得到的单一初始化基线，包含完整结构、约束、函数、触发器和必要初始数据。该基线面向空库或明确重建后的环境；保留旧 Flyway 历史的数据库不能直接升级到此基线。
 
 ### 2.4 知识正文与附件
 

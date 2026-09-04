@@ -434,7 +434,7 @@ git pull --ff-only origin v2
 bash scripts/start.sh
 ```
 
-当前仓库保留 `V1` 基础结构及后续版本化迁移。升级前必须备份 PostgreSQL 与受管数据目录，再让 Flyway 按历史顺序执行尚未应用的迁移；禁止手工改写 `flyway_schema_history`、跳版本或直接清库。启动后应检查 Flyway 日志和 `/actuator/health`。切换新的外部向量模型后，仍需要对仓库执行一次完整索引，才能生成新模型维度的向量。
+当前仓库使用单一合并迁移 `V1__init_schema.sql`。它仅适用于空库或已经明确重建的环境，不可直接覆盖带有旧 V1 至 V14 Flyway 历史的数据库。生产环境必须先备份 PostgreSQL 与受管数据目录，并制定数据导出、重建和回灌方案；禁止直接修改 `flyway_schema_history` 伪造兼容。启动后应检查 Flyway 日志和 `/actuator/health`。切换新的外部向量模型后，仍需要对仓库执行一次完整索引，才能生成新模型维度的向量。
 
 只有确认 `frontend/package-lock.json` 没有变化时，才建议使用：
 

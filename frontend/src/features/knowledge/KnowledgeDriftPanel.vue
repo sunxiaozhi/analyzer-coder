@@ -28,7 +28,7 @@ const reasonLabels: Record<string, string> = {
     <header>
       <component :is="card.sourceVersionStatus === 'CURRENT' ? CheckCircle2 : AlertTriangle" :size="17" />
       <div>
-        <small>Source drift</small>
+        <small>来源漂移</small>
         <h3>{{ card.sourceVersionStatus === 'SUSPECT' ? '代码变化命中知识范围，等待复核' : card.sourceVersionStatus === 'STALE' ? '知识已确认不适用于当前代码' : '知识来源版本已核对' }}</h3>
       </div>
       <RefreshCw v-if="loading" class="spinning" :size="14" />
@@ -43,7 +43,7 @@ const reasonLabels: Record<string, string> = {
         <time>{{ new Date(event.createdAt).toLocaleString() }}</time>
       </div>
       <article v-for="reason in event.reasons" :key="`${reason.kind}:${reason.rule}:${reason.filePath}`">
-        <b>{{ reasonLabels[reason.kind] ?? reason.kind }}</b>
+        <b>{{ reasonLabels[reason.kind] ?? '其他变更原因' }}</b>
         <span>{{ reason.detail }}</span>
         <code v-if="reason.filePath">{{ reason.filePath }}<template v-if="reason.startLine">:{{ reason.startLine }}</template></code>
         <small v-if="reason.rule">规则/哈希：{{ reason.rule }}</small>

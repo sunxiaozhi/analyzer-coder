@@ -67,8 +67,7 @@ public class ApiExceptionHandler {
                 switch (e.code()) {
                     case "REPOSITORY_NOT_FOUND", "WEBHOOK_REPOSITORY_NOT_FOUND" ->
                             HttpStatus.NOT_FOUND;
-                    case "CURRENT_SNAPSHOT_REQUIRED", "PR_HEAD_NOT_CURRENT_SNAPSHOT" ->
-                            HttpStatus.CONFLICT;
+                    case "CURRENT_SNAPSHOT_REQUIRED" -> HttpStatus.CONFLICT;
                     case "PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE", "WEBHOOK_NOT_CONFIGURED" ->
                             HttpStatus.SERVICE_UNAVAILABLE;
                     case "PROVIDER_HTTP_ERROR" -> HttpStatus.BAD_GATEWAY;

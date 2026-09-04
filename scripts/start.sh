@@ -45,7 +45,7 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 if [[ ! -f "$ROOT_DIR/pom.xml" || ! -f "$ROOT_DIR/backend/pom.xml" ]]; then
-  echo "Run this script from a complete Analyzer Coder source tree." >&2
+  echo "请在完整的代码知识平台源码目录中运行此脚本。" >&2
   exit 1
 fi
 if [[ ! -f "$ROOT_DIR/frontend/package.json" || ! -f "$ROOT_DIR/frontend/package-lock.json" ]]; then
@@ -63,7 +63,7 @@ if [[ -f "$PID_FILE" ]]; then
   if [[ -n "$previous_pid" ]] && kill -0 "$previous_pid" >/dev/null 2>&1; then
     previous_command="$(ps -p "$previous_pid" -o args= 2>/dev/null || true)"
     if [[ "$previous_command" != *"$ROOT_DIR/backend/target/"* ]]; then
-      echo "PID $previous_pid is not an Analyzer Coder backend started from this tree; refusing to stop it." >&2
+      echo "PID $previous_pid 不是从当前源码目录启动的代码知识平台后端，拒绝停止该进程。" >&2
       exit 1
     fi
     echo "Stopping previous backend process $previous_pid..."
@@ -262,7 +262,7 @@ fi
 
 http_port="$(sed -n 's/^APP_HTTP_PORT=//p' "$COMPONENT_ENV" | tail -n 1)"
 compose_filename="$(basename "$component_compose_file")"
-echo "Analyzer Coder is ready at http://127.0.0.1:${http_port:-8088}"
+echo "代码知识平台已启动：http://127.0.0.1:${http_port:-8088}"
 echo "Backend PID: $backend_pid"
 echo "Backend log: $BACKEND_LOG"
 echo "Component logs: docker compose --env-file .env.components -f $compose_filename logs -f"

@@ -36,7 +36,56 @@ public class GitCredentialExecutor {
         run(List.of("reset", "--hard", remoteRef), worktree, credential, 60);
     }
 
-    private void run(List<String> arguments, Path cwd, ResolvedCredential credential, int seconds) {
+    /** 仅把 PR/MR Head 写入隔离的本地引用，不切换分支，也不改变当前工作区或发布快照。 */
+    public String fetchReviewHead(
+            Path worktree, String provider, long number, ResolvedCredential credential) {
+        if (worktree == null || number < 1) {
+            throw new IllegalArgumentException("PR/MR 审查引用不完整");
+        }
+        String normalizedProvider = provider == null ? "" : provider.trim().toUpperCase();
+        String remoteRef;
+        String localRef;
+        switch (normalizedProvider) {
+            case "GITHUB" -> {
+                remoteRef = "refs/pull/" + number + "/head";
+                localRef = "refs/analyzer/reviews/github/" + number + "/head";
+            }
+            case "GITLAB" -> {
+                remoteRef = "refs/merge-requests/" + number + "/head";
+                localRef = "refs/analyzer/reviews/gitlab/" + number + "/head";
+            }
+            default -> throw new IllegalArgumentException("不支持的 PR/MR 提供方");
+        }
+        run(
+                List.of(
+                        "fetch",
+                        "--no-tags",
+                        "--force",
+                        "--depth=64",
+                        "origin",
+                        "+" + remoteRef + ":" + localRef),
+                worktree,
+                credential,
+                180);
+        String commit =
+                run(
+                                List.of(
+                                        "rev-parse",
+                                        "--verify",
+                                        "--end-of-options",
+                                        localRef + "^{commit}"),
+                                worktree,
+                                null,
+                                30)
+                        .trim();
+        if (!commit.matches("(?i)[0-9a-f]{40,64}")) {
+            throw new IllegalStateException("无法确认 PR/MR Head 提交");
+        }
+        return commit;
+    }
+
+    private String run(
+            List<String> arguments, Path cwd, ResolvedCredential credential, int seconds) {
         Path askPassRoot = null;
         try {
             Path askPass = null;
@@ -68,6 +117,7 @@ public class GitCredentialExecutor {
             if (process.exitValue() != 0) {
                 throw new IllegalStateException(failureMessage(output));
             }
+            return output;
         } catch (IOException exception) {
             throw new IllegalStateException("无法执行带凭据的 Git 操作", exception);
         } catch (InterruptedException exception) {

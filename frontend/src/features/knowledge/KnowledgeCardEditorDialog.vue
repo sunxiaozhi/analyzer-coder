@@ -12,7 +12,10 @@ import {
   type KnowledgeKind,
   type KnowledgeSeverity,
 } from '@/api/intelligence';
+import { engineeringProjectsApi, type EngineeringProject } from '@/api/engineeringProjects';
+import { repositoryGovernanceApi, type RepositoryMember } from '@/api/repositoryGovernance';
 import { useAuthStore } from '@/stores/authStore';
+import KnowledgeAccountSelect from './KnowledgeAccountSelect.vue';
 import KnowledgeAttachmentList from './KnowledgeAttachmentList.vue';
 import KnowledgeMarkdownEditor from './KnowledgeMarkdownEditor.vue';
 import KnowledgeCodeReferenceSelector from './KnowledgeCodeReferenceSelector.vue';
@@ -33,13 +36,16 @@ const auth = useAuthStore();
 const expanded = ref<string[]>([]);
 const form = reactive<CardInput>(emptyForm());
 const engineeringText = reactive({
-  paths: '', symbols: '', modules: '', repositories: '', services: '', contracts: '',
-  tests: '', approvers: '', instructions: '', prohibitedPaths: '',
+  paths: '', symbols: '', modules: '', services: '',
+  tests: '', instructions: '', prohibitedPaths: '',
 });
-const tagText = shallowRef('');
 const items = shallowRef<KnowledgeAttachment[]>([]);
 const uploading = shallowRef(false);
 const codeReferences = shallowRef<CodeReference[]>([]);
+const members = shallowRef<RepositoryMember[]>([]);
+const membersLoading = shallowRef(false);
+const engineeringProjects = shallowRef<EngineeringProject[]>([]);
+const topologyLoading = shallowRef(false);
 
 const kindOptions: { value: KnowledgeKind; label: string }[] = [
   { value: 'REFERENCE', label: '参考资料' },
@@ -65,13 +71,14 @@ const enforcementOptions: { value: KnowledgeEnforcement; label: string; hint: st
   { value: 'REQUIRED', label: '必须执行', hint: '发布前必须有负责人、范围和当前代码证据' },
 ];
 
-const invalidApprovers = computed(() => lines(engineeringText.approvers).some(value =>
-  !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
-));
-const invalidScopeIds = computed(() => [...lines(engineeringText.repositories), ...lines(engineeringText.contracts)]
-  .some(value => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)));
+const repositoryOptions = computed(() => [...new Map(engineeringProjects.value
+  .flatMap(project => project.repositories)
+  .map(repository => [repository.repositoryId, repository])).values()]);
+const contractOptions = computed(() => [...new Map(engineeringProjects.value
+  .flatMap(project => project.contracts)
+  .map(contract => [contract.id, contract])).values()]);
 const referenceHasObligations = computed(() => form.enforcement === 'REFERENCE'
-  && Boolean(engineeringText.tests.trim() || engineeringText.approvers.trim()
+  && Boolean(engineeringText.tests.trim() || form.obligations.requiredApproverAccountIds.length
     || engineeringText.instructions.trim() || engineeringText.prohibitedPaths.trim()
     || form.obligations.knowledgeUpdateRequired));
 const requiredIncomplete = computed(() => form.enforcement === 'REQUIRED'
@@ -107,21 +114,24 @@ watch(() => [props.modelValue, props.card] as const, () => {
     attachmentIds: props.card.attachments.map(item => item.id),
     codeReferences: cardReferences.filter(item => item.chunkId).map(item => ({ chunkId: item.chunkId! })),
   } : emptyForm());
-  tagText.value = form.tags.join(', ');
   items.value = props.card ? [...props.card.attachments] : [];
   codeReferences.value = [...cardReferences];
   engineeringText.paths = form.scope.pathPatterns.join('\n');
   engineeringText.symbols = form.scope.symbols.join('\n');
   engineeringText.modules = form.scope.modules.join('\n');
-  engineeringText.repositories = form.scope.repositoryIds.join('\n');
   engineeringText.services = form.scope.serviceNames.join('\n');
-  engineeringText.contracts = form.scope.contractIds.join('\n');
   engineeringText.tests = form.obligations.requiredTests.join('\n');
-  engineeringText.approvers = form.obligations.requiredApproverAccountIds.join('\n');
   engineeringText.instructions = form.obligations.instructions.join('\n');
   engineeringText.prohibitedPaths = form.obligations.prohibitedPathPatterns.join('\n');
   expanded.value = props.card && props.card.enforcement !== 'REFERENCE' ? ['engineering'] : [];
+  void Promise.all([loadMembers(), loadTopology()]);
 }, { immediate: true });
+
+watch(() => form.enforcement, enforcement => {
+  if (enforcement !== 'REFERENCE' && !expanded.value.includes('engineering')) {
+    expanded.value = [...expanded.value, 'engineering'];
+  }
+});
 
 function emptyForm(): CardInput {
   return {
@@ -143,17 +153,51 @@ function lines(value: string) {
 
 function hasScope() {
   return Boolean(engineeringText.paths.trim() || engineeringText.symbols.trim()
-    || engineeringText.modules.trim() || engineeringText.repositories.trim()
-    || engineeringText.services.trim() || engineeringText.contracts.trim());
+    || engineeringText.modules.trim() || form.scope.repositoryIds.length
+    || engineeringText.services.trim() || form.scope.contractIds.length);
 }
 
 function useCurrentAccount() {
   form.ownerAccountId = auth.account?.id ?? null;
 }
 
+async function loadMembers() {
+  if (!props.modelValue || !props.repositoryId) return;
+  membersLoading.value = true;
+  try {
+    members.value = await repositoryGovernanceApi.members(props.repositoryId);
+  } catch (error) {
+    members.value = auth.account ? [{
+      accountId: auth.account.id,
+      username: auth.account.username,
+      displayName: auth.account.displayName,
+      accountRole: auth.account.role,
+      enabled: true,
+      relationship: 'MAINTAIN',
+      permissionLevel: 'MAINTAIN',
+    }] : [];
+    ElMessage.error(error instanceof Error ? error.message : '仓库成员加载失败');
+  } finally {
+    membersLoading.value = false;
+  }
+}
+
+async function loadTopology() {
+  if (!props.modelValue) return;
+  topologyLoading.value = true;
+  try {
+    engineeringProjects.value = await engineeringProjectsApi.list();
+  } catch (error) {
+    engineeringProjects.value = [];
+    ElMessage.error(error instanceof Error ? error.message : '工程项目拓扑加载失败');
+  } finally {
+    topologyLoading.value = false;
+  }
+}
+
 function clearObligations() {
   engineeringText.tests = '';
-  engineeringText.approvers = '';
+  form.obligations.requiredApproverAccountIds = [];
   engineeringText.instructions = '';
   engineeringText.prohibitedPaths = '';
   form.obligations.knowledgeUpdateRequired = false;
@@ -185,20 +229,20 @@ function insert(item: KnowledgeAttachment) {
 }
 
 function save() {
-  form.tags = tagText.value.split(',').map(value => value.trim()).filter(Boolean);
+  form.tags = [...new Set(form.tags.map(value => value.trim()).filter(Boolean))];
   form.attachmentIds = items.value.map(item => item.id);
   form.codeReferences = codeReferences.value.filter(item => item.chunkId).map(item => ({ chunkId: item.chunkId! }));
   form.scope = {
     pathPatterns: lines(engineeringText.paths),
     symbols: lines(engineeringText.symbols),
     modules: lines(engineeringText.modules),
-    repositoryIds: lines(engineeringText.repositories),
+    repositoryIds: [...form.scope.repositoryIds],
     serviceNames: lines(engineeringText.services),
-    contractIds: lines(engineeringText.contracts),
+    contractIds: [...form.scope.contractIds],
   };
   form.obligations = {
     requiredTests: lines(engineeringText.tests),
-    requiredApproverAccountIds: lines(engineeringText.approvers),
+    requiredApproverAccountIds: [...form.obligations.requiredApproverAccountIds],
     instructions: lines(engineeringText.instructions),
     prohibitedPathPatterns: lines(engineeringText.prohibitedPaths),
     knowledgeUpdateRequired: form.obligations.knowledgeUpdateRequired,
@@ -219,7 +263,7 @@ function save() {
   <el-dialog :model-value="modelValue" :title="card ? '编辑工程知识' : '新建工程知识'"
     width="960" top="3vh" destroy-on-close @update:model-value="emit('update:modelValue', $event)">
     <div class="editor-thesis">
-      <span>ENGINEERING KNOWLEDGE</span>
+      <span>工程知识</span>
       <p>先记录清楚，再决定它对开发任务是参考、建议还是必须执行。</p>
       <b :data-enforcement="form.enforcement">
         {{ enforcementOptions.find(item => item.value === form.enforcement)?.label }}
@@ -242,8 +286,8 @@ function save() {
             </el-form-item>
           </div>
           <div class="form-grid policy-grid">
-            <el-form-item label="原有展示分类">
-              <el-input v-model="form.cardType" maxlength="40" placeholder="保留旧知识分类，便于筛选" />
+            <el-form-item label="业务分类">
+              <el-input v-model="form.cardType" maxlength="40" placeholder="例如：模块说明、开发规范" />
             </el-form-item>
             <el-form-item label="严重程度">
               <el-segmented v-model="form.severity" :options="severityOptions" block />
@@ -260,7 +304,10 @@ function save() {
           <el-form-item label="知识正文（Markdown）" required>
             <KnowledgeMarkdownEditor v-model="form.content" :repository-id="repositoryId" class="full-width" />
           </el-form-item>
-          <el-form-item label="标签（逗号分隔）"><el-input v-model="tagText" /></el-form-item>
+          <el-form-item label="标签">
+            <el-select v-model="form.tags" class="full-width" multiple filterable allow-create
+              default-first-option placeholder="输入标签后按回车，可添加多个" />
+          </el-form-item>
         </div>
       </section>
 
@@ -278,7 +325,7 @@ function save() {
             <section class="form-section">
               <div class="section-marker"><span>02</span><small>范围</small></div>
               <div class="section-body">
-                <div class="section-heading"><h3>这条知识适用于哪里</h3><p>每行一项；路径使用仓库相对 Glob。</p></div>
+                <div class="section-heading"><h3>这条知识适用于哪里</h3><p>每行一项；路径使用仓库相对通配规则。</p></div>
                 <div class="form-grid three-columns">
                   <el-form-item label="路径规则">
                     <el-input v-model="engineeringText.paths" type="textarea" :rows="4"
@@ -293,18 +340,29 @@ function save() {
                   </el-form-item>
                 </div>
                 <div class="form-grid three-columns cross-scope-grid">
-                  <el-form-item label="工程项目仓库 ID">
-                    <el-input v-model="engineeringText.repositories" type="textarea" :rows="3"
-                      placeholder="每行一个已关联仓库 UUID" />
+                  <el-form-item label="工程项目仓库">
+                    <el-select v-model="form.scope.repositoryIds" class="full-width" multiple filterable
+                      collapse-tags collapse-tags-tooltip :loading="topologyLoading"
+                      placeholder="从工程项目中选择仓库">
+                      <el-option v-for="repository in repositoryOptions" :key="repository.repositoryId"
+                        :value="repository.repositoryId"
+                        :label="`${repository.repositoryName}（${repository.serviceName}）`" />
+                    </el-select>
+                    <small v-if="!topologyLoading && !repositoryOptions.length">尚未配置跨仓工程项目时可留空。</small>
                   </el-form-item>
                   <el-form-item label="工程服务名">
                     <el-input v-model="engineeringText.services" type="textarea" :rows="3"
                       placeholder="order-service" />
                   </el-form-item>
-                  <el-form-item label="已验证契约 ID">
-                    <el-input v-model="engineeringText.contracts" type="textarea" :rows="3"
-                      placeholder="每行一个契约 UUID" />
-                    <small v-if="invalidScopeIds" class="field-error">仓库或契约 ID 不是有效 UUID</small>
+                  <el-form-item label="已验证契约">
+                    <el-select v-model="form.scope.contractIds" class="full-width" multiple filterable
+                      collapse-tags collapse-tags-tooltip :loading="topologyLoading"
+                      placeholder="从工程项目中选择契约">
+                      <el-option v-for="contract in contractOptions" :key="contract.id" :value="contract.id"
+                        :disabled="!contract.current"
+                        :label="`${contract.name}（${contract.contractKey}）${contract.current ? '' : ' · 证据待刷新'}`" />
+                    </el-select>
+                    <small v-if="!topologyLoading && !contractOptions.length">尚未登记跨仓契约时可留空。</small>
                   </el-form-item>
                 </div>
               </div>
@@ -325,10 +383,14 @@ function save() {
                     <el-input v-model="engineeringText.tests" type="textarea" :rows="4"
                       placeholder="./mvnw test&#10;npm run test" />
                   </el-form-item>
-                  <el-form-item label="审批人账号 ID">
-                    <el-input v-model="engineeringText.approvers" type="textarea" :rows="4"
-                      placeholder="每行一个账号 UUID" />
-                    <small v-if="invalidApprovers" class="field-error">存在无效 UUID</small>
+                  <el-form-item label="必需审批人">
+                    <KnowledgeAccountSelect
+                      v-model="form.obligations.requiredApproverAccountIds"
+                      :members="members"
+                      :loading="membersLoading"
+                      multiple
+                      placeholder="选择一个或多个仓库成员"
+                    />
                   </el-form-item>
                   <el-form-item label="补充开发要求">
                     <el-input v-model="engineeringText.instructions" type="textarea" :rows="4"
@@ -339,7 +401,7 @@ function save() {
                   <el-form-item label="禁止修改路径（CI）">
                     <el-input v-model="engineeringText.prohibitedPaths" type="textarea" :rows="3"
                       placeholder="deploy/production/**&#10;security/keys/**" />
-                    <small>只按真实改动路径和已审核 REQUIRED 知识判断，不解析自然语言。</small>
+                    <small>只按真实改动路径和已审核的“必须执行”知识判断，不解析自然语言。</small>
                   </el-form-item>
                   <el-form-item label="知识同步（CI）">
                     <el-switch v-model="form.obligations.knowledgeUpdateRequired"
@@ -353,10 +415,16 @@ function save() {
               <div class="section-marker"><span>04</span><small>负责</small></div>
               <div class="section-body owner-row">
                 <div class="section-heading"><h3>谁负责确认它仍然有效</h3><p>必须执行的知识发布前需要负责人。</p></div>
-                <el-form-item label="负责人账号 ID">
-                  <el-input v-model="form.ownerAccountId" clearable placeholder="账号 UUID">
-                    <template #append><el-button @click="useCurrentAccount">设为我</el-button></template>
-                  </el-input>
+                <el-form-item label="负责人">
+                  <div class="owner-control">
+                    <KnowledgeAccountSelect
+                      v-model="form.ownerAccountId"
+                      :members="members"
+                      :loading="membersLoading"
+                      placeholder="选择负责维护这条知识的成员"
+                    />
+                    <el-button :disabled="!auth.account" @click="useCurrentAccount">设为我</el-button>
+                  </div>
                 </el-form-item>
                 <el-alert v-if="requiredIncomplete" type="warning" :closable="false"
                   title="当前草稿可以保存，但发布前必须补全负责人和至少一种适用范围。" />
@@ -393,7 +461,7 @@ function save() {
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
       <el-button type="primary" :loading="busy"
-        :disabled="uploading || invalidApprovers || invalidScopeIds || referenceHasObligations || !form.title.trim() || !form.content.trim()"
+        :disabled="uploading || referenceHasObligations || !form.title.trim() || !form.content.trim()"
         @click="save">{{ card ? '保存新修订' : '创建草稿' }}</el-button>
     </template>
   </el-dialog>
@@ -437,6 +505,7 @@ function save() {
 .owner-row .section-heading { display: block; }
 .owner-row .section-heading p { margin-top: 4px; }
 .owner-row .el-alert { grid-column: 1 / -1; }
+.owner-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; width: 100%; }
 .field-error { display: block; margin-top: 4px; color: var(--el-color-danger); }
 .attachment-field { margin-top: 20px; }
 .attachment-field :deep(.el-form-item__content) { display: grid; gap: 10px; }
@@ -450,6 +519,7 @@ function save() {
   .form-section { grid-template-columns: 38px minmax(0, 1fr); }
   .engineering-collapse { margin-left: 38px; }
   .title-grid, .policy-grid, .three-columns, .ci-policy-grid, .owner-row { grid-template-columns: 1fr; }
+  .owner-control { grid-template-columns: 1fr; }
   .owner-row .el-alert { grid-column: auto; }
   .section-heading { display: block; }
   .section-heading p { margin-top: 4px; }

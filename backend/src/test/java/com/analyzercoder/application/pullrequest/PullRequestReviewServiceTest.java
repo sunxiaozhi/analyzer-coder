@@ -37,6 +37,7 @@ class PullRequestReviewServiceTest {
     private final InMemoryCodeRepositoryStore repositories = new InMemoryCodeRepositoryStore();
     private final RepositoryMapper repositoryMapper = mock(RepositoryMapper.class);
     private final RepositoryCredentialService credentials = mock(RepositoryCredentialService.class);
+    private final GitCredentialExecutor git = mock(GitCredentialExecutor.class);
     private final TaskReviewService taskReviews = mock(TaskReviewService.class);
     private final PullRequestReviewCommentRenderer renderer = mock(PullRequestReviewCommentRenderer.class);
     private final FakeProvider provider = new FakeProvider();
@@ -85,6 +86,7 @@ class PullRequestReviewServiceTest {
                         repositories,
                         repositoryMapper,
                         credentials,
+                        git,
                         new PullRequestTargetResolver(),
                         new UnifiedDiffRepositoryChangeParser(),
                         taskReviews,
@@ -128,8 +130,48 @@ class PullRequestReviewServiceTest {
     }
 
     @Test
-    void refusesToReviewOrCommentWhenProviderHeadIsNotThePublishedSnapshot() {
+    void reviewsProviderHeadAgainstThePublishedKnowledgeBaseline() {
         provider.headSha = "c".repeat(40);
+        when(git.fetchReviewHead(
+                        workspace,
+                        "GITHUB",
+                        7,
+                        new GitCredentialExecutor.ResolvedCredential("git", "secret-token")))
+                .thenReturn(provider.headSha);
+
+        PullRequestReviewService.ReviewResult result =
+                service.review(
+                        actor,
+                        repository.id(),
+                        new PullRequestReviewService.ReviewRequest(
+                                UUID.randomUUID(),
+                                PullRequestProvider.ProviderKind.GITHUB,
+                                7,
+                                null,
+                                null,
+                                null));
+
+        assertThat(result.review()).isSameAs(savedReview);
+        org.mockito.ArgumentCaptor<RepositoryChange> change =
+                org.mockito.ArgumentCaptor.forClass(RepositoryChange.class);
+        verify(taskReviews)
+                .createExternal(eq(repository.id()), eq(actor.id()), any(), change.capture());
+        assertThat(change.getValue().headCommit()).isEqualTo(provider.headSha);
+        assertThat(change.getValue().limitations())
+                .extracting(RepositoryChange.Limitation::code)
+                .contains("PR_HEAD_NOT_INDEXED");
+        assertThat(provider.publishedBody).isEqualTo("rendered comment");
+    }
+
+    @Test
+    void refusesReviewWhenFetchedRefDoesNotMatchProviderHead() {
+        provider.headSha = "c".repeat(40);
+        when(git.fetchReviewHead(
+                        workspace,
+                        "GITHUB",
+                        7,
+                        new GitCredentialExecutor.ResolvedCredential("git", "secret-token")))
+                .thenReturn("d".repeat(40));
 
         assertThatThrownBy(
                         () ->
@@ -145,7 +187,8 @@ class PullRequestReviewServiceTest {
                                                 null)))
                 .isInstanceOfSatisfying(
                         PullRequestIntegrationException.class,
-                        exception -> assertThat(exception.code()).isEqualTo("PR_HEAD_NOT_CURRENT_SNAPSHOT"));
+                        exception ->
+                                assertThat(exception.code()).isEqualTo("PR_HEAD_FETCH_MISMATCH"));
         verify(taskReviews, never()).createExternal(any(), any(), any(), any());
         assertThat(provider.publishedBody).isNull();
     }

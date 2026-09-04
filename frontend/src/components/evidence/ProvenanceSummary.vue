@@ -22,7 +22,7 @@ const emit = defineEmits<{ open: [source: Provenance] }>();
         </small>
         <small v-else-if="source.retrievalChannel">检索通道：{{ source.retrievalChannel }}（仅用于排序候选）</small>
         <small v-else-if="source.relationPath.length">关系路径：{{ source.relationPath.join(' → ') }}</small>
-        <small v-else-if="source.snapshotId">Snapshot {{ source.snapshotId.slice(0, 8) }}</small>
+        <small v-else-if="source.snapshotId">快照 {{ source.snapshotId.slice(0, 8) }}</small>
       </div>
     </article>
   </section>

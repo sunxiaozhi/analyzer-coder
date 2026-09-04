@@ -83,6 +83,14 @@ function relationLabel(edge: ProjectArchitectureEdge) {
   return edge.relation === 'CONNECTS_TO' ? '运行连接' : '模块依赖';
 }
 
+function resourceTypeLabel(value: string | null) {
+  if (!value) return '运行资源';
+  return ({
+    DATABASE: '数据库', CACHE: '缓存', QUEUE: '消息队列', TOPIC: '消息主题',
+    STORAGE: '对象存储', EXTERNAL_SERVICE: '外部服务', SERVICE: '服务',
+  } as Record<string, string>)[value] ?? '运行资源';
+}
+
 function moduleStats(nodeId: string) {
   return {
     incoming: relationshipEdges.value.filter(edge => edge.target === nodeId).length,
@@ -216,7 +224,7 @@ watch(
           <div>
             <span>{{ selectedNode.kind === 'RESOURCE' ? '运行资源' : '选中模块' }}</span>
             <h3>{{ selectedNode.kind === 'RESOURCE' ? selectedNode.label : selectedNode.id }}</h3>
-            <p>{{ selectedNode.kind === 'RESOURCE' ? selectedNode.resourceType : `${selectedNode.primaryLanguage} · ${selectedNode.codeFileCount} 个代码文件` }}</p>
+            <p>{{ selectedNode.kind === 'RESOURCE' ? resourceTypeLabel(selectedNode.resourceType) : `${selectedNode.primaryLanguage} · ${selectedNode.codeFileCount} 个代码文件` }}</p>
           </div>
           <span v-if="riskSeverity(selectedNode.id)" class="risk-badge" :data-severity="riskSeverity(selectedNode.id)">
             <ShieldAlert :size="13" />{{ riskSeverity(selectedNode.id) === 'HIGH' ? '高风险提醒' : '架构提醒' }}
@@ -239,7 +247,7 @@ watch(
           <div class="current-node" :class="{ resource: selectedNode.kind === 'RESOURCE' }" :data-risk="riskSeverity(selectedNode.id)">
             <span><Database v-if="selectedNode.kind === 'RESOURCE'" :size="20" /><Network v-else :size="20" /></span>
             <strong>{{ selectedNode.label }}</strong>
-            <small>{{ selectedNode.kind === 'RESOURCE' ? selectedNode.resourceType : selectedNode.id }}</small>
+            <small>{{ selectedNode.kind === 'RESOURCE' ? resourceTypeLabel(selectedNode.resourceType) : selectedNode.id }}</small>
           </div>
 
           <section class="relation-column outgoing">
@@ -307,7 +315,7 @@ watch(
         <div>
           <button v-for="resource in resourceNodes" :key="resource.id" type="button" @click="selectNode(resource.id); viewMode = 'browser'">
             <Database :size="15" />
-            <span><strong>{{ resource.label }}</strong><small>{{ resource.resourceType }}</small></span>
+            <span><strong>{{ resource.label }}</strong><small>{{ resourceTypeLabel(resource.resourceType) }}</small></span>
             <em>{{ resourceInboundCount(resource.id) }} 个连接</em>
           </button>
         </div>

@@ -11,7 +11,7 @@ const chunkTypeLabels: Record<CodeChunk['chunkType'], string> = {
   DOC_SECTION: 'DOC_SECTION（文档段落）',
   TEST_CASE: 'TEST_CASE（测试用例）',
   CONFIG: 'CONFIG（配置）',
-  KNOWLEDGE_CARD: 'KNOWLEDGE_CARD（知识卡片）',
+  KNOWLEDGE_CARD: '知识卡片',
 };
 
 const languageAliases: Record<string, string> = {
