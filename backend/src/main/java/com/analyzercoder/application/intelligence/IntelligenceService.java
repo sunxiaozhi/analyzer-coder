@@ -202,7 +202,9 @@ public class IntelligenceService {
             citationAssessment = CitationAssessment.empty();
         } else {
             Optional<LlmSettingsService.GenerationResult> generated =
-                    llm.generate(modelConfigId, llmPrompt(question, history, evidence));
+                    modelConfigId == null
+                            ? Optional.empty()
+                            : llm.generate(modelConfigId, llmPrompt(question, history, evidence));
             if (generated.isPresent()) {
                 AnswerCitationValidator.Validation validation =
                         citationValidator.validate(generated.get().answer(), evidence.size());
@@ -225,7 +227,7 @@ public class IntelligenceService {
             } else {
                 answer = deterministicAnswer(evidence);
                 evidenceStatus = "DEGRADED";
-                fallbackReason = "MODEL_UNAVAILABLE";
+                fallbackReason = modelConfigId == null ? "LOCAL_EVIDENCE_MODE" : "MODEL_UNAVAILABLE";
                 cited = indexed(evidence, Math.min(5, evidence.size()));
                 citationAssessment = citationValidator.validate(answer, evidence.size()).assessment();
             }
@@ -381,10 +383,7 @@ public class IntelligenceService {
         }
 
         try {
-            ensureCodeEmbeddings(repositoryId);
-            if (includeKnowledge) {
-                ensureKnowledgeEmbeddings(repositoryId);
-            }
+            // Index construction belongs to background jobs. A query must not rebuild the corpus.
             LlmSettingsService.VectorEmbedding embedding = llm.vectorize(query.normalized());
             vectorModel = embedding.model();
             retrievalCapability = embedding.retrievalCapability();

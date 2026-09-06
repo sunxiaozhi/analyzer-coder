@@ -34,7 +34,7 @@ export function useAskConversation() {
       ?? null
   );
 
-  async function send(repositoryId: string, modelConfigId: string, retrying = false) {
+  async function send(repositoryId: string, modelConfigId: string | null, retrying = false) {
     const value = (retrying ? pendingQuestion.value : question.value).trim();
     if (!value || requestState.value === 'sending') return null;
     const version = ++requestVersion;
@@ -69,7 +69,7 @@ export function useAskConversation() {
     }
   }
 
-  function retry(repositoryId: string, modelConfigId: string) {
+  function retry(repositoryId: string, modelConfigId: string | null) {
     return send(repositoryId, modelConfigId, true);
   }
 

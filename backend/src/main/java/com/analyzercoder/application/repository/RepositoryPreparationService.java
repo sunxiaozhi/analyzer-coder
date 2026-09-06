@@ -98,7 +98,7 @@ public class RepositoryPreparationService {
                     indexJobs.start(new StartIndexCommand(repositoryId, IndexJobType.FULL));
             return view(repository, started);
         }
-        if (summary.missingChunks() > 0) {
+        if (summary.missingChunks() > 0 && !currentVectorRepairDegraded(repository)) {
             IndexJob started =
                     indexJobs.start(new StartIndexCommand(repositoryId, IndexJobType.INCREMENTAL));
             return view(repository, started);
@@ -139,7 +139,7 @@ public class RepositoryPreparationService {
                                     new StartIndexCommand(
                                             repositoryId, IndexJobType.INCREMENTAL)));
             case "graph" -> {
-                requireVectors(repositoryId);
+                requireContent(repositoryId);
                 yield view(repository, codeGraphTasks.start(repositoryId));
             }
             case "knowledge_drift" -> {
@@ -170,7 +170,6 @@ public class RepositoryPreparationService {
                 driftCompleted && drift.currentStep() != null && drift.currentStep().endsWith(":ready");
         boolean indexRunning = indexJobRunning(latestJob);
         boolean indexFailed = indexJobFailed(latestJob);
-        boolean vectorRepairDegraded = vectorRepairDegraded(latestJob);
 
         List<PreparationStage> stages =
                 List.of(
@@ -246,7 +245,6 @@ public class RepositoryPreparationService {
         String state =
                 jobActive
                         ? "PROCESSING"
-                        : vectorRepairDegraded && contentReady ? "DEGRADED"
                         : graphReady && contentReady && driftCompleted
                                 ? (vectorsReady && driftReady ? "READY" : "DEGRADED")
                                 : jobFailed ? "ACTION_REQUIRED" : "NOT_READY";
@@ -294,10 +292,10 @@ public class RepositoryPreparationService {
                 .orElse(null);
     }
 
-    private void requireVectors(CodeRepositoryId repositoryId) {
+    private void requireContent(CodeRepositoryId repositoryId) {
         VectorIndexQueryService.Summary summary = vectors.summary(repositoryId.value());
-        if (summary.totalChunks() == 0 || summary.missingChunks() > 0) {
-            throw new IllegalStateException("请先完成内容和向量索引");
+        if (summary.totalChunks() == 0) {
+            throw new IllegalStateException("请先完成内容索引");
         }
     }
 
@@ -454,6 +452,17 @@ public class RepositoryPreparationService {
                 && job.status() == IndexJobStatus.SUCCEEDED
                 && job.currentStep() != null
                 && job.currentStep().contains(":vectors-degraded");
+    }
+
+    private boolean currentVectorRepairDegraded(CodeRepository repository) {
+        return indexJobStore.findByRepositoryId(repository.id()).stream()
+                .filter(job -> job.type() == IndexJobType.FULL || job.type() == IndexJobType.INCREMENTAL)
+                .filter(job -> job.startedAt() != null
+                        && repository.snapshotCreatedAt() != null
+                        && !job.startedAt().isBefore(repository.snapshotCreatedAt()))
+                .max(Comparator.comparing(IndexJob::createdAt))
+                .map(RepositoryPreparationService::vectorRepairDegraded)
+                .orElse(false);
     }
 
     private static String jobDetail(IndexJob job, String fallback) {

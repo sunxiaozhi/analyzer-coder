@@ -293,4 +293,64 @@ class RepositoryPreparationServiceTest {
                 "字符相似度",
                 Instant.now());
     }
+
+    @Test
+    void degradedVectorsContinueThroughGraphAndDriftWithoutAnAutomaticRepairLoop() {
+        CodeRepository repository = repository();
+        RegisterRepositoryUseCase repositories = mock(RegisterRepositoryUseCase.class);
+        RepositoryCodeBrowserService browser = mock(RepositoryCodeBrowserService.class);
+        VectorIndexQueryService vectors = mock(VectorIndexQueryService.class);
+        CodeGraphArtifactMapper artifacts = mock(CodeGraphArtifactMapper.class);
+        IndexJobStore store = mock(IndexJobStore.class);
+        IndexJobUseCase indexes = mock(IndexJobUseCase.class);
+        CodeGraphTaskService graphs = mock(CodeGraphTaskService.class);
+        KnowledgeDriftTaskService drifts = mock(KnowledgeDriftTaskService.class);
+        RepositoryPreparationService service = new RepositoryPreparationService(
+                repositories, mock(RepositoryRemoteSyncService.class), browser, vectors,
+                artifacts, indexes, store, graphs, drifts);
+        when(repositories.get(repository.id())).thenReturn(repository);
+        when(repositories.rescan(repository.id())).thenReturn(new RepositoryScanResult(false, repository));
+        when(vectors.summary(repository.id().value())).thenReturn(summary(repository, 8, 0, 8));
+        when(browser.list(repository.id())).thenReturn(new RepositoryCodeBrowserService.SnapshotFiles(
+                repository.currentSnapshotId().value().toString(), "main", "abc", List.of()));
+        IndexJob index = IndexJob.create(repository.id(), IndexJobType.FULL)
+                .start("build_embeddings").succeed("full:completed:8:vectors-degraded");
+        when(store.findByRepositoryId(repository.id())).thenReturn(List.of(index));
+        when(store.findLatestByRepositoryId(repository.id())).thenReturn(java.util.Optional.of(index));
+        IndexJob graph = IndexJob.create(repository.id(), IndexJobType.CODEGRAPH);
+        when(graphs.start(repository.id())).thenReturn(graph);
+
+        // A stopped browser can resume from persisted jobs without retrying a failed model forever.
+        assertThat(service.view(repository.id()).state()).isEqualTo("NOT_READY");
+        assertThat(service.prepare(mock(AuthenticatedAccount.class), repository.id()).activeJobType())
+                .isEqualTo("CODEGRAPH");
+        assertThat(service.retryStage(mock(AuthenticatedAccount.class), repository.id(), "graph").activeJobType())
+                .isEqualTo("CODEGRAPH");
+
+        graph = graph.start("build").succeed("codegraph_published:" + repository.currentSnapshotId().value());
+        when(artifacts.findPublished(repository.id().value(), repository.currentSnapshotId().value()))
+                .thenReturn(new CodeGraphArtifactRow(UUID.randomUUID(), repository.id().value(),
+                        repository.currentSnapshotId().value(), "test", "PUBLISHED", "artifact", 8, 5));
+        when(store.findByRepositoryId(repository.id())).thenReturn(List.of(graph, index));
+        when(store.findLatestByRepositoryId(repository.id())).thenReturn(java.util.Optional.of(graph));
+        IndexJob drift = IndexJob.create(repository.id(), IndexJobType.KNOWLEDGE_DRIFT);
+        when(drifts.start(repository.id())).thenReturn(drift);
+        assertThat(service.prepare(mock(AuthenticatedAccount.class), repository.id()).activeJobType())
+                .isEqualTo("KNOWLEDGE_DRIFT");
+
+        drift = drift.start("check").succeed("knowledge_drift_completed:"
+                + repository.currentSnapshotId().value() + ":ready");
+        when(store.findByRepositoryId(repository.id())).thenReturn(List.of(drift, graph, index));
+        when(store.findLatestByRepositoryId(repository.id())).thenReturn(java.util.Optional.of(drift));
+        var completed = service.prepare(mock(AuthenticatedAccount.class), repository.id());
+        assertThat(completed.state()).isEqualTo("DEGRADED");
+        assertThat(completed.stages()).extracting(RepositoryPreparationService.PreparationStage::state)
+                .containsExactly("READY", "READY", "DEGRADED", "READY", "READY");
+        verify(indexes, org.mockito.Mockito.never()).start(any());
+
+        when(indexes.start(any())).thenReturn(IndexJob.create(repository.id(), IndexJobType.INCREMENTAL));
+        assertThat(service.retryStage(mock(AuthenticatedAccount.class), repository.id(), "vectors").activeJobType())
+                .isEqualTo("INCREMENTAL");
+        verify(indexes).start(any());
+    }
 }

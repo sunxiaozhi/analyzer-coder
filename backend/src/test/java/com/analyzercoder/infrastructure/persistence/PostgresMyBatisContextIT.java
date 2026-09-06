@@ -40,7 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest(
         classes = CodebaseKnowledgeApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = "spring.main.lazy-initialization=false")
+        properties = {"spring.main.lazy-initialization=false", "app.workers.enabled=false"})
 class PostgresMyBatisContextIT {
     @Autowired AuthMapper auth;
     @Autowired RepositoryMapper repositories;
@@ -58,6 +58,7 @@ class PostgresMyBatisContextIT {
     @Autowired RepositorySourceImportService imports;
     @Autowired RepositorySnapshotPort managedFiles;
     @Autowired JdbcTemplate jdbc;
+    @Autowired com.analyzercoder.infrastructure.persistence.mapper.ProjectHealthMapper projectHealth;
 
     @Test
     void loadsFlywaySchemaAndExecutesRepresentativeMapperSql() {
@@ -74,6 +75,7 @@ class PostgresMyBatisContextIT {
                     llmSettings.vectorModels();
                     llmSettings.activeVectorModel();
                     var visible = repositories.findAll();
+                    assertNotNull(projectHealth.knowledgeHealth(UUID.randomUUID()));
                     if (!visible.isEmpty()) {
                         UUID id = visible.get(0).id();
                         chunks.count(id, null);

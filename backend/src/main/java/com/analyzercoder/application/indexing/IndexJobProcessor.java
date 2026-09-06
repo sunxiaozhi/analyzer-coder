@@ -126,6 +126,9 @@ public class IndexJobProcessor {
             }
 
             List<ScannedRepositoryFile> allFiles = repositoryScannerPort.scan(repository);
+            if (allFiles.stream().noneMatch(file -> !file.content().isBlank())) {
+                throw new IllegalStateException("当前快照没有可索引的文本内容，请检查文件类型、大小限制和仓库路径");
+            }
             String indexedCommit = codeChunkStore.latestIndexedCommit(repository.id());
             ExecutionPlan plan =
                     executionPlan(runningJob, repository, indexedCommit, allFiles.size());
@@ -180,6 +183,10 @@ public class IndexJobProcessor {
                         intelligenceService.prepareRepositoryEmbeddings(repository.id().value());
             }
 
+            if (finishCancellation(runningJob.id())) {
+                return true;
+            }
+
             IndexJob publishState = indexJobStore.findById(runningJob.id()).orElseThrow();
             String completion =
                     plan.mode().toLowerCase()
@@ -190,9 +197,8 @@ public class IndexJobProcessor {
                                     : ":fallback-" + plan.fallbackReason().toLowerCase())
                             + (vectorsReady ? ":vectors-ready" : ":vectors-degraded");
             indexJobStore.save(publishState.succeed(completion));
-            if (vectorsReady) {
-                enqueueCodeGraph(repository);
-            }
+            // CodeGraph reads the published source snapshot and does not depend on embeddings.
+            enqueueCodeGraph(repository);
             return true;
         } catch (Exception exception) {
             IndexJob latest = indexJobStore.findById(runningJob.id()).orElse(runningJob);

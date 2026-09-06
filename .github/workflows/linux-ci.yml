@@ -58,7 +58,7 @@ jobs:
       - name: Validate startup scripts
         run: |
           bash -n scripts/start.sh
-          pwsh -NoProfile -File scripts/start.ps1 -Help
+          node scripts/check-runtime.mjs --help
 
       - name: Validate quality and deterministic CI clients
         run: |

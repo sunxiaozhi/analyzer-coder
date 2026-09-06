@@ -6,8 +6,8 @@ Java 17 + Spring Boot 3.5 后端，承载账号、仓库、索引、检索、问
 
 - Spring MVC、Bean Validation、Actuator
 - MyBatis Mapper/XML、PageHelper
-- PostgreSQL 17、pgvector 64 维向量
-- Flyway 版本化迁移（`V1`–`V8`）
+- PostgreSQL 17、pgvector（内置 64 维字符哈希，外部模型维度可配置）
+- Flyway（当前源码保留合并后的 `V1` 基线；旧库升级需单独核验，见 `docs/12-data-flow-audit.md`）
 - Spring Scheduler + 数据库任务表
 - Git CLI、CodeGraph CLI
 - JDK `HttpClient` + OpenAI-compatible chat/embedding
@@ -38,6 +38,10 @@ mvn -pl backend spring-boot:run
 ```
 
 健康检查：`GET /actuator/health`。
+
+运行诊断：在加载上述环境变量的终端执行 `node scripts/check-runtime.mjs`。
+
+最小问答闭环不要求配置外部聊天模型。`POST /api/repositories/{id}/ask` 的 `modelConfigId` 可省略或传 `null`，此时返回带源码引用的本地证据回答，`fallbackReason=LOCAL_EVIDENCE_MODE`。传入具体模型 ID 时仍执行模型有效性校验。搜索请求只读已有索引，不会同步补建全仓库向量；切换向量模型后请执行项目准备或显式重试向量阶段。
 
 ## 验证
 

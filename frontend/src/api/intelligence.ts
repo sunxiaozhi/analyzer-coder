@@ -423,7 +423,7 @@ export const intelligenceApi = {
     question: string,
     clientRequestId: string,
     threadId: string | null,
-    modelConfigId: string,
+    modelConfigId: string | null,
   ) =>
     request<Answer>(`/api/repositories/${repositoryId}/ask`, {
       method: 'POST',

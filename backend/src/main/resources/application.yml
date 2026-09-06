@@ -1,4 +1,9 @@
 spring:
+  task:
+    scheduling:
+      # 文件扫描、外部模型和 CodeGraph 不应占住其他后台任务的调度线程。
+      pool:
+        size: ${APP_WORKER_POOL_SIZE:4}
   application:
     name: codebase-knowledge-backend
   datasource:

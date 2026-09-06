@@ -1,6 +1,31 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.VectorIndexQueryMapper">
+    <sql id="activeModel">
+        COALESCE((SELECT vm.model FROM vector_model_activation va
+            JOIN vector_model_configs vm ON vm.id=va.active_config_id WHERE va.singleton_id=1), 'local-hash-64')
+    </sql>
+    <sql id="activeDimension">
+        COALESCE((SELECT vm.dimension FROM vector_model_activation va
+            JOIN vector_model_configs vm ON vm.id=va.active_config_id WHERE va.singleton_id=1), 64)
+    </sql>
+    <sql id="activeCapability">
+        COALESCE((SELECT CASE WHEN vm.provider_type='LOCAL_HASH' THEN 'CHARACTER_HASH' ELSE 'SEMANTIC_EMBEDDING' END
+            FROM vector_model_activation va JOIN vector_model_configs vm ON vm.id=va.active_config_id
+            WHERE va.singleton_id=1), 'CHARACTER_HASH')
+    </sql>
+    <sql id="currentCodeEmbedding">
+        e.chunk_id=c.id AND e.content_hash=c.content_hash
+        AND e.model=<include refid="activeModel"/>
+        AND e.dimension=<include refid="activeDimension"/>
+        AND e.retrieval_capability=<include refid="activeCapability"/>
+    </sql>
+    <sql id="currentKnowledgeEmbedding">
+        ke.card_id=k.id AND ke.revision=k.revision
+        AND ke.model=<include refid="activeModel"/>
+        AND ke.dimension=<include refid="activeDimension"/>
+        AND ke.retrieval_capability=<include refid="activeCapability"/>
+    </sql>
     <sql id="validKnowledge">
         k.repo_id=#{repositoryId}
         AND k.publication_status='PUBLISHED'
@@ -35,37 +60,19 @@
             (
                 SELECT COUNT(*)
                 FROM knowledge_cards k
-                JOIN knowledge_card_embeddings ke ON ke.card_id=k.id AND ke.revision=k.revision
+                JOIN knowledge_card_embeddings ke ON <include refid="currentKnowledgeEmbedding"/>
                 WHERE <include refid="validKnowledge"/>
             ) vectorized_knowledge_cards,
-            COALESCE(
-                MAX(e.model),
-                (SELECT vm.model FROM vector_model_activation va
-                 JOIN vector_model_configs vm ON vm.id=va.active_config_id
-                 WHERE va.singleton_id=1)
-            ) vector_model,
-            COALESCE(
-                MAX(e.dimension),
-                (SELECT vm.dimension FROM vector_model_activation va
-                 JOIN vector_model_configs vm ON vm.id=va.active_config_id
-                 WHERE va.singleton_id=1)
-            ) dimension,
-            COALESCE(
-                MAX(e.retrieval_capability),
-                (SELECT CASE WHEN vm.provider_type='LOCAL_HASH'
-                        THEN 'CHARACTER_HASH' ELSE 'SEMANTIC_EMBEDDING' END
-                 FROM vector_model_activation va
-                 JOIN vector_model_configs vm ON vm.id=va.active_config_id
-                 WHERE va.singleton_id=1),
-                'CHARACTER_HASH'
-            ) retrieval_capability,
+            <include refid="activeModel"/> vector_model,
+            <include refid="activeDimension"/> dimension,
+            <include refid="activeCapability"/> retrieval_capability,
             GREATEST(
                 MAX(e.created_at),
                 (SELECT MAX(ke.created_at) FROM knowledge_card_embeddings ke WHERE ke.repo_id=r.id)
             ) updated_at
         FROM repositories r
         LEFT JOIN code_chunks c ON c.repo_id=r.id AND c.snapshot_id=r.current_snapshot_id
-        LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
+        LEFT JOIN chunk_embeddings e ON <include refid="currentCodeEmbedding"/>
         WHERE r.id=#{repositoryId}
         GROUP BY r.id,r.current_snapshot_id,r.current_commit
     </select>
@@ -80,7 +87,7 @@
             CASE WHEN e.chunk_id IS NULL THEN 'MISSING' ELSE 'EMBEDDED' END vector_status
         FROM repositories r
         JOIN code_chunks c ON c.repo_id=r.id AND c.snapshot_id=r.current_snapshot_id
-        LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
+        LEFT JOIN chunk_embeddings e ON <include refid="currentCodeEmbedding"/>
         WHERE r.id=#{repositoryId}
         <if test="query != null and query != ''">
             AND(
@@ -104,7 +111,7 @@
             ke.created_at vectorized_at,
             CASE WHEN ke.card_id IS NULL THEN 'MISSING' ELSE 'EMBEDDED' END vector_status
         FROM knowledge_cards k
-        LEFT JOIN knowledge_card_embeddings ke ON ke.card_id=k.id AND ke.revision=k.revision
+        LEFT JOIN knowledge_card_embeddings ke ON <include refid="currentKnowledgeEmbedding"/>
         WHERE <include refid="validKnowledge"/>
         <if test="query != null and query != ''">
             AND(

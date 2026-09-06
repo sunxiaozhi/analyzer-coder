@@ -8,7 +8,6 @@ import com.analyzercoder.security.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -203,7 +202,7 @@ public class IntelligenceController {
             @NotBlank String question,
             UUID clientRequestId,
             UUID threadId,
-            @NotNull UUID modelConfigId) {}
+            UUID modelConfigId) {}
 
     public record HistoryTitle(String title) {}
 }

@@ -51,6 +51,20 @@ class IntelligenceServiceMultiTurnTest {
     }
 
     @Test
+    void queriesNeverBuildCorpusEmbeddingsOnTheRequestThread() {
+        UUID repositoryId = UUID.randomUUID();
+        when(llm.vectorize(anyString())).thenReturn(
+                new LlmSettingsService.VectorEmbedding("local-hash-64", 64, null, "CHARACTER_HASH"));
+
+        service.unifiedSearchDetailed(repositoryId, "OrderCheckoutWorkflow", 10);
+
+        verify(llm).vectorize(anyString());
+        verify(mapper, never()).missingEmbeddings(any(), any(), anyInt(), any());
+        verify(mapper, never()).missingKnowledgeEmbeddings(any(), any(), anyInt(), any());
+        verify(mapper, never()).upsertEmbedding(any(), any(), any(), anyInt(), any(), any(), any());
+    }
+
+    @Test
     void rejectsFollowUpForThreadOutsideRepositoryAndAccount() {
         UUID repositoryId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
@@ -145,6 +159,17 @@ class IntelligenceServiceMultiTurnTest {
         assertEquals(0, answer.citationAssessment().uncitedBlockCount());
         assertTrue(answer.citations().get(0).channels().contains("HEURISTIC_CALL_REFERENCE"));
         verify(mapper, never()).deleteHeuristicCallEdges(repositoryId);
+    }
+
+    @Test
+    void localEvidenceModeAnswersWithoutCallingAChatProvider() {
+        UUID repositoryId = UUID.randomUUID();
+        stubSingleEvidence(repositoryId);
+        var answer = service.ask(repositoryId, UUID.randomUUID(), "Example", UUID.randomUUID(), null, null);
+        assertEquals("LOCAL_EVIDENCE_MODE", answer.fallbackReason());
+        assertEquals("deterministic-local", answer.provider());
+        assertTrue(!answer.citations().isEmpty());
+        verify(llm, never()).generate(any(), anyString());
     }
 
     @Test

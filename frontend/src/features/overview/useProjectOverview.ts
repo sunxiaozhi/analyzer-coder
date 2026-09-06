@@ -91,11 +91,7 @@ export function useProjectOverview() {
       const result = await prepareRepository(repositoryId);
       preparation.value = result;
       if (!activeJob(result) || !result.activeJobId) return;
-      const completed = await waitForJob(result.activeJobId);
-      if (
-        (completed.type === 'FULL' || completed.type === 'INCREMENTAL')
-        && completed.currentStep?.includes(':vectors-degraded')
-      ) return;
+      await waitForJob(result.activeJobId);
     }
     throw new Error('准备流程超过预期阶段数，请刷新后查看具体失败阶段');
   }

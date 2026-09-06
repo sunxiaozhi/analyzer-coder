@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.analyzercoder.application.intelligence.MarkdownKnowledgeSourceService;
 import com.analyzercoder.application.intelligence.CodeGraphTaskService;
+import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.indexing.IndexJob;
 import com.analyzercoder.domain.indexing.IndexJobStore;
@@ -161,6 +162,26 @@ class IndexJobProcessorTest {
 
     @Test
     void queuesCodeGraphAfterChunksAndVectorsAreReady() {
+        assertGraphContinuation(true);
+    }
+
+    @Test
+    void vectorProviderFailureDoesNotPreventCodeGraphContinuation() {
+        assertGraphContinuation(false);
+    }
+
+    @Test
+    void emptySnapshotFailsActionablyWithoutPublishingAnEmptyIndex() {
+        Fixture fixture = fixture(cleanRepository(), null, List.of());
+        assertThat(fixture.processor().processNextQueuedJob()).isFalse();
+        verify(fixture.chunks(), never()).replaceRepositoryChunks(any(), any());
+        ArgumentCaptor<IndexJob> saved = ArgumentCaptor.forClass(IndexJob.class);
+        verify(fixture.jobs()).save(saved.capture());
+        assertThat(saved.getValue().status()).isEqualTo(com.analyzercoder.domain.indexing.IndexJobStatus.FAILED);
+        assertThat(saved.getValue().errorMessage()).contains("没有可索引的文本内容");
+    }
+
+    private void assertGraphContinuation(boolean vectorsReady) {
         CodeRepository repository = cleanRepository();
         IndexJobStore jobs = mock(IndexJobStore.class);
         CodeRepositoryStore repositories = mock(CodeRepositoryStore.class);
@@ -168,6 +189,8 @@ class IndexJobProcessorTest {
         CodeChunkStore chunks = mock(CodeChunkStore.class);
         CodeGraphArtifactMapper graphArtifacts = mock(CodeGraphArtifactMapper.class);
         CodeGraphTaskService graphTasks = mock(CodeGraphTaskService.class);
+        IntelligenceService intelligence = mock(IntelligenceService.class);
+        when(intelligence.prepareRepositoryEmbeddings(repository.id().value())).thenReturn(vectorsReady);
         IndexJob running = IndexJob.create(repository.id(), IndexJobType.FULL).start("scan");
         when(jobs.claimNextQueued()).thenReturn(Optional.of(running));
         when(jobs.findById(running.id())).thenReturn(Optional.of(running));
@@ -179,7 +202,7 @@ class IndexJobProcessorTest {
                         repositories,
                         scanner,
                         chunks,
-                        null,
+                        intelligence,
                         null,
                         mock(GitDiffService.class),
                         new com.analyzercoder.application.code.CodeSymbolExtractor(),
@@ -194,6 +217,12 @@ class IndexJobProcessorTest {
         verify(graphArtifacts)
                 .findPublished(
                         repository.id().value(), repository.currentSnapshotId().value());
+        ArgumentCaptor<IndexJob> saved = ArgumentCaptor.forClass(IndexJob.class);
+        verify(jobs, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
+        assertThat(saved.getAllValues()).anySatisfy(job -> {
+            assertThat(job.status()).isEqualTo(com.analyzercoder.domain.indexing.IndexJobStatus.SUCCEEDED);
+            assertThat(job.currentStep()).contains(vectorsReady ? ":vectors-ready" : ":vectors-degraded");
+        });
     }
 
     private static Fixture fixture(

@@ -69,6 +69,22 @@ class IntelligenceControllerTest {
     }
 
     @Test
+    void acceptsLocalEvidenceModeButStillRejectsBlankQuestions() {
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            var validator = factory.getValidator();
+            org.assertj.core.api.Assertions.assertThat(validator.validate(
+                    new IntelligenceController.Question("定位入口", UUID.randomUUID(), null, null))).isEmpty();
+            org.assertj.core.api.Assertions.assertThat(validator.validate(
+                    new IntelligenceController.Question(" ", UUID.randomUUID(), null, null))).isNotEmpty();
+        }
+        UUID repositoryId = UUID.randomUUID();
+        var question = new IntelligenceController.Question("定位入口", UUID.randomUUID(), null, null);
+        controller.ask(repositoryId, question, request);
+        verify(access).require(account, CodeRepositoryId.of(repositoryId), RepositoryPermission.READ);
+        verify(service).ask(repositoryId, account.id(), question.question(), question.clientRequestId(), null, null);
+    }
+
+    @Test
     void rechecksRepositoryPermissionForHistory() {
         UUID repositoryId = UUID.randomUUID();
         when(service.history(repositoryId, account.id(), 25, 0)).thenReturn(List.of());
