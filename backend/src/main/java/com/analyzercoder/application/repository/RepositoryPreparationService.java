@@ -17,6 +17,10 @@ import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper;
 import com.analyzercoder.infrastructure.persistence.model.CodeGraphArtifactRow;
 import com.analyzercoder.security.AuthenticatedAccount;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -25,6 +29,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
 /** 在索引或分析前准备仓库快照，统一处理本地路径、远程同步和版本确认。 */
 @Service
@@ -60,6 +66,7 @@ public class RepositoryPreparationService {
         this.driftTasks = driftTasks;
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public PreparationView view(CodeRepositoryId repositoryId) {
         CodeRepository repository = repositories.get(repositoryId);
         return view(repository, latest(repositoryId));
@@ -136,8 +143,7 @@ public class RepositoryPreparationService {
                     view(
                             repository,
                             indexJobs.start(
-                                    new StartIndexCommand(
-                                            repositoryId, IndexJobType.INCREMENTAL)));
+                                    new StartIndexCommand(repositoryId, IndexJobType.INCREMENTAL)));
             case "graph" -> {
                 requireContent(repositoryId);
                 yield view(repository, codeGraphTasks.start(repositoryId));
@@ -164,10 +170,11 @@ public class RepositoryPreparationService {
         boolean vectorsReady = contentReady && summary.missingChunks() == 0;
         boolean graphReady = graph != null;
         IndexJob drift = currentDrift(repository);
-        boolean driftCompleted =
-                drift != null && drift.status() == IndexJobStatus.SUCCEEDED;
+        boolean driftCompleted = drift != null && drift.status() == IndexJobStatus.SUCCEEDED;
         boolean driftReady =
-                driftCompleted && drift.currentStep() != null && drift.currentStep().endsWith(":ready");
+                driftCompleted
+                        && drift.currentStep() != null
+                        && drift.currentStep().endsWith(":ready");
         boolean indexRunning = indexJobRunning(latestJob);
         boolean indexFailed = indexJobFailed(latestJob);
 
@@ -209,7 +216,7 @@ public class RepositoryPreparationService {
                                                 : "等待内容索引"),
                         new PreparationStage(
                                 "graph",
-                                "调用图谱",
+                                "代码关系图谱",
                                 graphReady
                                         ? "READY"
                                         : graphJobRunning(latestJob)
@@ -230,8 +237,8 @@ public class RepositoryPreparationService {
                                                 : driftJobFailed(drift) ? "FAILED" : "PENDING",
                                 driftCompleted
                                         ? (driftReady
-                                                ? "已核对当前 Snapshot 的知识来源"
-                                                : "检查已完成，存在需要复核的知识")
+                                                ? "来源变更检查已执行；知识是否待复核请查看治理状态"
+                                                : "来源变更检查存在未完成项，请查看任务详情")
                                         : driftJobFailed(drift)
                                                 ? jobDetail(drift, "知识失效检查失败")
                                                 : graphReady ? "等待核对知识来源" : "等待 CodeGraph"));
@@ -250,7 +257,7 @@ public class RepositoryPreparationService {
                                 : jobFailed ? "ACTION_REQUIRED" : "NOT_READY";
         String message =
                 switch (state) {
-                    case "READY" -> "当前 Snapshot 的检索、图谱和知识状态已经核对完成";
+                    case "READY" -> "当前快照的索引已准备，知识来源变更检查已执行";
                     case "DEGRADED" -> "准备流程已完成，但存在向量或知识治理缺口";
                     case "PROCESSING" -> "正在准备项目，完成当前阶段后会自动继续";
                     case "ACTION_REQUIRED" -> jobDetail(latestJob, "项目准备失败，请重试");
@@ -265,15 +272,30 @@ public class RepositoryPreparationService {
                 profile,
                 latestJob == null ? null : latestJob.id().value(),
                 latestJob == null ? null : latestJob.type().name(),
-                latestJob == null ? null : latestJob.status().name());
+                latestJob == null ? null : latestJob.status().name(),
+                repository.currentSnapshotId() == null
+                        ? null
+                        : repository.currentSnapshotId().value(),
+                repository.currentCommit(),
+                repository.defaultBranch(),
+                repository.worktreeDirty(),
+                Instant.now());
     }
 
     private CodeGraphArtifactRow currentGraph(CodeRepository repository) {
         if (repository.currentSnapshotId() == null) {
             return null;
         }
-        return graphArtifacts.findPublished(
-                repository.id().value(), repository.currentSnapshotId().value());
+        CodeGraphArtifactRow graph =
+                graphArtifacts.findPublished(
+                        repository.id().value(), repository.currentSnapshotId().value());
+        if (graph == null || graph.nodeCount() <= 0 || graph.artifactPath() == null) return null;
+        try {
+            Path database = Path.of(graph.artifactPath()).resolve("codegraph.db");
+            return Files.isRegularFile(database) && Files.isReadable(database) ? graph : null;
+        } catch (InvalidPathException exception) {
+            return null;
+        }
     }
 
     private IndexJob currentDrift(CodeRepository repository) {
@@ -423,9 +445,7 @@ public class RepositoryPreparationService {
     }
 
     private static boolean driftJobRunning(IndexJob job) {
-        return job != null
-                && job.type() == IndexJobType.KNOWLEDGE_DRIFT
-                && isActive(job.status());
+        return job != null && job.type() == IndexJobType.KNOWLEDGE_DRIFT && isActive(job.status());
     }
 
     private static boolean driftJobFailed(IndexJob job) {
@@ -456,10 +476,16 @@ public class RepositoryPreparationService {
 
     private boolean currentVectorRepairDegraded(CodeRepository repository) {
         return indexJobStore.findByRepositoryId(repository.id()).stream()
-                .filter(job -> job.type() == IndexJobType.FULL || job.type() == IndexJobType.INCREMENTAL)
-                .filter(job -> job.startedAt() != null
-                        && repository.snapshotCreatedAt() != null
-                        && !job.startedAt().isBefore(repository.snapshotCreatedAt()))
+                .filter(
+                        job ->
+                                job.type() == IndexJobType.FULL
+                                        || job.type() == IndexJobType.INCREMENTAL)
+                .filter(
+                        job ->
+                                job.startedAt() != null
+                                        && repository.snapshotCreatedAt() != null
+                                        && !job.startedAt()
+                                                .isBefore(repository.snapshotCreatedAt()))
                 .max(Comparator.comparing(IndexJob::createdAt))
                 .map(RepositoryPreparationService::vectorRepairDegraded)
                 .orElse(false);
@@ -486,7 +512,12 @@ public class RepositoryPreparationService {
             ProjectProfile profile,
             UUID activeJobId,
             String activeJobType,
-            String activeJobStatus) {}
+            String activeJobStatus,
+            UUID snapshotId,
+            String commitSha,
+            String branch,
+            boolean dirty,
+            Instant generatedAt) {}
 
     public record PreparationStage(String key, String label, String state, String detail) {}
 

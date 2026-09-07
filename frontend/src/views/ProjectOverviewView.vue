@@ -27,6 +27,10 @@ function startReview() {
   void router.push('/change-impact');
 }
 
+function openReview(reviewId: string) {
+  void router.push({ path: '/change-impact', query: { reviewId } });
+}
+
 function openKnowledge() {
   void router.push('/knowledge');
 }
@@ -59,6 +63,7 @@ function openKnowledge() {
       @prepare="prepare"
       @retry-stage="retryStage"
       @start-review="startReview"
+      @open-review="openReview"
       @open-knowledge="openKnowledge"
     />
   </section>

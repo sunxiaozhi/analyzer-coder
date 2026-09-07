@@ -81,8 +81,10 @@ public class ManagedCodeGraphService extends CodeGraphService {
                             "building_codegraph");
             int nodes = metric(output, "nodes");
             int edges = metric(output, "edges");
-            String cliVersion =
-                    run(List.of("--version"), 30, control, "inspect_codegraph").trim();
+            if (nodes == 0) {
+                throw new IllegalStateException("CodeGraph 未生成可用节点，无法发布可用图谱");
+            }
+            String cliVersion = run(List.of("--version"), 30, control, "inspect_codegraph").trim();
             Path marker = project.resolve(".codegraph");
             if (!Files.isDirectory(marker)) {
                 throw new IllegalStateException("CodeGraph 未生成预期产物目录");
@@ -143,8 +145,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
                     "CODEGRAPH_IMPACT_QUERY_FAILED", "CodeGraph impact 查询失败", exception);
         }
         try {
-            exportOutput =
-                    run(List.of("export", project.toString(), "--no-centrality"), 120);
+            exportOutput = run(List.of("export", project.toString(), "--no-centrality"), 120);
         } catch (IllegalStateException exception) {
             throw new CodeGraphException(
                     "CODEGRAPH_EXPORT_NOT_AVAILABLE",
@@ -173,8 +174,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
         }
         Path marker = Path.of(result.artifactPath()).toAbsolutePath().normalize();
         if (!marker.startsWith(root) || !Files.isDirectory(marker)) {
-            throw new CodeGraphException(
-                    "CODEGRAPH_ARTIFACT_MISSING", "CodeGraph 产物目录不存在或超出受管目录");
+            throw new CodeGraphException("CODEGRAPH_ARTIFACT_MISSING", "CodeGraph 产物目录不存在或超出受管目录");
         }
         return result;
     }
@@ -221,10 +221,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
     }
 
     private String run(
-            List<String> arguments,
-            long timeoutSeconds,
-            BuildControl control,
-            String step) {
+            List<String> arguments, long timeoutSeconds, BuildControl control, String step) {
         try {
             List<String> command = command(arguments);
             java.lang.ProcessBuilder builder =
@@ -233,7 +230,8 @@ public class ManagedCodeGraphService extends CodeGraphService {
             Process process = builder.start();
             ByteArrayOutputStream buffer = new ByteArrayOutputStream();
             Thread reader = outputReader(process, buffer);
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, timeoutSeconds));
+            long deadline =
+                    System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, timeoutSeconds));
             try {
                 while (!process.waitFor(1, TimeUnit.SECONDS)) {
                     control.checkpoint(step);
@@ -303,10 +301,13 @@ public class ManagedCodeGraphService extends CodeGraphService {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
-    private static int metric(String output, String label) {
+    static int metric(String output, String label) {
         Matcher matcher =
                 Pattern.compile("([0-9,]+)\\s+" + label, Pattern.CASE_INSENSITIVE).matcher(output);
-        return matcher.find() ? Integer.parseInt(matcher.group(1).replace(",", "")) : 0;
+        if (!matcher.find()) {
+            throw new IllegalStateException("无法读取 CodeGraph 的 " + label + " 统计，请检查 CLI 输出格式");
+        }
+        return Integer.parseInt(matcher.group(1).replace(",", ""));
     }
 
     private record Version(UUID snapshotId, Path snapshotPath) {}

@@ -48,11 +48,9 @@ public record TaskReviewResult(
                             : modelConfigId == null
                                     ? ModelSummaryState.notRequested()
                                     : ModelSummaryState.unavailable(
-                                            "MODEL_SUMMARY_NOT_RECORDED",
-                                            "该历史审查没有保存模型总结状态");
+                                            "MODEL_SUMMARY_NOT_RECORDED", "该历史审查没有保存模型总结状态");
         }
-        if (modelSummaryState.status() == ModelSummaryStatus.COMPLETED
-                && modelSummary == null) {
+        if (modelSummaryState.status() == ModelSummaryStatus.COMPLETED && modelSummary == null) {
             throw new IllegalArgumentException("已完成的模型总结状态必须包含总结");
         }
     }
@@ -217,13 +215,13 @@ public record TaskReviewResult(
             UUID clientRequestId,
             String task,
             String changeSource,
-            int changedFileCount,
-            int changedSymbolCount,
-            int applicableKnowledgeCount,
-            int requiredTestCount,
-            int requiredApprovalCount,
-            int staleKnowledgeCount,
-            int unknownCount,
+            Integer changedFileCount,
+            Integer changedSymbolCount,
+            Integer applicableKnowledgeCount,
+            Integer requiredTestCount,
+            Integer requiredApprovalCount,
+            Integer staleKnowledgeCount,
+            Integer unknownCount,
             ErrorDetail error,
             Instant createdAt,
             Instant finishedAt) {}

@@ -43,47 +43,32 @@ const emit = defineEmits<{
   retryStage: [stage: 'snapshot' | 'content' | 'vectors' | 'graph' | 'knowledge_drift'];
   startReview: [];
   openKnowledge: [];
+  openReview: [reviewId: string];
 }>();
 
 const HEALTH_COPY = {
-  READY: { label: '工程状态良好', detail: '索引与可信知识均可用于变更审查', tone: 'ready' },
-  DEGRADED: { label: '可用但有缺口', detail: '可以审查，部分证据或治理状态需要处理', tone: 'warning' },
+  READY: { label: '准备与治理检查无已知缺口', detail: '仅检查索引与知识状态，未评估代码质量、测试或安全', tone: 'ready' },
+  DEGRADED: { label: '准备或治理存在缺口', detail: '请查看具体问题；可发起审查不代表证据完整', tone: 'warning' },
   BLOCKED: { label: '审查条件不足', detail: '先处理阻塞项，再发起可靠的变更审查', tone: 'danger' },
+  UNKNOWN: { label: '状态尚未获取', detail: '请等待数据加载或刷新重试', tone: 'muted' },
   PREPARING: { label: '正在准备', detail: '正在生成当前快照对应的工程证据', tone: 'running' },
 } as const;
 
-const fallbackHealthState = computed(() => {
-  if (props.preparation?.state === 'PROCESSING') return 'PREPARING';
-  if (props.preparation?.state === 'ACTION_REQUIRED' || props.preparation?.state === 'NOT_READY') {
-    return 'BLOCKED';
-  }
-  if (props.preparation?.state === 'READY') return 'READY';
-  return 'DEGRADED';
-});
-const healthState = computed(() => props.health?.state ?? fallbackHealthState.value);
+const healthState = computed(() => props.health?.state ?? 'UNKNOWN');
 const healthCopy = computed(() => HEALTH_COPY[healthState.value]);
-const knowledge = computed(() => props.health?.knowledge ?? {
-  total: 0,
-  current: 0,
-  suspect: 0,
-  stale: 0,
-  unverified: 0,
-  trusted: 0,
-  requiredWithoutOwner: 0,
-  unreviewed: 0,
-});
+const knowledge = computed(() => props.health?.knowledge);
 const vectorCoverage = computed(() => {
-  if (!props.profile?.chunkCount) return 0;
-  return Math.round(props.profile.vectorizedChunks / props.profile.chunkCount * 100);
+  if (!props.profile?.chunkCount) return '—';
+  if (props.profile.missingChunks === 0 && props.profile.vectorizedChunks === props.profile.chunkCount) return '100%';
+  return Math.min(99.9, Math.floor(props.profile.vectorizedChunks / props.profile.chunkCount * 1000) / 10) + '%';
 });
 const categories = computed(() => (
-  props.codeFacts?.fileCategories.filter(item => item.count > 0).slice(0, 8) ?? []
+  props.codeFacts?.fileCategories.filter(item => item.count > 0) ?? []
 ));
-const categoryMaximum = computed(() => Math.max(1, ...categories.value.map(item => item.count)));
 const prepareLabel = computed(() => {
   if (props.preparation?.state === 'NOT_READY') return '准备项目';
   if (props.preparation?.state === 'PROCESSING') return '继续准备';
-  if (props.preparation?.state === 'READY') return '检查更新';
+  if (props.preparation?.state === 'READY') return '同步并检查更新';
   return '修复准备状态';
 });
 const reviewActionLabel = computed(() => (
@@ -91,7 +76,7 @@ const reviewActionLabel = computed(() => (
 ));
 const reviewActionTitle = computed(() => (
   props.health?.readyForReview
-    ? '基于当前快照和可信知识发起变更审查'
+    ? '已具备快照和内容索引；审查仍可能缺少图谱、知识或检索证据'
     : '请先处理右侧准备流程和当前问题'
 ));
 
@@ -100,7 +85,11 @@ function short(value: string | null | undefined, length: number) {
 }
 
 function categoryWidth(value: number) {
-  return Math.max(6, Math.round(value / categoryMaximum.value * 100)) + '%';
+  return categoryPercent(value) + '%';
+}
+
+function categoryPercent(value: number) {
+  return props.codeFacts?.codeFileCount ? Math.round(value / props.codeFacts.codeFileCount * 1000) / 10 : 0;
 }
 
 function stageTone(stageState: string) {
@@ -119,6 +108,7 @@ function reviewStatus(review: TaskReviewSummary) {
 function formatTime(value: string | null) {
   if (!value) return '尚未完成';
   return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -128,10 +118,12 @@ function formatTime(value: string | null) {
 
 function issueAction(issue: ProjectHealthIssue) {
   if (issue.actionTarget === 'PREPARATION') emit('prepare');
+  else if (issue.actionTarget === 'REVIEW') emit('startReview');
   else emit('openKnowledge');
 }
 
 function canResolveIssue(issue: ProjectHealthIssue) {
+  if (issue.actionTarget === 'REVIEW') return true;
   return issue.actionTarget === 'PREPARATION'
     ? Boolean(props.repository.capabilities?.canIndex)
     : Boolean(props.repository.capabilities?.canUpdate);
@@ -150,10 +142,10 @@ function canResolveIssue(issue: ProjectHealthIssue) {
       </div>
 
       <div class="version-line" aria-label="项目版本">
-        <span><GitBranch :size="13" />{{ repository.branch ?? '无分支' }}</span>
-        <span><GitCommit :size="13" />{{ short(repository.commit, 10) }}</span>
-        <span>快照 {{ short(repository.snapshotId, 8) }}</span>
-        <span v-if="repository.dirty" class="dirty-flag">工作区有未发布变更</span>
+        <span><GitBranch :size="13" />{{ preparation?.branch ?? '—' }}</span>
+        <span><GitCommit :size="13" />{{ short(preparation?.commitSha, 10) }}</span>
+        <span>快照 {{ short(preparation?.snapshotId, 8) }}</span>
+        <span v-if="preparation?.dirty" class="dirty-flag">快照采集时含未提交改动</span>
       </div>
 
       <div class="health-callout" :data-tone="healthCopy.tone">
@@ -193,6 +185,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
           type="button"
           class="refresh-action"
           aria-label="刷新总览"
+          title="重新读取统计；同步或重新扫描代码请使用准备按钮"
           :disabled="loading || preparing"
           @click="emit('refresh')"
         >
@@ -204,50 +197,58 @@ function canResolveIssue(issue: ProjectHealthIssue) {
     <section class="capability-strip" aria-label="项目核心数据">
       <article data-accent="blue">
         <span><Network :size="17" />代码图谱</span>
-        <strong>{{ profile?.graphNodes ?? 0 }}</strong>
-        <small>节点 · {{ profile?.graphEdges ?? 0 }} 条关系</small>
+        <strong>{{ profile && profile.graphNodes > 0 ? profile.graphNodes : '—' }}</strong>
+        <small>节点 · {{ profile && profile.graphNodes > 0 ? profile.graphEdges : '—' }} 条关系</small>
+        <small>{{ profile && profile.graphNodes > 0 ? '当前快照的已发布图谱' : '尚无可用图谱统计' }} · 关系包含调用、引用、包含等类型</small>
       </article>
       <article data-accent="cyan">
         <span><Database :size="17" />向量数据</span>
-        <strong>{{ vectorCoverage }}%</strong>
-        <small>{{ profile?.vectorizedChunks ?? 0 }} / {{ profile?.chunkCount ?? 0 }} 个片段</small>
+        <strong>{{ vectorCoverage }}</strong>
+        <small>{{ profile?.vectorizedChunks ?? '—' }} / {{ profile?.chunkCount ?? '—' }} 个已索引片段</small>
+        <small>{{ profile?.retrievalCapabilityLabel ?? '检索能力未知' }} · {{ profile?.missingChunks ?? '—' }} 个片段缺少向量</small>
+        <small v-if="profile?.retrievalCapability === 'CHARACTER_HASH'">当前使用字符相似度，不具备语义理解能力</small>
+        <small>覆盖率只衡量向量齐备程度，不代表召回准确率</small>
       </article>
       <article data-accent="green">
-        <span><BookOpenCheck :size="17" />可信知识</span>
-        <strong>{{ knowledge.trusted }}</strong>
-        <small>{{ knowledge.total }} 条知识中的可用依据</small>
+        <span><BookOpenCheck :size="17" />已审核的当前知识</span>
+        <strong>{{ knowledge?.trusted ?? '—' }}</strong>
+        <small>{{ knowledge?.total ?? '—' }} 条未归档知识 · 按治理状态筛选</small>
       </article>
       <article data-accent="violet">
         <span><FileCode2 :size="17" />代码文件</span>
         <strong>{{ codeFacts?.codeFileCount ?? '—' }}</strong>
-        <small>{{ categories.length }} 类 · {{ profile?.fileCount ?? 0 }} 个快照文件</small>
+        <small>{{ codeFacts ? categories.length : '—' }} 类 · {{ profile?.fileCount ?? '—' }} 个快照文件</small>
       </article>
     </section>
+
+    <p class="data-note">统计读取时间：{{ preparation ? formatTime(preparation.generatedAt) : '尚未获取' }}。
+      页面展示已发布快照；刷新统计不会同步代码。准备流程的进度按阶段计算，不代表耗时或文件完成比例。</p>
 
     <div class="overview-body">
       <main class="primary-column">
         <section class="overview-section knowledge-section" aria-labelledby="knowledge-health-title">
           <header class="section-heading">
             <div>
-              <span>知识可信度</span>
-              <h2 id="knowledge-health-title">知识真实性</h2>
-              <p>计数直接来自知识卡的审核、发布和代码版本状态。</p>
+              <span>知识状态</span>
+              <h2 id="knowledge-health-title">知识治理状态</h2>
+              <p>计数来自未归档知识卡的审核、发布和来源版本标记，不验证知识内容是否正确。</p>
             </div>
             <button v-if="repository.capabilities?.canUpdate" type="button" @click="emit('openKnowledge')">管理知识 <ArrowRight :size="13" /></button>
           </header>
 
           <div class="knowledge-states">
-            <article data-tone="current"><small>当前</small><strong>{{ knowledge.current }}</strong><span>与当前代码一致</span></article>
-            <article data-tone="suspect"><small>待复核</small><strong>{{ knowledge.suspect }}</strong><span>变化后待复核</span></article>
-            <article data-tone="stale"><small>已失效</small><strong>{{ knowledge.stale }}</strong><span>已排除出可信依据</span></article>
-            <article data-tone="unverified"><small>未验证</small><strong>{{ knowledge.unverified }}</strong><span>尚未绑定代码版本</span></article>
+            <article data-tone="current"><small>当前</small><strong>{{ knowledge?.current ?? '—' }}</strong><span>来源版本标记为 CURRENT</span></article>
+            <article data-tone="suspect"><small>待复核</small><strong>{{ knowledge?.suspect ?? '—' }}</strong><span>变化后待复核</span></article>
+            <article data-tone="stale"><small>已失效</small><strong>{{ knowledge?.stale ?? '—' }}</strong><span>已排除出可信依据</span></article>
+            <article data-tone="unverified"><small>未验证</small><strong>{{ knowledge?.unverified ?? '—' }}</strong><span>来源版本尚未验证</span></article>
           </div>
 
           <div class="governance-ledger">
-            <div><span>可信可用</span><strong>{{ knowledge.trusted }}</strong><small>已发布 + 已审核 + 与当前代码一致</small></div>
-            <div><span>未审核</span><strong>{{ knowledge.unreviewed }}</strong><small>不能作为已确认规则</small></div>
-            <div><span>必需但无负责人</span><strong>{{ knowledge.requiredWithoutOwner }}</strong><small>审批责任尚未落位</small></div>
+            <div><span>满足治理条件</span><strong>{{ knowledge?.trusted ?? '—' }}</strong><small>已发布 + 审核通过 + 来源版本 CURRENT</small></div>
+            <div><span>未审核</span><strong>{{ knowledge?.unreviewed ?? '—' }}</strong><small>审核状态为 UNREVIEWED</small></div>
+            <div><span>必需但无负责人</span><strong>{{ knowledge?.requiredWithoutOwner ?? '—' }}</strong><small>审批责任尚未落位</small></div>
           </div>
+          <p class="data-note">上方四种来源状态互斥；下方审核与负责人计数可重叠。满足治理条件不保证引用仍有效，实际审查会进一步筛选证据。</p>
         </section>
 
         <section class="overview-section code-section" aria-labelledby="code-types-title">
@@ -255,13 +256,13 @@ function canResolveIssue(issue: ProjectHealthIssue) {
             <div>
               <span>代码分布</span>
               <h2 id="code-types-title">代码类型统计</h2>
-              <p>基于当前快照的文件路径和代码内容分类，不读取项目说明。</p>
+              <p>按文件路径、扩展名和命名规则推断职责，仅统计支持识别的源码语言，每个文件归入一类。条形长度为占识别源码总数的比例，不是测试覆盖率。</p>
             </div>
           </header>
 
           <div v-if="categories.length" class="category-list">
             <article v-for="category in categories" :key="category.key" class="category-row">
-              <div class="category-main"><span>{{ category.label }}</span><strong>{{ category.count }}</strong></div>
+              <div class="category-main"><span>{{ category.label }}</span><strong>{{ category.count }} · {{ categoryPercent(category.count) }}%</strong></div>
               <i><b :style="{ width: categoryWidth(category.count) }"></b></i>
               <small>{{ category.detail }}<template v-if="category.samples.length"> · {{ category.samples.slice(0, 2).join('、') }}</template></small>
             </article>
@@ -274,7 +275,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
             <div>
               <span>最近审查</span>
               <h2 id="recent-reviews-title">最近变更审查</h2>
-              <p>每条记录都绑定创建时的快照和 Git 版本。</p>
+              <p>展示本仓库最近 5 条审查，可能包含旧快照。已完成仅表示生成了审查结果，不代表测试或审批通过。</p>
             </div>
           </header>
 
@@ -282,12 +283,16 @@ function canResolveIssue(issue: ProjectHealthIssue) {
             <article v-for="review in health.recentReviews" :key="review.reviewId" class="review-row">
               <span class="review-status" :data-tone="reviewStatus(review).tone">{{ reviewStatus(review).label }}</span>
               <div class="review-copy">
-                <strong>{{ review.task || '未填写任务说明' }}</strong>
-                <small>{{ review.changedFileCount }} 文件 · {{ review.changedSymbolCount }} 符号 · {{ review.applicableKnowledgeCount }} 条适用知识</small>
+                <button type="button" class="review-link" @click="emit('openReview', review.reviewId)">{{ review.task || '未填写任务说明' }} <ArrowRight :size="12" /></button>
+                <small v-if="review.status === 'COMPLETED'">{{ review.changedFileCount ?? '—' }} 文件 · {{ review.changedSymbolCount ?? '—' }} 符号 · {{ review.applicableKnowledgeCount ?? '—' }} 条适用知识</small>
+                <small v-else>{{ review.status === 'FAILED' ? '审查失败，未生成有效统计' : '审查进行中，统计尚未生成' }}</small>
+                <small>快照 {{ short(review.snapshotId, 8) }} · {{ review.snapshotId === preparation?.snapshotId ? '当前快照' : '历史快照' }}</small>
+                <small v-if="review.error" class="review-error">{{ review.error.code }}：{{ review.error.message }}</small>
               </div>
               <time>{{ formatTime(review.finishedAt ?? review.createdAt) }}</time>
             </article>
           </div>
+          <p v-else-if="!health" class="empty-copy">审查记录尚未获取。</p>
           <div v-else class="reviews-empty">
             <p>还没有变更审查记录。完成一次审查后，这里会保留版本和证据摘要。</p>
             <button type="button" :disabled="!health?.readyForReview" @click="emit('startReview')">开始第一次审查 <ArrowRight :size="13" /></button>
@@ -304,11 +309,12 @@ function canResolveIssue(issue: ProjectHealthIssue) {
               <div>
                 <strong>{{ issue.title }}</strong>
                 <p>{{ issue.detail }}</p>
-                <button v-if="canResolveIssue(issue)" type="button" @click="issueAction(issue)">{{ issue.actionTarget === 'PREPARATION' ? '处理准备状态' : '处理知识' }} <ArrowRight :size="12" /></button>
+                <button v-if="canResolveIssue(issue)" type="button" @click="issueAction(issue)">{{ issue.actionTarget === 'PREPARATION' ? '处理准备状态' : issue.actionTarget === 'REVIEW' ? '查看审查记录' : '处理知识' }} <ArrowRight :size="12" /></button>
               </div>
             </article>
           </div>
-          <div v-else class="all-clear"><Check :size="15" /><span>当前没有阻塞项或已知缺口</span></div>
+          <div v-else-if="health" class="all-clear"><Check :size="15" /><span>准备与知识治理规则未发现缺口</span></div>
+          <p v-else class="empty-copy">尚未获取检查结果，无法判断是否存在缺口。</p>
         </section>
 
         <section class="side-section readiness-section" aria-labelledby="readiness-title">
@@ -346,6 +352,11 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 </template>
 
 <style scoped>
+.data-note { margin: 12px 4px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.review-link { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; color: var(--blue); text-align: left; cursor: pointer; }
+.review-error { color: var(--red) !important; overflow-wrap: anywhere; white-space: normal !important; }
+.health-callout[data-tone='muted'] { color: var(--muted); border-color: var(--line); background: var(--soft); }
+
 .overview-sheet {
   --navy: var(--app-color-identity);
   --ink: var(--app-text-primary);
@@ -471,7 +482,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 .stage-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .stage-title button { padding: 0; color: var(--blue); border: 0; background: transparent; font-size: 12px; font-weight: 700; cursor: pointer; }
 .preparation-stage strong { color: #354b58; font-size: 12px; }
-.preparation-stage small { overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+.preparation-stage small { overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.45; text-overflow: ellipsis; white-space: normal; }
 .empty-copy { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .spinning { animation: spin .85s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

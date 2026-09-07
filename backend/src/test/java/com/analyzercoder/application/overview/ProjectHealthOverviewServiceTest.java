@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.analyzercoder.application.repository.RegisterRepositoryUseCase;
 import com.analyzercoder.application.repository.RepositoryPreparationService;
+import com.analyzercoder.application.review.TaskReviewResult;
 import com.analyzercoder.application.review.TaskReviewService;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
@@ -36,8 +37,7 @@ class ProjectHealthOverviewServiceTest {
                 .thenReturn(new ProjectKnowledgeHealthRow(3, 3, 0, 0, 0, 3, 0, 0));
         when(reviews.list(repository.id(), 5, 0)).thenReturn(List.of());
 
-        ProjectHealthOverviewService.ProjectHealthOverview result =
-                service.view(repository.id());
+        ProjectHealthOverviewService.ProjectHealthOverview result = service.view(repository.id());
 
         assertThat(result.state()).isEqualTo("READY");
         assertThat(result.readyForReview()).isTrue();
@@ -55,8 +55,7 @@ class ProjectHealthOverviewServiceTest {
                 .thenReturn(new ProjectKnowledgeHealthRow(4, 0, 1, 1, 2, 0, 1, 2));
         when(reviews.list(repository.id(), 5, 0)).thenReturn(List.of());
 
-        ProjectHealthOverviewService.ProjectHealthOverview result =
-                service.view(repository.id());
+        ProjectHealthOverviewService.ProjectHealthOverview result = service.view(repository.id());
 
         assertThat(result.state()).isEqualTo("BLOCKED");
         assertThat(result.readyForReview()).isFalse();
@@ -71,6 +70,41 @@ class ProjectHealthOverviewServiceTest {
                         "SUSPECT_KNOWLEDGE",
                         "STALE_KNOWLEDGE");
         assertThat(result.issues().get(0).severity()).isEqualTo("BLOCKING");
+    }
+
+    @Test
+    void doesNotEnableReviewDuringPreparationOrAfterPreparationFailure() {
+        CodeRepository repository = repository();
+        when(repositories.get(repository.id())).thenReturn(repository);
+        when(health.knowledgeHealth(repository.id().value()))
+                .thenReturn(new ProjectKnowledgeHealthRow(1, 1, 0, 0, 0, 1, 0, 0));
+        when(reviews.list(repository.id(), 5, 0)).thenReturn(List.of());
+        for (String state : List.of("PROCESSING", "ACTION_REQUIRED")) {
+            when(preparation.view(repository.id())).thenReturn(preparation(state, 20, 0, 30));
+            assertThat(service.view(repository.id()).readyForReview()).isFalse();
+        }
+    }
+
+    @Test
+    void recentFailureRemainsVisibleEvenWhenIndexesAndKnowledgeAreReady() {
+        CodeRepository repository = repository();
+        when(repositories.get(repository.id())).thenReturn(repository);
+        when(preparation.view(repository.id())).thenReturn(preparation("READY", 20, 0, 30));
+        when(health.knowledgeHealth(repository.id().value()))
+                .thenReturn(new ProjectKnowledgeHealthRow(1, 1, 0, 0, 0, 1, 0, 0));
+        TaskReviewResult.ReviewSummary failed = mock(TaskReviewResult.ReviewSummary.class);
+        when(failed.status()).thenReturn(TaskReviewResult.Status.FAILED);
+        when(reviews.list(repository.id(), 5, 0)).thenReturn(List.of(failed));
+        var result = service.view(repository.id());
+        assertThat(result.state()).isEqualTo("DEGRADED");
+        assertThat(result.readyForReview()).isTrue();
+        assertThat(result.issues())
+                .singleElement()
+                .satisfies(
+                        issue -> {
+                            assertThat(issue.code()).isEqualTo("RECENT_REVIEW_FAILED");
+                            assertThat(issue.actionTarget()).isEqualTo("REVIEW");
+                        });
     }
 
     private static RepositoryPreparationService.PreparationView preparation(
@@ -99,7 +133,12 @@ class ProjectHealthOverviewServiceTest {
                         List.of()),
                 null,
                 null,
-                null);
+                null,
+                null,
+                null,
+                null,
+                false,
+                Instant.now());
     }
 
     private static CodeRepository repository() {

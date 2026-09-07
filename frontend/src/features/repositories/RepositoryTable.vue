@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ArrowDown } from '@element-plus/icons-vue';
+import { ArrowDown, DocumentCopy } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import RepositoryVersionCell from '@/features/repositories/RepositoryVersionCell.vue';
 import type { Repository } from '@/types/api';
 import { relationshipLabel } from '@/utils/displayLabels';
@@ -47,6 +48,15 @@ function command(action: string, row: Repository) {
   else if (action === 'codegraph') emit('codegraph', row);
   else if (action === 'remove') emit('remove', row.id, row.name);
 }
+
+async function copyPath(path: string) {
+  try {
+    await navigator.clipboard.writeText(path);
+    ElMessage.success('服务端路径已复制');
+  } catch {
+    ElMessage.error('复制失败，请检查浏览器剪贴板权限');
+  }
+}
 </script>
 
 <template>
@@ -54,18 +64,27 @@ function command(action: string, row: Repository) {
     <el-table-column label="仓库" min-width="220">
       <template #default="{ row }">
         <div class="primary-cell">
-          <b>{{ row.name }}</b>
+          <div class="repository-name">
+            <b>{{ row.name }}</b>
+            <el-button
+              class="copy-path-button"
+              link
+              type="primary"
+              :icon="DocumentCopy"
+              :disabled="!row.path"
+              aria-label="复制服务端路径"
+              title="复制服务端路径"
+              @click.stop="copyPath(row.path)"
+            />
+          </div>
           <span>{{ sourceLabel(row.sourceType) }} · {{ row.ownerDisplayName }} · {{ relationshipLabel(row.relationship) }}</span>
         </div>
       </template>
     </el-table-column>
-    <el-table-column label="当前版本" min-width="250">
+    <el-table-column label="当前版本" min-width="320">
       <template #default="{ row }"><RepositoryVersionCell :repository="row" /></template>
     </el-table-column>
-    <el-table-column prop="path" label="服务端路径" min-width="260">
-      <template #default="{ row }"><span class="mono">{{ row.path }}</span></template>
-    </el-table-column>
-    <el-table-column label="产物状态" width="150">
+    <el-table-column label="产物状态" min-width="160">
       <template #default="{ row }">
         <div class="artifact-rail">
           <el-tag effect="plain" :type="row.codeGraphDetected ? 'success' : 'info'">
@@ -75,7 +94,7 @@ function command(action: string, row: Repository) {
         </div>
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="400" fixed="right">
+    <el-table-column label="操作" min-width="300">
       <template #default="{ row }">
         <div class="repository-actions">
           <el-button
@@ -132,11 +151,49 @@ function command(action: string, row: Repository) {
 </template>
 
 <style scoped>
+.primary-cell,
+.artifact-rail {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.primary-cell > span,
+.artifact-rail small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.artifact-rail .el-tag {
+  justify-self: start;
+}
+
+.repository-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.repository-name b {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.copy-path-button {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
 .repository-actions {
   display: flex;
+  flex-wrap: wrap;
   min-height: 32px;
   align-items: center;
-  gap: 14px;
+  gap: 4px 12px;
   white-space: nowrap;
 }
 

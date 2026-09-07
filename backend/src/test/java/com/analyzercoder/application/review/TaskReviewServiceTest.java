@@ -94,8 +94,7 @@ class TaskReviewServiceTest {
                         modelSummaries,
                         mapper,
                         json);
-        when(modelSummaries.summarize(
-                        org.mockito.ArgumentMatchers.any(TaskReviewResult.class)))
+        when(modelSummaries.summarize(org.mockito.ArgumentMatchers.any(TaskReviewResult.class)))
                 .thenAnswer(
                         invocation -> {
                             TaskReviewResult review = invocation.getArgument(0);
@@ -103,8 +102,7 @@ class TaskReviewServiceTest {
                                     review.modelConfigId() == null
                                             ? TaskReviewResult.ModelSummaryState.notRequested()
                                             : TaskReviewResult.ModelSummaryState.unavailable(
-                                                    "MODEL_PROVIDER_UNAVAILABLE",
-                                                    "测试模型不可用");
+                                                    "MODEL_PROVIDER_UNAVAILABLE", "测试模型不可用");
                             return new TaskReviewModelSummaryService.Attempt(null, state);
                         });
         when(changes.analyze(org.mockito.ArgumentMatchers.any())).thenReturn(change());
@@ -214,6 +212,17 @@ class TaskReviewServiceTest {
         assertThat(result.status()).isEqualTo(TaskReviewResult.Status.FAILED);
         assertThat(result.error().code()).isEqualTo("SNAPSHOT_CHANGED_DURING_REVIEW");
         assertThat(result.change()).isNull();
+        assertThat(service.list(repository.id(), 5, 0))
+                .singleElement()
+                .satisfies(
+                        summary -> {
+                            assertThat(summary.changedFileCount()).isNull();
+                            assertThat(summary.changedSymbolCount()).isNull();
+                            assertThat(summary.applicableKnowledgeCount()).isNull();
+                            assertThat(summary.unknownCount()).isNull();
+                            assertThat(summary.error().code())
+                                    .isEqualTo("SNAPSHOT_CHANGED_DURING_REVIEW");
+                        });
         assertThat(mapper.rows.values())
                 .singleElement()
                 .satisfies(row -> assertThat(row.resultPayload()).isNull());

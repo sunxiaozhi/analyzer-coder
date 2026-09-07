@@ -18,12 +18,14 @@ export function useProjectOverview() {
   let loadVersion = 0;
   let contextVersion = 0;
   let disposed = false;
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   function isCurrent(repositoryId: string, version: number) {
     return !disposed && version === contextVersion && repositoryId === repositories.selectedRepositoryId;
   }
 
   async function load(repositoryId: string | null) {
+    clearTimeout(refreshTimer);
     const version = ++loadVersion;
     const context = contextVersion;
     preparation.value = null;
@@ -40,9 +42,18 @@ export function useProjectOverview() {
         getProjectHealthOverview(repositoryId),
       ]);
       if (version !== loadVersion || !isCurrent(repositoryId, context)) return;
+      if (projectHealth && (profile.snapshotId !== projectHealth.snapshotId
+        || profile.commitSha !== projectHealth.commitSha)) {
+        throw new Error('读取期间项目快照发生变化，请重新加载总览以获取同一版本的数据');
+      }
       preparation.value = profile;
-      codeFacts.value = facts;
+      codeFacts.value = facts && facts.snapshotId === profile.snapshotId && facts.commitSha === profile.commitSha ? facts : null;
       health.value = projectHealth;
+      if (profile.state === 'PROCESSING') {
+        refreshTimer = setTimeout(() => {
+          if (isCurrent(repositoryId, context) && !preparing.value) void load(repositoryId);
+        }, 5000);
+      }
     } catch (exception) {
       if (version === loadVersion && isCurrent(repositoryId, context)) {
         error.value = exception instanceof Error ? exception.message : '项目总览加载失败';
@@ -117,7 +128,7 @@ export function useProjectOverview() {
     preparing.value = false;
     void load(repositoryId);
   }, { immediate: true, flush: 'sync' });
-  onScopeDispose(() => { disposed = true; contextVersion++; loadVersion++; });
+  onScopeDispose(() => { clearTimeout(refreshTimer); disposed = true; contextVersion++; loadVersion++; });
 
   return {
     preparation: shallowReadonly(preparation), codeFacts: shallowReadonly(codeFacts),

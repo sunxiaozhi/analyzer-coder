@@ -34,8 +34,10 @@ const snapshotTime = computed(() =>
 </template>
 
 <style scoped>
-.version-cell { display: grid; gap: 7px; }
-.version-main, .version-meta, .snapshot-meta { display: flex; align-items: center; gap: 9px; }
-.branch { color: var(--text-strong, #172033); font-weight: 650; }
+.version-cell { display: grid; min-width: 0; gap: 7px; }
+.version-main, .version-meta, .snapshot-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; }
+.version-cell .el-tag { flex-shrink: 0; }
+.branch { min-width: 0; white-space: normal; overflow-wrap: anywhere; color: var(--text-strong, #172033); font-weight: 650; }
+.snapshot-time { white-space: normal; }
 .digest, .snapshot-time { color: var(--text-muted, #748096); font-size: 14px; }
 </style>

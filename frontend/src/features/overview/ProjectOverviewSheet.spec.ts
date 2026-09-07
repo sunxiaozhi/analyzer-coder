@@ -40,6 +40,11 @@ const profile = {
 } satisfies ProjectProfile;
 
 const preparation = {
+  snapshotId: 'snapshot-1',
+  commitSha: '1234567890abcdef',
+  branch: 'main',
+  dirty: false,
+  generatedAt: '2026-08-30T10:02:00Z',
   repositoryId: 'repo-1',
   state: 'READY',
   progress: 100,
@@ -179,13 +184,13 @@ describe('ProjectOverviewSheet', () => {
     const text = wrapper.text();
 
     expect(text).toContain('示例项目');
-    expect(text).toContain('可用但有缺口');
+    expect(text).toContain('准备或治理存在缺口');
     expect(text).toContain('1234567890');
     expect(text).toContain('快照 snapshot');
     expect(text).toContain('代码图谱');
     expect(text).toContain('120');
     expect(text).toContain('100%');
-    expect(text).toContain('知识真实性');
+    expect(text).toContain('知识治理状态');
     expect(text).toContain('当前');
     expect(text).toContain('必需但无负责人');
     expect(text).toContain('代码类型统计');
@@ -228,4 +233,47 @@ it('shows unavailable statistics instead of reporting zero code files on a faile
   await wrapper.setProps({ codeFacts: null });
   expect(wrapper.text()).toContain('代码统计未能加载，请刷新重试。');
   expect(wrapper.find('[data-accent="violet"] strong').text()).toBe('—');
+});
+
+it('never presents missing responses as healthy or as zero measurements', async () => {
+  const wrapper = mountSheet();
+  await wrapper.setProps({ profile: null, health: null, preparation: null, codeFacts: null });
+  expect(wrapper.text()).toContain('状态尚未获取');
+  expect(wrapper.text()).toContain('无法判断是否存在缺口');
+  expect(wrapper.text()).not.toContain('未发现缺口');
+  expect(wrapper.text()).not.toContain('还没有变更审查记录');
+  expect(wrapper.findAll('.capability-strip strong').map(item => item.text())).toEqual(['—', '—', '—', '—']);
+});
+
+it('keeps incomplete vector coverage below 100% and names character retrieval', async () => {
+  const wrapper = mountSheet();
+  await wrapper.setProps({ profile: { ...profile, chunkCount: 10000, vectorizedChunks: 9999, missingChunks: 1,
+    retrievalCapability: 'CHARACTER_HASH', retrievalCapabilityLabel: '字符相似度' } });
+  expect(wrapper.get('[data-accent="cyan"] strong').text()).toBe('99.9%');
+  expect(wrapper.text()).toContain('不具备语义理解能力');
+  await wrapper.setProps({ profile: { ...profile, chunkCount: 0, vectorizedChunks: 0 } });
+  expect(wrapper.get('[data-accent="cyan"] strong').text()).toBe('—');
+});
+
+it('shows all categories with their share of source files', async () => {
+  const wrapper = mountSheet();
+  const fileCategories = Array.from({ length: 10 }, (_, index) => ({ key: String(index), label: `类别${index}`, count: 1, detail: '', samples: [] }));
+  await wrapper.setProps({ codeFacts: { ...codeFacts, codeFileCount: 10, fileCategories } });
+  expect(wrapper.findAll('.category-row')).toHaveLength(10);
+  expect(wrapper.get('.category-row b').attributes('style')).toContain('width: 10%');
+  expect(wrapper.get('[data-accent="violet"]').text()).toContain('10 类');
+});
+
+it('shows failed review errors and opens the exact historical record', async () => {
+  const wrapper = mountSheet();
+  await wrapper.setProps({ health: { ...health, recentReviews: [{ ...health.recentReviews[0], status: 'FAILED', snapshotId: 'old-snapshot',
+    changedFileCount: null, changedSymbolCount: null, applicableKnowledgeCount: null,
+    error: { code: 'GIT_REF_NOT_FOUND', message: '目标提交不存在' } }] } });
+  const row = wrapper.get('.review-row');
+  expect(row.text()).toContain('未生成有效统计');
+  expect(row.text()).toContain('历史快照');
+  expect(row.text()).toContain('目标提交不存在');
+  expect(row.text()).not.toContain('0 文件');
+  await row.get('button').trigger('click');
+  expect(wrapper.emitted('openReview')).toEqual([['review-1']]);
 });

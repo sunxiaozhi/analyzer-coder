@@ -55,6 +55,7 @@ const selection = shallowRef<ReviewEvidenceSelection | null>(null);
 const historyReadOnly = shallowRef(false);
 const formKey = shallowRef(0);
 let contextVersion = 0;
+let historyRequestVersion = 0;
 
 const repository = computed(() => repositories.selectedRepository);
 const shortSnapshot = computed(() => repository.value?.snapshotId?.slice(0, 8) ?? '未发布');
@@ -62,13 +63,15 @@ const shortCommit = computed(() => repository.value?.commit?.slice(0, 8) ?? '无
 const resultState = computed(() => {
   if (!result.value) return null;
   if (result.value.status === 'FAILED') return 'failed';
-  if (result.value.change?.partial || result.value.change?.limitations.length || result.value.unknowns.length) return 'degraded';
+  if (result.value.status === 'RUNNING') return 'running';
+  if (!result.value.change || result.value.change?.partial || result.value.change?.limitations.length || result.value.unknowns.length) return 'degraded';
   return 'complete';
 });
 const resultStateLabel = computed(() => ({
   failed: '审查失败',
+  running: '审查进行中',
   degraded: '已完成，存在限制',
-  complete: '证据完整',
+  complete: '审查结果已生成',
 }[resultState.value ?? 'complete']));
 const initialDraft = computed<Partial<TaskReviewDraft>>(() => {
   const source = route.query.source;
@@ -191,26 +194,28 @@ async function submitProvider(draft: PullRequestReviewDraft) {
   }
 }
 
-async function openHistory(item: TaskReviewSummary) {
+async function openHistory(item: Pick<TaskReviewSummary, 'reviewId'>) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   const version = contextVersion;
   loading.value = true;
   error.value = null;
   selection.value = null;
+  const requestVersion = ++historyRequestVersion;
   try {
     const detail = await getTaskReview(repositoryId, item.reviewId);
-    if (version !== contextVersion || repositoryId !== repositories.selectedRepositoryId) return;
+    if (version !== contextVersion || requestVersion !== historyRequestVersion || repositoryId !== repositories.selectedRepositoryId) return;
     result.value = detail;
     historyReadOnly.value = true;
   } catch (exception) {
-    if (version === contextVersion) error.value = failureMessage(exception, '历史审查加载失败');
+    if (version === contextVersion && requestVersion === historyRequestVersion) error.value = failureMessage(exception, '历史审查加载失败');
   } finally {
-    if (version === contextVersion) loading.value = false;
+    if (version === contextVersion && requestVersion === historyRequestVersion) loading.value = false;
   }
 }
 
 function resetResult() {
+  historyRequestVersion++;
   result.value = null;
   selection.value = null;
   historyReadOnly.value = false;
@@ -285,6 +290,17 @@ watch(
     formKey.value++;
     resetResult();
   },
+);
+
+watch(
+  () => [repositories.selectedRepositoryId, route.query.reviewId] as const,
+  ([repositoryId, reviewId]) => {
+    if (repositoryId && typeof reviewId === 'string' && reviewId) {
+      mode.value = 'review';
+      void openHistory({ reviewId });
+    }
+  },
+  { immediate: true },
 );
 
 onMounted(async () => {
@@ -378,7 +394,7 @@ onMounted(async () => {
             >
               <span><component :is="item.status === 'COMPLETED' ? CheckCircle2 : AlertTriangle" :size="13" />{{ item.status === 'COMPLETED' ? '已完成' : '失败' }}</span>
               <strong>{{ item.task || `${sourceLabel(item.changeSource)}审查` }}</strong>
-              <small>{{ item.changedFileCount }} 文件 · {{ item.unknownCount }} 未知 · {{ shortDate(item.finishedAt) }}</small>
+              <small>{{ item.changedFileCount ?? '—' }} 文件 · {{ item.unknownCount ?? '—' }} 未知 · {{ shortDate(item.finishedAt) }}</small>
             </button>
           </div>
           <p v-else-if="!historyLoading">还没有审查记录。提交上方表单后，结果会成为可追溯的只读版本。</p>
@@ -399,10 +415,10 @@ onMounted(async () => {
               <component :is="resultState === 'complete' ? CheckCircle2 : AlertTriangle" :size="18" />
               <span><small>{{ historyReadOnly ? '历史审查 · 只读' : '本次审查' }}</small><strong>{{ resultStateLabel }}</strong></span>
             </div>
-            <p>{{ result.summary || result.error?.message || '审查已经完成，所有可确认内容均附带事实来源。' }}</p>
+            <p>{{ result.summary || result.error?.message || (result.status === 'RUNNING' ? '审查仍在运行，结果尚未生成。' : '请查看具体证据、限制与待办义务。') }}</p>
             <div class="ledger-version">
               <span><Archive :size="12" />知识基线 <code>{{ result.snapshotId.slice(0, 8) }}</code></span>
-              <span><GitCommitHorizontal :size="12" />待审提交 {{ result.change?.headCommit?.slice(0, 8) ?? shortCommit }}</span>
+              <span><GitCommitHorizontal :size="12" />待审提交 {{ result.change?.headCommit?.slice(0, 8) ?? '—' }}</span>
               <span><Clock3 :size="12" />{{ shortDate(result.finishedAt) }}</span>
             </div>
           </section>
@@ -435,7 +451,7 @@ onMounted(async () => {
             <AlertTriangle :size="26" /><h2>变更审查失败</h2><p>{{ result.error?.message }}</p>
           </section>
 
-          <div v-else class="review-workbench">
+          <div v-else-if="result.status === 'COMPLETED'" class="review-workbench">
             <ChangeEvidenceSpine :result="result" @select="selectEvidence" />
             <ReviewEvidenceDrawer
               :selection="selection"

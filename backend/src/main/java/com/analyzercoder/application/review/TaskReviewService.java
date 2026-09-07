@@ -270,7 +270,10 @@ public class TaskReviewService {
                         });
         review.applicableKnowledge().stream()
                 .flatMap(match -> match.reasons().stream())
-                .filter(reason -> filePath.equals(normalizeNullablePath(reason.evidence().filePath())))
+                .filter(
+                        reason ->
+                                filePath.equals(
+                                        normalizeNullablePath(reason.evidence().filePath())))
                 .findAny()
                 .ifPresent(ignored -> roles.add("KNOWLEDGE_EVIDENCE"));
         addFindingRole(review.requiredTests(), filePath, "REQUIRED_TEST", roles);
@@ -295,10 +298,7 @@ public class TaskReviewService {
     }
 
     private static void addFindingRole(
-            List<TaskReviewFinding> findings,
-            String filePath,
-            String role,
-            Set<String> roles) {
+            List<TaskReviewFinding> findings, String filePath, String role, Set<String> roles) {
         boolean matched =
                 findings.stream()
                         .flatMap(finding -> finding.evidence().stream())
@@ -371,7 +371,8 @@ public class TaskReviewService {
                 topology.repositories().stream()
                         .collect(
                                 java.util.stream.Collectors.groupingBy(
-                                        EngineeringProjectService.RepositoryBinding::sourceRepositoryId,
+                                        EngineeringProjectService.RepositoryBinding
+                                                ::sourceRepositoryId,
                                         LinkedHashMap::new,
                                         java.util.stream.Collectors.mapping(
                                                 binding ->
@@ -384,45 +385,54 @@ public class TaskReviewService {
                                                                                 contract ->
                                                                                         new KnowledgeMatch
                                                                                                 .ContractScopeBinding(
-                                                                                                contract.contractId(),
-                                                                                                contract.targetEvidencePath(),
-                                                                                                contract.current()))
+                                                                                                contract
+                                                                                                        .contractId(),
+                                                                                                contract
+                                                                                                        .targetEvidencePath(),
+                                                                                                contract
+                                                                                                        .current()))
                                                                         .toList()),
                                                 java.util.stream.Collectors.toList())));
         LinkedHashSet<UUID> sourceRepositories = new LinkedHashSet<>();
         sourceRepositories.add(repositoryId);
         sourceRepositories.addAll(bindingsByRepository.keySet());
         return sourceRepositories.stream()
-                .flatMap(sourceRepositoryId ->
-                        intelligence.cards(sourceRepositoryId, true).stream()
-                .map(
-                        card ->
-                                new KnowledgeMatch.Candidate(
-                                        card.id(),
-                                        card.repositoryId(),
-                                        card.title(),
-                                        card.knowledgeKind(),
-                                        card.severity(),
-                                        card.enforcement(),
-                                        card.ownerAccountId(),
-                                        card.scope(),
-                                        card.obligations(),
-                                        card.revision(),
-                                        card.publicationStatus(),
-                                        card.reviewStatus(),
-                                        card.sourceVersionStatus(),
-                                        card.codeReferences().stream()
-                                                .map(
-                                                        reference ->
-                                                                new KnowledgeScopeMatcher
-                                                                        .BoundCodeReference(
-                                                                        reference.chunkId(),
-                                                                        reference.filePath(),
-                                                                        reference.symbolName(),
-                                                                        reference.contentHash()))
-                                                .toList(),
-                                        bindingsByRepository.getOrDefault(
-                                                sourceRepositoryId, List.of()))))
+                .flatMap(
+                        sourceRepositoryId ->
+                                intelligence.cards(sourceRepositoryId, true).stream()
+                                        .map(
+                                                card ->
+                                                        new KnowledgeMatch.Candidate(
+                                                                card.id(),
+                                                                card.repositoryId(),
+                                                                card.title(),
+                                                                card.knowledgeKind(),
+                                                                card.severity(),
+                                                                card.enforcement(),
+                                                                card.ownerAccountId(),
+                                                                card.scope(),
+                                                                card.obligations(),
+                                                                card.revision(),
+                                                                card.publicationStatus(),
+                                                                card.reviewStatus(),
+                                                                card.sourceVersionStatus(),
+                                                                card.codeReferences().stream()
+                                                                        .map(
+                                                                                reference ->
+                                                                                        new KnowledgeScopeMatcher
+                                                                                                .BoundCodeReference(
+                                                                                                reference
+                                                                                                        .chunkId(),
+                                                                                                reference
+                                                                                                        .filePath(),
+                                                                                                reference
+                                                                                                        .symbolName(),
+                                                                                                reference
+                                                                                                        .contentHash()))
+                                                                        .toList(),
+                                                                bindingsByRepository.getOrDefault(
+                                                                        sourceRepositoryId,
+                                                                        List.of()))))
                 .toList();
     }
 
@@ -537,6 +547,8 @@ public class TaskReviewService {
 
     private TaskReviewResult.ReviewSummary summary(TaskReviewRow row) {
         TaskReviewResult result = result(row);
+        boolean hasResult =
+                result.status() == TaskReviewResult.Status.COMPLETED && result.change() != null;
         return new TaskReviewResult.ReviewSummary(
                 result.reviewId(),
                 result.status(),
@@ -546,13 +558,13 @@ public class TaskReviewService {
                 result.clientRequestId(),
                 result.task(),
                 result.changeSource(),
-                result.change() == null ? 0 : result.change().changes().size(),
-                result.changedSymbols().size(),
-                result.applicableKnowledge().size(),
-                result.requiredTests().size(),
-                result.requiredApprovals().size(),
-                result.staleKnowledge().size(),
-                result.unknowns().size(),
+                hasResult ? result.change().changes().size() : null,
+                hasResult ? result.changedSymbols().size() : null,
+                hasResult ? result.applicableKnowledge().size() : null,
+                hasResult ? result.requiredTests().size() : null,
+                hasResult ? result.requiredApprovals().size() : null,
+                hasResult ? result.staleKnowledge().size() : null,
+                hasResult ? result.unknowns().size() : null,
                 result.error(),
                 result.createdAt(),
                 result.finishedAt());

@@ -57,6 +57,47 @@ describe('preparation repository isolation', () => {
     vi.mocked(api.getRepositoryProfile).mockImplementation(async id => ({ repositoryId: id, state: 'READY', activeJobId: null } as api.RepositoryPreparation));
   });
 
+  it('rejects profile and health measurements from different snapshots', async () => {
+    vi.mocked(api.getRepositoryProfile).mockResolvedValue({ snapshotId: 'new', commitSha: 'new' } as api.RepositoryPreparation);
+    vi.mocked(api.getProjectHealthOverview).mockResolvedValue({ snapshotId: 'old', commitSha: 'old' } as api.ProjectHealthOverview);
+    const scope = effectScope();
+    const overview = scope.run(useProjectOverview)!;
+    try {
+      await flushPromises();
+      expect(overview.error.value).toContain('快照发生变化');
+      expect(overview.preparation.value).toBeNull();
+      expect(overview.health.value).toBeNull();
+    } finally { scope.stop(); }
+  });
+
+  it('omits code categories from an older snapshot', async () => {
+    vi.mocked(api.getRepositoryProfile).mockResolvedValue({ snapshotId: 'new', commitSha: 'new' } as api.RepositoryPreparation);
+    vi.mocked(api.getProjectHealthOverview).mockResolvedValue({ snapshotId: 'new', commitSha: 'new' } as api.ProjectHealthOverview);
+    vi.mocked(api.getProjectCodeFacts).mockResolvedValue({ snapshotId: 'old', commitSha: 'old' } as api.ProjectCodeFacts);
+    const scope = effectScope();
+    const overview = scope.run(useProjectOverview)!;
+    try {
+      await flushPromises();
+      expect(overview.error.value).toBeNull();
+      expect(overview.codeFacts.value).toBeNull();
+    } finally { scope.stop(); }
+  });
+
+  it('refreshes background preparation and cancels the timer on disposal', async () => {
+    vi.useFakeTimers();
+    vi.mocked(api.getRepositoryProfile).mockResolvedValue({ state: 'PROCESSING' } as api.RepositoryPreparation);
+    const scope = effectScope();
+    scope.run(useProjectOverview);
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(api.getRepositoryProfile).toHaveBeenCalledTimes(2);
+      scope.stop();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(api.getRepositoryProfile).toHaveBeenCalledTimes(2);
+    } finally { scope.stop(); vi.useRealTimers(); }
+  });
+
   it('ignores a prepare response after switching away and back to the same repository', async () => {
     const pending = deferred<api.RepositoryPreparation>();
     vi.mocked(api.prepareRepository).mockReturnValue(pending.promise);

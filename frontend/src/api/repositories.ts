@@ -111,6 +111,11 @@ export interface ProjectCodeFacts {
 }
 
 export interface RepositoryPreparation {
+  snapshotId: string | null;
+  commitSha: string | null;
+  branch: string | null;
+  dirty: boolean;
+  generatedAt: string;
   repositoryId: string;
   state: 'READY' | 'DEGRADED' | 'PROCESSING' | 'ACTION_REQUIRED' | 'NOT_READY';
   progress: number;
@@ -140,7 +145,7 @@ export interface ProjectHealthIssue {
   severity: 'BLOCKING' | 'WARNING';
   title: string;
   detail: string;
-  actionTarget: 'PREPARATION' | 'KNOWLEDGE';
+  actionTarget: 'PREPARATION' | 'KNOWLEDGE' | 'REVIEW';
 }
 
 export interface ProjectHealthOverview {

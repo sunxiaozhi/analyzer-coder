@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
 /** 用持久化事实回答项目是否具备可信知识和可执行审查条件。 */
 @Service
@@ -35,20 +37,40 @@ public class ProjectHealthOverviewService {
         this.reviews = reviews;
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ProjectHealthOverview view(CodeRepositoryId repositoryId) {
         CodeRepository repository = repositories.get(repositoryId);
         RepositoryPreparationService.PreparationView preparationView =
                 preparation.view(repositoryId);
-        ProjectKnowledgeHealthRow knowledge =
-                health.knowledgeHealth(repositoryId.value());
+        ProjectKnowledgeHealthRow knowledge = health.knowledgeHealth(repositoryId.value());
         if (knowledge == null) {
             knowledge = ProjectKnowledgeHealthRow.empty();
         }
         List<TaskReviewResult.ReviewSummary> recentReviews =
                 reviews.list(repositoryId, RECENT_REVIEW_LIMIT, 0);
-        List<HealthIssue> issues = issues(repository, preparationView, knowledge);
+        List<HealthIssue> issues = new ArrayList<>(issues(repository, preparationView, knowledge));
+        long failedReviews =
+                recentReviews.stream()
+                        .filter(review -> review.status() == TaskReviewResult.Status.FAILED)
+                        .count();
+        if (failedReviews > 0) {
+            issues.add(
+                    issue(
+                            "RECENT_REVIEW_FAILED",
+                            "WARNING",
+                            "近期审查存在失败",
+                            "最近 "
+                                    + recentReviews.size()
+                                    + " 条历史审查中有 "
+                                    + failedReviews
+                                    + " 条失败，请查看具体原因；历史记录可能属于旧快照。",
+                            "REVIEW"));
+        }
         boolean readyForReview =
-                repository.currentSnapshotId() != null && preparationView.profile().chunkCount() > 0;
+                repository.currentSnapshotId() != null
+                        && preparationView.profile().chunkCount() > 0
+                        && !"ACTION_REQUIRED".equals(preparationView.state())
+                        && !"PROCESSING".equals(preparationView.state());
         String state = state(preparationView.state(), issues);
         return new ProjectHealthOverview(
                 repositoryId.value(),
@@ -117,7 +139,7 @@ public class ProjectHealthOverviewService {
                                                 "知识失效检查"
                                                         + ("FAILED".equals(stage.state())
                                                                 ? "失败"
-                                                                : "发现待复核项"),
+                                                                : "未完整执行"),
                                                 stage.detail(),
                                                 "PREPARATION")));
         if (knowledge.trusted() == 0) {
@@ -125,7 +147,7 @@ public class ProjectHealthOverviewService {
                     issue(
                             "NO_TRUSTED_KNOWLEDGE",
                             "WARNING",
-                            "没有可信知识",
+                            "没有已审核且版本标记为当前的已发布知识",
                             "当前没有同时满足已发布、已审核和版本 CURRENT 的知识。",
                             "KNOWLEDGE"));
         }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Check, ChevronRight, CircleAlert } from 'lucide-vue-next';
+import { ChevronRight, CircleAlert } from 'lucide-vue-next';
 
 interface Props {
   activeRoute: string;
@@ -20,7 +20,6 @@ interface JourneyStep {
   path: string;
   routes: string[];
   available: boolean;
-  complete: boolean;
 }
 
 const steps = computed<JourneyStep[]>(() => [
@@ -31,16 +30,14 @@ const steps = computed<JourneyStep[]>(() => [
     path: props.canManageProjects ? '/repositories' : '/overview',
     routes: ['repositories'],
     available: true,
-    complete: props.hasRepository,
   },
   {
     key: 'prepare',
     label: '准备证据',
-    detail: props.hasSnapshot ? '当前快照已发布' : '扫描并建立索引',
+    detail: props.hasSnapshot ? '已有快照，查看索引状态' : '扫描并建立索引',
     path: '/overview',
     routes: ['overview'],
     available: props.hasRepository,
-    complete: props.hasSnapshot,
   },
   {
     key: 'code',
@@ -49,7 +46,6 @@ const steps = computed<JourneyStep[]>(() => [
     path: props.hasSnapshot ? '/search' : '/overview',
     routes: ['search', 'graph'],
     available: props.hasSnapshot,
-    complete: false,
   },
   {
     key: 'ask',
@@ -58,7 +54,6 @@ const steps = computed<JourneyStep[]>(() => [
     path: props.hasSnapshot ? '/ask' : '/overview',
     routes: ['ask'],
     available: props.hasSnapshot,
-    complete: false,
   },
   {
     key: 'review',
@@ -67,7 +62,6 @@ const steps = computed<JourneyStep[]>(() => [
     path: props.hasSnapshot ? '/change-impact' : '/overview',
     routes: ['change-impact'],
     available: props.hasSnapshot,
-    complete: false,
   },
   ...(props.canMaintainKnowledge ? [{
     key: 'knowledge',
@@ -76,7 +70,6 @@ const steps = computed<JourneyStep[]>(() => [
     path: props.hasSnapshot ? '/knowledge' : '/overview',
     routes: ['knowledge'],
     available: props.hasSnapshot,
-    complete: false,
   }] : []),
 ]);
 
@@ -87,22 +80,20 @@ function stepTitle(step: JourneyStep) {
 </script>
 
 <template>
-  <nav class="journey-bar" aria-label="研发工作流程">
-    <span class="journey-label">工作流程</span>
+  <nav class="journey-bar" aria-label="工作区导航">
+    <span class="journey-label">功能导航</span>
     <template v-for="(step, index) in steps" :key="step.key">
       <button
         type="button"
         :class="{
           active: step.routes.includes(activeRoute),
-          complete: step.complete,
           blocked: !step.available,
         }"
         :title="stepTitle(step)"
         @click="emit('navigate', step.path)"
       >
         <span class="step-mark">
-          <Check v-if="step.complete" :size="11" />
-          <CircleAlert v-else-if="!step.available" :size="11" />
+          <CircleAlert v-if="!step.available" :size="11" />
           <span v-else>{{ index + 1 }}</span>
         </span>
         <span class="step-copy"><strong>{{ step.label }}</strong><small>{{ step.detail }}</small></span>
@@ -134,7 +125,6 @@ function stepTitle(step: JourneyStep) {
 .journey-bar button.active { color: #fff; background: var(--app-color-identity); }
 .journey-bar button.blocked:not(.active) { color: #89959d; }
 .step-mark { display: grid; width: 19px; height: 19px; flex: none; place-items: center; color: #6f7e88; border: 1px solid #cbd5db; border-radius: 50%; font-size: 11px; font-weight: 750; }
-button.complete .step-mark { color: #fff; border-color: var(--app-color-success); background: var(--app-color-success); }
 button.active .step-mark { color: var(--app-color-identity); border-color: #fff; background: #fff; }
 button.blocked .step-mark { color: var(--app-color-warning); border-color: #dfc49f; }
 .step-copy { display: grid; min-width: 0; line-height: 1.15; }
