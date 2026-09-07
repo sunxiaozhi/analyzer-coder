@@ -296,7 +296,7 @@ watch(
           v-model="query"
           :prefix-icon="Search"
           clearable
-          placeholder="搜索源码、文档、规则、任务或文件路径"
+          placeholder="搜索当前仓库的源码、文档或文件路径"
           @clear="clearSearch"
           @keyup.enter="search"
         />

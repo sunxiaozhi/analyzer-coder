@@ -50,63 +50,6 @@ export interface ProjectProfile {
   keyAssets: ProjectKeyAsset[];
 }
 
-export interface ProjectArchitectureNode {
-  id: string;
-  label: string;
-  path: string;
-  kind: 'PROJECT' | 'MODULE' | 'RESOURCE';
-  fileCount: number;
-  codeFileCount: number;
-  primaryLanguage: string;
-  resourceType: string | null;
-}
-
-export interface ProjectArchitectureEdge {
-  source: string;
-  target: string;
-  relation: 'CONTAINS' | 'DEPENDS_ON' | 'CONNECTS_TO';
-  weight: number;
-  samples: string[];
-  evidenceSamples: ProjectArchitectureEvidenceSample[];
-}
-
-export interface ProjectArchitectureEvidenceSample {
-  filePath: string;
-  relatedFilePath: string | null;
-  snapshotId: string;
-  contentHash: string;
-}
-
-export interface ProjectArchitectureRisk {
-  id: string;
-  severity: 'HIGH' | 'MEDIUM' | 'LOW';
-  type: 'CYCLE' | 'BOUNDARY' | 'INSECURE_TRANSPORT';
-  title: string;
-  detail: string;
-  modules: string[];
-}
-
-export interface ProjectArchitectureCoverage {
-  analyzedFiles: number;
-  totalCodeFiles: number;
-  skippedLargeFiles: number;
-  skippedByLimit: number;
-  unreadableFiles: number;
-  partial: boolean;
-  notes: string[];
-}
-
-export interface ProjectArchitectureMap {
-  repositoryId: string;
-  snapshotId: string;
-  commitSha: string | null;
-  generatedAt: string;
-  nodes: ProjectArchitectureNode[];
-  edges: ProjectArchitectureEdge[];
-  risks: ProjectArchitectureRisk[];
-  coverage: ProjectArchitectureCoverage;
-}
-
 export interface ProjectTechnologyFact {
   name: string;
   category: 'LANGUAGE' | 'FRAMEWORK' | 'DATA' | 'UI' | 'STATE' | 'BUILD' | 'RUNTIME' | 'TEST' | 'INFRASTRUCTURE';
@@ -166,24 +109,6 @@ export interface ProjectCodeFacts {
   suggestions: ProjectSuggestion[];
   evidenceNotes: string[];
 }
-export interface ProjectArchitectureSymbol {
-  symbolName: string;
-  symbolKind: string | null;
-  filePath: string;
-  startLine: number | null;
-  endLine: number | null;
-  language: string | null;
-}
-
-export interface ProjectArchitectureModuleSymbols {
-  repositoryId: string;
-  snapshotId: string;
-  module: string;
-  symbols: ProjectArchitectureSymbol[];
-  truncated: boolean;
-}
-
-
 
 export interface RepositoryPreparation {
   repositoryId: string;
@@ -195,21 +120,6 @@ export interface RepositoryPreparation {
   activeJobId: string | null;
   activeJobType: IndexJobType | null;
   activeJobStatus: IndexJob['status'] | null;
-}
-
-export interface ProjectContextItem {
-  id: string;
-  chunkId: string | null;
-  assetType: RepositoryAssetType;
-  sourceType: 'VERIFIED_KNOWLEDGE' | 'CODE_FACT' | 'RETRIEVAL_CANDIDATE' | 'UNKNOWN';
-  title: string;
-  filePath: string | null;
-  symbolName: string | null;
-  startLine: number | null;
-  endLine: number | null;
-  excerpt: string;
-  content: string;
-  contentHash: string | null;
 }
 
 export type ProjectHealthState = 'READY' | 'DEGRADED' | 'BLOCKED' | 'PREPARING';
@@ -245,20 +155,9 @@ export interface ProjectHealthOverview {
   generatedAt: string;
 }
 
-export interface ProjectContextPack {
-  repositoryId: string;
-  repositoryName: string;
-  snapshotId: string;
-  commitSha: string | null;
-  task: string;
-  items: ProjectContextItem[];
-  markdown: string;
-}
-
 export function listRepositories(): Promise<Repository[]> {
   return request<Repository[]>('/api/repositories');
 }
-
 
 export function listRepositoryPage(params: { query?: string; pageNum: number; pageSize: number }): Promise<PageResult<Repository>> {
   const search = new URLSearchParams({ pageNum: String(params.pageNum), pageSize: String(params.pageSize) });
@@ -269,7 +168,6 @@ export function listRepositoryPage(params: { query?: string; pageNum: number; pa
 export function registerRepository(payload: RegisterRepositoryPayload): Promise<Repository> {
   return request<Repository>('/api/repositories', { method: 'POST', body: JSON.stringify(payload) });
 }
-
 
 export function updateRepository(repositoryId: string, payload: {
   name: string; description: string; defaultBranch: string; version: number;
@@ -327,25 +225,9 @@ export function getRepositoryProfile(repositoryId: string): Promise<RepositoryPr
 export function getProjectHealthOverview(repositoryId: string): Promise<ProjectHealthOverview> {
   return request<ProjectHealthOverview>(`/api/repositories/${repositoryId}/health-overview`);
 }
-export function getProjectArchitectureMap(repositoryId: string): Promise<ProjectArchitectureMap> {
-  return request<ProjectArchitectureMap>(`/api/repositories/${repositoryId}/architecture-map`);
-}
 export function getProjectCodeFacts(repositoryId: string): Promise<ProjectCodeFacts> {
   return request<ProjectCodeFacts>(`/api/repositories/${repositoryId}/code-facts`);
 }
-export function getProjectArchitectureModuleSymbols(
-  repositoryId: string,
-  module: string,
-  limit = 80,
-): Promise<ProjectArchitectureModuleSymbols> {
-  const query = new URLSearchParams({ module, limit: String(limit) });
-  return request<ProjectArchitectureModuleSymbols>(
-    `/api/repositories/${repositoryId}/architecture-map/modules/symbols?${query}`,
-  );
-}
-
-
-
 
 export function prepareRepository(repositoryId: string): Promise<RepositoryPreparation> {
   return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/prepare`, { method: 'POST' });
@@ -371,11 +253,12 @@ export function getRepositoryFile(repositoryId: string, path: string): Promise<R
   );
 }
 
-export function generateProjectContextPack(
-  repositoryId: string,
-  payload: { task: string; maxItems?: number; maxChars?: number },
-): Promise<ProjectContextPack> {
-  return request<ProjectContextPack>(`/api/repositories/${repositoryId}/context-pack`, {
-    method: 'POST', body: JSON.stringify(payload),
-  });
+// Shared by the live change-impact analysis response.
+export interface ProjectArchitectureRisk {
+  id: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+  type: 'CYCLE' | 'BOUNDARY' | 'INSECURE_TRANSPORT';
+  title: string;
+  detail: string;
+  modules: string[];
 }

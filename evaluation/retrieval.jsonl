@@ -38,9 +38,9 @@
 {"id":"RET-038","repositoryType":"VUE_TYPESCRIPT","question":"回答正文和引用覆盖提示在哪里展示？","expectedPaths":["frontend/src/features/ask/AskConversationPanel.vue"],"tags":["frontend","qa"]}
 {"id":"RET-039","repositoryType":"VUE_TYPESCRIPT","question":"当前向量索引的能力、模型和覆盖率在哪里展示？","expectedPaths":["frontend/src/features/indexing/VectorIndexSummary.vue"],"tags":["frontend","vector"]}
 {"id":"RET-040","repositoryType":"VUE_TYPESCRIPT","question":"向量模型配置卡片和编辑弹窗在哪里？","expectedPaths":["frontend/src/views/SystemSettingsView.vue"],"tags":["frontend","settings"]}
-{"id":"RET-041","repositoryType":"VUE_TYPESCRIPT","question":"调用图谱页面如何加载并展示来源限制？","expectedPaths":["frontend/src/views/GraphView.vue"],"tags":["frontend","graph"]}
+{"id":"RET-041","repositoryType":"VUE_TYPESCRIPT","question":"调用图谱页面如何加载并展示来源限制？","expectedPaths":["frontend/src/features/code/CodeEvidencePanel.vue"],"tags":["frontend","graph"]}
 {"id":"RET-042","repositoryType":"VUE_TYPESCRIPT","question":"变更影响分析表单和结果页面在哪里？","expectedPaths":["frontend/src/views/ChangeImpactView.vue"],"tags":["frontend","change"]}
-{"id":"RET-043","repositoryType":"VUE_TYPESCRIPT","question":"项目总览页如何组合准备度和架构面板？","expectedPaths":["frontend/src/views/ProjectOverviewView.vue"],"tags":["frontend","overview"]}
+{"id":"RET-043","repositoryType":"VUE_TYPESCRIPT","question":"项目总览页如何组合准备流程、知识健康和代码统计？","expectedPaths":["frontend/src/views/ProjectOverviewView.vue"],"tags":["frontend","overview"]}
 {"id":"RET-044","repositoryType":"VUE_TYPESCRIPT","question":"仓库列表的主要表格组件在哪里？","expectedPaths":["frontend/src/features/repositories/RepositoryTable.vue"],"tags":["frontend","repository"]}
 {"id":"RET-045","repositoryType":"VUE_TYPESCRIPT","question":"仓库导入任务 API 在哪里定义？","expectedPaths":["frontend/src/api/sourceImports.ts"],"tags":["frontend","import"]}
 {"id":"RET-046","repositoryType":"VUE_TYPESCRIPT","question":"前端路由和权限进入规则在哪里？","expectedPaths":["frontend/src/router/index.ts"],"tags":["frontend","router"]}

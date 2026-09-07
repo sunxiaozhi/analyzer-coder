@@ -58,7 +58,13 @@
 
     <select id="searchCodeKeyword" resultType="map">
         SELECT <include refid="codeColumns"/>,
-        LEAST(1.0,
+        GREATEST(
+          CASE WHEN FALSE
+            <foreach collection="terms" item="term">
+              OR LOWER(COALESCE(c.symbol_name,''))=#{term}
+            </foreach>
+          THEN .98 ELSE 0 END,
+          LEAST(1.0,
           CASE WHEN POSITION(#{query} IN LOWER(c.file_path))&gt;0 THEN .75 ELSE 0 END
           +CASE WHEN POSITION(#{query} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0 THEN .95 ELSE 0 END
           +CASE WHEN POSITION(#{query} IN LOWER(c.content))&gt;0 THEN .65 ELSE 0 END
@@ -73,7 +79,7 @@
               END
             </foreach>
           ) / #{termCount}
-        ) lexical_score,0.0 semantic_score
+        )) lexical_score,0.0 semantic_score
         FROM code_chunks c
         WHERE c.repo_id=#{repositoryId}
         AND c.snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})

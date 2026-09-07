@@ -47,11 +47,8 @@ const iconComponents: Record<WorkspaceNavIcon, object> = {
 const canMaintainSelectedRepository = computed(() => (
   auth.isAdmin || Boolean(repositoryStore.selectedRepository?.capabilities.canUpdate)
 ));
-const canManageProjects = computed(() => (
-  auth.isAdmin
-  || repositoryStore.repositories.some(repository => repository.capabilities.canUpdate)
-  || (repositoryStore.initialized && repositoryStore.repositories.length === 0)
-));
+// Every authenticated account can import its own repository; row actions remain capability-gated.
+const canManageProjects = computed(() => auth.authenticated);
 const navGroups = computed(() => workspaceNavigation({
   isAdmin: auth.isAdmin,
   canMaintainSelectedRepository: canMaintainSelectedRepository.value,
@@ -65,11 +62,6 @@ async function logout() { await auth.logout(); workspaceTabs.closeAll(); await r
 async function changeRepository(repositoryId: string | null) {
   try {
     await repositoryStore.selectRepository(repositoryId);
-    if (
-      route.meta.repositoryMaintain
-      && !auth.isAdmin
-      && !repositoryStore.selectedRepository?.capabilities.canUpdate
-    ) await router.replace('/overview');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '保存当前仓库失败');
   }

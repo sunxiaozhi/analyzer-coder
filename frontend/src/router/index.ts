@@ -33,7 +33,7 @@ export const router = createRouter({
         }),
         meta: { title: '代码与证据' },
       },
-      { path: 'knowledge', name: 'knowledge', component: KnowledgeView, meta: { title: '知识治理', repositoryMaintain: true } },
+      { path: 'knowledge', name: 'knowledge', component: KnowledgeView, meta: { title: '知识治理', repositoryRead: true } },
       { path: 'accounts', name: 'accounts', component: AccountsView, meta: { admin: true, title: '账号权限' } },
       { path: 'audit', name: 'audit', component: AuditLogsView, meta: { admin: true, title: '审计日志' } },
       { path: 'settings', name: 'settings', component: SystemSettingsView, meta: { admin: true, title: '模型配置' } },
@@ -52,21 +52,6 @@ router.beforeEach(async (to) => {
   if (!auth.authenticated) return { path: '/login', query: { redirect: to.fullPath } };
   if (auth.account?.mustChangePassword) return '/login';
   if (to.meta.admin && !auth.isAdmin) return '/overview';
-  if (to.meta.repositoryMaintain || to.meta.projectManage) {
-    const { useRepositoryStore } = await import('@/stores/repositoryStore');
-    const repositories = useRepositoryStore();
-    if (!repositories.initialized) await repositories.loadRepositories();
-    if (
-      to.meta.repositoryMaintain
-      && !auth.isAdmin
-      && !repositories.selectedRepository?.capabilities.canUpdate
-    ) return '/overview';
-    if (to.meta.projectManage && !auth.isAdmin) {
-      const canManage = repositories.repositories.some(
-        repository => repository.capabilities.canUpdate,
-      ) || (repositories.repositories.length === 0 && !repositories.error);
-      if (!canManage) return '/overview';
-    }
-  }
+
   return true;
 });

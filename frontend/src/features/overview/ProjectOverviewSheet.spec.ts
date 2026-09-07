@@ -222,3 +222,10 @@ describe('ProjectOverviewSheet', () => {
     expect(wrapper.emitted('retryStage')).toEqual([['vectors']]);
   });
 });
+
+it('shows unavailable statistics instead of reporting zero code files on a failed request', async () => {
+  const wrapper = mountSheet();
+  await wrapper.setProps({ codeFacts: null });
+  expect(wrapper.text()).toContain('代码统计未能加载，请刷新重试。');
+  expect(wrapper.find('[data-accent="violet"] strong').text()).toBe('—');
+});

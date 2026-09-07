@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { router } from './index';
+
+vi.mock('@/stores/authStore', () => ({ useAuthStore: () => ({ restore: async () => {}, authenticated: true, isAdmin: false, account: { mustChangePassword: false } }) }));
+vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => ({ initialized: true, repositories: [{ capabilities: { canUpdate: false } }], selectedRepository: { capabilities: { canUpdate: false } } }) }));
 
 describe('workspace critical routes', () => {
   it('keeps every shipped workspace capability on one unique route', () => {
@@ -30,7 +33,7 @@ describe('workspace critical routes', () => {
   it('keeps maintenance and system operations behind explicit route metadata', () => {
     const routes = new Map(router.getRoutes().map(route => [String(route.name), route]));
 
-    expect(routes.get('knowledge')?.meta.repositoryMaintain).toBe(true);
+    expect(routes.get('knowledge')?.meta.repositoryRead).toBe(true);
     expect(routes.get('repositories')?.meta.projectManage).toBe(true);
     for (const name of ['indexing', 'settings', 'accounts', 'audit']) {
       expect(routes.get(name)?.meta.admin).toBe(true);
@@ -50,4 +53,13 @@ describe('workspace critical routes', () => {
       .toBe('UnifiedIndexJobsView');
     expect((audit?.components?.default as { __name?: string }).__name).toBe('AuditLogsView');
   });
+});
+
+it('lets a READ-only account import its own repository and open knowledge evidence', async () => {
+  await router.push('/repositories');
+  expect(router.currentRoute.value.name).toBe('repositories');
+  await router.push('/knowledge?cardId=published-card');
+  expect(router.currentRoute.value.name).toBe('knowledge');
+  await router.push('/accounts');
+  expect(router.currentRoute.value.name).toBe('overview');
 });

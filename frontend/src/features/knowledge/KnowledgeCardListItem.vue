@@ -6,6 +6,7 @@ import { statusLabel } from '@/utils/displayLabels';
 defineProps<{
   card: KnowledgeCard;
   canManage: boolean;
+  canMaintain: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -80,8 +81,8 @@ const enforcementLabels: Record<string, string> = {
 
     <footer class="card-actions">
       <el-button link type="primary" @click="emit('view', card)">查看</el-button>
-      <el-button link @click="emit('edit', card)">编辑</el-button>
-      <el-button link @click="emit('history', card)">历史</el-button>
+      <el-button v-if="canMaintain" link @click="emit('edit', card)">编辑</el-button>
+      <el-button v-if="canMaintain" link @click="emit('history', card)">历史</el-button>
       <template v-if="canManage">
         <el-button v-if="card.reviewStatus !== 'APPROVED'" link type="primary" @click="emit('review', card, 'APPROVED')">通过评审</el-button>
         <el-button v-else link @click="emit('review', card, 'CHANGES_REQUESTED')">要求修改</el-button>

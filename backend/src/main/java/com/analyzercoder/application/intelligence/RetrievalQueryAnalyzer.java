@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 /** 从自然语言问题中提取检索意图、关键词和范围约束，为混合检索生成结构化条件。 */
 @Component
 public class RetrievalQueryAnalyzer {
-    private static final Pattern TERM = Pattern.compile("[\\p{L}\\p{N}_$.-]+");
+    private static final Pattern TERM = Pattern.compile("[\\p{IsHan}]+|[\\p{L}\\p{N}_$.\\-&&[^\\p{IsHan}]]+");
     private static final Pattern CJK = Pattern.compile("[\\p{IsHan}]{4,}");
     private static final Set<String> STOP_WORDS =
             Set.of(

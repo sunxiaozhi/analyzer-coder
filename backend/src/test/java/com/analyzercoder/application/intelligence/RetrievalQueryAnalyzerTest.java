@@ -23,4 +23,10 @@ class RetrievalQueryAnalyzerTest {
 
         assertTrue(query.terms().isEmpty());
     }
+    @Test
+    void extractsAnExplicitSymbolNextToChineseWithoutSpaces() {
+        var query = analyzer.analyze("OrderCheckoutWorkflow在哪里定义？");
+        assertTrue(query.terms().contains("ordercheckoutworkflow"));
+        assertFalse(query.terms().contains("ordercheckoutworkflow在哪里定义"));
+    }
 }

@@ -219,7 +219,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
       </article>
       <article data-accent="violet">
         <span><FileCode2 :size="17" />代码文件</span>
-        <strong>{{ codeFacts?.codeFileCount ?? 0 }}</strong>
+        <strong>{{ codeFacts?.codeFileCount ?? '—' }}</strong>
         <small>{{ categories.length }} 类 · {{ profile?.fileCount ?? 0 }} 个快照文件</small>
       </article>
     </section>
@@ -266,7 +266,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
               <small>{{ category.detail }}<template v-if="category.samples.length"> · {{ category.samples.slice(0, 2).join('、') }}</template></small>
             </article>
           </div>
-          <p v-else class="empty-copy">当前快照还没有可用的代码分类结果。</p>
+          <p v-else class="empty-copy">{{ codeFacts ? '当前快照没有可分类的代码文件。' : '代码统计未能加载，请刷新重试。' }}</p>
         </section>
 
         <section class="overview-section reviews-section" aria-labelledby="recent-reviews-title">

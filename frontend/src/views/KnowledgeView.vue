@@ -107,7 +107,8 @@ async function loadCards() {
 
 async function loadMarkdownSources() {
   const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId) {
+  if (!repositoryId || !canMaintain.value) {
+    activeMode.value = 'cards';
     markdownSources.value = null;
     sourceLoadError.value = null;
     return;
@@ -442,6 +443,7 @@ onMounted(() => void load());
           <button
             type="button"
             role="tab"
+            v-if="canMaintain"
             :aria-selected="activeMode === 'markdown'"
             :class="{ active: activeMode === 'markdown' }"
             @click="activeMode = 'markdown'"
@@ -491,7 +493,7 @@ onMounted(() => void load());
         </el-select>
         <span class="spacer" />
         <el-button
-          v-if="activeMode === 'cards'"
+          v-if="canMaintain && activeMode === 'cards'"
           type="primary"
           :icon="Plus"
           :disabled="!repositories.selectedRepositoryId || !canMaintain"
@@ -500,7 +502,7 @@ onMounted(() => void load());
           新建卡片
         </el-button>
         <el-button
-          v-else
+          v-else-if="canMaintain"
           type="primary"
           :loading="bulkGenerating"
           :disabled="!repositories.selectedRepositoryId
@@ -526,6 +528,7 @@ onMounted(() => void load());
             :key="card.id"
             :card="card"
             :can-manage="canManage"
+            :can-maintain="canMaintain"
             @view="openDetail"
             @edit="openEdit"
             @history="showHistory"
@@ -566,7 +569,7 @@ onMounted(() => void load());
       @open-drift="openDrift"
       @source-review="sourceReview"
     />
-    <KnowledgeCardEditorDialog v-if="repositories.selectedRepositoryId" v-model="dialog"
+    <KnowledgeCardEditorDialog v-if="canMaintain && repositories.selectedRepositoryId" v-model="dialog"
       :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy"
       @submit="save" @open-code="openCode" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
