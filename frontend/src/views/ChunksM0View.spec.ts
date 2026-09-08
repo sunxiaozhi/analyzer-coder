@@ -24,7 +24,16 @@ function file(path: string) {
   return { snapshotId: 's1', path, content: path, lineCount: 1, language: 'typescript', name: path, sizeBytes: 10 };
 }
 function mountCode() {
-  return shallowMount(ChunksM0View, { global: { stubs: { ElInput: true, ElButton: true, ElEmpty: true } } });
+  return shallowMount(ChunksM0View, {
+    global: {
+      stubs: {
+        ElInput: true,
+        ElButton: true,
+        ElEmpty: true,
+        ElDrawer: { template: '<aside class="drawer-stub"><slot /></aside>' },
+      },
+    },
+  });
 }
 describe('code browsing continuity', () => {
   beforeEach(() => {
@@ -93,6 +102,18 @@ describe('code browsing continuity', () => {
     await flushPromises();
     wrapper.findComponent(CodeEvidencePanel).vm.$emit('openReview', 'review-42');
     expect(api.push).toHaveBeenCalledWith({ name: 'change-impact', query: { reviewId: 'review-42' } });
+    wrapper.unmount();
+  });
+
+  it('opens file evidence in a drawer without shrinking the source grid', async () => {
+    route.query = { path: 'a.ts', symbol: 'caller', relation: '1' };
+    const wrapper = mountCode();
+    await flushPromises();
+
+    expect(wrapper.findComponent(CodeEvidencePanel).exists()).toBe(true);
+    expect(wrapper.find('.drawer-stub').exists()).toBe(true);
+    expect(wrapper.find('.workbench-grid').classes()).not.toContain('side-open');
+    expect(wrapper.find('.workbench-grid').classes()).not.toContain('evidence-open');
     wrapper.unmount();
   });
 });

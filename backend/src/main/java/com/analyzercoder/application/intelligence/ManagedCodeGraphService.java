@@ -127,7 +127,6 @@ public class ManagedCodeGraphService extends CodeGraphService {
         Path project = Path.of(artifact.artifactPath()).getParent();
         int boundedDepth = Math.max(1, Math.min(depth, MAX_IMPACT_DEPTH));
         String impactOutput;
-        String exportOutput;
         try {
             impactOutput =
                     run(
@@ -144,16 +143,13 @@ public class ManagedCodeGraphService extends CodeGraphService {
             throw new CodeGraphException(
                     "CODEGRAPH_IMPACT_QUERY_FAILED", "CodeGraph impact 查询失败", exception);
         }
-        try {
-            exportOutput = run(List.of("export", project.toString(), "--no-centrality"), 120);
-        } catch (IllegalStateException exception) {
-            throw new CodeGraphException(
-                    "CODEGRAPH_EXPORT_NOT_AVAILABLE",
-                    "当前 CodeGraph CLI 无法提供真实边导出，已拒绝拼接关系",
-                    exception);
-        }
-        return CodeGraphPropagation.fromCli(
-                json, impactOutput, exportOutput, symbol, boundedDepth, artifact);
+        return CodeGraphPropagation.fromDatabase(
+                json,
+                impactOutput,
+                CodeGraphDatabaseReader.read(json, Path.of(artifact.artifactPath())),
+                symbol,
+                boundedDepth,
+                artifact);
     }
 
     @Override
@@ -246,9 +242,10 @@ public class ManagedCodeGraphService extends CodeGraphService {
             }
             reader.join(5000);
 
-            String output = buffer.toString(StandardCharsets.UTF_8);
+            String output = CodeGraphProcessOutput.decode(buffer.toByteArray());
             if (process.exitValue() != 0) {
-                throw new IllegalStateException("CodeGraph 执行失败: " + truncate(output));
+                throw new IllegalStateException(
+                        CodeGraphProcessOutput.failureMessage(truncate(output)));
             }
             return output;
         } catch (IOException exception) {

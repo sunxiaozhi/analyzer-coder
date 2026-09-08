@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
+import java.sql.DriverManager;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -86,7 +87,7 @@ class ManagedCodeGraphCliContractTest {
     }
 
     @Test
-    void combinesImpactAndExportContractsWithoutInventingStarEdges() throws Exception {
+    void combinesImpactAndPublishedDatabaseWithoutInventingStarEdges() throws Exception {
         Path executable = temporaryDirectory.resolve("fake-codegraph-query");
         Files.writeString(
                 executable,
@@ -95,10 +96,6 @@ class ManagedCodeGraphCliContractTest {
                 set -eu
                 if [ "$1" = "impact" ]; then
                   printf '%s\n' '{"symbol":"charge","depth":3,"nodeCount":3,"edgeCount":2,"affected":[{"name":"Service","filePath":"src/Service.java","startLine":10},{"name":"Controller","filePath":"src/Controller.java","startLine":20}]}'
-                  exit 0
-                fi
-                if [ "$1" = "export" ]; then
-                  printf '%s\n' '{"nodes":[{"id":"focus","label":"charge","kind":"method","source_file":"src/Gateway.java","start_line":4},{"id":"service","label":"Service","kind":"class","source_file":"src/Service.java","start_line":10},{"id":"controller","label":"Controller","kind":"class","source_file":"src/Controller.java","start_line":20}],"edges":[{"source":"service","target":"focus","relation":"calls","line":14},{"source":"controller","target":"service","relation":"references","line":28}]}'
                   exit 0
                 fi
                 echo "unexpected arguments: $*" >&2
@@ -123,6 +120,39 @@ class ManagedCodeGraphCliContractTest {
                         .resolve(artifactId.toString())
                         .resolve("project/.codegraph");
         Files.createDirectories(marker);
+        try (var connection =
+                DriverManager.getConnection("jdbc:sqlite:" + marker.resolve("codegraph.db"))) {
+            try (var statement = connection.createStatement()) {
+                statement.execute(
+                        """
+                        CREATE TABLE nodes (
+                          id TEXT PRIMARY KEY, name TEXT NOT NULL, qualified_name TEXT NOT NULL,
+                          kind TEXT NOT NULL, file_path TEXT NOT NULL,
+                          start_line INTEGER NOT NULL, end_line INTEGER NOT NULL
+                        )
+                        """);
+                statement.execute(
+                        """
+                        CREATE TABLE edges (
+                          id INTEGER PRIMARY KEY, source TEXT NOT NULL, target TEXT NOT NULL,
+                          kind TEXT NOT NULL, line INTEGER
+                        )
+                        """);
+                statement.execute(
+                        """
+                        INSERT INTO nodes VALUES
+                          ('focus','charge','charge','method','src/Gateway.java',4,8),
+                          ('service','Service','Service','class','src/Service.java',10,18),
+                          ('controller','Controller','Controller','class','src/Controller.java',20,32)
+                        """);
+                statement.execute(
+                        """
+                        INSERT INTO edges VALUES
+                          (1,'service','focus','calls',14),
+                          (2,'controller','service','references',28)
+                        """);
+            }
+        }
         CodeGraphArtifactMapper mapper = mock(CodeGraphArtifactMapper.class);
         when(mapper.findRepositoryVersion(repositoryId))
                 .thenReturn(

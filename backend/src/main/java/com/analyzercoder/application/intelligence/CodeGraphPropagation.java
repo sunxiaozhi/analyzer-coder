@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** 由同一 CodeGraph 产物的 impact 与 export 输出重建真实传播边和完整最短路径。 */
+/** 由同一 CodeGraph 产物的 impact 输出与真实节点/边快照重建完整最短路径。 */
 public record CodeGraphPropagation(
         List<Node> nodes,
         List<Edge> edges,
@@ -47,7 +47,34 @@ public record CodeGraphPropagation(
         try {
             JsonNode impact = json.readTree(impactOutput);
             JsonNode exported = json.readTree(exportOutput);
-            return assemble(impact, exported, requestedSymbol, requestedDepth, artifact);
+            return assemble(
+                    impact,
+                    exported,
+                    requestedSymbol,
+                    requestedDepth,
+                    artifact,
+                    "CODEGRAPH_CLI");
+        } catch (IOException exception) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_CLI_OUTPUT_INVALID", "CodeGraph 返回了无法解析的 JSON", exception);
+        }
+    }
+
+    public static CodeGraphPropagation fromDatabase(
+            ObjectMapper json,
+            String impactOutput,
+            JsonNode graph,
+            String requestedSymbol,
+            int requestedDepth,
+            CodeGraphService.Artifact artifact) {
+        try {
+            return assemble(
+                    json.readTree(impactOutput),
+                    graph,
+                    requestedSymbol,
+                    requestedDepth,
+                    artifact,
+                    "CODEGRAPH_SQLITE");
         } catch (IOException exception) {
             throw new CodeGraphException(
                     "CODEGRAPH_CLI_OUTPUT_INVALID", "CodeGraph 返回了无法解析的 JSON", exception);
@@ -59,7 +86,8 @@ public record CodeGraphPropagation(
             JsonNode exported,
             String requestedSymbol,
             int requestedDepth,
-            CodeGraphService.Artifact artifact) {
+            CodeGraphService.Artifact artifact,
+            String relationSource) {
         if (!impact.isObject() || !impact.path("affected").isArray()) {
             throw new CodeGraphException(
                     "CODEGRAPH_IMPACT_SCHEMA_UNSUPPORTED",
@@ -186,7 +214,7 @@ public record CodeGraphPropagation(
                 nodes,
                 edges,
                 paths,
-                "CODEGRAPH_CLI",
+                relationSource,
                 artifact.id(),
                 artifact.snapshotId(),
                 artifact.cliVersion(),

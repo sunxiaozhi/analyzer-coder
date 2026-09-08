@@ -70,20 +70,21 @@ public class CodeGraphService {
     public CodeGraphPropagation impact(UUID repoId, String symbol, int depth) {
         RepoVersion repo = version(repoId);
         Artifact artifact = artifact(mapper.findPublished(repoId, repo.snapshotId()));
-        if (artifact == null || !Files.isDirectory(repo.path().resolve(".codegraph"))) {
+        if (artifact == null || !Files.isDirectory(Path.of(artifact.artifactPath()))) {
             throw new CodeGraphException(
                     "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 Snapshot 尚未发布 CodeGraph 产物");
         }
+        Path marker = Path.of(artifact.artifactPath()).toAbsolutePath().normalize();
+        Path project = marker.getParent();
         int boundedDepth = Math.max(1, Math.min(depth, 5));
         String impactOutput;
-        String exportOutput;
         try {
             impactOutput =
                     run(
                             List.of(
                                     "impact",
                                     "-p",
-                                    repo.path().toString(),
+                                    project.toString(),
                                     "-d",
                                     String.valueOf(boundedDepth),
                                     "-j",
@@ -93,19 +94,13 @@ public class CodeGraphService {
             throw new CodeGraphException(
                     "CODEGRAPH_IMPACT_QUERY_FAILED", "CodeGraph impact 查询失败", exception);
         }
-        try {
-            exportOutput =
-                    run(
-                            List.of("export", repo.path().toString(), "--no-centrality"),
-                            Duration.ofMinutes(2));
-        } catch (IllegalStateException exception) {
-            throw new CodeGraphException(
-                    "CODEGRAPH_EXPORT_NOT_AVAILABLE",
-                    "当前 CodeGraph CLI 无法提供真实边导出，已拒绝拼接关系",
-                    exception);
-        }
-        return CodeGraphPropagation.fromCli(
-                json, impactOutput, exportOutput, symbol, boundedDepth, artifact);
+        return CodeGraphPropagation.fromDatabase(
+                json,
+                impactOutput,
+                CodeGraphDatabaseReader.read(json, marker),
+                symbol,
+                boundedDepth,
+                artifact);
     }
 
     public Artifact latest(UUID repoId) {
@@ -154,13 +149,11 @@ public class CodeGraphService {
                 process.destroyForcibly();
                 throw new IllegalStateException("CodeGraph 执行超时");
             }
-            String output =
-                    new String(
-                            process.getInputStream().readAllBytes(),
-                            java.nio.charset.StandardCharsets.UTF_8);
+            String output = CodeGraphProcessOutput.decode(process.getInputStream().readAllBytes());
             if (process.exitValue() != 0) {
                 throw new IllegalStateException(
-                        "CodeGraph 执行失败: " + output.substring(0, Math.min(1000, output.length())));
+                        CodeGraphProcessOutput.failureMessage(
+                                output.substring(0, Math.min(1000, output.length()))));
             }
             return output;
         } catch (IOException e) {

@@ -101,6 +101,11 @@ export interface CodeEvidenceKnowledgeReference {
     stale: boolean;
     currentSnapshot: boolean;
   }[];
+  applicability: {
+    kind: 'DIRECT_BINDING' | 'PATH_SCOPE' | 'SYMBOL_SCOPE' | 'REPOSITORY_SCOPE' | string;
+    rule: string;
+    detail: string;
+  }[];
 }
 
 export interface CodeEvidenceReviewReference {
@@ -198,7 +203,7 @@ export interface GraphResult {
     sourceLine: number | null;
   }[];
   paths: { targetNodeId: string; nodeIds: string[]; edgeIds: string[]; depth: number }[];
-  relationSource: 'CODEGRAPH_CLI';
+  relationSource: 'CODEGRAPH_SQLITE' | 'CODEGRAPH_CLI';
   graphArtifactId: string;
   snapshotId: string;
   cliVersion: string;

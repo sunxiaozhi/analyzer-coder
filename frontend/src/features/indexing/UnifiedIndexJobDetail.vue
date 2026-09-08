@@ -9,6 +9,16 @@ const emit = defineEmits<{ cancel: [taskId: string]; retry: [taskId: string] }>(
 
 const canCancel = computed(() => props.job?.status === 'QUEUED' || props.job?.status === 'RUNNING');
 const canRetry = computed(() => props.job?.status === 'FAILED');
+const errorMessage = computed(() => {
+  const message = props.job?.errorMessage;
+  if (!message) return null;
+  if (props.job?.type === 'CODEGRAPH'
+      && props.job.failureCode === 'CODEGRAPH_BUILD_FAILED'
+      && message.includes('\uFFFD')) {
+    return '未找到 CodeGraph CLI，请安装并配置 app.codegraph.executable。';
+  }
+  return message;
+});
 
 function repositoryName(repositoryId: string) {
   return props.repositories.find((item) => item.id === repositoryId)?.name ?? repositoryId;
@@ -44,19 +54,19 @@ function fallbackLabel(reason: string | null) {
     <template v-if="job">
       <div class="section-head"><h2>任务详情</h2><TaskStatusTag :status="job.status" /></div>
       <dl class="meta-grid">
-        <div><dt>任务编号</dt><dd class="mono">{{ job.id }}</dd></div>
+        <div class="meta-wide"><dt>任务编号</dt><dd class="mono">{{ job.id }}</dd></div>
         <div><dt>仓库</dt><dd>{{ repositoryName(job.repositoryId) }}</dd></div>
         <div><dt>请求类型</dt><dd>{{ typeLabel(job.type) }}</dd></div>
         <div v-if="job.type === 'FULL' || job.type === 'INCREMENTAL'"><dt>实际模式</dt><dd>{{ modeLabel(job.executionMode) }}</dd></div>
         <div v-if="job.fallbackReason"><dt>回退原因</dt><dd>{{ fallbackLabel(job.fallbackReason) }}</dd></div>
-        <div><dt>阶段</dt><dd class="mono">{{ job.currentStep ?? '—' }}</dd></div>
+        <div class="meta-wide"><dt>阶段</dt><dd class="mono">{{ job.currentStep ?? '—' }}</dd></div>
         <div><dt>创建时间</dt><dd>{{ new Date(job.createdAt).toLocaleString() }}</dd></div>
         <div><dt>开始时间</dt><dd>{{ job.startedAt ? new Date(job.startedAt).toLocaleString() : '—' }}</dd></div>
         <div><dt>最近心跳</dt><dd>{{ job.heartbeatAt ? new Date(job.heartbeatAt).toLocaleString() : '—' }}</dd></div>
         <div><dt>超时截止</dt><dd>{{ job.timeoutAt ? new Date(job.timeoutAt).toLocaleString() : '—' }}</dd></div>
         <div><dt>结束时间</dt><dd>{{ job.finishedAt ? new Date(job.finishedAt).toLocaleString() : '—' }}</dd></div>
       </dl>
-      <el-alert v-if="job.errorMessage" :title="job.errorMessage" type="error" :closable="false" show-icon />
+      <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" show-icon />
       <el-alert
         v-else-if="job.status === 'CANCEL_REQUESTED'"
         title="取消请求已受理，任务将在下一个安全检查点停止。"
@@ -74,6 +84,25 @@ function fallbackLabel(reason: string | null) {
 </template>
 
 <style scoped>
+.meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.meta-grid > div {
+  min-width: 0;
+}
+
+.meta-grid .meta-wide {
+  grid-column: 1 / -1;
+}
+
+.meta-grid dd {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .terminal-note {
   margin: 12px 16px 0;
   color: var(--app-text-muted);

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.analyzercoder.application.intelligence.IntelligenceService;
+import com.analyzercoder.application.knowledge.RepositoryGlobMatcher;
 import com.analyzercoder.application.review.TaskReviewService;
 import com.analyzercoder.domain.knowledge.KnowledgeEnforcement;
 import com.analyzercoder.domain.knowledge.KnowledgeKind;
@@ -31,7 +32,8 @@ class CodeEvidenceContextServiceTest {
         IntelligenceService intelligence = mock(IntelligenceService.class);
         TaskReviewService reviews = mock(TaskReviewService.class);
         CodeEvidenceContextService service =
-                new CodeEvidenceContextService(repositories, intelligence, reviews);
+                new CodeEvidenceContextService(
+                        repositories, intelligence, reviews, new RepositoryGlobMatcher());
         CodeRepository repository = repository();
         UUID repositoryId = repository.id().value();
         String filePath = "src/refund/RefundService.java";
@@ -59,9 +61,43 @@ class CodeEvidenceContextServiceTest {
                                                 assertThat(binding.contentHash()).isEqualTo("hash");
                                             });
                         });
-        assertThat(result.limitations()).containsExactly("DIRECT_KNOWLEDGE_BINDINGS_ONLY");
+        assertThat(result.limitations())
+                .containsExactly("DETERMINISTIC_KNOWLEDGE_MATCHING_ONLY");
         assertThat(result.scannedReviewCount()).isEqualTo(3);
         verify(intelligence).cards(repositoryId, true);
+    }
+
+    @Test
+    void includesPathAndSymbolScopedKnowledgeWithoutPretendingItIsDirectlyBound() {
+        CodeRepositoryStore repositories = mock(CodeRepositoryStore.class);
+        IntelligenceService intelligence = mock(IntelligenceService.class);
+        TaskReviewService reviews = mock(TaskReviewService.class);
+        CodeEvidenceContextService service =
+                new CodeEvidenceContextService(
+                        repositories, intelligence, reviews, new RepositoryGlobMatcher());
+        CodeRepository repository = repository();
+        UUID repositoryId = repository.id().value();
+        String filePath = "src/refund/RefundService.java";
+        when(repositories.findById(repository.id())).thenReturn(Optional.of(repository));
+        IntelligenceService.KnowledgeCard scoped =
+                scopedCard(repository, List.of("src/refund/**"), List.of("approveRefund"));
+        when(intelligence.cards(repositoryId, false)).thenReturn(List.of(scoped));
+        when(reviews.references(repository.id(), filePath, 20))
+                .thenReturn(new TaskReviewService.ReviewReferenceResult(List.of(), 0, false));
+
+        CodeEvidenceContextService.CodeEvidenceContext result =
+                service.context(repository.id(), filePath, "approveRefund", false);
+
+        assertThat(result.knowledgeReferences())
+                .singleElement()
+                .satisfies(
+                        knowledge -> {
+                            assertThat(knowledge.bindings()).isEmpty();
+                            assertThat(knowledge.applicability())
+                                    .extracting(
+                                            CodeEvidenceContextService.ApplicabilityReason::kind)
+                                    .containsExactly("PATH_SCOPE", "SYMBOL_SCOPE");
+                        });
     }
 
     private static IntelligenceService.KnowledgeCard card(
@@ -105,6 +141,39 @@ class CodeEvidenceContextServiceTest {
                                 20,
                                 "hash",
                                 false)));
+    }
+
+    private static IntelligenceService.KnowledgeCard scopedCard(
+            CodeRepository repository, List<String> paths, List<String> symbols) {
+        Instant now = Instant.now();
+        return new IntelligenceService.KnowledgeCard(
+                UUID.randomUUID(),
+                repository.id().value(),
+                "退款范围规则",
+                "RULE",
+                "退款模块统一规则",
+                "退款模块统一规则",
+                List.of("refund"),
+                KnowledgeKind.BUSINESS_RULE,
+                KnowledgeSeverity.WARNING,
+                KnowledgeEnforcement.ADVISORY,
+                UUID.randomUUID(),
+                new KnowledgeScope(paths, symbols, List.of()),
+                KnowledgeObligations.empty(),
+                repository.currentSnapshotId().value(),
+                "verified",
+                "PUBLISHED",
+                1,
+                now,
+                now,
+                repository.currentCommit(),
+                "CURRENT",
+                now,
+                "APPROVED",
+                UUID.randomUUID(),
+                now,
+                List.of(),
+                List.of());
     }
 
     private static CodeRepository repository() {

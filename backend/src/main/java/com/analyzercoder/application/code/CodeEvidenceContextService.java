@@ -1,31 +1,36 @@
 package com.analyzercoder.application.code;
 
 import com.analyzercoder.application.intelligence.IntelligenceService;
+import com.analyzercoder.application.knowledge.RepositoryGlobMatcher;
 import com.analyzercoder.application.review.TaskReviewService;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
-/** 汇总当前文件的直接知识绑定和不可变审查引用，供代码工作台展示。 */
+/** 汇总当前文件的确定性知识匹配和不可变审查引用，供代码工作台展示。 */
 @Service
 public class CodeEvidenceContextService {
     private final CodeRepositoryStore repositories;
     private final IntelligenceService intelligence;
     private final TaskReviewService reviews;
+    private final RepositoryGlobMatcher globMatcher;
 
     public CodeEvidenceContextService(
             CodeRepositoryStore repositories,
             IntelligenceService intelligence,
-            TaskReviewService reviews) {
+            TaskReviewService reviews,
+            RepositoryGlobMatcher globMatcher) {
         this.repositories = repositories;
         this.intelligence = intelligence;
         this.reviews = reviews;
+        this.globMatcher = globMatcher;
     }
 
     public CodeEvidenceContext context(
@@ -41,7 +46,13 @@ public class CodeEvidenceContextService {
         String normalizedSymbol = symbol == null || symbol.isBlank() ? null : symbol.trim();
         List<KnowledgeReference> knowledge =
                 intelligence.cards(repositoryId.value(), includeDraftKnowledge).stream()
-                        .map(card -> knowledgeReference(repository, card, normalizedPath))
+                        .map(
+                                card ->
+                                        knowledgeReference(
+                                                repository,
+                                                card,
+                                                normalizedPath,
+                                                normalizedSymbol))
                         .filter(Objects::nonNull)
                         .sorted(
                                 Comparator.comparing(KnowledgeReference::trusted)
@@ -52,7 +63,7 @@ public class CodeEvidenceContextService {
                 reviews.references(repositoryId, normalizedPath, 20);
         List<String> limitations =
                 java.util.stream.Stream.of(
-                                "DIRECT_KNOWLEDGE_BINDINGS_ONLY",
+                                "DETERMINISTIC_KNOWLEDGE_MATCHING_ONLY",
                                 normalizedSymbol == null ? "SYMBOL_REQUIRED_FOR_CODEGRAPH" : null,
                                 reviewReferences.historyTruncated()
                                         ? "REVIEW_HISTORY_TRUNCATED"
@@ -74,10 +85,11 @@ public class CodeEvidenceContextService {
                 Instant.now());
     }
 
-    private static KnowledgeReference knowledgeReference(
+    private KnowledgeReference knowledgeReference(
             CodeRepository repository,
             IntelligenceService.KnowledgeCard card,
-            String filePath) {
+            String filePath,
+            String symbol) {
         List<CodeBinding> bindings =
                 card.codeReferences().stream()
                         .filter(reference -> filePath.equals(normalizeNullablePath(reference.filePath())))
@@ -97,7 +109,43 @@ public class CodeEvidenceContextService {
                                                                 .value()
                                                                 .equals(reference.snapshotId())))
                         .toList();
-        if (bindings.isEmpty()) {
+        LinkedHashSet<ApplicabilityReason> applicability = new LinkedHashSet<>();
+        if (!bindings.isEmpty()) {
+            applicability.add(
+                    new ApplicabilityReason(
+                            "DIRECT_BINDING", filePath, "知识修订直接绑定到该文件的代码片段"));
+        }
+        card.scope().pathPatterns().forEach(
+                rule -> {
+                    try {
+                        if (globMatcher.matches(rule, filePath)) {
+                            applicability.add(
+                                    new ApplicabilityReason(
+                                            "PATH_SCOPE", rule, "文件路径命中知识卡片的适用范围"));
+                        }
+                    } catch (IllegalArgumentException ignored) {
+                        // 无效的旧范围规则不能扩大适用结论；知识治理页负责修正该规则。
+                    }
+                });
+        if (symbol != null) {
+            card.scope().symbols().stream()
+                    .filter(symbol::equals)
+                    .forEach(
+                            rule ->
+                                    applicability.add(
+                                            new ApplicabilityReason(
+                                                    "SYMBOL_SCOPE",
+                                                    rule,
+                                                    "当前符号与知识卡片的适用符号精确一致")));
+        }
+        if (card.scope().repositoryIds().contains(repository.id().value())) {
+            applicability.add(
+                    new ApplicabilityReason(
+                            "REPOSITORY_SCOPE",
+                            repository.id().value().toString(),
+                            "当前仓库位于知识卡片的显式仓库范围内"));
+        }
+        if (applicability.isEmpty()) {
             return null;
         }
         boolean trusted =
@@ -117,7 +165,8 @@ public class CodeEvidenceContextService {
                 card.reviewStatus(),
                 card.sourceVersionStatus(),
                 trusted,
-                bindings);
+                bindings,
+                List.copyOf(applicability));
     }
 
     private static String normalizeFilePath(String filePath) {
@@ -170,11 +219,15 @@ public class CodeEvidenceContextService {
             String reviewStatus,
             String sourceVersionStatus,
             boolean trusted,
-            List<CodeBinding> bindings) {
+            List<CodeBinding> bindings,
+            List<ApplicabilityReason> applicability) {
         public KnowledgeReference {
             bindings = bindings == null ? List.of() : List.copyOf(bindings);
+            applicability = applicability == null ? List.of() : List.copyOf(applicability);
         }
     }
+
+    public record ApplicabilityReason(String kind, String rule, String detail) {}
 
     public record CodeBinding(
             UUID chunkId,

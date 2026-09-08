@@ -47,12 +47,18 @@ const sourceBusyPath = shallowRef<string | null>(null);
 const bulkGenerating = shallowRef(false);
 const sourceLoadError = shallowRef<string | null>(null);
 const editing = shallowRef<KnowledgeCard | null>(null);
+const initialReference = shallowRef<{
+  filePath: string;
+  symbolName: string | null;
+  snapshotId: string | null;
+} | null>(null);
 const viewing = shallowRef<KnowledgeCard | null>(null);
 const driftEvent = shallowRef<KnowledgeDriftEvent | null>(null);
 const driftLoading = shallowRef(false);
 const sourceReviewLoading = shallowRef(false);
 const historyCard = shallowRef<KnowledgeCard | null>(null);
 const revisions = shallowRef<CardRevision[]>([]);
+let handledCreateRequest = '';
 const emptySourceCounts = { total: 0, pending: 0, current: 0, stale: 0 };
 const canMaintain = computed(() => repositories.selectedRepository?.capabilities.canUpdate ?? false);
 const canManage = computed(() => repositories.selectedRepository?.capabilities.canConfigure ?? false);
@@ -97,6 +103,7 @@ async function loadCards() {
   try {
     cards.value = await intelligenceApi.cards(repositoryId);
     syncRequestedCard();
+    syncRequestedCreate();
   } catch (error) {
     cards.value = [];
     ElMessage.error(error instanceof Error ? error.message : '知识卡片加载失败');
@@ -141,8 +148,21 @@ function syncRequestedCard() {
   detailDialog.value = true;
   void loadDrift(card);
 }
-function openCreate() { editing.value = null; dialog.value = true; }
-function openEdit(card: KnowledgeCard) { editing.value = card; dialog.value = true; }
+function openCreate() { initialReference.value = null; editing.value = null; dialog.value = true; }
+function openEdit(card: KnowledgeCard) { initialReference.value = null; editing.value = card; dialog.value = true; }
+function syncRequestedCreate() {
+  const path = typeof route.query.path === 'string' ? route.query.path : null;
+  if (route.query.create !== '1' || !path || !canMaintain.value) return;
+  const requestedSnapshot = typeof route.query.snapshotId === 'string' ? route.query.snapshotId : null;
+  const requestedSymbol = typeof route.query.symbol === 'string' ? route.query.symbol : null;
+  const requestKey = `${repositories.selectedRepositoryId}:${path}:${requestedSnapshot}:${requestedSymbol}`;
+  if (handledCreateRequest === requestKey) return;
+  handledCreateRequest = requestKey;
+  activeMode.value = 'cards';
+  initialReference.value = { filePath: path, symbolName: requestedSymbol, snapshotId: requestedSnapshot };
+  editing.value = null;
+  dialog.value = true;
+}
 function openDetail(card: KnowledgeCard) {
   viewing.value = card;
   detailDialog.value = true;
@@ -409,6 +429,7 @@ async function restore(revision: number) {
   ElMessage.success('历史内容及附件已恢复为新草稿');
 }
 watch(() => repositories.selectedRepositoryId, () => {
+  handledCreateRequest = '';
   selectedType.value = allCardTypes;
   selectedSourceStatus.value = allSourceStatuses;
   cardQuery.value = '';
@@ -419,6 +440,10 @@ watch(() => repositories.selectedRepositoryId, () => {
   void load();
 });
 watch(() => route.query.cardId, syncRequestedCard);
+watch(
+  () => [route.query.create, route.query.path, route.query.snapshotId, route.query.symbol] as const,
+  syncRequestedCreate,
+);
 onMounted(() => void load());
 </script>
 
@@ -573,6 +598,7 @@ onMounted(() => void load());
     />
     <KnowledgeCardEditorDialog v-if="canMaintain && repositories.selectedRepositoryId" v-model="dialog"
       :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy"
+      :initial-reference="initialReference"
       @submit="save" @open-code="openCode" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">

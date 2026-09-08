@@ -13,6 +13,7 @@ import {
   type KnowledgeSeverity,
 } from '@/api/intelligence';
 import { engineeringProjectsApi, type EngineeringProject } from '@/api/engineeringProjects';
+import { listChunks } from '@/api/repositories';
 import { repositoryGovernanceApi, type RepositoryMember } from '@/api/repositoryGovernance';
 import { useAuthStore } from '@/stores/authStore';
 import KnowledgeAccountSelect from './KnowledgeAccountSelect.vue';
@@ -25,6 +26,11 @@ const props = defineProps<{
   repositoryId: string;
   card: KnowledgeCard | null;
   busy: boolean;
+  initialReference?: {
+    filePath: string;
+    symbolName: string | null;
+    snapshotId: string | null;
+  } | null;
 }>();
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
@@ -46,6 +52,7 @@ const members = shallowRef<RepositoryMember[]>([]);
 const membersLoading = shallowRef(false);
 const engineeringProjects = shallowRef<EngineeringProject[]>([]);
 const topologyLoading = shallowRef(false);
+let referencePrimeVersion = 0;
 
 const kindOptions: { value: KnowledgeKind; label: string }[] = [
   { value: 'REFERENCE', label: '参考资料' },
@@ -124,8 +131,51 @@ watch(() => [props.modelValue, props.card] as const, () => {
   engineeringText.instructions = form.obligations.instructions.join('\n');
   engineeringText.prohibitedPaths = form.obligations.prohibitedPathPatterns.join('\n');
   expanded.value = props.card && props.card.enforcement !== 'REFERENCE' ? ['engineering'] : [];
+  const primeVersion = ++referencePrimeVersion;
+  if (!props.card && props.initialReference) void primeInitialReference(props.initialReference, primeVersion);
   void Promise.all([loadMembers(), loadTopology()]);
 }, { immediate: true });
+
+async function primeInitialReference(
+  target: NonNullable<typeof props.initialReference>,
+  version: number,
+) {
+  engineeringText.paths = target.filePath;
+  engineeringText.symbols = target.symbolName ?? '';
+  expanded.value = ['engineering'];
+  try {
+    const response = await listChunks(props.repositoryId, {
+      q: target.symbolName || target.filePath,
+      limit: 20,
+    });
+    if (version !== referencePrimeVersion || !props.modelValue || props.card) return;
+    const candidates = response.chunks.filter(chunk => chunk.filePath === target.filePath
+      && (!target.snapshotId || chunk.snapshotId === target.snapshotId));
+    const selected = candidates.find(chunk => target.symbolName && chunk.symbolName === target.symbolName)
+      ?? candidates.find(chunk => chunk.chunkType === 'FILE')
+      ?? candidates[0];
+    if (!selected) {
+      ElMessage.warning('已预填文件适用范围，但内容索引中没有可直接绑定的代码片段');
+      return;
+    }
+    codeReferences.value = [{
+      repositoryId: props.repositoryId,
+      chunkId: selected.id,
+      snapshotId: selected.snapshotId,
+      filePath: selected.filePath,
+      symbolName: selected.symbolName,
+      startLine: selected.startLine,
+      endLine: selected.endLine,
+      contentHash: selected.contentHash,
+      stale: false,
+    }];
+    ElMessage.success(`已关联 ${selected.symbolName || selected.filePath}`);
+  } catch (error) {
+    if (version === referencePrimeVersion) {
+      ElMessage.warning(error instanceof Error ? error.message : '代码引用预绑定失败，请在证据区域手动选择');
+    }
+  }
+}
 
 watch(() => form.enforcement, enforcement => {
   if (enforcement !== 'REFERENCE' && !expanded.value.includes('engineering')) {

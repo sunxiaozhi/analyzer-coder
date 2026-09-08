@@ -18,7 +18,7 @@ import {
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import type { RepositoryFileContent, RepositorySnapshotFiles } from '@/types/api';
 
-type MobilePane = 'tree' | 'code' | 'results' | 'context';
+type MobilePane = 'tree' | 'code' | 'results';
 type RightPane = 'results' | 'context' | null;
 
 const repositories = useRepositoryStore();
@@ -78,6 +78,13 @@ const resultSummary = computed(() => {
   if (!searchPerformed.value) return '输入关键词检索当前代码快照';
   if (staleHits.value) return `当前快照 ${hits.value.length} 条，忽略旧快照 ${staleHits.value} 条`;
   return `当前快照命中 ${totalHits.value} 个代码片段`;
+});
+const evidenceDrawerOpen = computed({
+  get: () => rightPane.value === 'context',
+  set: (open: boolean) => {
+    if (open) rightPane.value = 'context';
+    else if (rightPane.value === 'context') rightPane.value = null;
+  },
 });
 
 async function loadSnapshot(repositoryId: string | null) {
@@ -283,6 +290,30 @@ function openKnowledge(knowledgeId: string) {
   void router.push({ name: 'knowledge', query: { cardId: knowledgeId } });
 }
 
+function createKnowledgeForFile() {
+  if (!selectedPath.value) return;
+  void router.push({
+    name: 'knowledge',
+    query: {
+      create: '1',
+      path: selectedPath.value,
+      snapshotId: snapshot.value?.snapshotId,
+      symbol: selectedSymbol.value ?? undefined,
+    },
+  });
+}
+
+function startReviewForFile() {
+  if (!selectedPath.value) return;
+  const target = selectedSymbol.value
+    ? `${selectedPath.value} 中的 ${selectedSymbol.value}`
+    : selectedPath.value;
+  void router.push({
+    name: 'change-impact',
+    query: { source: 'WORKTREE', task: `审查 ${target} 的真实代码变更及关联工程知识` },
+  });
+}
+
 watch(
   () => [route.query.path, route.query.startLine, route.query.endLine, route.query.q, route.query.symbol, route.query.relation, route.query.analyze, route.query.snapshotId] as const,
   ([path, startLine, endLine, routeQuery, routeSymbol]) => {
@@ -359,7 +390,7 @@ watch(
           :type="rightPane === 'context' ? 'primary' : 'default'"
           @click="rightPane = rightPane === 'context' ? null : 'context'"
         >
-          文件证据
+          文件关联证据
         </el-button>
       </div>
       <div v-if="retrieval" class="retrieval-diagnostics" :data-degraded="retrieval.degraded">
@@ -379,9 +410,9 @@ watch(
           结果 {{ hits.length }}
         </button>
         <button
-          :class="{ active: mobilePane === 'context' }"
+          :class="{ active: rightPane === 'context' }"
           :disabled="!selectedPath"
-          @click="mobilePane = 'context'; rightPane = 'context'"
+          @click="rightPane = rightPane === 'context' ? null : 'context'"
         >
           证据
         </button>
@@ -390,7 +421,10 @@ watch(
 
     <div
       class="workbench-grid"
-      :class="{ 'side-open': rightPane }"
+      :class="{
+        'side-open': rightPane === 'results',
+        'results-open': rightPane === 'results',
+      }"
       :data-mobile-pane="mobilePane"
     >
       <RepositoryFileTree
@@ -443,20 +477,36 @@ watch(
         </div>
       </aside>
 
+    </div>
+
+    <el-drawer
+      v-model="evidenceDrawerOpen"
+      class="file-evidence-drawer"
+      direction="rtl"
+      size="860px"
+      :with-header="false"
+      :modal="false"
+      :lock-scroll="false"
+      :destroy-on-close="false"
+    >
       <CodeEvidencePanel
-        v-else-if="rightPane === 'context'"
-        class="workbench-context"
+        class="drawer-context"
         :repository-id="repositories.selectedRepositoryId"
         :file-path="selectedPath"
         :initial-symbol="selectedSymbol"
         :can-build-graph="repository?.capabilities.canBuildCodeGraph ?? false"
         :snapshot-id="snapshot?.snapshotId ?? null"
+        :initial-depth="routeNumber(route.query.depth) ?? 3"
         :auto-analyze="route.query.relation === '1' || route.query.analyze === '1'"
+        :can-maintain-knowledge="repository?.capabilities.canUpdate ?? false"
+        @close="evidenceDrawerOpen = false"
         @open-file="openFile"
         @open-knowledge="openKnowledge"
         @open-review="reviewId => router.push({ name: 'change-impact', query: { reviewId } })"
+        @create-knowledge="createKnowledgeForFile"
+        @start-review="startReviewForFile"
       />
-    </div>
+    </el-drawer>
     </template>
   </section>
 </template>
@@ -575,8 +625,8 @@ watch(
   overflow: hidden;
 }
 
-.workbench-grid.side-open {
-  grid-template-columns: 250px minmax(360px, 1fr) 310px;
+.workbench-grid.results-open {
+  grid-template-columns: 250px minmax(360px, 1fr) 340px;
 }
 
 .workbench-preview {
@@ -595,8 +645,23 @@ watch(
   border-radius: 0 0 7px 0;
 }
 
-.workbench-context {
-  border-radius: 0 0 7px 0;
+.drawer-context {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+:global(.file-evidence-drawer.el-drawer) {
+  max-width: calc(100vw - 24px);
+  border-left: 1px solid #cfd9df;
+  box-shadow: -14px 0 36px rgb(28 48 64 / 16%);
+}
+
+:global(.file-evidence-drawer .el-drawer__body) {
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .results-head {
@@ -718,6 +783,7 @@ watch(
   .workbench-grid.side-open {
     grid-template-columns: 220px minmax(330px, 1fr) 270px;
   }
+
 }
 
 @media (max-width: 900px) {
@@ -801,8 +867,7 @@ watch(
 
   .workbench-grid[data-mobile-pane="tree"] > .workbench-tree,
   .workbench-grid[data-mobile-pane="code"] > .workbench-preview,
-  .workbench-grid[data-mobile-pane="results"] > .workbench-results,
-  .workbench-grid[data-mobile-pane="context"] > .workbench-context {
+  .workbench-grid[data-mobile-pane="results"] > .workbench-results {
     display: grid;
   }
 }
