@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.AccessTokenMapper">
+  <resultMap id="token" type="com.analyzercoder.infrastructure.persistence.model.AccessTokenRow">
+    <constructor>
+      <idArg column="id" javaType="java.util.UUID"/>
+      <arg column="account_id" javaType="java.util.UUID"/>
+      <arg column="name" javaType="string"/>
+      <arg column="token_hash" javaType="string"/>
+      <arg column="token_prefix" javaType="string"/>
+      <arg column="created_at" javaType="java.time.Instant"/>
+      <arg column="expires_at" javaType="java.time.Instant"/>
+      <arg column="last_used_at" javaType="java.time.Instant"/>
+      <arg column="revoked_at" javaType="java.time.Instant"/>
+    </constructor>
+  </resultMap>
+  <insert id="insert">
+    INSERT INTO account_access_tokens (id, account_id, name, token_hash, token_prefix, created_at, expires_at)
+    VALUES (#{id}, #{accountId}, #{name}, #{tokenHash}, #{tokenPrefix}, #{createdAt}, #{expiresAt})
+  </insert>
+  <select id="findByHash" resultMap="token">
+    SELECT * FROM account_access_tokens WHERE token_hash = #{hash}
+  </select>
+  <select id="list" resultMap="token">
+    SELECT * FROM account_access_tokens WHERE account_id = #{accountId} ORDER BY created_at DESC, id
+  </select>
+  <update id="revoke">
+    UPDATE account_access_tokens SET revoked_at = COALESCE(revoked_at, #{now})
+    WHERE id = #{id} AND account_id = #{accountId}
+  </update>
+  <update id="touch">
+    UPDATE account_access_tokens SET last_used_at = #{now}
+    WHERE id = #{id} AND revoked_at IS NULL AND expires_at > #{now}
+  </update>
+</mapper>

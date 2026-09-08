@@ -13,6 +13,8 @@ import org.apache.ibatis.annotations.Param;
 /** 定义当前模块数据访问操作的 MyBatis 映射接口，集中维护持久化层查询边界。 */
 @Mapper
 public interface AuthMapper {
+    void revokeAccountAccessTokens(@Param("accountId") UUID accountId);
+
     /**
      * 统计系统中的账户总数。
      *

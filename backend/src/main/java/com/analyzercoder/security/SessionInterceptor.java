@@ -43,6 +43,8 @@ public class SessionInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(
             HttpServletRequest request, HttpServletResponse response, Object handler) {
+        if (request.getAttribute(SecurityContext.TOKEN_ACCOUNT_ATTRIBUTE)
+                instanceof AuthenticatedAccount) return true;
         String path = request.getRequestURI();
         if (publicPath(path)) {
             return true;

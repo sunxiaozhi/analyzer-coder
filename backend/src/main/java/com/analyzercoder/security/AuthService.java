@@ -258,6 +258,7 @@ public class AuthService {
         passwordHasher.validate(account.username(), newPassword);
         mapper.changePassword(account.id(), passwordHasher.hash(newPassword), Instant.now());
         mapper.deleteAccountSessions(account.id());
+        mapper.revokeAccountAccessTokens(account.id());
         audit(account.id(), account.id(), null, "PASSWORD_CHANGED", "SUCCESS", sourceIp);
         return issueSession(findById(account.id()).orElseThrow());
     }
@@ -357,6 +358,7 @@ public class AuthService {
         }
         if (!nextEnabled || nextRole != current.role()) {
             mapper.deleteAccountSessions(targetId);
+            mapper.revokeAccountAccessTokens(targetId);
         }
         String event =
                 !nextEnabled
@@ -384,6 +386,7 @@ public class AuthService {
                 now.plus(Duration.ofHours(24)),
                 now);
         mapper.deleteAccountSessions(targetId);
+        mapper.revokeAccountAccessTokens(targetId);
         audit(actorId, targetId, null, "PASSWORD_RESET", "SUCCESS", sourceIp);
         return temporaryPassword;
     }

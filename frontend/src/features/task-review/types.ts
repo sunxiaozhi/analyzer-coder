@@ -10,6 +10,11 @@ export interface ReviewEvidenceSelection {
   status: string;
   description: string;
   filePath?: string | null;
+  repositoryId?: string | null;
+  snapshotId?: string | null;
+  commitSha?: string | null;
+  worktreeDigest?: string | null;
+  side?: 'OLD' | 'NEW';
   startLine?: number | null;
   endLine?: number | null;
   knowledgeId?: string | null;

@@ -72,3 +72,16 @@ test('requires environment-provided credentials for stdio authentication', () =>
     /ANALYZER_SESSION_TOKEN/,
   );
 });
+
+
+test('uses account access token without browser cookie or CSRF', async () => {
+  let headers;
+  const client = new AnalyzerApiClient({ baseUrl: 'https://example.test', accessToken: 'acp-test', fetchImpl: async (_url, init) => {
+    headers = init.headers;
+    return new Response('{}', { status: 200 });
+  } });
+  await client.request('/api/repositories/repository/task-context', { method: 'POST', body: '{}' });
+  assert.equal(headers.get('Authorization'), 'Bearer acp-test');
+  assert.equal(headers.has('Cookie'), false);
+  assert.equal(headers.has('X-CSRF-Token'), false);
+});

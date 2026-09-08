@@ -22,7 +22,7 @@ watch(() => [props.modelValue, props.account] as const, () => {
 <template>
   <el-dialog :model-value="modelValue" title="编辑账号" width="480"
              @update:model-value="emit('update:modelValue', $event)">
-    <el-alert title="账号名、状态和密码由独立操作维护，此处只修改资料与角色。" type="info"
+    <el-alert title="账号名、状态和密码由独立操作维护，此处只修改资料与角色。变更角色会撤销该账户的现有会话和访问令牌。" type="info"
               :closable="false" show-icon />
     <el-form label-position="top" class="edit-form">
       <el-form-item label="登录账号"><el-input :model-value="account?.username" disabled /></el-form-item>

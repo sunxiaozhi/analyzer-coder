@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, shallowRef, watch } from 'vue';
+import { computed, onScopeDispose, reactive, shallowRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   AlertTriangle,
@@ -62,15 +62,17 @@ const parserLabel = computed(() => {
   if (!analysis.value) return '';
   return analysis.value.intent.parserMode === 'MODEL'
     ? `模型解析 · ${analysis.value.intent.provider ?? '已配置模型'}`
-    : '规则解析 · 已自动降级';
+    : '规则解析';
 });
 
 let modelContextVersion = 0;
+let analysisVersion = 0;
 
 async function loadModels(repositoryId: string | null) {
   const version = ++modelContextVersion;
   askModels.value = [];
   selectedModelId.value = null;
+  modelsLoading.value = false;
   if (!repositoryId) return;
   modelsLoading.value = true;
   try {
@@ -109,23 +111,29 @@ async function analyze() {
     ElMessage.warning('请描述要修改的行为或问题');
     return;
   }
+  const version = ++analysisVersion;
+  const modelId = selectedModelId.value;
   loading.value = true;
   try {
-    analysis.value = await createChangeAnalysis(repositoryId, taskValue.value, selectedModelId.value);
+    const result = await createChangeAnalysis(repositoryId, taskValue.value, modelId);
+    if (version !== analysisVersion) return;
+    analysis.value = result;
     Object.keys(candidateStates).forEach(key => delete candidateStates[key]);
-    if (analysis.value.intent.parserMode === 'RULES' && selectedModelId.value) {
+    if (analysis.value.intent.parserMode === 'RULES' && modelId) {
       ElMessage.warning('所选模型未完成有效解析，本次已自动降级为规则解析');
     }
   } catch (error) {
+    if (version !== analysisVersion) return;
     ElMessage.error(error instanceof Error ? error.message : '变更影响分析失败');
   } finally {
-    loading.value = false;
+    if (version === analysisVersion) loading.value = false;
   }
 }
 
 function openEvidence(item: ChangeCandidateEvidence | ChangeTestSuggestion) {
   if (!item.filePath) return;
   void router.push({ name: 'search', query: {
+    snapshotId: analysis.value?.snapshotId,
     path: item.filePath,
     startLine: item.startLine ?? undefined,
     endLine: item.endLine ?? item.startLine ?? undefined,
@@ -133,12 +141,12 @@ function openEvidence(item: ChangeCandidateEvidence | ChangeTestSuggestion) {
 }
 
 function openModule(moduleId: string) {
-  void router.push({ name: 'search', query: { q: moduleId } });
+  void router.push({ name: 'search', query: { q: moduleId, snapshotId: analysis.value?.snapshotId } });
 }
 
 function openDependencySample(edge: ChangeDependencyImpact) {
   const source = edge.samples[0]?.filePath;
-  if (source) void router.push({ name: 'search', query: { path: source } });
+  if (source) void router.push({ name: 'search', query: { path: source, snapshotId: analysis.value?.snapshotId } });
 }
 
 function continueAsk() {
@@ -191,13 +199,17 @@ watch(
   { immediate: true },
 );
 watch(
-  () => repositories.selectedRepositoryId,
-  (repositoryId) => {
+  () => [repositories.selectedRepositoryId, repository.value?.snapshotId] as const,
+  ([repositoryId]) => {
+    analysisVersion++;
+    loading.value = false;
+    Object.keys(candidateStates).forEach(key => delete candidateStates[key]);
     analysis.value = null;
     void loadModels(repositoryId);
   },
   { immediate: true },
 );
+onScopeDispose(() => { analysisVersion++; modelContextVersion++; });
 </script>
 
 <template>
@@ -266,7 +278,7 @@ watch(
           <div><span class="eyebrow">证据覆盖等级</span><h2>{{ analysis.evidenceCoverage.label }}</h2><p>{{ analysis.evidenceCoverage.detail }}</p></div>
           <div class="review-progress">
             <strong>{{ reviewedCount }}/{{ analysis.candidates.length }}</strong>
-            <span>候选已核验</span>
+            <span>候选已核验 · 仅当前页面</span>
           </div>
         </header>
 

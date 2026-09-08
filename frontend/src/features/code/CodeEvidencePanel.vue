@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue';
+import { computed, onScopeDispose, shallowRef, watch } from 'vue';
 import { AlertTriangle, ArrowRight, BookOpenCheck, GitPullRequest, Network, RefreshCw } from 'lucide-vue-next';
 import { ElMessage } from 'element-plus';
 import {
@@ -23,12 +23,14 @@ interface Props {
   initialSymbol: string | null;
   snapshotId: string | null;
   autoAnalyze?: boolean;
+  canBuildGraph?: boolean;
 }
 
-const props = withDefaults(defineProps<Props>(), { autoAnalyze: false });
+const props = withDefaults(defineProps<Props>(), { autoAnalyze: false, canBuildGraph: false });
 const emit = defineEmits<{
   openFile: [path: string, startLine: number | null, endLine: number | null];
   openKnowledge: [knowledgeId: string];
+  openReview: [reviewId: string];
 }>();
 
 const tab = shallowRef<ContextTab>('relations');
@@ -43,7 +45,7 @@ const building = shallowRef(false);
 const error = shallowRef<string | null>(null);
 const relationError = shallowRef<string | null>(null);
 let contextVersion = 0;
-let autoKey = '';
+let relationVersion = 0;
 
 const nodeById = computed(() => new Map((relation.value?.nodes ?? []).map(node => [node.id, node])));
 const edgeById = computed(() => new Map((relation.value?.edges ?? []).map(edge => [edge.id, edge])));
@@ -54,6 +56,13 @@ function nodeLabel(nodeId: string) {
 
 function relationLabel(edgeId: string | undefined) {
   return edgeId ? (edgeById.value.get(edgeId)?.relation ?? '依赖') : '依赖';
+}
+
+function relationArrow(edgeId: string | undefined, from: string, to: string) {
+  const edge = edgeId ? edgeById.value.get(edgeId) : null;
+  if (edge?.source === from && edge.target === to) return '→';
+  if (edge?.source === to && edge.target === from) return '←';
+  return '·';
 }
 
 function roleLabel(role: string) {
@@ -84,7 +93,12 @@ function graphLimitationLabel(value: string) {
 
 async function load() {
   const version = ++contextVersion;
+  relationVersion++;
+  analyzing.value = false;
+  loading.value = false;
+  building.value = false;
   context.value = null;
+  artifact.value = null;
   relation.value = null;
   error.value = null;
   relationError.value = null;
@@ -98,13 +112,9 @@ async function load() {
     ]);
     if (version !== contextVersion) return;
     context.value = fileContext;
-    artifact.value = graphArtifact;
+    artifact.value = graphArtifact?.snapshotId === props.snapshotId ? graphArtifact : null;
     if (props.autoAnalyze && symbol.value && artifact.value) {
-      const key = `${props.repositoryId}:${props.snapshotId}:${symbol.value}:${depth.value}`;
-      if (autoKey !== key) {
-        autoKey = key;
-        await analyze();
-      }
+      await analyze();
     }
   } catch (exception) {
     if (version === contextVersion) {
@@ -116,6 +126,10 @@ async function load() {
 }
 
 async function analyze() {
+  const version = ++relationVersion;
+  const context = contextVersion;
+  relation.value = null;
+  analyzing.value = false;
   if (!props.repositoryId || !symbol.value.trim()) {
     relationError.value = '请输入明确的类、函数、方法或路由符号。';
     return;
@@ -127,31 +141,40 @@ async function analyze() {
   analyzing.value = true;
   relationError.value = null;
   try {
-    relation.value = await intelligenceApi.graph(
+    const result = await intelligenceApi.graph(
       props.repositoryId,
       symbol.value.trim(),
       depth.value,
       'BOTH',
     );
+    if (version !== relationVersion || context !== contextVersion) return;
+    if (result.snapshotId !== props.snapshotId) {
+      relationError.value = '代码快照已更新，请刷新文件和图谱后重新查询。';
+      return;
+    }
+    relation.value = result;
   } catch (exception) {
+    if (version !== relationVersion || context !== contextVersion) return;
     relation.value = null;
     relationError.value = exception instanceof Error ? exception.message : '关系查询失败';
   } finally {
-    analyzing.value = false;
+    if (version === relationVersion && context === contextVersion) analyzing.value = false;
   }
 }
 
 async function buildGraph() {
-  if (!props.repositoryId) return;
+  if (!props.repositoryId || !props.canBuildGraph) return;
+  const version = contextVersion;
   building.value = true;
   try {
     const task = await intelligenceApi.buildGraph(props.repositoryId);
+    if (version !== contextVersion) return;
     if (task.status === 'FAILED') ElMessage.error(task.errorMessage ?? '代码图谱构建失败');
     else ElMessage.info('代码图谱构建任务已提交，发布完成后可查询关系。');
   } catch (exception) {
-    ElMessage.error(exception instanceof Error ? exception.message : '代码图谱构建失败');
+    if (version === contextVersion) ElMessage.error(exception instanceof Error ? exception.message : '代码图谱构建失败');
   } finally {
-    building.value = false;
+    if (version === contextVersion) building.value = false;
   }
 }
 
@@ -161,10 +184,11 @@ function openNode(nodeId: string) {
 }
 
 watch(
-  () => [props.repositoryId, props.filePath, props.initialSymbol, props.snapshotId] as const,
+  () => [props.repositoryId, props.filePath, props.initialSymbol, props.snapshotId, props.autoAnalyze] as const,
   load,
   { immediate: true },
 );
+onScopeDispose(() => { contextVersion++; relationVersion++; });
 </script>
 
 <template>
@@ -174,7 +198,7 @@ watch(
         <b>文件证据</b>
         <span>{{ filePath ?? '尚未选择文件' }}</span>
       </div>
-      <RefreshCw v-if="loading" :size="14" class="spinning" />
+      <button type="button" title="刷新文件证据和图谱状态" :disabled="loading" @click="load"><RefreshCw :size="14" :class="{ spinning: loading }" /></button>
     </header>
 
     <nav class="context-tabs" aria-label="文件证据类型">
@@ -201,8 +225,9 @@ watch(
       <div class="artifact-line" :data-ready="Boolean(artifact)">
         <span v-if="artifact">工具版本 {{ artifact.cliVersion }} · {{ artifact.nodeCount }} 节点 · 快照 {{ artifact.snapshotId.slice(0, 8) }}</span>
         <span v-else>当前快照没有已发布图谱</span>
-        <button v-if="!artifact" type="button" :disabled="building" @click="buildGraph">{{ building ? '提交中' : '构建' }}</button>
+        <button v-if="!artifact && canBuildGraph" type="button" :disabled="building" @click="buildGraph">{{ building ? '提交中' : '构建' }}</button>
       </div>
+      <p v-if="!artifact && !canBuildGraph" class="limitation">请联系项目维护者在项目总览准备代码图谱。</p>
       <div v-if="relationError" class="context-error"><AlertTriangle :size="14" />{{ relationError }}</div>
       <template v-if="relation">
         <div class="relation-summary">
@@ -211,7 +236,7 @@ watch(
           <span><strong>{{ relation.maxDepthReached }}</strong>实际深度</span>
         </div>
         <p class="coverage" :data-complete="relation.coverage.complete">
-          {{ relation.coverage.complete ? '路径覆盖完整' : '覆盖不完整' }} ·
+          {{ relation.coverage.complete ? '返回记录已完整映射' : '返回记录映射不完整' }} ·
           {{ relation.coverage.representedAffectedRecordCount }}/{{ relation.coverage.affectedRecordCount }} 条 CLI 记录已映射
         </p>
         <div class="path-list">
@@ -219,7 +244,7 @@ watch(
             <header><span>深度 {{ path.depth }}</span><b>{{ nodeLabel(path.targetNodeId) }}</b></header>
             <div class="path-chain">
               <template v-for="(nodeId, index) in path.nodeIds" :key="nodeId">
-                <small v-if="index">← {{ relationLabel(path.edgeIds[index - 1]) }}</small>
+                <small v-if="index">{{ relationArrow(path.edgeIds[index - 1], path.nodeIds[index - 1], nodeId) }} {{ relationLabel(path.edgeIds[index - 1]) }}</small>
                 <button type="button" @click="openNode(nodeId)">{{ nodeLabel(nodeId) }}<ArrowRight :size="11" /></button>
               </template>
             </div>
@@ -236,7 +261,7 @@ watch(
         <header><span>{{ item.trusted ? '可信知识' : statusLabel(item.sourceVersionStatus) }}</span><b>{{ enforcementLabel(item.enforcement) }}</b></header>
         <button type="button" class="reference-title" @click="emit('openKnowledge', item.knowledgeId)">{{ item.title }}<ArrowRight :size="12" /></button>
         <small>修订 {{ item.revision }} · {{ knowledgeKindLabel(item.kind) }} · {{ statusLabel(item.reviewStatus) }} · {{ statusLabel(item.publicationStatus) }}</small>
-        <button v-for="binding in item.bindings" :key="`${binding.chunkId}:${binding.startLine}`" type="button" class="binding" @click="emit('openFile', filePath!, binding.startLine, binding.endLine)">
+        <button v-for="binding in item.bindings" :key="`${binding.chunkId}:${binding.startLine}`" type="button" class="binding" :disabled="binding.stale || !binding.currentSnapshot" @click="emit('openFile', filePath!, binding.startLine, binding.endLine)">
           {{ binding.symbolName ?? filePath }}:{{ binding.startLine ?? 1 }}
           <span v-if="binding.stale || !binding.currentSnapshot">旧版本绑定</span>
         </button>
@@ -248,7 +273,7 @@ watch(
     <div v-else class="context-body reference-list review-reference-list">
       <article v-for="item in context?.reviewReferences" :key="item.reviewId" :data-current="item.currentSnapshot">
         <header><span>{{ item.currentSnapshot ? '当前快照' : '历史快照' }}</span><b>{{ changeSourceLabel(item.changeSource) }}</b></header>
-        <strong>{{ item.task || '未填写任务说明' }}</strong>
+        <button type="button" class="reference-title" @click="emit('openReview', item.reviewId)">{{ item.task || '未填写任务说明' }}<ArrowRight :size="12" /></button>
         <div class="role-list"><span v-for="role in item.roles" :key="role">{{ roleLabel(role) }}</span></div>
         <small v-if="item.symbols.length">符号：{{ item.symbols.join('、') }}</small>
       </article>
@@ -262,6 +287,7 @@ watch(
 .evidence-context-panel { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; border-block: 1px solid #dedee3; border-right: 1px solid #dedee3; background: #fff; }
 .context-head { display: flex; min-height: 56px; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-bottom: 1px solid #ececef; }
 .context-head > div { display: grid; min-width: 0; gap: 3px; }
+.context-head > button { padding: 5px; border: 0; background: transparent; color: #346b98; cursor: pointer; }
 .context-head b { color: #303036; font-size: 15px; }
 .context-head span { overflow: hidden; color: #7a7a81; font: 12px "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .context-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 4px; border-bottom: 1px solid #e6e8eb; background: #f5f6f7; }

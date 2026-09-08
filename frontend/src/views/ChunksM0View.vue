@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef, watch } from 'vue';
+import { computed, onMounted, onScopeDispose, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Close, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
@@ -47,6 +47,7 @@ const mobilePane = shallowRef<MobilePane>('tree');
 const fileCache = new Map<string, RepositoryFileContent>();
 let snapshotRequest = 0;
 let fileRequest = 0;
+let searchRequest = 0;
 
 const repository = computed(() => repositories.selectedRepository);
 const workbenchReady = computed(() => Boolean(
@@ -81,6 +82,13 @@ const resultSummary = computed(() => {
 
 async function loadSnapshot(repositoryId: string | null) {
   const requestId = ++snapshotRequest;
+  fileRequest++;
+  searchRequest++;
+  fileLoading.value = false;
+  filesLoading.value = false;
+  searchLoading.value = false;
+  focusLine.value = null;
+  focusEndLine.value = null;
   snapshot.value = null;
   snapshotError.value = null;
   selectedPath.value = null;
@@ -101,7 +109,18 @@ async function loadSnapshot(repositoryId: string | null) {
     const result = await listRepositoryFiles(repositoryId);
     if (requestId !== snapshotRequest) return;
     snapshot.value = result;
+    if (typeof route.query.snapshotId === 'string' && route.query.snapshotId !== result.snapshotId) {
+      selectedPath.value = typeof route.query.path === 'string' ? route.query.path : null;
+      previewError.value = '该证据来自历史快照，当前源码不能代表当时的内容。请返回来源查看保存的证据，或从目录选择当前文件。';
+      mobilePane.value = 'code';
+      return;
+    }
     const routePath = typeof route.query.path === 'string' ? route.query.path : null;
+    if (routePath && !result.files.some(file => file.path === routePath)) {
+      selectedPath.value = routePath;
+      previewError.value = '当前快照中找不到该文件，文件可能已删除或重命名。请从目录重新选择。';
+      return;
+    }
     const preferred = result.files.find(file => file.path === routePath) ?? result.files.find(file =>
       /\.(vue|tsx?|jsx?|java|kt|py|go|rs|md)$/i.test(file.path),
     ) ?? result.files[0];
@@ -109,6 +128,7 @@ async function loadSnapshot(repositoryId: string | null) {
     const endLine = routePath ? routeNumber(route.query.endLine) : null;
     const routeSymbol = typeof route.query.symbol === 'string' ? route.query.symbol : null;
     if (preferred) await openFile(preferred.path, startLine, endLine, Boolean(routePath), routeSymbol);
+    if (requestId !== snapshotRequest) return;
     if (routeSymbol && (route.query.relation === '1' || route.query.analyze === '1')) {
       rightPane.value = 'context';
     }
@@ -143,6 +163,8 @@ async function openFile(
 ) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
+  const requestId = ++fileRequest;
+  fileLoading.value = false;
   const changedFile = selectedPath.value !== path;
   selectedPath.value = path;
   if (symbolName !== undefined) selectedSymbol.value = symbolName;
@@ -160,12 +182,15 @@ async function openFile(
     return;
   }
 
-  const requestId = ++fileRequest;
   selectedFile.value = null;
   fileLoading.value = true;
   try {
     const file = await getRepositoryFile(repositoryId, path);
     if (requestId !== fileRequest || repositoryId !== repositories.selectedRepositoryId) return;
+    if (file.snapshotId !== snapshot.value?.snapshotId) {
+      previewError.value = '代码快照已更新，请重新加载页面后查看源码。';
+      return;
+    }
     fileCache.set(cacheKey, file);
     selectedFile.value = file;
   } catch (error) {
@@ -185,9 +210,12 @@ async function search() {
     clearSearch();
     return;
   }
+  const requestId = ++searchRequest;
+  const snapshotId = snapshot.value?.snapshotId;
   searchLoading.value = true;
   try {
     const result = await intelligenceApi.search(repositoryId, keyword, 50);
+    if (requestId !== searchRequest || repositoryId !== repositories.selectedRepositoryId || snapshotId !== snapshot.value?.snapshotId) return;
     retrieval.value = result.retrieval;
     const current = result.hits.filter(hit => hit.snapshotId === snapshot.value?.snapshotId);
     hits.value = current;
@@ -197,13 +225,16 @@ async function search() {
     rightPane.value = 'results';
     mobilePane.value = 'results';
   } catch (error) {
+    if (requestId !== searchRequest) return;
     ElMessage.error(error instanceof Error ? error.message : '源码检索失败');
   } finally {
-    searchLoading.value = false;
+    if (requestId === searchRequest) searchLoading.value = false;
   }
 }
 
 function clearSearch() {
+  searchRequest++;
+  searchLoading.value = false;
   query.value = '';
   hits.value = [];
   retrieval.value = null;
@@ -237,7 +268,9 @@ function excerpt(content: string) {
   return content.replace(/\s+/g, ' ').trim().slice(0, 150);
 }
 
-watch(() => repositories.selectedRepositoryId, loadSnapshot, { immediate: true });
+watch(() => [repositories.selectedRepositoryId, repository.value?.snapshotId] as const,
+  ([repositoryId]) => loadSnapshot(repositoryId), { immediate: true });
+onScopeDispose(() => { snapshotRequest++; fileRequest++; searchRequest++; });
 function routeNumber(value: unknown) {
   const parsed = typeof value === 'string' ? Number.parseInt(value, 10) : Number.NaN;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -251,11 +284,15 @@ function openKnowledge(knowledgeId: string) {
 }
 
 watch(
-  () => [route.query.path, route.query.startLine, route.query.endLine, route.query.q, route.query.symbol] as const,
+  () => [route.query.path, route.query.startLine, route.query.endLine, route.query.q, route.query.symbol, route.query.relation, route.query.analyze, route.query.snapshotId] as const,
   ([path, startLine, endLine, routeQuery, routeSymbol]) => {
     if (typeof routeQuery === 'string' && routeQuery !== query.value) {
       query.value = routeQuery;
       void search();
+    }
+    if (typeof route.query.snapshotId === 'string' && route.query.snapshotId !== snapshot.value?.snapshotId) {
+      void loadSnapshot(repositories.selectedRepositoryId);
+      return;
     }
     if (typeof path === 'string' && snapshot.value?.files.some(file => file.path === path)) {
       rightPane.value = 'context';
@@ -266,6 +303,13 @@ watch(
         true,
         typeof routeSymbol === 'string' ? routeSymbol : undefined,
       );
+    } else if (typeof path === 'string' && snapshot.value) {
+      fileRequest++;
+      selectedPath.value = path;
+      selectedFile.value = null;
+      fileLoading.value = false;
+      previewError.value = '当前快照中找不到该文件，文件可能已删除或重命名。请从目录重新选择。';
+      mobilePane.value = 'code';
     } else if (typeof routeSymbol === 'string' && selectedPath.value) {
       selectedSymbol.value = routeSymbol;
       rightPane.value = 'context';
@@ -405,10 +449,12 @@ watch(
         :repository-id="repositories.selectedRepositoryId"
         :file-path="selectedPath"
         :initial-symbol="selectedSymbol"
+        :can-build-graph="repository?.capabilities.canBuildCodeGraph ?? false"
         :snapshot-id="snapshot?.snapshotId ?? null"
         :auto-analyze="route.query.relation === '1' || route.query.analyze === '1'"
         @open-file="openFile"
         @open-knowledge="openKnowledge"
+        @open-review="reviewId => router.push({ name: 'change-impact', query: { reviewId } })"
       />
     </div>
     </template>

@@ -50,7 +50,7 @@ const obligationStatusLabels: Record<string, string> = {
 };
 
 function selectChange(item: ChangedSymbol) {
-  const provenance = item.provenance[0];
+  const provenance = item.provenance.find(source => source.side === (item.changeType === 'DELETED' ? 'OLD' : 'NEW')) ?? item.provenance[0];
   emit('select', {
     kind: 'CHANGE',
     eyebrow: '真实 Git 改动',
@@ -58,6 +58,11 @@ function selectChange(item: ChangedSymbol) {
     status: `${changeLabels[item.changeType] ?? '其他变更'} · ${resolutionLabels[item.resolution] ?? '其他定位方式'}`,
     description: provenance?.detail ?? '该对象由真实文件变化和行号映射得到。',
     filePath: item.filePath,
+    repositoryId: provenance?.repositoryId,
+    snapshotId: provenance?.snapshotId,
+    commitSha: provenance?.commitSha,
+    worktreeDigest: provenance?.worktreeDigest,
+    side: provenance?.side,
     startLine: item.declarationStartLine,
     endLine: item.declarationEndLine,
     facts: [

@@ -12,6 +12,7 @@ const emit = defineEmits<{
   reset: [account: AccountSummary];
   unlock: [account: AccountSummary];
   audit: [account: AccountSummary];
+  tokens: [account: AccountSummary];
 }>();
 
 const labels: Record<string, string> = {
@@ -50,10 +51,11 @@ const labels: Record<string, string> = {
         {{ row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleString() : '—' }}
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="350" fixed="right">
+    <el-table-column label="操作" width="440" fixed="right">
       <template #default="{ row }">
         <div class="account-actions">
           <el-button class="action-button" link type="primary" @click="emit('edit', row)">编辑</el-button>
+          <el-button class="action-button" link type="primary" @click="emit('tokens', row)">访问令牌</el-button>
           <el-button class="action-button" link type="primary" @click="emit('audit', row)">查看审计</el-button>
           <el-button
             v-if="row.status === 'LOCKED'"

@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Plug,
   MessageSquareText,
   ScrollText,
   Search,
@@ -55,7 +56,7 @@ const navGroups = computed(() => workspaceNavigation({
   canManageProjects: canManageProjects.value,
 }));
 const visibleNavItems = computed(() => navGroups.value.flatMap(group => group.items));
-const titles: Record<string, string> = { overview: '项目总览', 'change-impact': '变更审查', repositories: '项目管理', indexing: '索引任务', search: '代码与证据', ask: '问项目', graph: '代码与证据', knowledge: '知识治理', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
+const titles: Record<string, string> = { mcp: 'MCP 接入', overview: '项目总览', 'change-impact': '变更审查', repositories: '项目管理', indexing: '索引任务', search: '代码与证据', ask: '问项目', graph: '代码与证据', knowledge: '知识治理', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
 const pageTitle = computed(() => titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
 async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }
@@ -136,10 +137,10 @@ watch(() => route.name, name => {
   if (['indexing', 'settings', 'accounts', 'audit'].includes(String(name))) systemOpen.value = true;
 }, { immediate: true });
 watch(visibleNavItems, items => {
-  workspaceTabs.retain(new Set(items.map(item => item.to.slice(1))));
+  workspaceTabs.retain(new Set(['mcp', ...items.map(item => item.to.slice(1))]));
 });
 onMounted(() => {
-  workspaceTabs.retain(new Set(visibleNavItems.value.map(item => item.to.slice(1))));
+  workspaceTabs.retain(new Set(['mcp', ...visibleNavItems.value.map(item => item.to.slice(1))]));
   void repositoryStore.loadRepositories();
 });
 </script>
@@ -169,8 +170,8 @@ onMounted(() => {
       </section>
     </nav>
   </aside>
-  <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
-    <div class="page-frame">
+  <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><RouterLink class="mcp-entry" to="/mcp" title="查看 MCP 接入指导"><Plug :size="16" /><span>MCP 接入</span></RouterLink><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
+    <div class="page-frame" :class="{ 'page-frame--mcp': activeRouteName === 'mcp' }">
       <WorkspaceTabs
         :tabs="workspaceTabs.tabs"
         :active-name="activeRouteName"
@@ -184,6 +185,7 @@ onMounted(() => {
         @copy-link="copyTabLink"
       />
       <WorkspaceJourneyBar
+        v-if="activeRouteName !== 'mcp'"
         :active-route="activeRouteName"
         :has-repository="Boolean(repositoryStore.selectedRepository)"
         :has-snapshot="Boolean(repositoryStore.selectedRepository?.snapshotId)"
@@ -206,6 +208,10 @@ onMounted(() => {
 </div></template>
 
 <style scoped>
+.page-frame--mcp { grid-template-rows: 44px minmax(0, 1fr); }
+.mcp-entry { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 10px; border-radius: 6px; color: #526071; font-size: 13px; text-decoration: none; }
+.mcp-entry:hover, .mcp-entry.router-link-active { color: #2563eb; background: #eff6ff; }
+.mcp-entry:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
 .nav-list { align-content: start; overflow-y: auto; }
 .nav-section { display: grid; gap: 3px; }
 .nav-section + .nav-section { margin-top: 11px; padding-top: 11px; border-top: 1px solid #ededf0; }

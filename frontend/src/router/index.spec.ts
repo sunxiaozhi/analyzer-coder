@@ -7,6 +7,7 @@ vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => ({ initia
 describe('workspace critical routes', () => {
   it('keeps every shipped workspace capability on one unique route', () => {
     const expected = new Map([
+      ['mcp', '/mcp'],
       ['ask', '/ask'],
       ['knowledge', '/knowledge'],
       ['graph', '/graph'],
@@ -56,6 +57,8 @@ describe('workspace critical routes', () => {
 });
 
 it('lets a READ-only account import its own repository and open knowledge evidence', async () => {
+  await router.push('/mcp');
+  expect(router.currentRoute.value.name).toBe('mcp');
   await router.push('/repositories');
   expect(router.currentRoute.value.name).toBe('repositories');
   await router.push('/knowledge?cardId=published-card');

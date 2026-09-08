@@ -29,6 +29,8 @@ class CurrentSnapshotSqlContractTest {
         parseMapper(configuration, "mappers/ProjectHealthMapper.xml");
         parseMapper(configuration, "mappers/EngineeringProjectMapper.xml");
         parseMapper(configuration, "mappers/TaskReviewOutcomeMapper.xml");
+        parseMapper(configuration, "mappers/AccessTokenMapper.xml");
+        parseMapper(configuration, "mappers/AuthMapper.xml");
     }
 
     @Test

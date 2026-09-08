@@ -190,6 +190,7 @@ async function openCode(reference: CodeReference) {
   try {
     await selectTargetRepository(reference.repositoryId);
     await router.push({ name: 'search', query: {
+      snapshotId: reference.snapshotId ?? undefined,
       path: reference.filePath, startLine: String(reference.startLine ?? 1), endLine: String(reference.endLine ?? reference.startLine ?? 1),
     }});
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法打开源码'); }
@@ -212,6 +213,7 @@ async function openGraph(reference: CodeReference) {
     await router.push({ name: 'search', query: {
       path: ('filePath' in target ? target.filePath : null) || reference.filePath,
       startLine: String(('startLine' in target ? target.startLine : null) ?? reference.startLine ?? 1),
+      snapshotId: reference.snapshotId ?? undefined,
       symbol: target.symbol,
       depth: '3',
       relation: '1',

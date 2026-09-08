@@ -4,6 +4,8 @@ import jakarta.servlet.http.HttpServletRequest;
 
 /** 在单次请求范围保存已认证账户与会话，避免业务方法重复解析认证信息。 */
 public final class SecurityContext {
+    public static final String TOKEN_ACCOUNT_ATTRIBUTE =
+            SecurityContext.class.getName() + ".tokenAccount";
     public static final String SESSION_ATTRIBUTE = SecurityContext.class.getName() + ".session";
 
     private SecurityContext() {}
@@ -17,6 +19,8 @@ public final class SecurityContext {
     }
 
     public static AuthenticatedAccount account(HttpServletRequest request) {
+        Object tokenAccount = request.getAttribute(TOKEN_ACCOUNT_ATTRIBUTE);
+        if (tokenAccount instanceof AuthenticatedAccount account) return account;
         return session(request).account();
     }
 

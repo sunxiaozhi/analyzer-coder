@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
+import { onBeforeUnmount, onDeactivated, onMounted, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
@@ -8,6 +8,7 @@ import AppPagination from '@/components/AppPagination.vue';
 import AccountDialog from '@/features/accounts/AccountDialog.vue';
 import AccountEditDialog from '@/features/accounts/AccountEditDialog.vue';
 import AccountTable from '@/features/accounts/AccountTable.vue';
+import AccountAccessTokens from '@/features/accounts/AccountAccessTokens.vue';
 import { useAuthStore } from '@/stores/authStore';
 import type { AccountSummary } from '@/types/security';
 
@@ -24,6 +25,8 @@ const busy = shallowRef(false);
 const editDialog = shallowRef(false);
 const editing = shallowRef<AccountSummary | null>(null);
 const editBusy = shallowRef(false);
+const tokenAccount = shallowRef<AccountSummary | null>(null);
+onDeactivated(() => { tokenAccount.value = null; });
 let searchTimer: number | undefined;
 
 async function loadAccounts() {
@@ -41,10 +44,11 @@ async function loadAccounts() {
 async function changePage(value: number) { pageNum.value = value; await loadAccounts(); }
 async function changePageSize(value: number) { pageSize.value = value; pageNum.value = 1; await loadAccounts(); }
 async function create(input: AccountInput) { busy.value = true; try { const created = await accountsApi.create(input); dialog.value = false; pageNum.value = 1; await loadAccounts(); await ElMessageBox.alert(`临时密码：${created.temporaryPassword}\n请安全转交，此密码只显示一次。`, '账号已创建'); } finally { busy.value = false; } }
+function closeTokens(value: boolean) { if (!value) tokenAccount.value = null; }
 function openEdit(account: AccountSummary) { editing.value = account; editDialog.value = true; }
 async function saveEdit(input: { displayName: string; role: AccountSummary['role']; version: number }) { if (!editing.value) return; editBusy.value = true; try { await accountsApi.update(editing.value.id, input); editDialog.value = false; await loadAccounts(); ElMessage.success('账号资料已更新'); } finally { editBusy.value = false; } }
 async function toggle(account: AccountSummary) { await accountsApi.update(account.id, { enabled: account.status === 'DISABLED', version: account.version }); await loadAccounts(); }
-async function reset(account: AccountSummary) { await ElMessageBox.confirm(`确定重置账号“${account.username}”的密码吗？重置后该账号的现有会话将立即失效。`, '确认重置密码', { type: 'warning', confirmButtonText: '确定重置', cancelButtonText: '取消' }); const result = await accountsApi.resetPassword(account.id); await loadAccounts(); await ElMessageBox.alert(`重置密码：${result.temporaryPassword}\n该账号下次登录必须先修改密码，修改完成前无法进入系统。`, '密码已重置', { confirmButtonText: '我知道了' }); }
+async function reset(account: AccountSummary) { await ElMessageBox.confirm(`确定重置账号“${account.username}”的密码吗？重置后该账号的现有会话和访问令牌将立即失效。`, '确认重置密码', { type: 'warning', confirmButtonText: '确定重置', cancelButtonText: '取消' }); const result = await accountsApi.resetPassword(account.id); await loadAccounts(); await ElMessageBox.alert(`重置密码：${result.temporaryPassword}\n该账号下次登录必须先修改密码，修改完成前无法进入系统。`, '密码已重置', { confirmButtonText: '我知道了' }); }
 async function unlock(account: AccountSummary) { await accountsApi.unlock(account.id); await loadAccounts(); }
 async function showAudit(account: AccountSummary) { await router.push({ name: 'audit', query: { username: account.username } }); }
 
@@ -61,10 +65,13 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
     <div class="surface account-surface">
       <div class="toolbar account-toolbar"><el-input v-model="query" class="app-search-input" :prefix-icon="Search" placeholder="搜索姓名、账号" clearable /><span class="spacer" /><el-button type="primary" @click="dialog=true">新增账号</el-button></div>
       <div class="account-table-region">
-        <AccountTable v-loading="loading" :rows="accounts" :current-account-id="auth.account?.id" @edit="openEdit" @toggle="toggle" @reset="reset" @unlock="unlock" @audit="showAudit" />
+        <AccountTable v-loading="loading" :rows="accounts" :current-account-id="auth.account?.id" @edit="openEdit" @toggle="toggle" @reset="reset" @unlock="unlock" @audit="showAudit" @tokens="tokenAccount = $event" />
       </div>
       <AppPagination :page-num="pageNum" :page-size="pageSize" :total="total" :disabled="loading" @page-change="changePage" @size-change="changePageSize" />
     </div>
+    <el-dialog :model-value="Boolean(tokenAccount)" :title="`${tokenAccount?.displayName ?? ''} · 访问令牌`" width="min(960px, 95vw)" destroy-on-close @update:model-value="closeTokens">
+      <AccountAccessTokens v-if="tokenAccount" :key="tokenAccount.id" :account-id="tokenAccount.id" :can-create="tokenAccount.status === 'ENABLED'" />
+    </el-dialog>
     <AccountDialog v-model="dialog" :busy="busy" @submit="create" />
     <AccountEditDialog v-model="editDialog" :account="editing" :busy="editBusy" @submit="saveEdit" />
   </section>

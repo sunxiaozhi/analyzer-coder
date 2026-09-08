@@ -34,3 +34,46 @@ describe('overview review links', () => {
     } finally { wrapper.unmount(); }
   });
 });
+
+it('does not show Git review inputs for a ZIP repository', async () => {
+  route = reactive({ query: {} });
+  store = reactive({ selectedRepositoryId: 'zip', selectedRepository: {
+    sourceType: 'ZIP', snapshotId: 'current', capabilities: {},
+  }, repositories: [{}] });
+  vi.mocked(listTaskReviews).mockResolvedValue([]);
+  vi.mocked(intelligenceApi.askModels).mockResolvedValue([]);
+  const wrapper = shallowMount(ChangeImpactView, { global: { stubs: { ElButton: true }, directives: { loading: () => {} } } });
+  await flushPromises();
+  expect(wrapper.text()).toContain('ZIP 项目没有可审查的 Git 历史');
+  expect(wrapper.findComponent({ name: 'TaskReviewForm' }).exists()).toBe(false);
+  wrapper.unmount();
+});
+
+it('ignores a historical response after the user starts another review', async () => {
+  route = reactive({ query: { reviewId: 'slow-history' } });
+  store = reactive({ selectedRepositoryId: 'repo-1', selectedRepository: {
+    sourceType: 'LOCAL_GIT', snapshotId: 'current', capabilities: {},
+  }, repositories: [{}] });
+  vi.mocked(listTaskReviews).mockResolvedValue([]);
+  vi.mocked(intelligenceApi.askModels).mockResolvedValue([]);
+  let finishHistory!: (value: TaskReviewResult) => void;
+  vi.mocked(getTaskReview).mockReturnValue(new Promise(done => { finishHistory = done; }));
+  const wrapper = shallowMount(ChangeImpactView, { global: { stubs: { ElButton: true }, directives: { loading: () => {} } } });
+  await flushPromises();
+  const { createTaskReview } = await import('@/api/taskReviews');
+  vi.mocked(createTaskReview).mockResolvedValue({
+    reviewId: 'new-review', snapshotId: 'current', status: 'FAILED',
+    error: { code: 'NEW', message: '本次审查记录' },
+  } as TaskReviewResult);
+  wrapper.findComponent({ name: 'TaskReviewForm' }).vm.$emit('submit', {
+    task: 'new', changeSource: 'WORKTREE', baseRef: 'HEAD', headRef: null, modelConfigId: null,
+  });
+  await flushPromises();
+  finishHistory({ reviewId: 'slow-history', snapshotId: 'old', status: 'FAILED',
+    error: { code: 'OLD', message: '不应覆盖的新旧混淆' },
+  } as TaskReviewResult);
+  await flushPromises();
+  expect(wrapper.text()).toContain('本次审查记录');
+  expect(wrapper.text()).not.toContain('不应覆盖的新旧混淆');
+  wrapper.unmount();
+});

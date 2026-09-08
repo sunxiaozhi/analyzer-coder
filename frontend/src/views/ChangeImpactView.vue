@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef, watch } from 'vue';
+import { computed, onMounted, onScopeDispose, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import {
@@ -31,6 +31,7 @@ import PullRequestReviewForm, { type PullRequestReviewDraft } from '@/features/t
 import ReviewEvidenceDrawer from '@/features/task-review/ReviewEvidenceDrawer.vue';
 import TaskReviewForm, { type TaskReviewDraft } from '@/features/task-review/TaskReviewForm.vue';
 import TaskOutcomePanel from '@/features/task-review/TaskOutcomePanel.vue';
+import { reviewSourceMismatch } from '@/features/task-review/reviewSourceVersion';
 import type { ReviewEvidenceSelection } from '@/features/task-review/types';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
@@ -140,6 +141,9 @@ async function submit(draft: TaskReviewDraft) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   const version = contextVersion;
+  const requestVersion = ++historyRequestVersion;
+  result.value = null;
+  providerResult.value = null;
   loading.value = true;
   error.value = null;
   credentialRequired.value = false;
@@ -154,13 +158,13 @@ async function submit(draft: TaskReviewDraft) {
       headRef: draft.headRef,
       modelConfigId: draft.modelConfigId,
     });
-    if (version !== contextVersion || repositoryId !== repositories.selectedRepositoryId) return;
+    if (version !== contextVersion || requestVersion !== historyRequestVersion || repositoryId !== repositories.selectedRepositoryId) return;
     result.value = response;
     await loadHistory(repositoryId, version);
   } catch (exception) {
-    if (version === contextVersion) error.value = failureMessage(exception, '变更审查失败');
+    if (version === contextVersion && requestVersion === historyRequestVersion) error.value = failureMessage(exception, '变更审查失败');
   } finally {
-    if (version === contextVersion) loading.value = false;
+    if (version === contextVersion && requestVersion === historyRequestVersion) loading.value = false;
   }
 }
 
@@ -168,6 +172,9 @@ async function submitProvider(draft: PullRequestReviewDraft) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   const version = contextVersion;
+  const requestVersion = ++historyRequestVersion;
+  result.value = null;
+  providerResult.value = null;
   loading.value = true;
   error.value = null;
   credentialRequired.value = false;
@@ -179,18 +186,18 @@ async function submitProvider(draft: PullRequestReviewDraft) {
       clientRequestId: newRequestId(),
       ...draft,
     });
-    if (version !== contextVersion || repositoryId !== repositories.selectedRepositoryId) return;
+    if (version !== contextVersion || requestVersion !== historyRequestVersion || repositoryId !== repositories.selectedRepositoryId) return;
     result.value = response.review;
     providerResult.value = response;
     ElMessage.success(response.comment.action === 'UPDATED' ? '已有 PR/MR 评论已更新' : 'PR/MR 提示性评论已创建');
     await loadHistory(repositoryId, version);
   } catch (exception) {
-    if (version === contextVersion) {
+    if (version === contextVersion && requestVersion === historyRequestVersion) {
       credentialRequired.value = exception instanceof ApiError && exception.code === 'PROVIDER_CREDENTIAL_REQUIRED';
       error.value = failureMessage(exception, '拉取请求 / 合并请求审查同步失败');
     }
   } finally {
-    if (version === contextVersion) loading.value = false;
+    if (version === contextVersion && requestVersion === historyRequestVersion) loading.value = false;
   }
 }
 
@@ -198,6 +205,8 @@ async function openHistory(item: Pick<TaskReviewSummary, 'reviewId'>) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   const version = contextVersion;
+  result.value = null;
+  providerResult.value = null;
   loading.value = true;
   error.value = null;
   selection.value = null;
@@ -216,6 +225,7 @@ async function openHistory(item: Pick<TaskReviewSummary, 'reviewId'>) {
 
 function resetResult() {
   historyRequestVersion++;
+  loading.value = false;
   result.value = null;
   selection.value = null;
   historyReadOnly.value = false;
@@ -235,6 +245,8 @@ function selectEvidence(item: ReviewEvidenceSelection) {
 
 function openCode(item: ReviewEvidenceSelection) {
   if (!item.filePath) return;
+  const sourceMismatch = reviewSourceMismatch(item, repository.value);
+  if (sourceMismatch) { ElMessage.warning(sourceMismatch); return; }
   if (result.value?.snapshotId !== repository.value?.snapshotId) {
     ElMessage.warning('这条历史证据属于旧快照，当前源码预览不会冒充旧版本内容。');
     return;
@@ -243,6 +255,7 @@ function openCode(item: ReviewEvidenceSelection) {
     name: 'search',
     query: {
       path: item.filePath,
+      snapshotId: result.value?.snapshotId,
       startLine: String(item.startLine ?? 1),
       endLine: String(item.endLine ?? item.startLine ?? 1),
     },
@@ -306,6 +319,7 @@ watch(
 onMounted(async () => {
   if (!repositories.repositories.length) await repositories.loadRepositories();
 });
+onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
 </script>
 
 <template>
@@ -349,6 +363,10 @@ onMounted(async () => {
           <el-button type="primary" @click="router.push('/overview')">去准备项目</el-button>
         </section>
 
+        <section v-else-if="repository.sourceType === 'ZIP'" class="precondition-banner">
+          <AlertTriangle :size="18" /><div><strong>ZIP 项目没有可审查的 Git 历史</strong><p>可使用代码检索、问答和需求影响预估；审查实际改动需要接入 Git 仓库。</p></div>
+          <el-button @click="mode = 'estimate'">预估需求影响</el-button>
+        </section>
         <template v-else>
           <nav v-if="repository.capabilities.canUpdate" class="review-input-switch" aria-label="审查输入来源">
             <button type="button" :class="{ active: reviewInput === 'local' }" @click="reviewInput = 'local'; resetResult()">

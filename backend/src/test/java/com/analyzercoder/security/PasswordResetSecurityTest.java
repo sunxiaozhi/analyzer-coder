@@ -62,6 +62,7 @@ class PasswordResetSecurityTest {
                         any(Instant.class));
         assertThat(hasher.matches(resetPassword, passwordHash.getValue())).isTrue();
         verify(mapper).deleteAccountSessions(accountId);
+        verify(mapper).revokeAccountAccessTokens(accountId);
     }
 
     @Test

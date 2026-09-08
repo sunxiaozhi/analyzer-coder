@@ -19,6 +19,11 @@ function openSource(source: Provenance) {
     emit('openCode', {
       ...props.selection,
       filePath: source.filePath,
+      repositoryId: source.repositoryId,
+      snapshotId: source.snapshotId,
+      commitSha: source.commitSha,
+      worktreeDigest: source.worktreeDigest,
+      side: undefined,
       startLine: source.startLine,
       endLine: source.endLine,
     });

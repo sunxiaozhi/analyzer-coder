@@ -8,13 +8,17 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebSecurityConfig implements WebMvcConfigurer {
     private final SessionInterceptor sessionInterceptor;
+    private final AccessTokenInterceptor accessTokenInterceptor;
 
-    public WebSecurityConfig(SessionInterceptor sessionInterceptor) {
+    public WebSecurityConfig(
+            SessionInterceptor sessionInterceptor, AccessTokenInterceptor accessTokenInterceptor) {
         this.sessionInterceptor = sessionInterceptor;
+        this.accessTokenInterceptor = accessTokenInterceptor;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(accessTokenInterceptor).addPathPatterns("/**");
         registry.addInterceptor(sessionInterceptor).addPathPatterns("/**");
     }
 }

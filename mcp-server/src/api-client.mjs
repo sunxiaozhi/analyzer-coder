@@ -8,11 +8,12 @@ export class AnalyzerApiError extends Error {
 }
 
 export class AnalyzerApiClient {
-  constructor({ baseUrl, sessionToken, csrfToken, fetchImpl = fetch }) {
+  constructor({ baseUrl, accessToken, sessionToken, csrfToken, fetchImpl = fetch }) {
     if (!baseUrl) throw new Error('ANALYZER_API_BASE is required');
-    if (!sessionToken) throw new Error('ANALYZER_SESSION_TOKEN is required');
-    if (!csrfToken) throw new Error('ANALYZER_CSRF_TOKEN is required');
+    if (!accessToken && !sessionToken) throw new Error('ANALYZER_SESSION_TOKEN is required');
+    if (!accessToken && !csrfToken) throw new Error('ANALYZER_CSRF_TOKEN is required');
     this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.accessToken = accessToken;
     this.sessionToken = sessionToken;
     this.csrfToken = csrfToken;
     this.fetchImpl = fetchImpl;
@@ -22,9 +23,10 @@ export class AnalyzerApiClient {
     const method = (init.method ?? 'GET').toUpperCase();
     const headers = new Headers(init.headers);
     headers.set('Accept', 'application/json');
-    headers.set('Cookie', `AC_SESSION=${this.sessionToken}`);
+    if (this.accessToken) headers.set('Authorization', `Bearer ${this.accessToken}`);
+    else headers.set('Cookie', `AC_SESSION=${this.sessionToken}`);
     if (init.body !== undefined) headers.set('Content-Type', 'application/json');
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    if (!this.accessToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
       headers.set('X-CSRF-Token', this.csrfToken);
     }
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, method, headers });
@@ -51,6 +53,7 @@ async function readPayload(response) {
 export function clientFromEnvironment(environment = process.env) {
   return new AnalyzerApiClient({
     baseUrl: environment.ANALYZER_API_BASE ?? 'http://127.0.0.1:8080',
+    accessToken: environment.ANALYZER_ACCESS_TOKEN,
     sessionToken: environment.ANALYZER_SESSION_TOKEN,
     csrfToken: environment.ANALYZER_CSRF_TOKEN,
   });

@@ -230,6 +230,7 @@ function openCode(reference: CodeReference) {
   void router.push({
     name: 'search',
     query: {
+      snapshotId: reference.snapshotId ?? undefined,
       path: reference.filePath,
       startLine: String(reference.startLine ?? 1),
       endLine: String(reference.endLine ?? reference.startLine ?? 1),
@@ -341,6 +342,7 @@ async function openGraph(reference: CodeReference) {
     await router.push({ name: 'search', query: {
       path: target.filePath || reference.filePath,
       startLine: String(target.startLine ?? reference.startLine ?? 1),
+      snapshotId: reference.snapshotId ?? undefined,
       symbol: target.symbol,
       depth: '3',
       relation: '1',
