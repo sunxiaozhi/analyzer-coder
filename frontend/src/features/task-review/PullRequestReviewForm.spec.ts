@@ -9,7 +9,7 @@ describe('PullRequestReviewForm', () => {
       global: { stubs: { 'el-button': { template: '<button class="el-button"><slot /></button>' } } },
     });
 
-    await wrapper.get('input[type="number"]').setValue('19');
+    await wrapper.get('input[inputmode="url"]').setValue('19');
     await wrapper.get('textarea').setValue('  核对支付变更  ');
     await wrapper.get('.el-button').trigger('click');
 
@@ -23,5 +23,18 @@ describe('PullRequestReviewForm', () => {
       },
     ]]);
     expect(wrapper.text()).toContain('评论只提示、不阻断合并');
+  });
+
+  it('recognizes a pasted GitHub pull request link', async () => {
+    const wrapper = mount(PullRequestReviewForm, {
+      props: { loading: false, defaultProvider: 'GITLAB', models: [] },
+      global: { stubs: { 'el-button': { template: '<button class="el-button"><slot /></button>' } } },
+    });
+
+    await wrapper.get('input[inputmode="url"]').setValue('https://github.com/acme/orders/pull/128');
+    expect(wrapper.text()).toContain('将读取 PR #128');
+    await wrapper.get('.el-button').trigger('click');
+
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ provider: 'GITHUB', number: 128 });
   });
 });

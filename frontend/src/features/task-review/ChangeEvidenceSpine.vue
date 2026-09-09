@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   AlertCircle,
   BookCheck,
@@ -30,6 +31,9 @@ import ObligationPanel from './ObligationPanel.vue';
 
 const props = defineProps<{ result: TaskReviewResult }>();
 const emit = defineEmits<{ select: [selection: ReviewEvidenceSelection] }>();
+const uniqueChangedSymbols = computed(() => Array.from(
+  new Map(props.result.changedSymbols.map(item => [`${item.filePath}\u0000${item.symbolId}`, item])).values(),
+));
 
 const resolutionLabels: Record<string, string> = {
   CODEGRAPH: '代码图谱节点',
@@ -204,16 +208,16 @@ function unknownAction(code?: string) {
       <span class="stage-marker"><FileDiff :size="15" /></span>
       <header>
         <div><small>变更事实</small><h2>真实改动</h2></div>
-        <b>{{ result.change?.changes.length ?? 0 }} 文件 · {{ result.changedSymbols.length }} 对象</b>
+        <b>{{ result.change?.changes.length ?? 0 }} 文件 · {{ uniqueChangedSymbols.length }} 对象</b>
       </header>
       <div class="stage-body change-list">
-        <button v-for="item in result.changedSymbols" :key="`${item.symbolId}:${item.hunkIndex}:${item.filePath}`" type="button" @click="selectChange(item)">
+        <button v-for="item in uniqueChangedSymbols" :key="`${item.symbolId}:${item.filePath}`" type="button" @click="selectChange(item)">
           <span :data-change="item.changeType">{{ changeLabels[item.changeType] ?? '其他' }}</span>
           <div><strong>{{ item.name }}</strong><code>{{ item.filePath }}:{{ item.newStartLine ?? item.oldStartLine ?? 1 }}</code></div>
           <small>{{ symbolKindLabel(item.kind) }} · {{ resolutionLabels[item.resolution] ?? '其他定位方式' }}</small>
           <ChevronRight :size="14" />
         </button>
-        <p v-if="!result.changedSymbols.length">Git 没有返回可审查的改动对象。</p>
+        <p v-if="!uniqueChangedSymbols.length">Git 没有返回可定位的代码对象，请结合文件变化和未知项人工核对。</p>
       </div>
     </section>
 
@@ -237,7 +241,7 @@ function unknownAction(code?: string) {
       <span class="stage-marker"><ShieldCheck :size="15" /></span>
       <header>
         <div><small>必须动作</small><h2>测试与审批</h2></div>
-        <b>{{ result.requiredTests.length + result.requiredApprovals.length }} 项待处理</b>
+        <b>{{ result.requiredTests.length + result.requiredApprovals.length }} 项规则要求</b>
       </header>
       <div class="stage-body">
         <ObligationPanel :tests="result.requiredTests" :approvals="result.requiredApprovals" @select="selectObligation" />

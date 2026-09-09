@@ -179,7 +179,7 @@ function mountSheet(currentPreparation: RepositoryPreparation = preparation) {
 }
 
 describe('ProjectOverviewSheet', () => {
-  it('shows snapshot facts, knowledge health, code categories and recent reviews without README or technologies', () => {
+  it('shows snapshot facts, knowledge health and recent reviews without derived code categories or technologies', () => {
     const wrapper = mountSheet();
     const text = wrapper.text();
 
@@ -193,8 +193,9 @@ describe('ProjectOverviewSheet', () => {
     expect(text).toContain('知识治理状态');
     expect(text).toContain('当前');
     expect(text).toContain('必需但无负责人');
-    expect(text).toContain('代码类型统计');
-    expect(text).toContain('应用与服务');
+    expect(text).toContain('代码文件');
+    expect(text).not.toContain('代码类型统计');
+    expect(text).not.toContain('应用与服务');
     expect(text).toContain('最近变更审查');
     expect(text).toContain('调整登录校验');
     expect(text).toContain('当前阻塞与缺口');
@@ -231,7 +232,7 @@ describe('ProjectOverviewSheet', () => {
 it('shows unavailable statistics instead of reporting zero code files on a failed request', async () => {
   const wrapper = mountSheet();
   await wrapper.setProps({ codeFacts: null });
-  expect(wrapper.text()).toContain('代码统计未能加载，请刷新重试。');
+
   expect(wrapper.find('[data-accent="violet"] strong').text()).toBe('—');
 });
 
@@ -253,15 +254,6 @@ it('keeps incomplete vector coverage below 100% and names character retrieval', 
   expect(wrapper.text()).toContain('不具备语义理解能力');
   await wrapper.setProps({ profile: { ...profile, chunkCount: 0, vectorizedChunks: 0 } });
   expect(wrapper.get('[data-accent="cyan"] strong').text()).toBe('—');
-});
-
-it('shows all categories with their share of source files', async () => {
-  const wrapper = mountSheet();
-  const fileCategories = Array.from({ length: 10 }, (_, index) => ({ key: String(index), label: `类别${index}`, count: 1, detail: '', samples: [] }));
-  await wrapper.setProps({ codeFacts: { ...codeFacts, codeFileCount: 10, fileCategories } });
-  expect(wrapper.findAll('.category-row')).toHaveLength(10);
-  expect(wrapper.get('.category-row b').attributes('style')).toContain('width: 10%');
-  expect(wrapper.get('[data-accent="violet"]').text()).toContain('10 类');
 });
 
 it('shows failed review errors and opens the exact historical record', async () => {

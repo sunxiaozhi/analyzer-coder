@@ -114,7 +114,7 @@ async function loadCards() {
 
 async function loadMarkdownSources() {
   const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId || !canMaintain.value) {
+  if (!repositoryId) {
     activeMode.value = 'cards';
     markdownSources.value = null;
     sourceLoadError.value = null;
@@ -470,7 +470,6 @@ onMounted(() => void load());
           <button
             type="button"
             role="tab"
-            v-if="canMaintain"
             :aria-selected="activeMode === 'markdown'"
             :class="{ active: activeMode === 'markdown' }"
             @click="activeMode = 'markdown'"

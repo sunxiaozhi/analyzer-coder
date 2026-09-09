@@ -25,7 +25,7 @@ export interface WorkspaceNavGroup {
 
 export interface WorkspaceNavigationContext {
   isAdmin: boolean;
-  canMaintainSelectedRepository: boolean;
+  canReadSelectedRepository: boolean;
   canManageProjects: boolean;
 }
 
@@ -40,7 +40,7 @@ export function workspaceNavigation(
   context: WorkspaceNavigationContext,
 ): WorkspaceNavGroup[] {
   const maintenanceItems: WorkspaceNavItem[] = [];
-  if (context.canMaintainSelectedRepository) {
+  if (context.canReadSelectedRepository) {
     maintenanceItems.push({ to: '/knowledge', label: '知识治理', icon: 'knowledge' });
   }
   if (context.canManageProjects) {

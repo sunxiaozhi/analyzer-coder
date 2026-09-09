@@ -27,7 +27,7 @@
 
 安装前端/MCP 依赖并启动 Docker 后，可执行 `node scripts/verify-core.mjs`。脚本创建独立临时 pgvector 数据库，执行前端测试/构建、全部后端单元与集成测试、真实 HTTP 导入到问答验收、MCP 和 CI 脚本测试，结束后移除测试容器。默认端口 15439，可用 `--port=15440` 更换；不会使用业务库凭据。
 
-逐项使用说明见 [功能与数据流](docs/13-system-usage-map.md)。
+完整操作、权限、数据来源和未明确功能见 [系统使用手册](docs/16-system-user-manual.md)；快速说明见 [功能与数据流](docs/13-system-usage-map.md)。
 
 ```sh
 mvn -pl backend -am test

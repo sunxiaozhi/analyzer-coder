@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue';
-import { GitMerge, MessageSquareText, Play } from 'lucide-vue-next';
+import { ChevronDown, GitMerge, MessageSquareText, Play } from 'lucide-vue-next';
 import type { AskModel } from '@/api/intelligence';
 import type { PullRequestProviderKind } from '@/api/taskReviews';
 
@@ -22,29 +22,44 @@ const props = defineProps<{
 const emit = defineEmits<{ submit: [draft: PullRequestReviewDraft] }>();
 
 const provider = shallowRef<PullRequestProviderKind>(props.defaultProvider ?? 'GITHUB');
-const number = shallowRef<number | null>(null);
+const reference = shallowRef('');
 const task = shallowRef('');
 const modelConfigId = shallowRef('');
 const customApi = shallowRef(false);
 const apiBaseUrl = shallowRef('');
+const reviewNumber = computed(() => {
+  const value = reference.value.trim();
+  if (/^\d+$/.test(value)) return Number(value);
+  const github = value.match(/\/pull\/(\d+)(?:[/?#]|$)/i);
+  if (github) return Number(github[1]);
+  const gitlab = value.match(/\/merge_requests\/(\d+)(?:[/?#]|$)/i);
+  return gitlab ? Number(gitlab[1]) : null;
+});
+const referenceHint = computed(() => reviewNumber.value
+  ? `将读取 ${provider.value === 'GITHUB' ? 'PR' : 'MR'} #${reviewNumber.value}`
+  : '粘贴完整链接时会自动识别平台和编号');
 const canSubmit = computed(() => (
   !props.loading
   && !props.disabled
-  && number.value !== null
-  && Number.isInteger(number.value)
-  && number.value > 0
+  && reviewNumber.value !== null
+  && Number.isInteger(reviewNumber.value)
+  && reviewNumber.value > 0
   && (!customApi.value || /^https:\/\//i.test(apiBaseUrl.value.trim()))
 ));
 
 watch(() => props.defaultProvider, value => {
   if (value) provider.value = value;
 });
+watch(reference, value => {
+  if (/github\.com\/.+\/pull\/\d+/i.test(value)) provider.value = 'GITHUB';
+  if (/\/-\/merge_requests\/\d+/i.test(value)) provider.value = 'GITLAB';
+});
 
 function submit() {
-  if (!canSubmit.value || number.value === null) return;
+  if (!canSubmit.value || reviewNumber.value === null) return;
   emit('submit', {
     provider: provider.value,
-    number: number.value,
+    number: reviewNumber.value,
     task: task.value.trim() || null,
     modelConfigId: modelConfigId.value || null,
     apiBaseUrl: customApi.value ? apiBaseUrl.value.trim() || null : null,
@@ -72,8 +87,9 @@ function submit() {
         </select>
       </label>
       <label>
-        <span>{{ provider === 'GITHUB' ? 'PR 编号' : 'MR 编号' }}</span>
-        <input v-model.number="number" type="number" min="1" step="1" placeholder="例如 128" />
+        <span>PR / MR 链接或编号</span>
+        <input v-model="reference" type="text" inputmode="url" placeholder="粘贴链接，或输入 128" />
+        <small>{{ referenceHint }}</small>
       </label>
     </div>
 
@@ -82,28 +98,30 @@ function submit() {
       <textarea v-model="task" rows="2" maxlength="2000" placeholder="例如：核对退款流程改动的测试和审批要求" @keydown.ctrl.enter="submit" />
     </label>
 
-    <div class="provider-row">
-      <label>
-        <span>引用总结 <small>可选</small></span>
-        <select v-model="modelConfigId" :disabled="modelsLoading">
-          <option value="">不使用模型总结</option>
-          <option v-for="item in models ?? []" :key="item.id" :value="item.id" :disabled="!item.available">
-            {{ item.name }} / {{ item.model }}{{ item.available ? '' : '（不可用）' }}
-          </option>
-        </select>
+    <details class="advanced-settings">
+      <summary><ChevronDown :size="15" />高级设置 <small>模型总结与企业版接口</small></summary>
+      <div class="provider-row">
+        <label>
+          <span>引用总结 <small>可选</small></span>
+          <select v-model="modelConfigId" :disabled="modelsLoading">
+            <option value="">不使用模型总结</option>
+            <option v-for="item in models ?? []" :key="item.id" :value="item.id" :disabled="!item.available">
+              {{ item.name }} / {{ item.model }}{{ item.available ? '' : '（不可用）' }}
+            </option>
+          </select>
+        </label>
+        <label class="api-toggle">
+          <span>企业版接口</span>
+          <button type="button" :aria-pressed="customApi" @click="customApi = !customApi">
+            {{ customApi ? '使用自定义 HTTPS API' : '按仓库地址自动识别' }}
+          </button>
+        </label>
+      </div>
+      <label v-if="customApi" class="api-field">
+        <span>接口根地址 <small>必须与仓库同主机</small></span>
+        <input v-model="apiBaseUrl" type="url" maxlength="500" placeholder="https://git.example.com/api/v4" />
       </label>
-      <label class="api-toggle">
-        <span>企业版接口</span>
-        <button type="button" :aria-pressed="customApi" @click="customApi = !customApi">
-          {{ customApi ? '使用自定义 HTTPS API' : '按仓库地址自动识别' }}
-        </button>
-      </label>
-    </div>
-
-    <label v-if="customApi" class="api-field">
-      <span>接口根地址 <small>必须与仓库同主机</small></span>
-      <input v-model="apiBaseUrl" type="url" maxlength="500" placeholder="https://git.example.com/api/v4" />
-    </label>
+    </details>
 
     <aside>
       <MessageSquareText :size="16" />
@@ -135,10 +153,17 @@ textarea { min-height: 68px; padding: 10px 11px; resize: vertical; line-height: 
 input:focus, select:focus, textarea:focus, .api-toggle button:focus-visible { border-color: var(--app-color-success); box-shadow: 0 0 0 3px rgb(33 138 96 / 12%); }
 .api-toggle button { color: #4f645d; text-align: left; cursor: pointer; }
 .api-toggle button[aria-pressed="true"] { color: var(--app-color-success); border-color: #85b9aa; background: #f1faf7; }
+.advanced-settings { display: grid; gap: 12px; padding-bottom: 12px; border-top: 1px solid #e5ece9; border-bottom: 1px solid #e5ece9; }
+.advanced-settings summary { display: flex; align-items: center; gap: 6px; padding: 11px 2px 0; color: #566872; font-size: 13px; font-weight: 700; cursor: pointer; list-style: none; }
+.advanced-settings summary::-webkit-details-marker { display: none; }
+.advanced-settings summary small { color: #8a969e; font-weight: 500; }
+.advanced-settings summary svg { transition: transform .18s ease; }
+.advanced-settings[open] summary svg { transform: rotate(180deg); }
 aside { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 10px 12px; color: #46645b; border-left: 3px solid var(--app-color-success); background: #f0f8f5; font-size: 13px; line-height: 1.5; }
 aside span { display: grid; gap: 1px; }
 footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 footer > span { color: #82918b; font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .advanced-settings summary svg { transition: none; } }
 @media (max-width: 760px) {
   .provider-form { padding: 15px; }
   .provider-form > header, .provider-row { grid-template-columns: 1fr; }

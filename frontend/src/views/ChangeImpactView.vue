@@ -11,7 +11,6 @@ import {
   FlaskConical,
   GitCommitHorizontal,
   GitPullRequest,
-  History,
   RefreshCw,
 } from 'lucide-vue-next';
 import {
@@ -29,6 +28,8 @@ import ChangeEvidenceSpine from '@/features/task-review/ChangeEvidenceSpine.vue'
 import ImpactEstimatePanel from '@/features/task-review/ImpactEstimatePanel.vue';
 import PullRequestReviewForm, { type PullRequestReviewDraft } from '@/features/task-review/PullRequestReviewForm.vue';
 import ReviewEvidenceDrawer from '@/features/task-review/ReviewEvidenceDrawer.vue';
+import ReviewHistoryPanel from '@/features/task-review/ReviewHistoryPanel.vue';
+import ReviewResultOverview from '@/features/task-review/ReviewResultOverview.vue';
 import TaskReviewForm, { type TaskReviewDraft } from '@/features/task-review/TaskReviewForm.vue';
 import TaskOutcomePanel from '@/features/task-review/TaskOutcomePanel.vue';
 import { reviewSourceMismatch } from '@/features/task-review/reviewSourceVersion';
@@ -61,6 +62,7 @@ let historyRequestVersion = 0;
 const repository = computed(() => repositories.selectedRepository);
 const shortSnapshot = computed(() => repository.value?.snapshotId?.slice(0, 8) ?? '未发布');
 const shortCommit = computed(() => repository.value?.commit?.slice(0, 8) ?? '无提交');
+const showLauncher = computed(() => !result.value);
 const resultState = computed(() => {
   if (!result.value) return null;
   if (result.value.status === 'FAILED') return 'failed';
@@ -274,10 +276,6 @@ function shortDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function sourceLabel(source: TaskReviewSummary['changeSource']) {
-  return { WORKTREE: '工作区', SINGLE_COMMIT: '单次提交', COMMIT_RANGE: '提交范围' }[source];
-}
-
 watch(
   () => repositories.selectedRepositoryId,
   repositoryId => {
@@ -337,7 +335,7 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
       </dl>
     </header>
 
-    <nav class="mode-switch" aria-label="变更工具模式">
+    <nav v-if="showLauncher" class="mode-switch" aria-label="变更工具模式">
       <button type="button" :class="{ active: mode === 'review' }" @click="mode = 'review'">
         <FileSearch :size="15" /><span><strong>真实变更审查</strong><small>读取 Git 差异与正式知识</small></span>
       </button>
@@ -367,7 +365,7 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
           <AlertTriangle :size="18" /><div><strong>ZIP 项目没有可审查的 Git 历史</strong><p>可使用代码检索、问答和需求影响预估；审查实际改动需要接入 Git 仓库。</p></div>
           <el-button @click="mode = 'estimate'">预估需求影响</el-button>
         </section>
-        <template v-else>
+        <template v-else-if="showLauncher">
           <nav v-if="repository.capabilities.canUpdate" class="review-input-switch" aria-label="审查输入来源">
             <button type="button" :class="{ active: reviewInput === 'local' }" @click="reviewInput = 'local'; resetResult()">
               <GitCommitHorizontal :size="14" /><span><strong>本地 Git</strong><small>工作区 / 提交版本 / 版本范围</small></span>
@@ -384,6 +382,9 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
             :initial-draft="initialDraft"
             :models="summaryModels"
             :models-loading="summaryModelsLoading"
+            :repository-name="repository.name"
+            :repository-commit="repository.commit"
+            :snapshot-id="repository.snapshotId"
             @submit="submit"
           />
           <PullRequestReviewForm
@@ -397,26 +398,12 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
           />
         </template>
 
-        <section class="history-strip" aria-labelledby="history-title">
-          <header>
-            <div><History :size="15" /><strong id="history-title">最近审查</strong><small>不可变、只读的版本记录</small></div>
-            <RefreshCw v-if="historyLoading" class="spinning" :size="14" />
-          </header>
-          <div v-if="history.length" class="history-list">
-            <button
-              v-for="item in history"
-              :key="item.reviewId"
-              type="button"
-              :class="{ selected: result?.reviewId === item.reviewId }"
-              @click="openHistory(item)"
-            >
-              <span><component :is="item.status === 'COMPLETED' ? CheckCircle2 : AlertTriangle" :size="13" />{{ item.status === 'COMPLETED' ? '已完成' : '失败' }}</span>
-              <strong>{{ item.task || `${sourceLabel(item.changeSource)}审查` }}</strong>
-              <small>{{ item.changedFileCount ?? '—' }} 文件 · {{ item.unknownCount ?? '—' }} 未知 · {{ shortDate(item.finishedAt) }}</small>
-            </button>
-          </div>
-          <p v-else-if="!historyLoading">还没有审查记录。提交上方表单后，结果会成为可追溯的只读版本。</p>
-        </section>
+        <ReviewHistoryPanel
+          :items="history"
+          :loading="historyLoading"
+          :selected-review-id="result?.reviewId"
+          @open="openHistory"
+        />
 
         <section v-if="error" class="state-banner error-state" role="alert">
           <AlertTriangle :size="17" /><div><strong>无法完成当前操作</strong><p>{{ error }}</p></div>
@@ -428,6 +415,10 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
         </section>
 
         <template v-if="result">
+          <div class="result-actions">
+            <div><strong>{{ historyReadOnly ? '正在查看历史审查' : '本次审查已经生成' }}</strong><span>输入区域已收起，方便集中处理结果。</span></div>
+            <el-button plain @click="resetResult">发起新的审查</el-button>
+          </div>
           <section class="result-ledger" :data-state="resultState">
             <div class="ledger-state">
               <component :is="resultState === 'complete' ? CheckCircle2 : AlertTriangle" :size="18" />
@@ -440,6 +431,8 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
               <span><Clock3 :size="12" />{{ shortDate(result.finishedAt) }}</span>
             </div>
           </section>
+
+          <ReviewResultOverview v-if="result.status === 'COMPLETED'" :result="result" />
 
           <section v-if="result.change?.limitations.length" class="review-limitations">
             <AlertTriangle :size="16" />
@@ -469,7 +462,14 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
             <AlertTriangle :size="26" /><h2>变更审查失败</h2><p>{{ result.error?.message }}</p>
           </section>
 
-          <div v-else-if="result.status === 'COMPLETED'" class="review-workbench">
+          <TaskOutcomePanel
+            v-if="result.status === 'COMPLETED'"
+            :key="result.reviewId"
+            :repository-id="result.repositoryId"
+            :review="result"
+          />
+
+          <div v-if="result.status === 'COMPLETED'" class="review-workbench">
             <ChangeEvidenceSpine :result="result" @select="selectEvidence" />
             <ReviewEvidenceDrawer
               :selection="selection"
@@ -478,12 +478,6 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
               @open-knowledge="openKnowledge"
             />
           </div>
-          <TaskOutcomePanel
-            v-if="result.status === 'COMPLETED'"
-            :key="result.reviewId"
-            :repository-id="result.repositoryId"
-            :review="result"
-          />
         </template>
       </template>
     </template>
@@ -526,18 +520,10 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
 .precondition-banner div { display: grid; gap: 2px; }
 .precondition-banner strong { color: #67451d; font-size: 14px; }
 .precondition-banner p { margin: 0; color: #76624a; font-size: 13px; }
-.history-strip { border: 1px solid #dbe2e6; border-radius: 9px; overflow: hidden; background: #fff; }
-.history-strip > header { display: flex; align-items: center; justify-content: space-between; min-height: 38px; padding: 0 12px; color: #52616b; border-bottom: 1px solid #e6ebee; background: #f8fafb; }
-.history-strip > header div { display: flex; align-items: center; gap: 7px; }
-.history-strip > header strong { font-size: 13px; }
-.history-strip > header small { color: #89949b; font-size: 12px; }
-.history-strip > p { margin: 0; padding: 13px; color: #77858e; font-size: 13px; }
-.history-list { display: flex; gap: 7px; overflow-x: auto; padding: 8px; }
-.history-list button { display: grid; flex: 0 0 220px; gap: 4px; padding: 9px 10px; color: #697780; text-align: left; border: 1px solid #e0e6e9; border-radius: 6px; background: #fff; }
-.history-list button:hover, .history-list button.selected { border-color: #8fb5d5; background: #f5f9fc; }
-.history-list button > span { display: flex; align-items: center; gap: 4px; color: #567182; font-size: 12px; }
-.history-list strong { overflow: hidden; color: #33424c; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.history-list small { color: #7c8992; font-size: 12px; }
+.result-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 12px; border: 1px solid #dde4e8; border-radius: 8px; background: #f8fafb; }
+.result-actions div { display: grid; gap: 2px; }
+.result-actions strong { color: #34444e; font-size: 13px; }
+.result-actions span { color: #7a8891; font-size: 12px; }
 .state-banner { display: grid; grid-template-columns: 23px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 13px; border-left: 3px solid #76838f; background: #f3f5f6; }
 .state-banner div { display: grid; gap: 2px; }
 .state-banner strong { font-size: 13px; }
@@ -591,5 +577,6 @@ onScopeDispose(() => { contextVersion++; historyRequestVersion++; });
   .provider-result-note a { grid-column: 2; }
   .precondition-banner { grid-template-columns: 24px minmax(0, 1fr); }
   .precondition-banner .el-button { grid-column: 2; justify-self: start; margin-left: 0; }
+  .result-actions { align-items: stretch; flex-direction: column; }
 }
 </style>

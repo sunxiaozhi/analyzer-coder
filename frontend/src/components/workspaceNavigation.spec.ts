@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { workspaceNavigation } from './workspaceNavigation';
 
 describe('workspaceNavigation', () => {
-  it('shows ordinary developers only the four daily development tasks', () => {
+  it('shows ordinary developers only the four daily development tasks without a selected repository', () => {
     const groups = workspaceNavigation({
       isAdmin: false,
-      canMaintainSelectedRepository: false,
+      canReadSelectedRepository: false,
       canManageProjects: false,
     });
 
@@ -18,10 +18,10 @@ describe('workspaceNavigation', () => {
     ]);
   });
 
-  it('adds governance without exposing system operations to maintainers', () => {
+  it('keeps readable knowledge and project management in the original maintenance group', () => {
     const groups = workspaceNavigation({
       isAdmin: false,
-      canMaintainSelectedRepository: true,
+      canReadSelectedRepository: true,
       canManageProjects: true,
     });
 
@@ -32,7 +32,7 @@ describe('workspaceNavigation', () => {
   it('nests all four administrator operations in one system group', () => {
     const groups = workspaceNavigation({
       isAdmin: true,
-      canMaintainSelectedRepository: true,
+      canReadSelectedRepository: true,
       canManageProjects: true,
     });
     const system = groups.find(group => group.key === 'system');

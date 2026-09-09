@@ -2,6 +2,7 @@
 import {
   BookOpenCheck,
   ChevronDown,
+  CircleHelp,
   Cpu,
   FolderCog,
   LayoutDashboard,
@@ -22,7 +23,6 @@ import { useAuthStore } from '@/stores/authStore';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useWorkspaceTabsStore, type WorkspaceTab } from '@/stores/workspaceTabs';
 import WorkspaceTabs from '@/components/WorkspaceTabs.vue';
-import WorkspaceJourneyBar from '@/components/WorkspaceJourneyBar.vue';
 import ProductLogo from '@/components/ProductLogo.vue';
 import {
   workspaceNavigation,
@@ -45,18 +45,16 @@ const iconComponents: Record<WorkspaceNavIcon, object> = {
   accounts: Users,
   audit: ScrollText,
 };
-const canMaintainSelectedRepository = computed(() => (
-  auth.isAdmin || Boolean(repositoryStore.selectedRepository?.capabilities.canUpdate)
-));
+
 // Every authenticated account can import its own repository; row actions remain capability-gated.
 const canManageProjects = computed(() => auth.authenticated);
 const navGroups = computed(() => workspaceNavigation({
   isAdmin: auth.isAdmin,
-  canMaintainSelectedRepository: canMaintainSelectedRepository.value,
+  canReadSelectedRepository: Boolean(repositoryStore.selectedRepository),
   canManageProjects: canManageProjects.value,
 }));
 const visibleNavItems = computed(() => navGroups.value.flatMap(group => group.items));
-const titles: Record<string, string> = { mcp: 'MCP 接入', overview: '项目总览', 'change-impact': '变更审查', repositories: '项目管理', indexing: '索引任务', search: '代码与证据', ask: '问项目', graph: '代码与证据', knowledge: '知识治理', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
+const titles: Record<string, string> = { help: '功能导航', mcp: 'MCP 接入', overview: '项目总览', 'change-impact': '变更审查', repositories: '项目管理', indexing: '索引任务', search: '代码与证据', ask: '问项目', graph: '代码与证据', knowledge: '知识治理', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
 const pageTitle = computed(() => titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
 async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }
@@ -121,9 +119,7 @@ function closeAllTabs() {
     workspaceTabs.open({ name: 'overview', title: '项目总览', fullPath: route.fullPath });
   }
 }
-function navigateJourney(path: string) {
-  if (path !== route.path) void router.push(path);
-}
+
 watch(() => route.fullPath, () => {
   if (!route.meta.public && typeof route.name === 'string') {
     workspaceTabs.open({
@@ -137,10 +133,10 @@ watch(() => route.name, name => {
   if (['indexing', 'settings', 'accounts', 'audit'].includes(String(name))) systemOpen.value = true;
 }, { immediate: true });
 watch(visibleNavItems, items => {
-  workspaceTabs.retain(new Set(['mcp', ...items.map(item => item.to.slice(1))]));
+  workspaceTabs.retain(new Set(['help', 'mcp', ...items.map(item => item.to.slice(1))]));
 });
 onMounted(() => {
-  workspaceTabs.retain(new Set(['mcp', ...visibleNavItems.value.map(item => item.to.slice(1))]));
+  workspaceTabs.retain(new Set(['help', 'mcp', ...visibleNavItems.value.map(item => item.to.slice(1))]));
   void repositoryStore.loadRepositories();
 });
 </script>
@@ -170,8 +166,8 @@ onMounted(() => {
       </section>
     </nav>
   </aside>
-  <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><RouterLink class="mcp-entry" to="/mcp" title="查看 MCP 接入指导"><Plug :size="16" /><span>MCP 接入</span></RouterLink><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
-    <div class="page-frame" :class="{ 'page-frame--mcp': activeRouteName === 'mcp' }">
+  <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><RouterLink class="help-entry" to="/help" title="查看功能导航和数据来源"><CircleHelp :size="16" /><span>帮助说明</span></RouterLink><RouterLink class="mcp-entry" to="/mcp" title="查看 MCP 接入指导"><Plug :size="16" /><span>MCP 接入</span></RouterLink><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
+    <div class="page-frame">
       <WorkspaceTabs
         :tabs="workspaceTabs.tabs"
         :active-name="activeRouteName"
@@ -184,15 +180,7 @@ onMounted(() => {
         @close-all="closeAllTabs"
         @copy-link="copyTabLink"
       />
-      <WorkspaceJourneyBar
-        v-if="activeRouteName !== 'mcp'"
-        :active-route="activeRouteName"
-        :has-repository="Boolean(repositoryStore.selectedRepository)"
-        :has-snapshot="Boolean(repositoryStore.selectedRepository?.snapshotId)"
-        :can-manage-projects="canManageProjects"
-        :can-maintain-knowledge="canMaintainSelectedRepository"
-        @navigate="navigateJourney"
-      />
+
       <div class="route-view">
         <RouterView v-slot="{ Component, route: viewRoute }">
           <KeepAlive :max="12">
@@ -208,11 +196,20 @@ onMounted(() => {
 </div></template>
 
 <style scoped>
-.page-frame--mcp { grid-template-rows: 44px minmax(0, 1fr); }
-.mcp-entry { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 10px; border-radius: 6px; color: #526071; font-size: 13px; text-decoration: none; }
-.mcp-entry:hover, .mcp-entry.router-link-active { color: #2563eb; background: #eff6ff; }
-.mcp-entry:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
-.nav-list { align-content: start; overflow-y: auto; }
+.page-frame { grid-template-rows: 44px minmax(0, 1fr); }
+.help-entry, .mcp-entry { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 10px; border-radius: 6px; color: #526071; font-size: 13px; text-decoration: none; }
+.help-entry:hover, .help-entry.router-link-active, .mcp-entry:hover, .mcp-entry.router-link-active { color: #2563eb; background: #eff6ff; }
+.help-entry:focus-visible, .mcp-entry:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+.sidebar { min-height: 0; overflow: hidden; }
+.brand { flex: none; }
+.nav-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
 .nav-section { display: grid; gap: 3px; }
 .nav-section + .nav-section { margin-top: 11px; padding-top: 11px; border-top: 1px solid #ededf0; }
 .nav-section-label { padding: 0 12px 4px; color: #8a8a92; font-size: 12px; font-weight: 750; letter-spacing: .11em; }
@@ -228,9 +225,17 @@ onMounted(() => {
   .nav-section[data-group='system'] .nav-link { padding-left: 0; }
 }
 @media (max-width: 760px) {
+  .sidebar { overflow-x: auto; overflow-y: hidden; }
   .nav-list, .nav-section, .nav-section-links { display: flex; flex: none; }
+  .nav-list { min-height: auto; overflow: visible; scrollbar-gutter: auto; }
   .nav-section { align-items: center; }
   .nav-section + .nav-section { margin: 0 0 0 4px; padding: 0 0 0 4px; border-top: 0; border-left: 1px solid #ededf0; }
   .system-toggle { width: 38px; height: 38px; }
+}
+@media (max-width: 620px) {
+  .topbar { gap: 6px; padding: 0 10px; }
+  .topbar .global-repository-switcher { width: min(180px, calc(100vw - 166px)); }
+  .help-entry, .mcp-entry { justify-content: center; width: 34px; height: 34px; padding: 0; }
+  .help-entry span, .mcp-entry span, .context-chip { display: none; }
 }
 </style>

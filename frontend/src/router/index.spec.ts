@@ -7,6 +7,7 @@ vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => ({ initia
 describe('workspace critical routes', () => {
   it('keeps every shipped workspace capability on one unique route', () => {
     const expected = new Map([
+      ['help', '/help'],
       ['mcp', '/mcp'],
       ['ask', '/ask'],
       ['knowledge', '/knowledge'],
@@ -21,14 +22,15 @@ describe('workspace critical routes', () => {
       ['audit', '/audit'],
     ]);
 
+    const namedRoutes = router.getRoutes()
+      .filter(route => typeof route.name === 'string');
     const actual = new Map(
-      router.getRoutes()
-        .filter(route => typeof route.name === 'string')
-        .map(route => [String(route.name), route.path]),
+      namedRoutes.map(route => [String(route.name), route.path]),
     );
 
     for (const [name, path] of expected) expect(actual.get(name)).toBe(path);
-    expect(new Set(actual.values()).size).toBe(actual.size);
+    expect(new Set(namedRoutes.map(route => String(route.name))).size).toBe(namedRoutes.length);
+    expect(new Set(namedRoutes.map(route => route.path)).size).toBe(namedRoutes.length);
   });
 
   it('keeps maintenance and system operations behind explicit route metadata', () => {

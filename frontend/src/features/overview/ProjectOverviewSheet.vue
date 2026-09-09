@@ -62,9 +62,7 @@ const vectorCoverage = computed(() => {
   if (props.profile.missingChunks === 0 && props.profile.vectorizedChunks === props.profile.chunkCount) return '100%';
   return Math.min(99.9, Math.floor(props.profile.vectorizedChunks / props.profile.chunkCount * 1000) / 10) + '%';
 });
-const categories = computed(() => (
-  props.codeFacts?.fileCategories.filter(item => item.count > 0) ?? []
-));
+
 const prepareLabel = computed(() => {
   if (props.preparation?.state === 'NOT_READY') return '准备项目';
   if (props.preparation?.state === 'PROCESSING') return '继续准备';
@@ -84,13 +82,6 @@ function short(value: string | null | undefined, length: number) {
   return value ? value.slice(0, length) : '—';
 }
 
-function categoryWidth(value: number) {
-  return categoryPercent(value) + '%';
-}
-
-function categoryPercent(value: number) {
-  return props.codeFacts?.codeFileCount ? Math.round(value / props.codeFacts.codeFileCount * 1000) / 10 : 0;
-}
 
 function stageTone(stageState: string) {
   if (stageState === 'READY') return 'ready';
@@ -217,7 +208,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
       <article data-accent="violet">
         <span><FileCode2 :size="17" />代码文件</span>
         <strong>{{ codeFacts?.codeFileCount ?? '—' }}</strong>
-        <small>{{ codeFacts ? categories.length : '—' }} 类 · {{ profile?.fileCount ?? '—' }} 个快照文件</small>
+        <small>{{ profile?.fileCount ?? '—' }} 个快照文件 · 当前已发布快照</small>
       </article>
     </section>
 
@@ -251,24 +242,6 @@ function canResolveIssue(issue: ProjectHealthIssue) {
           <p class="data-note">上方四种来源状态互斥；下方审核与负责人计数可重叠。满足治理条件不保证引用仍有效，实际审查会进一步筛选证据。</p>
         </section>
 
-        <section class="overview-section code-section" aria-labelledby="code-types-title">
-          <header class="section-heading">
-            <div>
-              <span>代码分布</span>
-              <h2 id="code-types-title">代码类型统计</h2>
-              <p>按文件路径、扩展名和命名规则推断职责，仅统计支持识别的源码语言，每个文件归入一类。条形长度为占识别源码总数的比例，不是测试覆盖率。</p>
-            </div>
-          </header>
-
-          <div v-if="categories.length" class="category-list">
-            <article v-for="category in categories" :key="category.key" class="category-row">
-              <div class="category-main"><span>{{ category.label }}</span><strong>{{ category.count }} · {{ categoryPercent(category.count) }}%</strong></div>
-              <i><b :style="{ width: categoryWidth(category.count) }"></b></i>
-              <small>{{ category.detail }}<template v-if="category.samples.length"> · {{ category.samples.slice(0, 2).join('、') }}</template></small>
-            </article>
-          </div>
-          <p v-else class="empty-copy">{{ codeFacts ? '当前快照没有可分类的代码文件。' : '代码统计未能加载，请刷新重试。' }}</p>
-        </section>
 
         <section class="overview-section reviews-section" aria-labelledby="recent-reviews-title">
           <header class="section-heading">
@@ -441,14 +414,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 .governance-ledger span { color: #405663; font-size: 12px; font-weight: 700; }
 .governance-ledger strong { color: var(--navy); font: 700 14px/1 "SFMono-Regular", Consolas, monospace; }
 .governance-ledger small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
-.category-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 28px; }
-.category-row { display: grid; min-width: 0; gap: 6px; }
-.category-main { display: flex; justify-content: space-between; gap: 12px; color: #405663; font-size: 12px; }
-.category-main span { font-weight: 700; }
-.category-main strong { font-family: "SFMono-Regular", Consolas, monospace; }
-.category-row > i { display: block; height: 4px; overflow: hidden; background: #e7edf0; }
-.category-row > i b { display: block; height: 100%; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
-.category-row > small { overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+
 .review-list { border-top: 1px solid var(--line); }
 .review-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 13px 3px; border-bottom: 1px solid var(--line); }
 .review-status { min-width: 44px; padding: 4px 6px; color: var(--green); border: 1px solid rgb(33 138 96 / 24%); border-radius: 3px; background: rgb(33 138 96 / 6%); font-size: 12px; font-weight: 750; text-align: center; }
@@ -510,7 +476,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
   .knowledge-states { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .knowledge-states article:nth-child(2) { border-right: 0; }
   .knowledge-states article:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
-  .governance-ledger, .category-list { grid-template-columns: 1fr; }
+  .governance-ledger { grid-template-columns: 1fr; }
   .governance-ledger div { border-right: 0; border-bottom: 1px solid var(--line); }
   .governance-ledger div:last-child { border-bottom: 0; }
   .review-row { grid-template-columns: auto minmax(0, 1fr); }

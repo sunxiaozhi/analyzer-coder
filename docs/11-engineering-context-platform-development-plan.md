@@ -1018,7 +1018,7 @@ report_task_outcome
 ```text
 项目名称、分支、Commit、Snapshot
 准备状态
-CodeGraph、向量、知识和代码类型统计
+CodeGraph、向量、知识和代码文件统计
 ```
 
 新增：

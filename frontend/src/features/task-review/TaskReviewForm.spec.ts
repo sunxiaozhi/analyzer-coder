@@ -7,7 +7,7 @@ describe('TaskReviewForm', () => {
     const wrapper = mount(TaskReviewForm, { props: { loading: false } });
 
     expect(wrapper.text()).toContain('暂存、未暂存和未跟踪文件');
-    expect(wrapper.text()).toContain('分析期间不要修改文件');
+    expect(wrapper.text()).toContain('审查期间请保持文件不变');
 
     await wrapper.get('textarea').setValue('核对退款改动');
     await wrapper.get('textarea').trigger('keydown', { key: 'Enter', ctrlKey: true });
@@ -58,6 +58,22 @@ describe('TaskReviewForm', () => {
     await wrapper.get('.review-form > footer el-button').trigger('click');
 
     expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ modelConfigId: 'model-1' });
-    expect(wrapper.text()).toContain('每条建议必须引用现有证据标识');
+    expect(wrapper.text()).toContain('每条模型建议都必须引用已有证据');
+  });
+
+  it('shows the selected range before the review starts', async () => {
+    const wrapper = mount(TaskReviewForm, {
+      props: {
+        loading: false,
+        repositoryName: '订单服务',
+        repositoryCommit: '1234567890abcdef',
+        snapshotId: 'snapshot-12345678',
+      },
+    });
+
+    expect(wrapper.text()).toContain('确认本次审查范围');
+    expect(wrapper.text()).toContain('订单服务');
+    expect(wrapper.text()).toContain('12345678 → 当前工作区');
+    expect(wrapper.text()).toContain('snapshot');
   });
 });
