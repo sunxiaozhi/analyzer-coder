@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import {
+  ChevronLeft,
+  ChevronRight,
   Clipboard,
   Copy,
   Layers3,
@@ -9,7 +11,7 @@ import {
   RefreshCw,
   X,
 } from 'lucide-vue-next';
-import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import type { WorkspaceTab } from '@/stores/workspaceTabs';
 
 const props = defineProps<{ tabs: WorkspaceTab[]; activeName: string }>();
@@ -26,6 +28,12 @@ const emit = defineEmits<{
 
 const contextMenu = reactive({ visible: false, x: 0, y: 0, tab: null as WorkspaceTab | null });
 const contextMenuElement = ref<HTMLElement | null>(null);
+const tabViewport = ref<HTMLElement | null>(null);
+const tabTrack = ref<HTMLElement | null>(null);
+const hasOverflow = shallowRef(false);
+const canScrollLeft = shallowRef(false);
+const canScrollRight = shallowRef(false);
+let resizeObserver: ResizeObserver | null = null;
 const contextTabIndex = computed(() => props.tabs.findIndex(tab => tab.name === contextMenu.tab?.name));
 const canCloseLeft = computed(() => contextTabIndex.value > 0);
 const canCloseRight = computed(() => contextTabIndex.value >= 0 && contextTabIndex.value < props.tabs.length - 1);
@@ -66,13 +74,70 @@ function onGlobalKey(event: KeyboardEvent) {
   if (event.key === 'Escape') closeContextMenu();
 }
 
+function updateScrollState() {
+  const viewport = tabViewport.value;
+  const track = tabTrack.value;
+  if (!viewport || !track) return;
+  hasOverflow.value = track.scrollWidth > viewport.clientWidth + 1;
+  canScrollLeft.value = hasOverflow.value && track.scrollLeft > 1;
+  canScrollRight.value = hasOverflow.value
+    && track.scrollLeft + track.clientWidth < track.scrollWidth - 1;
+}
+
+function scrollTabs(direction: -1 | 1) {
+  const track = tabTrack.value;
+  if (!track) return;
+  track.scrollBy({
+    left: direction * Math.max(160, Math.round(track.clientWidth * 0.72)),
+    behavior: 'smooth',
+  });
+}
+
+function revealActiveTab() {
+  const track = tabTrack.value;
+  const active = track?.querySelector<HTMLElement>('.workspace-tab.active');
+  if (!track || !active) return;
+  const left = active.offsetLeft;
+  const right = left + active.offsetWidth;
+  if (left < track.scrollLeft) {
+    track.scrollTo({ left: Math.max(0, left - 6), behavior: 'smooth' });
+  } else if (right > track.scrollLeft + track.clientWidth) {
+    track.scrollTo({ left: right - track.clientWidth + 6, behavior: 'smooth' });
+  }
+}
+
+watch(
+  () => [props.activeName, ...props.tabs.map(tab => tab.name)],
+  async () => {
+    await nextTick();
+    updateScrollState();
+    await nextTick();
+    revealActiveTab();
+    updateScrollState();
+  },
+);
+
 window.addEventListener('mousedown', onGlobalPointer);
 window.addEventListener('blur', closeContextMenu);
 window.addEventListener('keydown', onGlobalKey);
+onMounted(async () => {
+  await nextTick();
+  updateScrollState();
+  await nextTick();
+  revealActiveTab();
+  updateScrollState();
+  window.addEventListener('resize', updateScrollState);
+  if (typeof ResizeObserver !== 'undefined' && tabViewport.value) {
+    resizeObserver = new ResizeObserver(updateScrollState);
+    resizeObserver.observe(tabViewport.value);
+  }
+});
 onBeforeUnmount(() => {
   window.removeEventListener('mousedown', onGlobalPointer);
   window.removeEventListener('blur', closeContextMenu);
   window.removeEventListener('keydown', onGlobalKey);
+  window.removeEventListener('resize', updateScrollState);
+  resizeObserver?.disconnect();
 });
 </script>
 
@@ -82,28 +147,52 @@ onBeforeUnmount(() => {
       <Layers3 :size="14" />
       <span>工作区</span>
     </div>
-    <div class="tab-track" role="tablist">
+    <div ref="tabViewport" class="tab-viewport" :class="{ 'has-overflow': hasOverflow }">
       <button
-        v-for="tab in tabs"
-        :key="tab.name"
-        :class="['workspace-tab', { active: tab.name === activeName }]"
+        v-if="hasOverflow"
+        class="tab-scroll-button"
         type="button"
-        role="tab"
-        :aria-selected="tab.name === activeName"
-        @click="emit('activate', tab)"
-        @contextmenu="openContextMenu($event, tab)"
-        @auxclick.middle.prevent="emit('close', tab)"
+        aria-label="向左滚动页签"
+        title="向左滚动页签"
+        :disabled="!canScrollLeft"
+        @click="scrollTabs(-1)"
       >
-        <span>{{ tab.title }}</span>
-        <i
-          role="button"
-          tabindex="0"
-          :aria-label="`关闭${tab.title}`"
-          @click.stop="emit('close', tab)"
-          @keydown.enter.stop="emit('close', tab)"
+        <ChevronLeft :size="16" />
+      </button>
+      <div ref="tabTrack" class="tab-track" role="tablist" @scroll.passive="updateScrollState">
+        <button
+          v-for="tab in tabs"
+          :key="tab.name"
+          :class="['workspace-tab', { active: tab.name === activeName }]"
+          type="button"
+          role="tab"
+          :aria-selected="tab.name === activeName"
+          @click="emit('activate', tab)"
+          @contextmenu="openContextMenu($event, tab)"
+          @auxclick.middle.prevent="emit('close', tab)"
         >
-          <X :size="12" />
-        </i>
+          <span>{{ tab.title }}</span>
+          <i
+            role="button"
+            tabindex="0"
+            :aria-label="`关闭${tab.title}`"
+            @click.stop="emit('close', tab)"
+            @keydown.enter.stop="emit('close', tab)"
+          >
+            <X :size="12" />
+          </i>
+        </button>
+      </div>
+      <button
+        v-if="hasOverflow"
+        class="tab-scroll-button"
+        type="button"
+        aria-label="向右滚动页签"
+        title="向右滚动页签"
+        :disabled="!canScrollRight"
+        @click="scrollTabs(1)"
+      >
+        <ChevronRight :size="16" />
       </button>
     </div>
     <el-dropdown trigger="click" placement="bottom-end">
@@ -179,7 +268,42 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .workspace-tabs-label svg { color: var(--app-color-action); }
-.tab-track { display: flex; gap: 4px; min-width: 0; padding-left: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.tab-viewport {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+.tab-viewport.has-overflow {
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  gap: 2px;
+}
+.tab-scroll-button {
+  display: grid;
+  width: 28px;
+  height: 34px;
+  place-items: center;
+  align-self: center;
+  padding: 0;
+  color: #526170;
+  border: 1px solid #dbe3ea;
+  border-radius: 5px;
+  background: #f8fafc;
+}
+.tab-scroll-button:not(:disabled):hover,
+.tab-scroll-button:not(:disabled):focus-visible {
+  color: var(--app-color-action);
+  border-color: #b8d2e7;
+  background: #edf6fd;
+  outline: none;
+}
+.tab-scroll-button:disabled {
+  color: #bec6cd;
+  border-color: #e6e9ec;
+  background: #f8fafc;
+  cursor: default;
+}
+.tab-track { display: flex; gap: 4px; min-width: 0; padding: 0 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tab-track::-webkit-scrollbar { display: none; }
 .workspace-tab {
   position: relative;
   display: inline-flex;

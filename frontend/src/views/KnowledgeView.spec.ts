@@ -48,16 +48,16 @@ describe('knowledge evidence access', () => {
     });
   }
 
-  it('opens a published card from an evidence link without loading draft tools', async () => {
+  it('opens a published card and loads readable Markdown sources without maintenance tools', async () => {
     const wrapper = mountView();
     await flushPromises();
     expect(intelligenceApi.cards).toHaveBeenCalledWith('repo-1');
-    expect(intelligenceApi.markdownSources).not.toHaveBeenCalled();
+    expect(intelligenceApi.markdownSources).toHaveBeenCalledWith('repo-1');
     expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('modelValue')).toBe(true);
     expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('card')?.id).toBe('card-1');
     expect(wrapper.findComponent(KnowledgeCardListItem).props('canMaintain')).toBe(false);
     expect(wrapper.findComponent(KnowledgeCardEditorDialog).exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Markdown 预备知识');
+    expect(wrapper.text()).toContain('Markdown 预备知识');
     wrapper.unmount();
   });
 

@@ -349,7 +349,7 @@ watch(
 <template>
   <section class="code-workbench">
     <section v-if="!workbenchReady" class="workbench-gate">
-      <Search :size="28" />
+      <Search class="workbench-gate-icon" aria-hidden="true" />
       <h1>{{ gateCopy.title }}</h1>
       <p>{{ gateCopy.detail }}</p>
       <el-button type="primary" @click="resolveGate">{{ gateCopy.action }}</el-button>
@@ -529,6 +529,14 @@ watch(
   border-radius: 8px;
   background: #fff;
   text-align: center;
+}
+.workbench-gate-icon {
+  width: 44px;
+  height: 44px;
+  padding: 9px;
+  color: var(--app-color-action);
+  border-radius: 12px;
+  background: var(--app-color-action-soft);
 }
 .workbench-gate h1 { margin: 12px 0 4px; color: var(--app-text-primary); font-size: 18px; }
 .workbench-gate p { max-width: 500px; margin: 0 0 16px; font-size: 13px; line-height: 1.6; }

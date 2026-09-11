@@ -5,33 +5,33 @@ describe('workspaceNavigation', () => {
   it('shows ordinary developers the focused retrieval workflow', () => {
     const groups = workspaceNavigation({
       isAdmin: false,
-      canMaintainSelectedRepository: false,
+      canReadSelectedRepository: false,
       canManageProjects: false,
     });
 
     expect(groups).toHaveLength(1);
     expect(groups[0].items.map(item => item.label)).toEqual([
       '项目总览',
-      '代码与证据',
+      '代码与知识',
       '问项目',
     ]);
   });
 
-  it('adds governance without exposing system operations to maintainers', () => {
+  it('keeps the knowledge library and project management in the maintenance group', () => {
     const groups = workspaceNavigation({
       isAdmin: false,
-      canMaintainSelectedRepository: true,
+      canReadSelectedRepository: true,
       canManageProjects: true,
     });
 
     expect(groups.map(group => group.label)).toEqual(['研发工作', '项目维护']);
-    expect(groups[1].items.map(item => item.label)).toEqual(['知识治理', '项目管理']);
+    expect(groups[1].items.map(item => item.label)).toEqual(['知识库', '项目管理']);
   });
 
   it('nests all four administrator operations in one system group', () => {
     const groups = workspaceNavigation({
       isAdmin: true,
-      canMaintainSelectedRepository: true,
+      canReadSelectedRepository: true,
       canManageProjects: true,
     });
     const system = groups.find(group => group.key === 'system');

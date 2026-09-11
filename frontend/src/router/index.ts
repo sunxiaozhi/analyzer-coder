@@ -17,6 +17,7 @@ export const router = createRouter({
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
     { path: '/', component: WorkspaceShell, children: [
       { path: '', redirect: '/overview' },
+      { path: 'help', name: 'help', component: () => import('@/views/FeatureGuideView.vue'), meta: { title: '功能导航' } },
       { path: 'mcp', name: 'mcp', component: () => import('@/views/McpGuideView.vue'), meta: { title: 'MCP 接入' } },
       { path: 'overview', name: 'overview', component: ProjectOverviewView, meta: { title: '项目总览' } },
       { path: 'repositories', name: 'repositories', component: RepositoriesView, meta: { title: '项目管理', projectManage: true } },

@@ -24,13 +24,13 @@ export interface WorkspaceNavGroup {
 
 export interface WorkspaceNavigationContext {
   isAdmin: boolean;
-  canMaintainSelectedRepository: boolean;
+  canReadSelectedRepository: boolean;
   canManageProjects: boolean;
 }
 
 const developerItems: WorkspaceNavItem[] = [
   { to: '/overview', label: '项目总览', icon: 'overview' },
-  { to: '/search', label: '代码与证据', icon: 'code' },
+  { to: '/search', label: '代码与知识', icon: 'code' },
   { to: '/ask', label: '问项目', icon: 'ask' },
 ];
 
@@ -38,8 +38,8 @@ export function workspaceNavigation(
   context: WorkspaceNavigationContext,
 ): WorkspaceNavGroup[] {
   const maintenanceItems: WorkspaceNavItem[] = [];
-  if (context.canMaintainSelectedRepository) {
-    maintenanceItems.push({ to: '/knowledge', label: '知识治理', icon: 'knowledge' });
+  if (context.canReadSelectedRepository) {
+    maintenanceItems.push({ to: '/knowledge', label: '知识库', icon: 'knowledge' });
   }
   if (context.canManageProjects) {
     maintenanceItems.push({ to: '/repositories', label: '项目管理', icon: 'projects' });

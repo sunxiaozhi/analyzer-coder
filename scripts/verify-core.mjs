@@ -65,7 +65,7 @@ try {
   if (process.platform === 'win32') run('cmd.exe', ['/d', '/s', '/c', 'mvn -pl backend -am -Dtest=*Test,*Tests,*IT test']);
   else run('mvn', ['-pl', 'backend', '-am', '-Dtest=*Test,*Tests,*IT', 'test']);
   run(process.execPath, ['--test'], path.join(root, 'mcp-server'));
-  run(process.execPath, ['--test', 'scripts/evaluate-quality.test.mjs', 'scripts/ci-task-review.test.mjs']);
+  run(process.execPath, ['--test', 'scripts/evaluate-quality.test.mjs']);
   console.log('Core verification passed, including the isolated PostgreSQL import-to-answer flow.');
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

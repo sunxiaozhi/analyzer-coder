@@ -130,7 +130,7 @@ function formatBytes(value: number) {
             查看卡片
           </el-button>
           <el-button
-            v-if="source.status !== 'CURRENT'"
+            v-if="canGenerate && source.status !== 'CURRENT'"
             type="primary"
             size="small"
             :loading="busyPath === source.sourcePath"
