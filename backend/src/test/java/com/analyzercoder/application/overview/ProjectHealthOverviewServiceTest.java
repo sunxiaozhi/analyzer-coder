@@ -6,8 +6,6 @@ import static org.mockito.Mockito.when;
 
 import com.analyzercoder.application.repository.RegisterRepositoryUseCase;
 import com.analyzercoder.application.repository.RepositoryPreparationService;
-import com.analyzercoder.application.review.TaskReviewResult;
-import com.analyzercoder.application.review.TaskReviewService;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.RepositorySnapshotId;
@@ -24,9 +22,8 @@ class ProjectHealthOverviewServiceTest {
     private final RepositoryPreparationService preparation =
             mock(RepositoryPreparationService.class);
     private final ProjectHealthMapper health = mock(ProjectHealthMapper.class);
-    private final TaskReviewService reviews = mock(TaskReviewService.class);
     private final ProjectHealthOverviewService service =
-            new ProjectHealthOverviewService(repositories, preparation, health, reviews);
+            new ProjectHealthOverviewService(repositories, preparation, health);
 
     @Test
     void reportsReadyOnlyWhenPreparationAndKnowledgeHaveNoOpenIssue() {
@@ -35,12 +32,11 @@ class ProjectHealthOverviewServiceTest {
         when(preparation.view(repository.id())).thenReturn(preparation("READY", 20, 0, 30));
         when(health.knowledgeHealth(repository.id().value()))
                 .thenReturn(new ProjectKnowledgeHealthRow(3, 3, 0, 0, 0, 3, 0, 0));
-        when(reviews.list(repository.id(), 5, 0)).thenReturn(List.of());
 
         ProjectHealthOverviewService.ProjectHealthOverview result = service.view(repository.id());
 
         assertThat(result.state()).isEqualTo("READY");
-        assertThat(result.readyForReview()).isTrue();
+        assertThat(result.readyForSearch()).isTrue();
         assertThat(result.snapshotId()).isEqualTo(repository.currentSnapshotId().value());
         assertThat(result.issues()).isEmpty();
         assertThat(result.knowledge().trusted()).isEqualTo(3);
@@ -53,12 +49,11 @@ class ProjectHealthOverviewServiceTest {
         when(preparation.view(repository.id())).thenReturn(preparation("NOT_READY", 0, 0, 0));
         when(health.knowledgeHealth(repository.id().value()))
                 .thenReturn(new ProjectKnowledgeHealthRow(4, 0, 1, 1, 2, 0, 1, 2));
-        when(reviews.list(repository.id(), 5, 0)).thenReturn(List.of());
 
         ProjectHealthOverviewService.ProjectHealthOverview result = service.view(repository.id());
 
         assertThat(result.state()).isEqualTo("BLOCKED");
-        assertThat(result.readyForReview()).isFalse();
+        assertThat(result.readyForSearch()).isFalse();
         assertThat(result.issues())
                 .extracting(ProjectHealthOverviewService.HealthIssue::code)
                 .containsExactly(
@@ -73,38 +68,15 @@ class ProjectHealthOverviewServiceTest {
     }
 
     @Test
-    void doesNotEnableReviewDuringPreparationOrAfterPreparationFailure() {
+    void doesNotEnableSearchDuringPreparationOrAfterPreparationFailure() {
         CodeRepository repository = repository();
         when(repositories.get(repository.id())).thenReturn(repository);
         when(health.knowledgeHealth(repository.id().value()))
                 .thenReturn(new ProjectKnowledgeHealthRow(1, 1, 0, 0, 0, 1, 0, 0));
-        when(reviews.list(repository.id(), 5, 0)).thenReturn(List.of());
         for (String state : List.of("PROCESSING", "ACTION_REQUIRED")) {
             when(preparation.view(repository.id())).thenReturn(preparation(state, 20, 0, 30));
-            assertThat(service.view(repository.id()).readyForReview()).isFalse();
+            assertThat(service.view(repository.id()).readyForSearch()).isFalse();
         }
-    }
-
-    @Test
-    void recentFailureRemainsVisibleEvenWhenIndexesAndKnowledgeAreReady() {
-        CodeRepository repository = repository();
-        when(repositories.get(repository.id())).thenReturn(repository);
-        when(preparation.view(repository.id())).thenReturn(preparation("READY", 20, 0, 30));
-        when(health.knowledgeHealth(repository.id().value()))
-                .thenReturn(new ProjectKnowledgeHealthRow(1, 1, 0, 0, 0, 1, 0, 0));
-        TaskReviewResult.ReviewSummary failed = mock(TaskReviewResult.ReviewSummary.class);
-        when(failed.status()).thenReturn(TaskReviewResult.Status.FAILED);
-        when(reviews.list(repository.id(), 5, 0)).thenReturn(List.of(failed));
-        var result = service.view(repository.id());
-        assertThat(result.state()).isEqualTo("DEGRADED");
-        assertThat(result.readyForReview()).isTrue();
-        assertThat(result.issues())
-                .singleElement()
-                .satisfies(
-                        issue -> {
-                            assertThat(issue.code()).isEqualTo("RECENT_REVIEW_FAILED");
-                            assertThat(issue.actionTarget()).isEqualTo("REVIEW");
-                        });
     }
 
     private static RepositoryPreparationService.PreparationView preparation(

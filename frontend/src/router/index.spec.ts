@@ -15,7 +15,6 @@ describe('workspace critical routes', () => {
       ['repositories', '/repositories'],
       ['indexing', '/indexing'],
       ['overview', '/overview'],
-      ['change-impact', '/change-impact'],
       ['settings', '/settings'],
       ['accounts', '/accounts'],
       ['audit', '/audit'],

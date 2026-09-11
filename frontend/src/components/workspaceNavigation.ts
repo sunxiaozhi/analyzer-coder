@@ -2,7 +2,6 @@ export type WorkspaceNavIcon =
   | 'overview'
   | 'code'
   | 'ask'
-  | 'review'
   | 'knowledge'
   | 'projects'
   | 'tasks'
@@ -33,7 +32,6 @@ const developerItems: WorkspaceNavItem[] = [
   { to: '/overview', label: '项目总览', icon: 'overview' },
   { to: '/search', label: '代码与证据', icon: 'code' },
   { to: '/ask', label: '问项目', icon: 'ask' },
-  { to: '/change-impact', label: '变更审查', icon: 'review' },
 ];
 
 export function workspaceNavigation(

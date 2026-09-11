@@ -8,8 +8,8 @@ import RepositoryFileTree from '@/components/RepositoryFileTree.vue';
 import CodeEvidencePanel from '@/features/code/CodeEvidencePanel.vue';
 import {
   intelligenceApi,
-  type HybridSearchHit,
   type RetrievalDiagnostics,
+  type UnifiedSearchHit,
 } from '@/api/intelligence';
 import {
   getRepositoryFile,
@@ -32,7 +32,7 @@ const filesLoading = shallowRef(false);
 const snapshotError = shallowRef<string | null>(null);
 const fileLoading = shallowRef(false);
 const query = shallowRef('');
-const hits = shallowRef<HybridSearchHit[]>([]);
+const hits = shallowRef<UnifiedSearchHit[]>([]);
 const retrieval = shallowRef<RetrievalDiagnostics | null>(null);
 const totalHits = shallowRef(0);
 const staleHits = shallowRef(0);
@@ -75,9 +75,11 @@ const gateCopy = computed(() => {
 });
 const shortCommit = computed(() => snapshot.value?.commit?.slice(0, 8) ?? '无提交');
 const resultSummary = computed(() => {
-  if (!searchPerformed.value) return '输入关键词检索当前代码快照';
-  if (staleHits.value) return `当前快照 ${hits.value.length} 条，忽略旧快照 ${staleHits.value} 条`;
-  return `当前快照命中 ${totalHits.value} 个代码片段`;
+  if (!searchPerformed.value) return '输入关键词，同时检索当前代码与项目知识';
+  const codeCount = hits.value.filter(hit => hit.sourceType === 'CODE').length;
+  const knowledgeCount = hits.value.filter(hit => hit.sourceType === 'KNOWLEDGE').length;
+  const summary = `命中 ${codeCount} 个代码片段、${knowledgeCount} 条知识`;
+  return staleHits.value ? `${summary}，忽略旧快照 ${staleHits.value} 条` : summary;
 });
 const evidenceDrawerOpen = computed({
   get: () => rightPane.value === 'context',
@@ -221,19 +223,21 @@ async function search() {
   const snapshotId = snapshot.value?.snapshotId;
   searchLoading.value = true;
   try {
-    const result = await intelligenceApi.search(repositoryId, keyword, 50);
+    const result = await intelligenceApi.unifiedSearch(repositoryId, keyword, 50);
     if (requestId !== searchRequest || repositoryId !== repositories.selectedRepositoryId || snapshotId !== snapshot.value?.snapshotId) return;
     retrieval.value = result.retrieval;
-    const current = result.hits.filter(hit => hit.snapshotId === snapshot.value?.snapshotId);
+    const current = result.evidence.filter(hit => (
+      hit.sourceType === 'KNOWLEDGE' || hit.snapshotId === snapshot.value?.snapshotId
+    ));
     hits.value = current;
     totalHits.value = current.length;
-    staleHits.value = result.hits.length - current.length;
+    staleHits.value = result.evidence.length - current.length;
     searchPerformed.value = true;
     rightPane.value = 'results';
     mobilePane.value = 'results';
   } catch (error) {
     if (requestId !== searchRequest) return;
-    ElMessage.error(error instanceof Error ? error.message : '源码检索失败');
+    ElMessage.error(error instanceof Error ? error.message : '代码与知识检索失败');
   } finally {
     if (requestId === searchRequest) searchLoading.value = false;
   }
@@ -252,7 +256,11 @@ function clearSearch() {
   if (mobilePane.value === 'results') mobilePane.value = selectedPath.value ? 'code' : 'tree';
 }
 
-function openHit(hit: HybridSearchHit) {
+function openHit(hit: UnifiedSearchHit) {
+  if (hit.sourceType === 'KNOWLEDGE' && hit.knowledgeCardId) {
+    openKnowledge(hit.knowledgeCardId);
+    return;
+  }
   rightPane.value = 'context';
   mobilePane.value = 'code';
   void openFile(hit.filePath, hit.startLine, hit.endLine, true, hit.symbolName);
@@ -300,17 +308,6 @@ function createKnowledgeForFile() {
       snapshotId: snapshot.value?.snapshotId,
       symbol: selectedSymbol.value ?? undefined,
     },
-  });
-}
-
-function startReviewForFile() {
-  if (!selectedPath.value) return;
-  const target = selectedSymbol.value
-    ? `${selectedPath.value} 中的 ${selectedSymbol.value}`
-    : selectedPath.value;
-  void router.push({
-    name: 'change-impact',
-    query: { source: 'WORKTREE', task: `审查 ${target} 的真实代码变更及关联工程知识` },
   });
 }
 
@@ -371,7 +368,7 @@ watch(
           v-model="query"
           :prefix-icon="Search"
           clearable
-          placeholder="搜索当前仓库的源码、文档或文件路径"
+          placeholder="搜索代码、设计说明、业务知识或文件路径"
           @clear="clearSearch"
           @keyup.enter="search"
         />
@@ -461,16 +458,17 @@ watch(
           />
           <button
             v-for="hit in hits"
-            :key="hit.chunkId"
-            :class="{ active: selectedPath === hit.filePath && focusLine === hit.startLine }"
+            :key="`${hit.sourceType}:${hit.chunkId ?? hit.knowledgeCardId}`"
+            :class="{ active: hit.sourceType === 'CODE' && selectedPath === hit.filePath && focusLine === hit.startLine }"
+            :data-source="hit.sourceType"
             @click="openHit(hit)"
           >
             <span class="hit-title">
-              <b>{{ fileName(hit.filePath) }}</b>
-              <i>{{ hit.symbolKind ?? '代码' }}</i>
-              <em>第 {{ hit.startLine ?? 1 }} 行</em>
+              <b>{{ hit.sourceType === 'KNOWLEDGE' ? hit.title : fileName(hit.filePath) }}</b>
+              <i>{{ hit.sourceType === 'KNOWLEDGE' ? '知识' : (hit.symbolKind ?? '代码') }}</i>
+              <em v-if="hit.sourceType === 'CODE'">第 {{ hit.startLine ?? 1 }} 行</em>
             </span>
-            <small class="mono">{{ hit.filePath }}</small>
+            <small class="mono">{{ hit.sourceType === 'KNOWLEDGE' ? `关联 ${hit.codeReferences.length} 处代码` : hit.filePath }}</small>
             <p>{{ excerpt(hit.content) }}</p>
             <span class="hit-channels">{{ hit.channels.map(channelLabel).join(' + ') }}</span>
           </button>
@@ -502,9 +500,7 @@ watch(
         @close="evidenceDrawerOpen = false"
         @open-file="openFile"
         @open-knowledge="openKnowledge"
-        @open-review="reviewId => router.push({ name: 'change-impact', query: { reviewId } })"
         @create-knowledge="createKnowledgeForFile"
-        @start-review="startReviewForFile"
       />
     </el-drawer>
     </template>
@@ -714,6 +710,20 @@ watch(
 .search-hit-list > button.active {
   background: #edf5fd;
   box-shadow: inset 3px 0 var(--app-color-action);
+}
+
+.search-hit-list > button[data-source='KNOWLEDGE'] {
+  background: #fffdf8;
+  box-shadow: inset 3px 0 #b3843d;
+}
+
+.search-hit-list > button[data-source='KNOWLEDGE']:hover {
+  background: #fbf5ea;
+}
+
+.search-hit-list > button[data-source='KNOWLEDGE'] .hit-title i {
+  color: #805820;
+  background: #f4e7ce;
 }
 
 .hit-title {

@@ -1,5 +1,4 @@
 import { request } from '@/api/http';
-import type { TaskReviewSummary } from '@/api/taskReviews';
 import type { PageResult } from '@/types/pagination';
 import type {
   CodeChunkListResponse,
@@ -145,7 +144,7 @@ export interface ProjectHealthIssue {
   severity: 'BLOCKING' | 'WARNING';
   title: string;
   detail: string;
-  actionTarget: 'PREPARATION' | 'KNOWLEDGE' | 'REVIEW';
+  actionTarget: 'PREPARATION' | 'KNOWLEDGE';
 }
 
 export interface ProjectHealthOverview {
@@ -153,9 +152,8 @@ export interface ProjectHealthOverview {
   snapshotId: string | null;
   commitSha: string | null;
   state: ProjectHealthState;
-  readyForReview: boolean;
+  readyForSearch: boolean;
   knowledge: ProjectKnowledgeHealth;
-  recentReviews: TaskReviewSummary[];
   issues: ProjectHealthIssue[];
   generatedAt: string;
 }
@@ -258,7 +256,6 @@ export function getRepositoryFile(repositoryId: string, path: string): Promise<R
   );
 }
 
-// Shared by the live change-impact analysis response.
 export interface ProjectArchitectureRisk {
   id: string;
   severity: 'HIGH' | 'MEDIUM' | 'LOW';

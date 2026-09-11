@@ -23,16 +23,12 @@ const {
 const repository = computed(() => repositories.selectedRepository);
 const profile = computed(() => preparation.value?.profile ?? null);
 
-function startReview() {
-  void router.push('/change-impact');
-}
-
-function openReview(reviewId: string) {
-  void router.push({ path: '/change-impact', query: { reviewId } });
-}
-
 function openKnowledge() {
   void router.push('/knowledge');
+}
+
+function openSearch() {
+  void router.push('/search');
 }
 </script>
 
@@ -41,7 +37,7 @@ function openKnowledge() {
     <div v-if="!repositories.selectedRepositoryId" class="overview-empty">
       <span><FolderTree :size="26" /></span>
       <h1>选择一个项目</h1>
-      <p>项目总览会展示当前快照、可信知识、索引能力和变更审查状态。</p>
+      <p>项目总览会展示当前快照、代码索引和知识库状态。</p>
       <el-button type="primary" @click="router.push('/repositories')">前往仓库管理</el-button>
     </div>
 
@@ -62,8 +58,7 @@ function openKnowledge() {
       @refresh="reload"
       @prepare="prepare"
       @retry-stage="retryStage"
-      @start-review="startReview"
-      @open-review="openReview"
+      @open-search="openSearch"
       @open-knowledge="openKnowledge"
     />
   </section>

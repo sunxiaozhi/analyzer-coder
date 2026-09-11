@@ -1,60 +1,58 @@
-# Analyzer Coder · 代码证据工作台
+# Analyzer Coder · 代码与知识联合检索
 
-导入代码仓库，定位源码、查看版本化引用、阅读本地证据回答，并结合可选的 CodeGraph 与问答模型分析调用关系和变更影响。
+这是一个面向开发者的最小检索工具：导入代码仓库，建立版本化索引，用一次查询同时找到相关代码与项目知识，并能回到文件、行号和知识卡来源。
 
-当前最小可用路径：**导入仓库 → 内容索引 → 关键词/字符相似度检索 → 本地证据回答 → 查看源码引用和会话历史**。本地证据模式不需要问答模型，不会生成模型推理；内置字符相似度不等于语义理解。完整调用图谱仍需要 CodeGraph CLI。
+## 产品边界
 
-## 启动与诊断
+核心路径只有四步：
 
-- Linux 源码启动：`bash scripts/start.sh`，配置要求见 [部署说明](docs/08-linux-git-deployment.md)。该脚本要求安装 CodeGraph。
-- 开发环境：按 [后端说明](backend/README.md) 启动 PostgreSQL/pgvector 和 Spring Boot；前端执行 `cd frontend`、`npm ci`、`npm run dev`。
-- 在已加载后端环境变量的终端执行 `node scripts/check-runtime.mjs`，检查命令、数据库端口、后端健康和仓库目录配置。诊断不会读取或打印密钥，也不启动服务。可加 `--json` 保存结果。
+1. 导入 Git 或 ZIP 仓库；
+2. 为当前快照建立代码索引；
+3. 维护与代码范围关联的知识卡；
+4. 在“代码与知识”页面统一检索两类结果。
 
-后端不能仅靠 `npm run dev` 启动。PostgreSQL、后端、仓库白名单及受管存储配置缺一不可。TCP 可达只说明端口开放，真实数据库与迁移可用性仍需要后端健康检查和集成测试确认。
+系统保留基于检索证据的问答、代码关系和知识失效提示作为辅助能力。它不再提供变更审查、PR/MR Webhook、审查 CI、任务结果回报或审查型 MCP 工具。
 
 ## 第一次使用
 
-1. 登录并导入一个小仓库，推荐先使用 ZIP 或本地 Git 仓库。
-2. 在项目总览执行准备，确认当前快照的内容索引片段数大于零。
-3. 进入代码检索，先搜索仓库中确实存在的类名、函数名或路径。
-4. 进入问答，回答方式选择“本地证据”，询问同一个符号的位置。检查引用的路径、行号、快照和原始内容。
-5. 刷新页面，重新打开会话，核对引用仍然可追溯。
-6. 配置外部模型或 CodeGraph 后，再验收语义召回、模型生成和调用图谱。向量失败不会阻断代码图谱入队；独立阶段失败会保留在准备状态中。
+1. 登录后在“项目管理”导入一个小仓库。
+2. 在“项目总览”完成仓库准备，确认当前快照已有内容索引。
+3. 在“知识库”录入一条业务约束，并绑定相关路径或符号。
+4. 打开“代码与知识”，搜索类名、函数名、错误信息或业务术语。
+5. 检查混排结果是否同时包含源码位置和相关知识卡。
 
-切换向量模型后，旧模型向量不计入当前覆盖率。到项目总览重新准备或重试向量阶段；搜索请求不会替你同步重建全仓库。已发生向量降级的快照不会自动无限重试模型，修复配置后请显式重试向量阶段。
+没有配置外部模型时，系统仍可使用关键词与字符相似度检索；这不等同于完整语义理解。向量模型和 CodeGraph 都是可选增强，不影响最小路径成立。
+
+## 启动
+
+- Linux 源码启动：`bash scripts/start.sh`
+- 后端：准备 PostgreSQL/pgvector 后运行 Spring Boot，详见 [后端说明](backend/README.md)
+- 前端：`npm --prefix frontend ci`，然后 `npm --prefix frontend run dev`
+- 环境诊断：`node scripts/check-runtime.mjs`
+
+后端不能只靠前端开发服务器启动；数据库、仓库目录配置和 Java 服务都必须可用。
 
 ## 验证
 
-安装前端/MCP 依赖并启动 Docker 后，可执行 `node scripts/verify-core.mjs`。脚本创建独立临时 pgvector 数据库，执行前端测试/构建、全部后端单元与集成测试、真实 HTTP 导入到问答验收、MCP 和 CI 脚本测试，结束后移除测试容器。默认端口 15439，可用 `--port=15440` 更换；不会使用业务库凭据。
-
-逐项使用说明见 [功能与数据流](docs/13-system-usage-map.md)。
-
 ```sh
 mvn -pl backend -am test
-npm --prefix frontend test
+npm --prefix frontend test -- --run
 npm --prefix frontend run build
-node --test scripts/evaluate-quality.test.mjs scripts/ci-task-review.test.mjs
+npm --prefix mcp-server test
+node --test scripts/evaluate-quality.test.mjs
 node scripts/evaluate-quality.mjs --validate
 ```
 
-数据库集成验收必须在**独立测试数据库**、独立受管文件目录和完整后端环境变量下执行：
-
-```sh
-# Bash；PowerShell 使用 $env:APP_RUN_POSTGRES_IT='true'
-export APP_RUN_POSTGRES_IT=true
-mvn -pl backend '-Dtest=*IT' test
-```
-
-普通 `mvn test` 会跳过数据库集成验收。`RepositoryImportToAskIT` 使用真实导入、文件扫描、MyBatis、pgvector 和内置向量服务，覆盖本地证据回答、历史恢复及模型切换后的索引恢复；它不验证真实 CodeGraph CLI 或外部模型。
+数据库集成测试默认跳过，应只在独立测试数据库与独立受管文件目录中执行。
 
 ## 项目结构
 
 | 目录 | 职责 |
 | --- | --- |
-| `backend` | Java 17 / Spring Boot、后台任务、MyBatis、Git 与模型调用 |
-| `frontend` | Vue 3 / TypeScript 工作台 |
-| `mcp-server` | 给开发代理提供上下文和审查工具的薄适配层 |
-| `evaluation` | 检索、问答、影响分析、任务审查和知识漂移的评测样本 |
-| `scripts` / `deploy` | 启动、运行诊断、部署与发布校验 |
+| `backend` | 仓库接入、版本化索引、代码与知识联合检索 API |
+| `frontend` | 项目管理、知识维护和统一检索工作台 |
+| `mcp-server` | 向 AI 客户端暴露只读 `search_project` 工具 |
+| `evaluation` | 检索召回和证据问答质量样本 |
+| `scripts` / `deploy` | 启动、诊断与部署脚本 |
 
-实际缺陷、已修复项、验证边界及后续优先级见 [数据链路审计](docs/12-data-flow-audit.md)。
+详细使用流程见 [功能与数据流](docs/13-system-usage-map.md)。

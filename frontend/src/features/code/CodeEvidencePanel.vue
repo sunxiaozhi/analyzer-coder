@@ -2,7 +2,7 @@
 import { computed, onScopeDispose, shallowRef, watch } from 'vue';
 import {
   AlertTriangle, ArrowRight, BookOpenCheck, CheckCircle2, Clipboard,
-  FilePlus2, GitPullRequest, Network, RefreshCw, X,
+  FilePlus2, Network, RefreshCw, X,
 } from 'lucide-vue-next';
 import { ElMessage } from 'element-plus';
 import {
@@ -14,15 +14,13 @@ import {
 import { getIndexJob } from '@/api/repositories';
 import type { IndexJob } from '@/types/api';
 import {
-  changeSourceLabel,
   enforcementLabel,
   knowledgeKindLabel,
   statusLabel,
 } from '@/utils/displayLabels';
 
-type ContextTab = 'relations' | 'knowledge' | 'reviews';
+type ContextTab = 'relations' | 'knowledge';
 type KnowledgeFilter = 'all' | 'trusted' | 'attention';
-type ReviewFilter = 'all' | 'current' | 'historical';
 
 interface Props {
   repositoryId: string | null;
@@ -42,12 +40,10 @@ const emit = defineEmits<{
   close: [];
   openFile: [path: string, startLine: number | null, endLine: number | null];
   openKnowledge: [knowledgeId: string];
-  openReview: [reviewId: string];
   createKnowledge: [];
-  startReview: [];
 }>();
 
-const tab = shallowRef<ContextTab>('relations');
+const tab = shallowRef<ContextTab>('knowledge');
 const context = shallowRef<CodeEvidenceContext | null>(null);
 const artifact = shallowRef<CodeGraphArtifact | null>(null);
 const relation = shallowRef<GraphResult | null>(null);
@@ -60,7 +56,6 @@ const buildJob = shallowRef<IndexJob | null>(null);
 const error = shallowRef<string | null>(null);
 const relationError = shallowRef<string | null>(null);
 const knowledgeFilter = shallowRef<KnowledgeFilter>('all');
-const reviewFilter = shallowRef<ReviewFilter>('all');
 let contextVersion = 0;
 let relationVersion = 0;
 let buildVersion = 0;
@@ -70,16 +65,9 @@ const nodeById = computed(() => new Map((relation.value?.nodes ?? []).map(node =
 const edgeById = computed(() => new Map((relation.value?.edges ?? []).map(edge => [edge.id, edge])));
 const trustedKnowledgeCount = computed(() => context.value?.knowledgeReferences.filter(item => item.trusted).length ?? 0);
 const attentionKnowledgeCount = computed(() => context.value?.knowledgeReferences.filter(item => !item.trusted).length ?? 0);
-const currentReviewCount = computed(() => context.value?.reviewReferences.filter(item => item.currentSnapshot).length ?? 0);
-const historicalReviewCount = computed(() => context.value?.reviewReferences.filter(item => !item.currentSnapshot).length ?? 0);
 const visibleKnowledge = computed(() => (context.value?.knowledgeReferences ?? []).filter(item => {
   if (knowledgeFilter.value === 'trusted') return item.trusted;
   if (knowledgeFilter.value === 'attention') return !item.trusted;
-  return true;
-}));
-const visibleReviews = computed(() => (context.value?.reviewReferences ?? []).filter(item => {
-  if (reviewFilter.value === 'current') return item.currentSnapshot;
-  if (reviewFilter.value === 'historical') return !item.currentSnapshot;
   return true;
 }));
 const impactedNodes = computed(() => (relation.value?.nodes ?? [])
@@ -107,17 +95,6 @@ function relationArrow(edgeId: string | undefined, from: string, to: string) {
   return '·';
 }
 
-function roleLabel(role: string) {
-  return ({
-    CHANGED_FILE: '变更文件',
-    CHANGED_SYMBOL: '变更符号',
-    KNOWLEDGE_EVIDENCE: '知识证据',
-    REQUIRED_TEST: '要求测试',
-    REQUIRED_APPROVAL: '要求审批',
-    UNKNOWN: '未知项证据',
-  } as Record<string, string>)[role] ?? '其他证据';
-}
-
 function applicabilityLabel(kind: string) {
   return ({
     DIRECT_BINDING: '直接代码绑定',
@@ -131,7 +108,6 @@ function limitationLabel(value: string) {
   if (value === 'DETERMINISTIC_KNOWLEDGE_MATCHING_ONLY') return '只展示代码绑定、路径、符号或仓库范围能够确定命中的知识；关键词相似内容不会被当作适用规则。';
   if (value === 'DIRECT_KNOWLEDGE_BINDINGS_ONLY') return '这里只展示直接绑定到该文件的知识，不把关键词相似结果冒充适用规则。';
   if (value === 'SYMBOL_REQUIRED_FOR_CODEGRAPH') return '关系查询需要明确符号；可从检索结果选择符号，或在下方输入。';
-  if (value === 'REVIEW_HISTORY_TRUNCATED') return '审查引用只扫描最近 100 条不可变审查记录。';
   return '其他限制说明。';
 }
 
@@ -284,8 +260,6 @@ async function copyEvidence() {
     `关系：${relation.value ? `${relation.value.affectedNodeCount} 个影响节点，${relation.value.paths.length} 条路径` : artifact.value ? '图谱可用，尚未查询' : '当前快照无图谱'}`,
     `适用知识：${context.value.knowledgeReferences.length} 条（可信 ${trustedKnowledgeCount.value}，需关注 ${attentionKnowledgeCount.value}）`,
     ...context.value.knowledgeReferences.map(item => `- [知识] ${item.title} · ${item.trusted ? '可信' : statusLabel(item.sourceVersionStatus)} · ${(item.applicability ?? []).map(reason => applicabilityLabel(reason.kind)).join('、')}`),
-    `相关审查：${context.value.reviewReferences.length} 条（当前快照 ${currentReviewCount.value}，历史 ${historicalReviewCount.value}）`,
-    ...context.value.reviewReferences.map(item => `- [审查] ${item.task || '未填写任务说明'} · ${item.currentSnapshot ? '当前快照' : '历史快照'} · ${item.roles.map(roleLabel).join('、')}`),
   ];
   try {
     await navigator.clipboard.writeText(lines.join('\n'));
@@ -333,12 +307,9 @@ onScopeDispose(() => {
       <button :class="{ active: tab === 'knowledge' }" @click="tab = 'knowledge'">
         <BookOpenCheck :size="17" /><span><b>适用知识</b><small>可信 {{ trustedKnowledgeCount }} · 需关注 {{ attentionKnowledgeCount }}</small></span><strong>{{ context?.knowledgeReferences.length ?? 0 }}</strong>
       </button>
-      <button :class="{ active: tab === 'reviews' }" @click="tab = 'reviews'">
-        <GitPullRequest :size="17" /><span><b>历史审查</b><small>当前 {{ currentReviewCount }} · 历史 {{ historicalReviewCount }}</small></span><strong>{{ context?.reviewReferences.length ?? 0 }}</strong>
-      </button>
     </nav>
 
-    <div v-if="!filePath" class="context-empty">从目录或检索结果选择文件，查看它的关系、知识和审查引用。</div>
+    <div v-if="!filePath" class="context-empty">从目录或检索结果选择文件，查看它的关联知识与代码关系。</div>
     <div v-else-if="error" class="context-error"><AlertTriangle :size="14" />{{ error }}</div>
 
     <div v-else-if="tab === 'relations'" class="context-body relation-body">
@@ -427,38 +398,10 @@ onScopeDispose(() => {
         </article>
       </div>
       <section v-if="!visibleKnowledge.length" class="action-empty">
-        <BookOpenCheck :size="24" /><div><b>{{ knowledgeFilter === 'all' ? '当前文件还没有适用知识' : '当前筛选条件没有知识' }}</b><p>创建知识卡片并直接绑定当前代码，后续变更审查会自动引用。</p></div>
+        <BookOpenCheck :size="24" /><div><b>{{ knowledgeFilter === 'all' ? '当前文件还没有适用知识' : '当前筛选条件没有知识' }}</b><p>创建知识卡片并绑定当前代码，让后续检索可以同时返回说明与实现。</p></div>
         <el-button v-if="canMaintainKnowledge && knowledgeFilter === 'all'" type="primary" @click="emit('createKnowledge')">创建并绑定</el-button>
       </section>
       <p v-for="item in context?.limitations.filter(item => item.includes('KNOWLEDGE'))" :key="item" class="limitation">{{ limitationLabel(item) }}</p>
-    </div>
-
-    <div v-else class="context-body">
-      <header class="section-toolbar">
-        <div><small>不可变记录</small><b>该文件参与过的变更审查</b></div>
-        <div class="filter-switch">
-          <button :class="{ active: reviewFilter === 'all' }" @click="reviewFilter = 'all'">全部 {{ context?.reviewReferences.length ?? 0 }}</button>
-          <button :class="{ active: reviewFilter === 'current' }" @click="reviewFilter = 'current'">当前 {{ currentReviewCount }}</button>
-          <button :class="{ active: reviewFilter === 'historical' }" @click="reviewFilter = 'historical'">历史 {{ historicalReviewCount }}</button>
-        </div>
-        <el-button type="primary" plain :icon="GitPullRequest" @click="emit('startReview')">发起变更审查</el-button>
-      </header>
-      <div class="review-list">
-        <article v-for="item in visibleReviews" :key="item.reviewId" :data-current="item.currentSnapshot">
-          <div class="review-time"><b>{{ shortDate(item.finishedAt ?? item.createdAt) }}</b><span>{{ item.currentSnapshot ? '当前快照' : '历史快照' }}</span></div>
-          <div class="review-copy">
-            <header><b>{{ changeSourceLabel(item.changeSource) }}</b><span class="mono">{{ item.snapshotId.slice(0, 8) }}</span></header>
-            <button type="button" class="reference-title" @click="emit('openReview', item.reviewId)">{{ item.task || '未填写任务说明' }}<ArrowRight :size="13" /></button>
-            <div class="role-list"><span v-for="role in item.roles" :key="role">{{ roleLabel(role) }}</span></div>
-            <small v-if="item.symbols.length">符号：{{ item.symbols.join('、') }}</small>
-          </div>
-        </article>
-      </div>
-      <section v-if="!visibleReviews.length" class="action-empty">
-        <GitPullRequest :size="24" /><div><b>{{ reviewFilter === 'all' ? '这个文件还没有审查记录' : '当前筛选条件没有审查记录' }}</b><p>从真实 Git 改动发起审查后，这里会保留对应快照和证据角色。</p></div>
-        <el-button v-if="reviewFilter === 'all'" type="primary" @click="emit('startReview')">发起审查</el-button>
-      </section>
-      <p v-for="item in context?.limitations.filter(item => item === 'REVIEW_HISTORY_TRUNCATED')" :key="item" class="limitation">{{ limitationLabel(item) }}</p>
     </div>
   </section>
 </template>
@@ -478,7 +421,7 @@ onScopeDispose(() => {
 .context-actions button { display: inline-flex; min-height: 31px; align-items: center; gap: 5px; padding: 0 8px; color: #416276; border: 1px solid #d2dee5; border-radius: 4px; background: #fff; font-size: 11px; cursor: pointer; }
 .context-actions button:hover { color: var(--blue); border-color: #9fc0d3; background: var(--blue-soft); }
 .context-actions .close-button { width: 31px; justify-content: center; padding: 0; color: #78858d; }
-.context-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid #dbe4e9; background: #f3f6f8; }
+.context-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid #dbe4e9; background: #f3f6f8; }
 .context-tabs button { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; min-height: 61px; align-items: center; gap: 9px; padding: 9px 14px; color: #71808a; border: 0; border-right: 1px solid #dbe4e9; background: transparent; text-align: left; cursor: pointer; }
 .context-tabs button:last-child { border-right: 0; }
 .context-tabs button::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 3px; background: transparent; content: ''; }
@@ -547,7 +490,7 @@ onScopeDispose(() => {
 .knowledge-card > header span { color: var(--blue); font-size: 9px; font-weight: 750; letter-spacing: .05em; }
 .knowledge-card > header b { color: #617079; font-size: 10px; }
 .reference-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0; color: var(--ink); border: 0; background: transparent; font-size: 13px; font-weight: 700; text-align: left; cursor: pointer; }
-.knowledge-card > small, .review-copy > small { color: #75838b; font-size: 10px; line-height: 1.5; }
+.knowledge-card > small { color: #75838b; font-size: 10px; line-height: 1.5; }
 .reason-list { display: flex; flex-wrap: wrap; gap: 5px; }
 .reason-list span { display: inline-flex; max-width: 100%; align-items: center; overflow: hidden; border: 1px solid #d7e1e6; background: #fff; }
 .reason-list b { flex: none; padding: 4px 5px; color: #366a86; background: var(--blue-soft); font-size: 9px; }
@@ -555,17 +498,6 @@ onScopeDispose(() => {
 .binding { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 7px; overflow: hidden; color: #376b8e; border: 1px solid #d8e2e8; border-radius: 3px; background: #fff; cursor: pointer; }
 .binding span { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .binding em { color: #a44f43; font-size: 10px; font-style: normal; }
-.review-list { display: grid; border: 1px solid #dbe3e8; background: #fff; }
-.review-list article { display: grid; grid-template-columns: 108px minmax(0, 1fr); border-bottom: 1px solid #e3e9ed; border-left: 4px solid #9ba8af; }
-.review-list article:last-child { border-bottom: 0; }
-.review-list article[data-current='true'] { border-left-color: var(--green); }
-.review-time { display: grid; align-content: start; gap: 5px; padding: 12px 10px; border-right: 1px solid #e3e9ed; background: #f7f9fa; }
-.review-time b { color: #3f515c; font: 700 10px "SFMono-Regular", Consolas, monospace; }
-.review-time span { color: #7b8890; font-size: 9px; }
-.review-copy { display: grid; gap: 7px; padding: 11px; }
-.review-copy > header { display: flex; justify-content: space-between; gap: 8px; color: #71808a; font-size: 9px; }
-.role-list { display: flex; flex-wrap: wrap; gap: 4px; }
-.role-list span { padding: 3px 5px; color: #42647b; border: 1px solid #ccd9e1; background: #f8fbfc; font-size: 9px; }
 .action-empty { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px; min-height: 90px; padding: 17px; color: #78909e; border: 1px dashed #becdd6; background: #f7fafb; }
 .action-empty div { display: grid; gap: 4px; }
 .action-empty b { color: #42545e; font-size: 12px; }

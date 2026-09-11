@@ -46,6 +46,16 @@ public class IntelligenceController {
         return service.hybridSearchDetailed(repoId, query, limit);
     }
 
+    @GetMapping("/repositories/{repoId}/evidence-search")
+    public IntelligenceService.EvidenceSearchResult evidenceSearch(
+            @PathVariable UUID repoId,
+            @RequestParam String query,
+            @RequestParam(defaultValue = "20") int limit,
+            HttpServletRequest request) {
+        require(request, repoId, RepositoryPermission.READ);
+        return service.unifiedSearchDetailed(repoId, query, limit);
+    }
+
     @PostMapping("/repositories/{repoId}/ask")
     public IntelligenceService.Answer ask(
             @PathVariable UUID repoId,

@@ -13,7 +13,7 @@ let store: { selectedRepositoryId: string; selectedRepository: { snapshotId: str
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: api.push }) }));
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => store }));
 vi.mock('@/api/repositories', () => ({ listRepositoryFiles: api.files, getRepositoryFile: api.file }));
-vi.mock('@/api/intelligence', () => ({ intelligenceApi: { search: api.search } }));
+vi.mock('@/api/intelligence', () => ({ intelligenceApi: { unifiedSearch: api.search } }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -90,18 +90,9 @@ describe('code browsing continuity', () => {
     route.query = {};
     api.files.mockResolvedValue({ snapshotId: 's2', files: [] });
     await flushPromises();
-    pending.resolve({ retrieval: { snapshotId: 's1' }, hits: [] });
+    pending.resolve({ retrieval: { snapshotId: 's1' }, evidence: [] });
     await flushPromises();
     expect(wrapper.find('.workbench-results').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('opens the specific immutable review from file evidence', async () => {
-    route.query = { path: 'a.ts', symbol: 'caller', relation: '1' };
-    const wrapper = mountCode();
-    await flushPromises();
-    wrapper.findComponent(CodeEvidencePanel).vm.$emit('openReview', 'review-42');
-    expect(api.push).toHaveBeenCalledWith({ name: 'change-impact', query: { reviewId: 'review-42' } });
     wrapper.unmount();
   });
 

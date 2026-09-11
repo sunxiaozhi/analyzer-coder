@@ -27,7 +27,6 @@
 {"id":"RET-027","repositoryType":"JAVA_SPRING","question":"CodeGraph 构建任务如何入队？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphTaskService.java"],"tags":["graph","job"]}
 {"id":"RET-028","repositoryType":"JAVA_SPRING","question":"已发布 CodeGraph 产物如何执行图查询？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java"],"tags":["graph","query"]}
 {"id":"RET-029","repositoryType":"JAVA_SPRING","question":"自然语言修改任务如何解析成变更意图？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/change/ChangeIntentParser.java"],"tags":["change","intent"]}
-{"id":"RET-030","repositoryType":"JAVA_SPRING","question":"变更影响候选和测试建议在哪里生成？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/change/ChangeImpactAnalysisService.java"],"tags":["change","impact"]}
 {"id":"RET-031","repositoryType":"JAVA_SPRING","question":"项目模块架构图如何从当前快照推导？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/architecture/ProjectArchitectureMapService.java"],"tags":["architecture","map"]}
 {"id":"RET-032","repositoryType":"JAVA_SPRING","question":"运行时依赖配置如何识别？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/architecture/RuntimeDependencyDetector.java"],"tags":["architecture","dependency"]}
 {"id":"RET-033","repositoryType":"JAVA_SPRING","question":"Markdown 知识源同步在哪里实现？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/MarkdownKnowledgeSourceService.java"],"tags":["knowledge","markdown"]}
@@ -39,7 +38,6 @@
 {"id":"RET-039","repositoryType":"VUE_TYPESCRIPT","question":"当前向量索引的能力、模型和覆盖率在哪里展示？","expectedPaths":["frontend/src/features/indexing/VectorIndexSummary.vue"],"tags":["frontend","vector"]}
 {"id":"RET-040","repositoryType":"VUE_TYPESCRIPT","question":"向量模型配置卡片和编辑弹窗在哪里？","expectedPaths":["frontend/src/views/SystemSettingsView.vue"],"tags":["frontend","settings"]}
 {"id":"RET-041","repositoryType":"VUE_TYPESCRIPT","question":"调用图谱页面如何加载并展示来源限制？","expectedPaths":["frontend/src/features/code/CodeEvidencePanel.vue"],"tags":["frontend","graph"]}
-{"id":"RET-042","repositoryType":"VUE_TYPESCRIPT","question":"变更影响分析表单和结果页面在哪里？","expectedPaths":["frontend/src/views/ChangeImpactView.vue"],"tags":["frontend","change"]}
 {"id":"RET-043","repositoryType":"VUE_TYPESCRIPT","question":"项目总览页如何组合准备流程、知识健康和代码统计？","expectedPaths":["frontend/src/views/ProjectOverviewView.vue"],"tags":["frontend","overview"]}
 {"id":"RET-044","repositoryType":"VUE_TYPESCRIPT","question":"仓库列表的主要表格组件在哪里？","expectedPaths":["frontend/src/features/repositories/RepositoryTable.vue"],"tags":["frontend","repository"]}
 {"id":"RET-045","repositoryType":"VUE_TYPESCRIPT","question":"仓库导入任务 API 在哪里定义？","expectedPaths":["frontend/src/api/sourceImports.ts"],"tags":["frontend","import"]}

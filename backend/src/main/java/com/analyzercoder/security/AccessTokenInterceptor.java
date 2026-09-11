@@ -10,14 +10,8 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class AccessTokenInterceptor implements HandlerInterceptor {
     private static final String ID = "[0-9a-fA-F-]{36}";
-    private static final Pattern CONTEXT =
-            Pattern.compile("/api/repositories/" + ID + "/task-context");
-    private static final Pattern REVIEWS =
-            Pattern.compile("/api/repositories/" + ID + "/task-reviews");
-    private static final Pattern REVIEW =
-            Pattern.compile("/api/repositories/" + ID + "/task-reviews/" + ID);
-    private static final Pattern OUTCOME =
-            Pattern.compile("/api/repositories/" + ID + "/task-reviews/" + ID + "/outcomes");
+    private static final Pattern SEARCH =
+            Pattern.compile("/api/repositories/" + ID + "/evidence-search");
     private final AccessTokenService tokens;
 
     public AccessTokenInterceptor(AccessTokenService tokens) {
@@ -53,11 +47,7 @@ public class AccessTokenInterceptor implements HandlerInterceptor {
     }
 
     static boolean allowed(String method, String path) {
-        return ("POST".equals(method)
-                        && (CONTEXT.matcher(path).matches()
-                                || REVIEWS.matcher(path).matches()
-                                || OUTCOME.matcher(path).matches()))
-                || ("GET".equals(method) && REVIEW.matcher(path).matches());
+        return "GET".equals(method) && SEARCH.matcher(path).matches();
     }
 
     private static void validateOrigin(HttpServletRequest request) {

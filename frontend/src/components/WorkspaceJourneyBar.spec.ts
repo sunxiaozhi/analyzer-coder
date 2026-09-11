@@ -14,9 +14,9 @@ describe('WorkspaceJourneyBar', () => {
       },
     });
 
-    const review = wrapper.findAll('button').find(button => button.text().includes('变更审查'))!;
-    expect(review.attributes('title')).toContain('完成证据准备');
-    await review.trigger('click');
+    const search = wrapper.findAll('button').find(button => button.text().includes('联合检索'))!;
+    expect(search.attributes('title')).toContain('完成证据准备');
+    await search.trigger('click');
     expect(wrapper.emitted('navigate')?.[0]).toEqual(['/overview']);
   });
 
@@ -32,10 +32,9 @@ describe('WorkspaceJourneyBar', () => {
     });
 
     expect(wrapper.text()).toContain('选择项目');
-    expect(wrapper.text()).toContain('代码证据');
+    expect(wrapper.text()).toContain('联合检索');
     expect(wrapper.text()).toContain('问项目');
-    expect(wrapper.text()).toContain('变更审查');
-    expect(wrapper.text()).toContain('知识回写');
-    expect(wrapper.find('button.active').text()).toContain('代码证据');
+    expect(wrapper.text()).toContain('维护知识');
+    expect(wrapper.find('button.active').text()).toContain('联合检索');
   });
 });

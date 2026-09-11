@@ -188,13 +188,17 @@ async function loadDrift(card: KnowledgeCard) {
 }
 function openDrift(event: KnowledgeDriftEvent) {
   detailDialog.value = false;
+  const reason = event.reasons.find(item => item.filePath);
+  if (!reason?.filePath) {
+    ElMessage.info('该记录没有可定位的代码文件');
+    return;
+  }
   void router.push({
-    name: 'change-impact',
+    name: 'search',
     query: {
-      source: 'COMMIT_RANGE',
-      baseRef: event.fromCommit ?? undefined,
-      headRef: event.toCommit ?? undefined,
-      task: `核对知识“${viewing.value?.title ?? event.cardId}”的来源漂移证据`,
+      path: reason.filePath,
+      startLine: reason.startLine ?? undefined,
+      snapshotId: event.toSnapshotId,
     },
   });
 }

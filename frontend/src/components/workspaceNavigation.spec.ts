@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { workspaceNavigation } from './workspaceNavigation';
 
 describe('workspaceNavigation', () => {
-  it('shows ordinary developers only the four daily development tasks', () => {
+  it('shows ordinary developers the focused retrieval workflow', () => {
     const groups = workspaceNavigation({
       isAdmin: false,
       canMaintainSelectedRepository: false,
@@ -14,7 +14,6 @@ describe('workspaceNavigation', () => {
       '项目总览',
       '代码与证据',
       '问项目',
-      '变更审查',
     ]);
   });
 

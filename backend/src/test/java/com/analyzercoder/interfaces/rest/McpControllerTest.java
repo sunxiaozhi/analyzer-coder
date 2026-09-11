@@ -59,11 +59,9 @@ class McpControllerTest {
     }
 
     private String call() {
-        return "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"get_required_tests\",\"arguments\":{\"repositoryId\":\""
+        return "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"search_project\",\"arguments\":{\"repositoryId\":\""
                 + UUID.randomUUID()
-                + "\",\"reviewId\":\""
-                + UUID.randomUUID()
-                + "\"}}}";
+                + "\",\"query\":\"订单超时\"}}}";
     }
 
     @Test
@@ -78,7 +76,7 @@ class McpControllerTest {
     }
 
     @Test
-    void initializeListsSevenToolsAndAcceptsNotification() throws Exception {
+    void initializeListsOneToolAndAcceptsNotification() throws Exception {
         mvc.perform(
                         post("/api/mcp")
                                 .header("Authorization", "Bearer alice-token")
@@ -93,7 +91,7 @@ class McpControllerTest {
                                 .contentType("application/json")
                                 .content(
                                         "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
-                .andExpect(jsonPath("$.result.tools.length()").value(7));
+                .andExpect(jsonPath("$.result.tools.length()").value(1));
         mvc.perform(
                         post("/api/mcp")
                                 .header("Authorization", "Bearer alice-token")
@@ -118,8 +116,8 @@ class McpControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.result.isError").value(false));
         }
-        verify(tools).call(eq("get_required_tests"), any(), eq(alice), anyString());
-        verify(tools).call(eq("get_required_tests"), any(), eq(bob), anyString());
+        verify(tools).call(eq("search_project"), any(), eq(alice), anyString());
+        verify(tools).call(eq("search_project"), any(), eq(bob), anyString());
         when(tokens.authenticate("alice-token"))
                 .thenThrow(new ApiSecurityException(401, "ACCESS_TOKEN_INVALID", "revoked"));
         mvc.perform(
@@ -156,7 +154,7 @@ class McpControllerTest {
                                 .header("Authorization", "Bearer alice-token")
                                 .contentType("application/json")
                                 .content(
-                                        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"get_task_context\",\"arguments\":{}}}"))
+                                        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"search_project\",\"arguments\":{}}}"))
                 .andExpect(jsonPath("$.result.isError").value(true));
         verifyNoInteractions(tools);
     }

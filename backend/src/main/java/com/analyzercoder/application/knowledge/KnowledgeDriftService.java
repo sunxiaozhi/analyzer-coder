@@ -3,7 +3,6 @@ package com.analyzercoder.application.knowledge;
 import com.analyzercoder.application.change.GitChangeRequest;
 import com.analyzercoder.application.change.RepositoryChange;
 import com.analyzercoder.application.change.RepositoryChangeService;
-import com.analyzercoder.application.review.ChangedSymbolResolver;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.knowledge.KnowledgeScope;
 import com.analyzercoder.domain.repository.CodeRepository;

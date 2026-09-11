@@ -1,5 +1,7 @@
 # 代码知识平台需求评审
 
+> 历史评审记录：其中的变更审查、任务上下文与交付闭环已退出当前范围。现行边界以 `01-requirements.md` 和 `13-system-usage-map.md` 为准。
+
 版本：v0.1
 日期：2026-07-19
 评审范围：`01-requirements.md`、`02-tech-selection.md`、`03-design.md` 与当前代码骨架

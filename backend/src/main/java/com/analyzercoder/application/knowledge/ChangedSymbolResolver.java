@@ -1,10 +1,9 @@
-package com.analyzercoder.application.review;
+package com.analyzercoder.application.knowledge;
 
 import com.analyzercoder.application.change.RepositoryChange;
 import com.analyzercoder.application.change.RepositoryChangeException;
 import com.analyzercoder.application.code.CodeSymbolExtractor;
 import com.analyzercoder.application.code.CodeSymbolExtractor.SymbolDeclaration;
-import com.analyzercoder.application.knowledge.RepositoryGlobMatcher;
 import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.repository.CodeRepository;

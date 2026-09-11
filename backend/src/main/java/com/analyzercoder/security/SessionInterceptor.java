@@ -24,7 +24,6 @@ public class SessionInterceptor implements HandlerInterceptor {
         return path.equals("/api/health")
                 || path.equals("/api/auth/login")
                 || path.equals("/api/auth/captcha")
-                || path.startsWith("/api/provider-webhooks/")
                 || path.startsWith("/actuator/health")
                 || path.startsWith("/error");
     }

@@ -17,13 +17,13 @@ test('forwards the Analyzer session and CSRF token without exposing them in the 
     },
   });
 
-  const result = await client.request('/api/repositories/id/task-context', {
+  const result = await client.request('/api/repositories/id/knowledge', {
     method: 'POST',
-    body: JSON.stringify({ task: 'review' }),
+    body: JSON.stringify({ title: '约束' }),
   });
 
   assert.deepEqual(result, { ok: true });
-  assert.equal(observed.url, 'http://127.0.0.1:8080/api/repositories/id/task-context');
+  assert.equal(observed.url, 'http://127.0.0.1:8080/api/repositories/id/knowledge');
   assert.equal(observed.init.headers.get('Cookie'), 'AC_SESSION=session-secret');
   assert.equal(observed.init.headers.get('X-CSRF-Token'), 'csrf-secret');
   assert.doesNotMatch(observed.init.body, /session-secret|csrf-secret/);
@@ -41,7 +41,7 @@ test('does not send CSRF headers for safe HTTP methods', async () => {
     },
   });
 
-  await client.request('/api/review');
+  await client.request('/api/repositories/id/evidence-search?query=order');
 
   assert.equal(headers.get('Cookie'), 'AC_SESSION=session');
   assert.equal(headers.has('X-CSRF-Token'), false);
@@ -59,7 +59,7 @@ test('preserves stable backend error codes for MCP tool errors', async () => {
   });
 
   await assert.rejects(
-    () => client.request('/api/repositories/forbidden/task-context', { method: 'POST', body: '{}' }),
+    () => client.request('/api/repositories/forbidden/evidence-search?query=order'),
     error => error instanceof AnalyzerApiError
       && error.status === 403
       && error.code === 'REPOSITORY_READ_FORBIDDEN',
@@ -80,7 +80,7 @@ test('uses account access token without browser cookie or CSRF', async () => {
     headers = init.headers;
     return new Response('{}', { status: 200 });
   } });
-  await client.request('/api/repositories/repository/task-context', { method: 'POST', body: '{}' });
+  await client.request('/api/repositories/repository/evidence-search?query=order');
   assert.equal(headers.get('Authorization'), 'Bearer acp-test');
   assert.equal(headers.has('Cookie'), false);
   assert.equal(headers.has('X-CSRF-Token'), false);

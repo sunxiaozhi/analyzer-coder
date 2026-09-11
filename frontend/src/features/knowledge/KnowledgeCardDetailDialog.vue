@@ -29,20 +29,13 @@ const kindLabels: Record<string, string> = {
   OWNERSHIP: '责任归属', TECH_DEBT: '技术债',
 };
 const enforcementLabels: Record<string, string> = {
-  REFERENCE: '仅参考', ADVISORY: '建议执行', REQUIRED: '必须执行',
+  REFERENCE: '参考', ADVISORY: '重点提醒', REQUIRED: '强约束',
 };
 const severityLabels: Record<string, string> = { INFO: '提示', WARNING: '警告', CRITICAL: '严重' };
 const hasScope = computed(() => Boolean(props.card && (
   props.card.scope.pathPatterns.length || props.card.scope.symbols.length || props.card.scope.modules.length
   || props.card.scope.repositoryIds?.length || props.card.scope.serviceNames?.length
   || props.card.scope.contractIds?.length
-)));
-const hasObligations = computed(() => Boolean(props.card && (
-  props.card.obligations.requiredTests.length
-  || props.card.obligations.requiredApproverAccountIds.length
-  || props.card.obligations.instructions.length
-  || props.card.obligations.prohibitedPathPatterns?.length
-  || props.card.obligations.knowledgeUpdateRequired
 )));
 </script>
 
@@ -98,14 +91,6 @@ const hasObligations = computed(() => Boolean(props.card && (
         <div v-if="card.scope.repositoryIds?.length"><b>跨仓库</b><code v-for="item in card.scope.repositoryIds" :key="item">{{ item }}</code></div>
         <div v-if="card.scope.serviceNames?.length"><b>服务</b><code v-for="item in card.scope.serviceNames" :key="item">{{ item }}</code></div>
         <div v-if="card.scope.contractIds?.length"><b>契约</b><code v-for="item in card.scope.contractIds" :key="item">{{ item }}</code></div>
-      </section>
-      <section v-if="hasObligations" class="engineering-detail">
-        <h3>开发要求</h3>
-        <div v-if="card.obligations.requiredTests.length"><b>测试</b><code v-for="item in card.obligations.requiredTests" :key="item">{{ item }}</code></div>
-        <div v-if="card.obligations.requiredApproverAccountIds.length"><b>审批人</b><code v-for="item in card.obligations.requiredApproverAccountIds" :key="item">{{ item }}</code></div>
-        <div v-if="card.obligations.instructions.length"><b>要求</b><span v-for="item in card.obligations.instructions" :key="item">{{ item }}</span></div>
-        <div v-if="card.obligations.prohibitedPathPatterns?.length"><b>CI 禁止路径</b><code v-for="item in card.obligations.prohibitedPathPatterns" :key="item">{{ item }}</code></div>
-        <div v-if="card.obligations.knowledgeUpdateRequired"><b>持续集成知识同步</b><span>命中代码变化时，必须发布更高修订且保持与当前代码一致</span></div>
       </section>
     </template>
       <section v-if="card?.codeReferences.length" class="detail-code-links">

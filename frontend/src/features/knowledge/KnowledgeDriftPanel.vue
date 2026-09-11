@@ -55,7 +55,7 @@ const reasonLabels: Record<string, string> = {
         class="diff-link"
         @click="emit('openDiff', event)"
       >
-        <GitCompareArrows :size="14" />打开触发本状态的提交范围审查<ExternalLink :size="12" />
+        <GitCompareArrows :size="14" />打开关联代码证据<ExternalLink :size="12" />
       </button>
     </template>
     <p v-else-if="!loading">当前没有可展示的来源漂移审计。</p>

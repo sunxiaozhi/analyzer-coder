@@ -73,9 +73,9 @@ const severityOptions: { value: KnowledgeSeverity; label: string }[] = [
   { value: 'CRITICAL', label: '严重' },
 ];
 const enforcementOptions: { value: KnowledgeEnforcement; label: string; hint: string }[] = [
-  { value: 'REFERENCE', label: '仅参考', hint: '不产生测试或审批要求' },
-  { value: 'ADVISORY', label: '建议执行', hint: '命中时提示开发者确认' },
-  { value: 'REQUIRED', label: '必须执行', hint: '发布前必须有负责人、范围和当前代码证据' },
+  { value: 'REFERENCE', label: '参考', hint: '作为理解项目的背景信息' },
+  { value: 'ADVISORY', label: '重点提醒', hint: '检索命中时提醒开发者关注' },
+  { value: 'REQUIRED', label: '强约束', hint: '发布前需要负责人、范围和当前代码证据' },
 ];
 
 const repositoryOptions = computed(() => [...new Map(engineeringProjects.value
@@ -84,10 +84,6 @@ const repositoryOptions = computed(() => [...new Map(engineeringProjects.value
 const contractOptions = computed(() => [...new Map(engineeringProjects.value
   .flatMap(project => project.contracts)
   .map(contract => [contract.id, contract])).values()]);
-const referenceHasObligations = computed(() => form.enforcement === 'REFERENCE'
-  && Boolean(engineeringText.tests.trim() || form.obligations.requiredApproverAccountIds.length
-    || engineeringText.instructions.trim() || engineeringText.prohibitedPaths.trim()
-    || form.obligations.knowledgeUpdateRequired));
 const requiredIncomplete = computed(() => form.enforcement === 'REQUIRED'
   && (!form.ownerAccountId || !hasScope()));
 
@@ -245,14 +241,6 @@ async function loadTopology() {
   }
 }
 
-function clearObligations() {
-  engineeringText.tests = '';
-  form.obligations.requiredApproverAccountIds = [];
-  engineeringText.instructions = '';
-  engineeringText.prohibitedPaths = '';
-  form.obligations.knowledgeUpdateRequired = false;
-}
-
 async function choose(event: Event) {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files ?? []);
@@ -314,7 +302,7 @@ function save() {
     width="960" top="3vh" destroy-on-close @update:model-value="emit('update:modelValue', $event)">
     <div class="editor-thesis">
       <span>工程知识</span>
-      <p>先记录清楚，再决定它对开发任务是参考、建议还是必须执行。</p>
+      <p>记录内容和适用范围，让检索能够把知识与相关代码放在一起。</p>
       <b :data-enforcement="form.enforcement">
         {{ enforcementOptions.find(item => item.value === form.enforcement)?.label }}
       </b>
@@ -342,7 +330,7 @@ function save() {
             <el-form-item label="严重程度">
               <el-segmented v-model="form.severity" :options="severityOptions" block />
             </el-form-item>
-            <el-form-item label="执行级别">
+            <el-form-item label="提示级别">
               <el-select v-model="form.enforcement" class="full-width">
                 <el-option v-for="option in enforcementOptions" :key="option.value"
                   :label="option.label" :value="option.value">
@@ -365,8 +353,8 @@ function save() {
         <el-collapse-item name="engineering">
           <template #title>
             <div class="collapse-title">
-              <span>02—05</span>
-              <div><b>适用范围、开发要求与代码证据</b><small>普通参考知识可以跳过</small></div>
+              <span>02—04</span>
+              <div><b>适用范围与代码证据</b><small>用于提升知识和代码的关联检索</small></div>
               <em>{{ codeReferences.length }} 条代码证据</em>
             </div>
           </template>
@@ -419,52 +407,9 @@ function save() {
             </section>
 
             <section class="form-section">
-              <div class="section-marker"><span>03</span><small>要求</small></div>
-              <div class="section-body">
-                <div class="section-heading"><h3>命中后需要做什么</h3><p>参考知识不产生强制义务。</p></div>
-                <el-alert v-if="referenceHasObligations" type="warning" :closable="false">
-                  <template #title>
-                    当前执行级别为“仅参考”，请清空下方要求或调整执行级别。
-                    <el-button link type="warning" @click="clearObligations">清空要求</el-button>
-                  </template>
-                </el-alert>
-                <div class="form-grid three-columns">
-                  <el-form-item label="必需测试">
-                    <el-input v-model="engineeringText.tests" type="textarea" :rows="4"
-                      placeholder="./mvnw test&#10;npm run test" />
-                  </el-form-item>
-                  <el-form-item label="必需审批人">
-                    <KnowledgeAccountSelect
-                      v-model="form.obligations.requiredApproverAccountIds"
-                      :members="members"
-                      :loading="membersLoading"
-                      multiple
-                      placeholder="选择一个或多个仓库成员"
-                    />
-                  </el-form-item>
-                  <el-form-item label="补充开发要求">
-                    <el-input v-model="engineeringText.instructions" type="textarea" :rows="4"
-                      placeholder="修改接口时同步更新契约测试" />
-                  </el-form-item>
-                </div>
-                <div class="form-grid ci-policy-grid">
-                  <el-form-item label="禁止修改路径（CI）">
-                    <el-input v-model="engineeringText.prohibitedPaths" type="textarea" :rows="3"
-                      placeholder="deploy/production/**&#10;security/keys/**" />
-                    <small>只按真实改动路径和已审核的“必须执行”知识判断，不解析自然语言。</small>
-                  </el-form-item>
-                  <el-form-item label="知识同步（CI）">
-                    <el-switch v-model="form.obligations.knowledgeUpdateRequired"
-                      active-text="命中代码变化时，要求先发布更高修订的当前知识" />
-                  </el-form-item>
-                </div>
-              </div>
-            </section>
-
-            <section class="form-section">
-              <div class="section-marker"><span>04</span><small>负责</small></div>
+              <div class="section-marker"><span>03</span><small>负责</small></div>
               <div class="section-body owner-row">
-                <div class="section-heading"><h3>谁负责确认它仍然有效</h3><p>必须执行的知识发布前需要负责人。</p></div>
+                <div class="section-heading"><h3>谁负责确认它仍然有效</h3><p>强约束知识发布前需要负责人。</p></div>
                 <el-form-item label="负责人">
                   <div class="owner-control">
                     <KnowledgeAccountSelect
@@ -477,12 +422,12 @@ function save() {
                   </div>
                 </el-form-item>
                 <el-alert v-if="requiredIncomplete" type="warning" :closable="false"
-                  title="当前草稿可以保存，但发布前必须补全负责人和至少一种适用范围。" />
+                  title="当前草稿可以保存，但强约束知识发布前需要负责人和至少一种适用范围。" />
               </div>
             </section>
 
             <section class="form-section">
-              <div class="section-marker"><span>05</span><small>证据</small></div>
+              <div class="section-marker"><span>04</span><small>证据</small></div>
               <div class="section-body">
                 <div class="section-heading"><h3>把知识绑定到当前代码</h3><p>代码引用用于验证来源版本，不等同于适用范围。</p></div>
                 <KnowledgeCodeReferenceSelector v-model="codeReferences" :repository-id="repositoryId"
@@ -511,7 +456,7 @@ function save() {
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
       <el-button type="primary" :loading="busy"
-        :disabled="uploading || referenceHasObligations || !form.title.trim() || !form.content.trim()"
+        :disabled="uploading || !form.title.trim() || !form.content.trim()"
         @click="save">{{ card ? '保存新修订' : '创建草稿' }}</el-button>
     </template>
   </el-dialog>
@@ -536,7 +481,6 @@ function save() {
 .policy-grid { grid-template-columns: minmax(180px, .8fr) minmax(230px, 1fr) minmax(200px, 1fr); }
 .three-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .cross-scope-grid { margin-top: 14px; padding-top: 14px; border-top: 1px dashed #d4e0e7; }
-.ci-policy-grid { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); margin-top: 14px; }
 .full-width { width: 100%; }
 .enforcement-option { display: grid; line-height: 1.35; }
 .enforcement-option span { color: var(--el-text-color-secondary); font-size: 13px; }

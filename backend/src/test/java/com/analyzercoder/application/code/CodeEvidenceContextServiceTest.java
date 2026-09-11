@@ -7,7 +7,6 @@ import static org.mockito.Mockito.when;
 
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.application.knowledge.RepositoryGlobMatcher;
-import com.analyzercoder.application.review.TaskReviewService;
 import com.analyzercoder.domain.knowledge.KnowledgeEnforcement;
 import com.analyzercoder.domain.knowledge.KnowledgeKind;
 import com.analyzercoder.domain.knowledge.KnowledgeObligations;
@@ -30,18 +29,15 @@ class CodeEvidenceContextServiceTest {
     void returnsOnlyDirectBindingsAndKeepsTrustAndVersionFactsExplicit() {
         CodeRepositoryStore repositories = mock(CodeRepositoryStore.class);
         IntelligenceService intelligence = mock(IntelligenceService.class);
-        TaskReviewService reviews = mock(TaskReviewService.class);
         CodeEvidenceContextService service =
                 new CodeEvidenceContextService(
-                        repositories, intelligence, reviews, new RepositoryGlobMatcher());
+                        repositories, intelligence, new RepositoryGlobMatcher());
         CodeRepository repository = repository();
         UUID repositoryId = repository.id().value();
         String filePath = "src/refund/RefundService.java";
         when(repositories.findById(repository.id())).thenReturn(Optional.of(repository));
         when(intelligence.cards(repositoryId, true))
                 .thenReturn(List.of(card(repository, filePath), card(repository, "src/Other.java")));
-        when(reviews.references(repository.id(), filePath, 20))
-                .thenReturn(new TaskReviewService.ReviewReferenceResult(List.of(), 3, false));
 
         CodeEvidenceContextService.CodeEvidenceContext result =
                 service.context(repository.id(), filePath, "approveRefund", true);
@@ -63,7 +59,6 @@ class CodeEvidenceContextServiceTest {
                         });
         assertThat(result.limitations())
                 .containsExactly("DETERMINISTIC_KNOWLEDGE_MATCHING_ONLY");
-        assertThat(result.scannedReviewCount()).isEqualTo(3);
         verify(intelligence).cards(repositoryId, true);
     }
 
@@ -71,10 +66,9 @@ class CodeEvidenceContextServiceTest {
     void includesPathAndSymbolScopedKnowledgeWithoutPretendingItIsDirectlyBound() {
         CodeRepositoryStore repositories = mock(CodeRepositoryStore.class);
         IntelligenceService intelligence = mock(IntelligenceService.class);
-        TaskReviewService reviews = mock(TaskReviewService.class);
         CodeEvidenceContextService service =
                 new CodeEvidenceContextService(
-                        repositories, intelligence, reviews, new RepositoryGlobMatcher());
+                        repositories, intelligence, new RepositoryGlobMatcher());
         CodeRepository repository = repository();
         UUID repositoryId = repository.id().value();
         String filePath = "src/refund/RefundService.java";
@@ -82,8 +76,6 @@ class CodeEvidenceContextServiceTest {
         IntelligenceService.KnowledgeCard scoped =
                 scopedCard(repository, List.of("src/refund/**"), List.of("approveRefund"));
         when(intelligence.cards(repositoryId, false)).thenReturn(List.of(scoped));
-        when(reviews.references(repository.id(), filePath, 20))
-                .thenReturn(new TaskReviewService.ReviewReferenceResult(List.of(), 0, false));
 
         CodeEvidenceContextService.CodeEvidenceContext result =
                 service.context(repository.id(), filePath, "approveRefund", false);

@@ -105,7 +105,7 @@ public class IntelligenceService {
             return new EvidenceSearchResult(
                     List.of(), RetrievalDiagnostics.notExecuted("EMPTY_QUERY"));
         }
-        int resolvedLimit = Math.max(1, Math.min(limit, 20));
+        int resolvedLimit = Math.max(1, Math.min(limit, 50));
         RetrievalOutcome outcome = retrieve(repositoryId, analyzed, true, resolvedLimit);
         return new EvidenceSearchResult(
                 outcome.ranked().stream()
@@ -811,34 +811,6 @@ public class IntelligenceService {
         return findCard(repositoryId, cardId);
     }
 
-    /** 仅执行知识关键词召回并丢弃分数，供任务审查展示非强制参考候选。 */
-    @Transactional(readOnly = true)
-    public List<KnowledgeReferenceHit> reviewKnowledgeReferences(
-            UUID repositoryId, String task, int limit) {
-        RetrievalQueryAnalyzer.Query query = queryAnalyzer.analyze(task);
-        if (query.normalized().isBlank()) {
-            return List.of();
-        }
-        int resolvedLimit = Math.max(1, Math.min(limit, 20));
-        int termCount = Math.max(1, query.terms().size());
-        return mapper.searchKnowledgeKeyword(
-                        repositoryId,
-                        query.normalized(),
-                        query.terms(),
-                        termCount,
-                        resolvedLimit)
-                .stream()
-                .map(
-                        row ->
-                                new KnowledgeReferenceHit(
-                                        uuid(row, "id"),
-                                        "KNOWLEDGE_KEYWORD",
-                                        "任务描述通过关键词召回该知识，但未命中确定性适用范围"))
-                .filter(hit -> hit.knowledgeId() != null)
-                .distinct()
-                .toList();
-    }
-
     @Transactional
     public KnowledgeCard createCard(UUID repositoryId, UUID actor, CardInput input) {
         CardInput validated = validateCardInput(input);
@@ -1469,8 +1441,6 @@ public class IntelligenceService {
             List<String> limitations) {}
 
     public record CodeReferenceInput(UUID chunkId) {}
-
-    public record KnowledgeReferenceHit(UUID knowledgeId, String source, String detail) {}
 
     public record CodeReference(
             UUID repositoryId,

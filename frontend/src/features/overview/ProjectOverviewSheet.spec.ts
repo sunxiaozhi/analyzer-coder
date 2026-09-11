@@ -123,7 +123,7 @@ const health = {
   snapshotId: 'snapshot-1',
   commitSha: '1234567890abcdef',
   state: 'DEGRADED',
-  readyForReview: true,
+  readyForSearch: true,
   knowledge: {
     total: 7,
     current: 4,
@@ -134,26 +134,6 @@ const health = {
     requiredWithoutOwner: 1,
     unreviewed: 2,
   },
-  recentReviews: [{
-    reviewId: 'review-1',
-    status: 'COMPLETED',
-    repositoryId: 'repo-1',
-    snapshotId: 'snapshot-1',
-    createdBy: 'account-1',
-    clientRequestId: 'request-1',
-    task: '调整登录校验',
-    changeSource: 'WORKTREE',
-    changedFileCount: 3,
-    changedSymbolCount: 5,
-    applicableKnowledgeCount: 2,
-    requiredTestCount: 1,
-    requiredApprovalCount: 0,
-    staleKnowledgeCount: 0,
-    unknownCount: 0,
-    error: null,
-    createdAt: '2026-08-30T10:00:00Z',
-    finishedAt: '2026-08-30T10:01:00Z',
-  }],
   issues: [{
     code: 'REQUIRED_KNOWLEDGE_WITHOUT_OWNER',
     severity: 'WARNING',
@@ -179,36 +159,34 @@ function mountSheet(currentPreparation: RepositoryPreparation = preparation) {
 }
 
 describe('ProjectOverviewSheet', () => {
-  it('shows snapshot facts, knowledge health, code categories and recent reviews without README or technologies', () => {
+  it('shows snapshot facts, knowledge health and code categories without unrelated review data', () => {
     const wrapper = mountSheet();
     const text = wrapper.text();
 
     expect(text).toContain('示例项目');
-    expect(text).toContain('准备或治理存在缺口');
+    expect(text).toContain('检索可用，部分能力降级');
     expect(text).toContain('1234567890');
     expect(text).toContain('快照 snapshot');
     expect(text).toContain('代码图谱');
     expect(text).toContain('120');
     expect(text).toContain('100%');
-    expect(text).toContain('知识治理状态');
+    expect(text).toContain('知识库状态');
     expect(text).toContain('当前');
-    expect(text).toContain('必需但无负责人');
+    expect(text).toContain('缺少维护人');
     expect(text).toContain('代码类型统计');
     expect(text).toContain('应用与服务');
-    expect(text).toContain('最近变更审查');
-    expect(text).toContain('调整登录校验');
     expect(text).toContain('当前阻塞与缺口');
     expect(text).not.toContain('技术栈');
     expect(text).not.toContain('Spring Boot');
     expect(text).not.toContain('README 原文');
   });
 
-  it('emits the primary review action and routes knowledge issue handling through explicit events', async () => {
+  it('emits the primary search action and routes knowledge issue handling through explicit events', async () => {
     const wrapper = mountSheet();
     await wrapper.get('.review-action').trigger('click');
     await wrapper.get('.issue-row button').trigger('click');
 
-    expect(wrapper.emitted('startReview')).toHaveLength(1);
+    expect(wrapper.emitted('openSearch')).toHaveLength(1);
     expect(wrapper.emitted('openKnowledge')).toHaveLength(1);
   });
 
@@ -241,7 +219,7 @@ it('never presents missing responses as healthy or as zero measurements', async 
   expect(wrapper.text()).toContain('状态尚未获取');
   expect(wrapper.text()).toContain('无法判断是否存在缺口');
   expect(wrapper.text()).not.toContain('未发现缺口');
-  expect(wrapper.text()).not.toContain('还没有变更审查记录');
+  expect(wrapper.text()).not.toContain('变更审查');
   expect(wrapper.findAll('.capability-strip strong').map(item => item.text())).toEqual(['—', '—', '—', '—']);
 });
 
@@ -262,18 +240,4 @@ it('shows all categories with their share of source files', async () => {
   expect(wrapper.findAll('.category-row')).toHaveLength(10);
   expect(wrapper.get('.category-row b').attributes('style')).toContain('width: 10%');
   expect(wrapper.get('[data-accent="violet"]').text()).toContain('10 类');
-});
-
-it('shows failed review errors and opens the exact historical record', async () => {
-  const wrapper = mountSheet();
-  await wrapper.setProps({ health: { ...health, recentReviews: [{ ...health.recentReviews[0], status: 'FAILED', snapshotId: 'old-snapshot',
-    changedFileCount: null, changedSymbolCount: null, applicableKnowledgeCount: null,
-    error: { code: 'GIT_REF_NOT_FOUND', message: '目标提交不存在' } }] } });
-  const row = wrapper.get('.review-row');
-  expect(row.text()).toContain('未生成有效统计');
-  expect(row.text()).toContain('历史快照');
-  expect(row.text()).toContain('目标提交不存在');
-  expect(row.text()).not.toContain('0 文件');
-  await row.get('button').trigger('click');
-  expect(wrapper.emitted('openReview')).toEqual([['review-1']]);
 });

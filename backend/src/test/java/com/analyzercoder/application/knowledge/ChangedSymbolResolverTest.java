@@ -1,4 +1,4 @@
-package com.analyzercoder.application.review;
+package com.analyzercoder.application.knowledge;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;

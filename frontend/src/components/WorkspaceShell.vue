@@ -13,7 +13,6 @@ import {
   Search,
   Settings,
   Users,
-  Workflow,
 } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, reactive, shallowRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
@@ -37,7 +36,6 @@ const iconComponents: Record<WorkspaceNavIcon, object> = {
   overview: LayoutDashboard,
   code: Search,
   ask: MessageSquareText,
-  review: Workflow,
   knowledge: BookOpenCheck,
   projects: FolderCog,
   tasks: ListChecks,
@@ -56,7 +54,7 @@ const navGroups = computed(() => workspaceNavigation({
   canManageProjects: canManageProjects.value,
 }));
 const visibleNavItems = computed(() => navGroups.value.flatMap(group => group.items));
-const titles: Record<string, string> = { mcp: 'MCP 接入', overview: '项目总览', 'change-impact': '变更审查', repositories: '项目管理', indexing: '索引任务', search: '代码与证据', ask: '问项目', graph: '代码与证据', knowledge: '知识治理', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
+const titles: Record<string, string> = { mcp: 'MCP 接入', overview: '项目总览', repositories: '项目管理', indexing: '索引任务', search: '代码与知识', ask: '问项目', graph: '代码与知识', knowledge: '知识库', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
 const pageTitle = computed(() => titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
 async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }

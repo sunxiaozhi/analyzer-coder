@@ -2,9 +2,6 @@ package com.analyzercoder.interfaces.rest;
 
 import com.analyzercoder.application.mcp.McpToolCatalog;
 import com.analyzercoder.application.mcp.McpToolService;
-import com.analyzercoder.application.memory.TaskContextException;
-import com.analyzercoder.application.outcome.TaskReviewOutcomeException;
-import com.analyzercoder.application.review.TaskReviewException;
 import com.analyzercoder.security.ApiSecurityException;
 import com.analyzercoder.security.SecurityContext;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -73,7 +70,7 @@ public class McpController {
                                 "serverInfo",
                                 Map.of("name", "analyzer-coder", "version", "1.0.0"),
                                 "instructions",
-                                "Use review_change before get_task_context for deterministic rules; retrieval candidates are not confirmed rules. Every call uses the token account's current repository permissions.");
+                                "Use search_project to retrieve current code and published project knowledge with versioned evidence. Every call uses the token account's current repository permissions.");
             }
             case "ping" -> result = Map.of();
             case "tools/list" -> result = Map.of("tools", catalog.tools());
@@ -98,11 +95,7 @@ public class McpController {
                                     data,
                                     "isError",
                                     false);
-                } catch (ApiSecurityException
-                        | TaskReviewException
-                        | TaskContextException
-                        | TaskReviewOutcomeException
-                        | IllegalArgumentException failure) {
+                } catch (ApiSecurityException | IllegalArgumentException failure) {
                     result =
                             Map.of(
                                     "content",

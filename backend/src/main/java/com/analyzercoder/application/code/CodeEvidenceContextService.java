@@ -2,7 +2,6 @@ package com.analyzercoder.application.code;
 
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.application.knowledge.RepositoryGlobMatcher;
-import com.analyzercoder.application.review.TaskReviewService;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
@@ -14,22 +13,19 @@ import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
-/** 汇总当前文件的确定性知识匹配和不可变审查引用，供代码工作台展示。 */
+/** 汇总当前文件的知识匹配与版本化代码绑定，供联合检索工作台展示。 */
 @Service
 public class CodeEvidenceContextService {
     private final CodeRepositoryStore repositories;
     private final IntelligenceService intelligence;
-    private final TaskReviewService reviews;
     private final RepositoryGlobMatcher globMatcher;
 
     public CodeEvidenceContextService(
             CodeRepositoryStore repositories,
             IntelligenceService intelligence,
-            TaskReviewService reviews,
             RepositoryGlobMatcher globMatcher) {
         this.repositories = repositories;
         this.intelligence = intelligence;
-        this.reviews = reviews;
         this.globMatcher = globMatcher;
     }
 
@@ -59,15 +55,10 @@ public class CodeEvidenceContextService {
                                         .reversed()
                                         .thenComparing(KnowledgeReference::title))
                         .toList();
-        TaskReviewService.ReviewReferenceResult reviewReferences =
-                reviews.references(repositoryId, normalizedPath, 20);
         List<String> limitations =
                 java.util.stream.Stream.of(
                                 "DETERMINISTIC_KNOWLEDGE_MATCHING_ONLY",
-                                normalizedSymbol == null ? "SYMBOL_REQUIRED_FOR_CODEGRAPH" : null,
-                                reviewReferences.historyTruncated()
-                                        ? "REVIEW_HISTORY_TRUNCATED"
-                                        : null)
+                                normalizedSymbol == null ? "SYMBOL_REQUIRED_FOR_CODEGRAPH" : null)
                         .filter(Objects::nonNull)
                         .toList();
         return new CodeEvidenceContext(
@@ -79,8 +70,6 @@ public class CodeEvidenceContextService {
                 normalizedPath,
                 normalizedSymbol,
                 knowledge,
-                reviewReferences.references(),
-                reviewReferences.scannedReviewCount(),
                 limitations,
                 Instant.now());
     }
@@ -194,15 +183,11 @@ public class CodeEvidenceContextService {
             String filePath,
             String symbol,
             List<KnowledgeReference> knowledgeReferences,
-            List<TaskReviewService.ReviewReference> reviewReferences,
-            int scannedReviewCount,
             List<String> limitations,
             Instant generatedAt) {
         public CodeEvidenceContext {
             knowledgeReferences =
                     knowledgeReferences == null ? List.of() : List.copyOf(knowledgeReferences);
-            reviewReferences =
-                    reviewReferences == null ? List.of() : List.copyOf(reviewReferences);
             limitations = limitations == null ? List.of() : List.copyOf(limitations);
         }
     }

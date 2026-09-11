@@ -79,6 +79,33 @@ export interface HybridSearchResponse {
   retrieval: RetrievalDiagnostics;
 }
 
+export interface UnifiedSearchHit {
+  repositoryId: string;
+  sourceType: 'CODE' | 'KNOWLEDGE';
+  chunkId: string | null;
+  knowledgeCardId: string | null;
+  snapshotId: string | null;
+  title: string;
+  filePath: string;
+  symbolName: string | null;
+  symbolKind: string | null;
+  startLine: number | null;
+  endLine: number | null;
+  content: string;
+  contentHash: string;
+  score: number;
+  lexicalScore: number;
+  similarityScore: number;
+  similarityKind: 'NONE' | 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING';
+  channels: string[];
+  codeReferences: CodeReference[];
+}
+
+export interface UnifiedSearchResponse {
+  evidence: UnifiedSearchHit[];
+  retrieval: RetrievalDiagnostics;
+}
+
 export interface CodeEvidenceKnowledgeReference {
   knowledgeId: string;
   title: string;
@@ -108,18 +135,6 @@ export interface CodeEvidenceKnowledgeReference {
   }[];
 }
 
-export interface CodeEvidenceReviewReference {
-  reviewId: string;
-  task: string | null;
-  changeSource: string;
-  snapshotId: string;
-  currentSnapshot: boolean;
-  roles: string[];
-  symbols: string[];
-  createdAt: string;
-  finishedAt: string | null;
-}
-
 export interface CodeEvidenceContext {
   repositoryId: string;
   snapshotId: string | null;
@@ -127,8 +142,6 @@ export interface CodeEvidenceContext {
   filePath: string;
   symbol: string | null;
   knowledgeReferences: CodeEvidenceKnowledgeReference[];
-  reviewReferences: CodeEvidenceReviewReference[];
-  scannedReviewCount: number;
   limitations: string[];
   generatedAt: string;
 }
@@ -412,6 +425,10 @@ export interface CardRevision {
 }
 
 export const intelligenceApi = {
+  unifiedSearch: (repositoryId: string, query: string, limit = 50) =>
+    request<UnifiedSearchResponse>(
+      `/api/repositories/${repositoryId}/evidence-search?query=${encodeURIComponent(query)}&limit=${limit}`,
+    ),
   search: (repositoryId: string, query: string, limit = 50) =>
     request<HybridSearchResponse>(
       `/api/repositories/${repositoryId}/hybrid-search?query=${encodeURIComponent(query)}&limit=${limit}`,

@@ -2,8 +2,6 @@ package com.analyzercoder.application.overview;
 
 import com.analyzercoder.application.repository.RegisterRepositoryUseCase;
 import com.analyzercoder.application.repository.RepositoryPreparationService;
-import com.analyzercoder.application.review.TaskReviewResult;
-import com.analyzercoder.application.review.TaskReviewService;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.infrastructure.persistence.mapper.ProjectHealthMapper;
@@ -16,25 +14,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 用持久化事实回答项目是否具备可信知识和可执行审查条件。 */
+/** 用持久化事实回答项目是否已经具备可用的代码与知识检索条件。 */
 @Service
 public class ProjectHealthOverviewService {
-    private static final int RECENT_REVIEW_LIMIT = 5;
-
     private final RegisterRepositoryUseCase repositories;
     private final RepositoryPreparationService preparation;
     private final ProjectHealthMapper health;
-    private final TaskReviewService reviews;
 
     public ProjectHealthOverviewService(
             RegisterRepositoryUseCase repositories,
             RepositoryPreparationService preparation,
-            ProjectHealthMapper health,
-            TaskReviewService reviews) {
+            ProjectHealthMapper health) {
         this.repositories = repositories;
         this.preparation = preparation;
         this.health = health;
-        this.reviews = reviews;
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -46,27 +39,8 @@ public class ProjectHealthOverviewService {
         if (knowledge == null) {
             knowledge = ProjectKnowledgeHealthRow.empty();
         }
-        List<TaskReviewResult.ReviewSummary> recentReviews =
-                reviews.list(repositoryId, RECENT_REVIEW_LIMIT, 0);
         List<HealthIssue> issues = new ArrayList<>(issues(repository, preparationView, knowledge));
-        long failedReviews =
-                recentReviews.stream()
-                        .filter(review -> review.status() == TaskReviewResult.Status.FAILED)
-                        .count();
-        if (failedReviews > 0) {
-            issues.add(
-                    issue(
-                            "RECENT_REVIEW_FAILED",
-                            "WARNING",
-                            "近期审查存在失败",
-                            "最近 "
-                                    + recentReviews.size()
-                                    + " 条历史审查中有 "
-                                    + failedReviews
-                                    + " 条失败，请查看具体原因；历史记录可能属于旧快照。",
-                            "REVIEW"));
-        }
-        boolean readyForReview =
+        boolean readyForSearch =
                 repository.currentSnapshotId() != null
                         && preparationView.profile().chunkCount() > 0
                         && !"ACTION_REQUIRED".equals(preparationView.state())
@@ -79,9 +53,8 @@ public class ProjectHealthOverviewService {
                         : repository.currentSnapshotId().value(),
                 repository.currentCommit(),
                 state,
-                readyForReview,
+                readyForSearch,
                 knowledge,
-                recentReviews,
                 issues,
                 Instant.now());
     }
@@ -97,7 +70,7 @@ public class ProjectHealthOverviewService {
                             "SNAPSHOT_NOT_READY",
                             "BLOCKING",
                             "尚无已发布代码快照",
-                            "先准备项目，审查结果才能绑定到不可变 Snapshot。",
+                            "先准备项目，联合检索才能读取稳定的代码版本。",
                             "PREPARATION"));
         } else if (preparation.profile().chunkCount() == 0) {
             issues.add(
@@ -105,7 +78,7 @@ public class ProjectHealthOverviewService {
                             "CONTENT_INDEX_NOT_READY",
                             "BLOCKING",
                             "当前快照没有代码片段",
-                            "内容索引完成后才能定位变化符号和代码证据。",
+                            "内容索引完成后才能检索源码并建立知识关联。",
                             "PREPARATION"));
         }
         if (preparation.profile().missingChunks() > 0) {
@@ -123,7 +96,7 @@ public class ProjectHealthOverviewService {
                             "CODEGRAPH_NOT_READY",
                             "WARNING",
                             "CodeGraph 尚不可用",
-                            "审查仍可使用代码片段，但关系与传播证据会缺失。",
+                            "代码与知识检索仍可使用，调用关系查询暂不可用。",
                             "PREPARATION"));
         }
         preparation.stages().stream()
@@ -157,7 +130,7 @@ public class ProjectHealthOverviewService {
                             "REQUIRED_KNOWLEDGE_WITHOUT_OWNER",
                             "WARNING",
                             "必需知识缺少负责人",
-                            knowledge.requiredWithoutOwner() + " 条 REQUIRED 知识无法明确审批责任。",
+                            knowledge.requiredWithoutOwner() + " 条重要知识没有明确维护人。",
                             "KNOWLEDGE"));
         }
         if (knowledge.unreviewed() > 0) {
@@ -184,7 +157,7 @@ public class ProjectHealthOverviewService {
                             "STALE_KNOWLEDGE",
                             "WARNING",
                             "知识已经过期",
-                            knowledge.stale() + " 条知识不会作为可信审查依据。",
+                            knowledge.stale() + " 条知识会在检索结果中标记为过期。",
                             "KNOWLEDGE"));
         }
         return List.copyOf(issues);
@@ -214,13 +187,11 @@ public class ProjectHealthOverviewService {
             UUID snapshotId,
             String commitSha,
             String state,
-            boolean readyForReview,
+            boolean readyForSearch,
             ProjectKnowledgeHealthRow knowledge,
-            List<TaskReviewResult.ReviewSummary> recentReviews,
             List<HealthIssue> issues,
             Instant generatedAt) {
         public ProjectHealthOverview {
-            recentReviews = recentReviews == null ? List.of() : List.copyOf(recentReviews);
             issues = issues == null ? List.of() : List.copyOf(issues);
         }
     }

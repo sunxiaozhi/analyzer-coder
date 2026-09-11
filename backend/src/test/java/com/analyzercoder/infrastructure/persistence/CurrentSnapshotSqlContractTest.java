@@ -24,11 +24,9 @@ class CurrentSnapshotSqlContractTest {
         parseMapper(configuration, "mappers/KnowledgeHistoryMapper.xml");
         parseMapper(configuration, "mappers/VectorIndexQueryMapper.xml");
         parseMapper(configuration, "mappers/IndexJobMapper.xml");
-        parseMapper(configuration, "mappers/TaskReviewMapper.xml");
         parseMapper(configuration, "mappers/KnowledgeDriftMapper.xml");
         parseMapper(configuration, "mappers/ProjectHealthMapper.xml");
         parseMapper(configuration, "mappers/EngineeringProjectMapper.xml");
-        parseMapper(configuration, "mappers/TaskReviewOutcomeMapper.xml");
         parseMapper(configuration, "mappers/AccessTokenMapper.xml");
         parseMapper(configuration, "mappers/AuthMapper.xml");
     }
@@ -108,25 +106,6 @@ class CurrentSnapshotSqlContractTest {
                 .contains("review_status='UNREVIEWED'")
                 .contains("c.review_status='APPROVED'")
                 .contains("c.source_version_status NOT IN ('SUSPECT','STALE')");
-    }
-
-    @Test
-    void taskReviewsAreIdempotentImmutableAndCompleteOnlyOnTheCapturedSnapshot() throws Exception {
-        String migration = resource(BASELINE_MIGRATION);
-        String mapper = compact(resource("mappers/TaskReviewMapper.xml"));
-
-        assertThat(migration)
-                .contains("CREATE TABLE task_reviews")
-                .contains("uq_task_reviews_client_request")
-                .contains("created_by,repo_id,client_request_id")
-                .contains("trg_task_reviews_immutable")
-                .contains("result_payload JSONB")
-                .contains("model_config_id UUID");
-        assertThat(mapper)
-                .contains("ONCONFLICT(created_by,repo_id,client_request_id)DONOTHING")
-                .contains("ANDstatus='RUNNING'")
-                .contains(
-                        "ANDsnapshot_id=(SELECTcurrent_snapshot_idFROMrepositoriesWHEREid=#{repositoryId})");
     }
 
     @Test
@@ -211,27 +190,6 @@ class CurrentSnapshotSqlContractTest {
                 .contains("target.normalized_service_name target_service_name")
                 .contains("provider_content_fingerprint")
                 .contains("consumer_content_fingerprint");
-    }
-
-    @Test
-    void taskOutcomesAreAppendOnlyIdempotentAndKeepHumanFeedbackSeparate() throws Exception {
-        String migration = resource(BASELINE_MIGRATION);
-        String mapper = compact(resource("mappers/TaskReviewOutcomeMapper.xml"));
-
-        assertThat(migration)
-                .contains("CREATE TABLE task_review_outcomes")
-                .contains("CREATE TABLE task_review_feedback")
-                .contains("uq_task_review_outcomes_client_request")
-                .contains("EXACT_REVIEW_HEAD", "REPORTER_ASSERTED_FINAL")
-                .contains("FALSE_POSITIVE", "FALSE_NEGATIVE", "KNOWLEDGE_UPDATE")
-                .contains("trg_task_review_outcomes_immutable")
-                .contains("trg_task_review_feedback_immutable")
-                .contains("只供评测和改进，不触发知识修改");
-        assertThat(mapper)
-                .contains("ONCONFLICT(review_id,reported_by,client_request_id)DONOTHING")
-                .contains("tests_payload::textAStests_payload")
-                .contains("approvals_payload::textASapprovals_payload")
-                .contains("FROMtask_review_feedbackWHEREoutcome_id=#{outcomeId}");
     }
 
     @Test

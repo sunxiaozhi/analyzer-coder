@@ -3,7 +3,6 @@ import WorkspaceShell from '@/components/WorkspaceShell.vue';
 import AccountsView from '@/views/AccountsView.vue';
 import AuditLogsView from '@/views/AuditLogsView.vue';
 import AskView from '@/views/AskView.vue';
-import ChangeImpactView from '@/views/ChangeImpactView.vue';
 import ChunksView from '@/views/ChunksM0View.vue';
 import IndexJobsView from '@/views/UnifiedIndexJobsView.vue';
 import ProjectOverviewView from '@/views/ProjectOverviewView.vue';
@@ -20,10 +19,9 @@ export const router = createRouter({
       { path: '', redirect: '/overview' },
       { path: 'mcp', name: 'mcp', component: () => import('@/views/McpGuideView.vue'), meta: { title: 'MCP 接入' } },
       { path: 'overview', name: 'overview', component: ProjectOverviewView, meta: { title: '项目总览' } },
-      { path: 'change-impact', name: 'change-impact', component: ChangeImpactView, meta: { title: '变更审查' } },
       { path: 'repositories', name: 'repositories', component: RepositoriesView, meta: { title: '项目管理', projectManage: true } },
       { path: 'indexing', name: 'indexing', component: IndexJobsView, meta: { admin: true, title: '索引任务' } },
-      { path: 'search', name: 'search', component: ChunksView, meta: { title: '代码与证据' } },
+      { path: 'search', name: 'search', component: ChunksView, meta: { title: '代码与知识' } },
       { path: 'ask', name: 'ask', component: AskView, meta: { title: '问项目' } },
       {
         path: 'graph',
@@ -32,9 +30,9 @@ export const router = createRouter({
           name: 'search',
           query: { ...to.query, relation: to.query.analyze === '1' ? '1' : to.query.relation ?? '1' },
         }),
-        meta: { title: '代码与证据' },
+        meta: { title: '代码与知识' },
       },
-      { path: 'knowledge', name: 'knowledge', component: KnowledgeView, meta: { title: '知识治理', repositoryRead: true } },
+      { path: 'knowledge', name: 'knowledge', component: KnowledgeView, meta: { title: '知识库', repositoryRead: true } },
       { path: 'accounts', name: 'accounts', component: AccountsView, meta: { admin: true, title: '账号权限' } },
       { path: 'audit', name: 'audit', component: AuditLogsView, meta: { admin: true, title: '审计日志' } },
       { path: 'settings', name: 'settings', component: SystemSettingsView, meta: { admin: true, title: '模型配置' } },

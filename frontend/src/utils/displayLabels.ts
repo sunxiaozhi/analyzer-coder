@@ -70,15 +70,6 @@ const retrievalSourceLabels: Record<string, string> = {
   VECTOR: '向量检索',
 };
 
-const changeSourceLabels: Record<string, string> = {
-  WORKTREE: '工作区',
-  COMMIT: '提交版本',
-  COMMIT_RANGE: '版本范围',
-  PULL_REQUEST: '拉取请求',
-  MERGE_REQUEST: '合并请求',
-  PATCH: '补丁',
-};
-
 const symbolKindLabels: Record<string, string> = {
   FILE: '文件',
   CLASS: '类',
@@ -115,10 +106,6 @@ export function enforcementLabel(enforcement: string | null | undefined) {
 
 export function retrievalSourceLabel(source: string | null | undefined) {
   return source ? (retrievalSourceLabels[source] ?? '检索候选') : '检索候选';
-}
-
-export function changeSourceLabel(source: string | null | undefined) {
-  return source ? (changeSourceLabels[source] ?? '变更审查') : '变更审查';
 }
 
 export function symbolKindLabel(kind: string | null | undefined) {

@@ -22,7 +22,6 @@ import type {
   ProjectProfile,
   RepositoryPreparation,
 } from '@/api/repositories';
-import type { TaskReviewSummary } from '@/api/taskReviews';
 import type { Repository } from '@/types/api';
 
 interface Props {
@@ -41,15 +40,14 @@ const emit = defineEmits<{
   refresh: [];
   prepare: [];
   retryStage: [stage: 'snapshot' | 'content' | 'vectors' | 'graph' | 'knowledge_drift'];
-  startReview: [];
+  openSearch: [];
   openKnowledge: [];
-  openReview: [reviewId: string];
 }>();
 
 const HEALTH_COPY = {
-  READY: { label: '准备与治理检查无已知缺口', detail: '仅检查索引与知识状态，未评估代码质量、测试或安全', tone: 'ready' },
-  DEGRADED: { label: '准备或治理存在缺口', detail: '请查看具体问题；可发起审查不代表证据完整', tone: 'warning' },
-  BLOCKED: { label: '审查条件不足', detail: '先处理阻塞项，再发起可靠的变更审查', tone: 'danger' },
+  READY: { label: '代码与知识可检索', detail: '当前快照已经建立内容索引，可以开始联合检索', tone: 'ready' },
+  DEGRADED: { label: '检索可用，部分能力降级', detail: '查看具体问题；关键词结果仍可能可用', tone: 'warning' },
+  BLOCKED: { label: '检索条件不足', detail: '先完成代码快照和内容索引', tone: 'danger' },
   UNKNOWN: { label: '状态尚未获取', detail: '请等待数据加载或刷新重试', tone: 'muted' },
   PREPARING: { label: '正在准备', detail: '正在生成当前快照对应的工程证据', tone: 'running' },
 } as const;
@@ -71,12 +69,12 @@ const prepareLabel = computed(() => {
   if (props.preparation?.state === 'READY') return '同步并检查更新';
   return '修复准备状态';
 });
-const reviewActionLabel = computed(() => (
-  props.health?.readyForReview ? '开始变更审查' : '准备完成后审查'
+const searchActionLabel = computed(() => (
+  props.health?.readyForSearch ? '开始联合检索' : '准备完成后检索'
 ));
-const reviewActionTitle = computed(() => (
-  props.health?.readyForReview
-    ? '已具备快照和内容索引；审查仍可能缺少图谱、知识或检索证据'
+const searchActionTitle = computed(() => (
+  props.health?.readyForSearch
+    ? '同时检索当前快照中的代码片段和项目知识'
     : '请先处理右侧准备流程和当前问题'
 ));
 
@@ -99,31 +97,19 @@ function stageTone(stageState: string) {
   return 'muted';
 }
 
-function reviewStatus(review: TaskReviewSummary) {
-  if (review.status === 'COMPLETED') return { label: '已完成', tone: 'ready' };
-  if (review.status === 'RUNNING') return { label: '进行中', tone: 'running' };
-  return { label: '失败', tone: 'danger' };
-}
-
 function formatTime(value: string | null) {
   if (!value) return '尚未完成';
   return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   }).format(new Date(value));
 }
 
 function issueAction(issue: ProjectHealthIssue) {
   if (issue.actionTarget === 'PREPARATION') emit('prepare');
-  else if (issue.actionTarget === 'REVIEW') emit('startReview');
   else emit('openKnowledge');
 }
 
 function canResolveIssue(issue: ProjectHealthIssue) {
-  if (issue.actionTarget === 'REVIEW') return true;
   return issue.actionTarget === 'PREPARATION'
     ? Boolean(props.repository.capabilities?.canIndex)
     : Boolean(props.repository.capabilities?.canUpdate);
@@ -137,7 +123,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <span class="project-mark"><Code2 :size="22" /></span>
         <div class="identity-copy">
           <h1>{{ repository.name }}</h1>
-          <p>{{ repository.description || '当前代码快照的工程知识、索引能力与审查状态。' }}</p>
+          <p>{{ repository.description || '在同一个入口检索当前代码快照与项目知识。' }}</p>
         </div>
       </div>
 
@@ -164,11 +150,11 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <button
           type="button"
           class="review-action"
-          :title="reviewActionTitle"
-          :disabled="loading || preparing || !health?.readyForReview"
-          @click="emit('startReview')"
+          :title="searchActionTitle"
+          :disabled="loading || preparing || !health?.readyForSearch"
+          @click="emit('openSearch')"
         >
-          {{ reviewActionLabel }}
+          {{ searchActionLabel }}
           <ArrowRight :size="15" />
         </button>
         <button
@@ -230,7 +216,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
           <header class="section-heading">
             <div>
               <span>知识状态</span>
-              <h2 id="knowledge-health-title">知识治理状态</h2>
+              <h2 id="knowledge-health-title">知识库状态</h2>
               <p>计数来自未归档知识卡的审核、发布和来源版本标记，不验证知识内容是否正确。</p>
             </div>
             <button v-if="repository.capabilities?.canUpdate" type="button" @click="emit('openKnowledge')">管理知识 <ArrowRight :size="13" /></button>
@@ -244,11 +230,11 @@ function canResolveIssue(issue: ProjectHealthIssue) {
           </div>
 
           <div class="governance-ledger">
-            <div><span>满足治理条件</span><strong>{{ knowledge?.trusted ?? '—' }}</strong><small>已发布 + 审核通过 + 来源版本 CURRENT</small></div>
+            <div><span>可信知识</span><strong>{{ knowledge?.trusted ?? '—' }}</strong><small>已发布 + 审核通过 + 来源版本 CURRENT</small></div>
             <div><span>未审核</span><strong>{{ knowledge?.unreviewed ?? '—' }}</strong><small>审核状态为 UNREVIEWED</small></div>
-            <div><span>必需但无负责人</span><strong>{{ knowledge?.requiredWithoutOwner ?? '—' }}</strong><small>审批责任尚未落位</small></div>
+            <div><span>缺少维护人</span><strong>{{ knowledge?.requiredWithoutOwner ?? '—' }}</strong><small>重要知识尚未明确维护责任</small></div>
           </div>
-          <p class="data-note">上方四种来源状态互斥；下方审核与负责人计数可重叠。满足治理条件不保证引用仍有效，实际审查会进一步筛选证据。</p>
+          <p class="data-note">上方四种来源状态互斥；下方审核与负责人计数可重叠。联合检索会保留知识状态和代码版本，方便用户自行核对。</p>
         </section>
 
         <section class="overview-section code-section" aria-labelledby="code-types-title">
@@ -270,34 +256,6 @@ function canResolveIssue(issue: ProjectHealthIssue) {
           <p v-else class="empty-copy">{{ codeFacts ? '当前快照没有可分类的代码文件。' : '代码统计未能加载，请刷新重试。' }}</p>
         </section>
 
-        <section class="overview-section reviews-section" aria-labelledby="recent-reviews-title">
-          <header class="section-heading">
-            <div>
-              <span>最近审查</span>
-              <h2 id="recent-reviews-title">最近变更审查</h2>
-              <p>展示本仓库最近 5 条审查，可能包含旧快照。已完成仅表示生成了审查结果，不代表测试或审批通过。</p>
-            </div>
-          </header>
-
-          <div v-if="health?.recentReviews.length" class="review-list">
-            <article v-for="review in health.recentReviews" :key="review.reviewId" class="review-row">
-              <span class="review-status" :data-tone="reviewStatus(review).tone">{{ reviewStatus(review).label }}</span>
-              <div class="review-copy">
-                <button type="button" class="review-link" @click="emit('openReview', review.reviewId)">{{ review.task || '未填写任务说明' }} <ArrowRight :size="12" /></button>
-                <small v-if="review.status === 'COMPLETED'">{{ review.changedFileCount ?? '—' }} 文件 · {{ review.changedSymbolCount ?? '—' }} 符号 · {{ review.applicableKnowledgeCount ?? '—' }} 条适用知识</small>
-                <small v-else>{{ review.status === 'FAILED' ? '审查失败，未生成有效统计' : '审查进行中，统计尚未生成' }}</small>
-                <small>快照 {{ short(review.snapshotId, 8) }} · {{ review.snapshotId === preparation?.snapshotId ? '当前快照' : '历史快照' }}</small>
-                <small v-if="review.error" class="review-error">{{ review.error.code }}：{{ review.error.message }}</small>
-              </div>
-              <time>{{ formatTime(review.finishedAt ?? review.createdAt) }}</time>
-            </article>
-          </div>
-          <p v-else-if="!health" class="empty-copy">审查记录尚未获取。</p>
-          <div v-else class="reviews-empty">
-            <p>还没有变更审查记录。完成一次审查后，这里会保留版本和证据摘要。</p>
-            <button type="button" :disabled="!health?.readyForReview" @click="emit('startReview')">开始第一次审查 <ArrowRight :size="13" /></button>
-          </div>
-        </section>
       </main>
 
       <aside class="secondary-column">
@@ -309,7 +267,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
               <div>
                 <strong>{{ issue.title }}</strong>
                 <p>{{ issue.detail }}</p>
-                <button v-if="canResolveIssue(issue)" type="button" @click="issueAction(issue)">{{ issue.actionTarget === 'PREPARATION' ? '处理准备状态' : issue.actionTarget === 'REVIEW' ? '查看审查记录' : '处理知识' }} <ArrowRight :size="12" /></button>
+                <button v-if="canResolveIssue(issue)" type="button" @click="issueAction(issue)">{{ issue.actionTarget === 'PREPARATION' ? '处理准备状态' : '处理知识' }} <ArrowRight :size="12" /></button>
               </div>
             </article>
           </div>

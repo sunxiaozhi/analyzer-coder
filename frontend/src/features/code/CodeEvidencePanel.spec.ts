@@ -16,7 +16,7 @@ vi.mock('@/api/intelligence', async importOriginal => {
 import CodeEvidencePanel from './CodeEvidencePanel.vue';
 
 describe('CodeEvidencePanel', () => {
-  it('keeps direct knowledge and immutable review references separate from graph relations', async () => {
+  it('shows directly bound knowledge with its trust and applicability evidence', async () => {
     api.codeEvidenceContext.mockResolvedValue({
       repositoryId: 'repo-1',
       snapshotId: 'snapshot-1',
@@ -46,18 +46,6 @@ describe('CodeEvidencePanel', () => {
           currentSnapshot: true,
         }],
       }],
-      reviewReferences: [{
-        reviewId: 'review-1',
-        task: '调整退款审批',
-        changeSource: 'WORKTREE',
-        snapshotId: 'snapshot-1',
-        currentSnapshot: true,
-        roles: ['CHANGED_FILE', 'REQUIRED_TEST'],
-        symbols: ['approveRefund'],
-        createdAt: '2026-08-30T10:00:00Z',
-        finishedAt: '2026-08-30T10:01:00Z',
-      }],
-      scannedReviewCount: 5,
       limitations: ['DIRECT_KNOWLEDGE_BINDINGS_ONLY'],
       generatedAt: '2026-08-30T10:02:00Z',
     });
@@ -82,17 +70,9 @@ describe('CodeEvidencePanel', () => {
 
     expect(api.codeEvidenceContext)
       .toHaveBeenCalledWith('repo-1', 'src/RefundService.java', 'approveRefund');
-    expect(wrapper.text()).toContain('当前快照没有已发布图谱');
-
-    await wrapper.findAll('.context-tabs button')[1].trigger('click');
     expect(wrapper.text()).toContain('退款审批规则');
     expect(wrapper.text()).toContain('可信知识');
     expect(wrapper.text()).toContain('不把关键词相似结果冒充适用规则');
-
-    await wrapper.findAll('.context-tabs button')[2].trigger('click');
-    expect(wrapper.text()).toContain('调整退款审批');
-    expect(wrapper.text()).toContain('变更文件');
-    expect(wrapper.text()).toContain('要求测试');
   });
 });
 
@@ -116,7 +96,7 @@ function graphFixture(snapshotId = 'snapshot-1') {
 }
 
 function mountRelations() {
-  api.codeEvidenceContext.mockResolvedValue({ knowledgeReferences: [], reviewReferences: [], limitations: [] });
+  api.codeEvidenceContext.mockResolvedValue({ knowledgeReferences: [], limitations: [] });
   api.latestGraph.mockResolvedValue({ snapshotId: 'snapshot-1', cliVersion: 'test', nodeCount: 2 });
   return mount(CodeEvidencePanel, {
     props: { repositoryId: 'repo-1', filePath: 'a.ts', initialSymbol: 'caller', snapshotId: 'snapshot-1', autoAnalyze: true },
@@ -142,6 +122,7 @@ describe('graph context integrity', () => {
     api.graph.mockResolvedValue(graphFixture());
     const wrapper = mountRelations();
     await flushPromises();
+    await wrapper.findAll('.context-tabs button')[0].trigger('click');
     expect(wrapper.find('.path-chain small').text()).toBe('→ CALLS');
     expect(wrapper.find('.coverage').text()).toContain('返回记录已完整映射');
     expect(wrapper.text()).not.toContain('路径覆盖完整');
@@ -154,6 +135,7 @@ describe('graph context integrity', () => {
     api.graph.mockResolvedValue(graphFixture('new-snapshot'));
     const wrapper = mountRelations();
     await flushPromises();
+    await wrapper.findAll('.context-tabs button')[0].trigger('click');
     expect(wrapper.text()).toContain('代码快照已更新');
     expect(wrapper.find('.relation-summary').exists()).toBe(false);
     wrapper.unmount();
@@ -163,6 +145,7 @@ describe('graph context integrity', () => {
     api.graph.mockResolvedValue(graphFixture());
     const wrapper = mountRelations();
     await flushPromises();
+    await wrapper.findAll('.context-tabs button')[0].trigger('click');
     const calls = api.graph.mock.calls.length;
     await wrapper.find('[title="刷新文件证据和图谱状态"]').trigger('click');
     await flushPromises();
