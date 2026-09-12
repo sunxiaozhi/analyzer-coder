@@ -69,6 +69,10 @@ const codeFacts = {
   projectType: '前后端分离 Web 应用',
   confidence: 100,
   codeFileCount: 30,
+  codeTypes: [
+    { name: 'Java', count: 20 },
+    { name: 'Vue SFC', count: 10 },
+  ],
   technologies: [
     {
       name: 'Spring Boot',
@@ -173,9 +177,10 @@ describe('ProjectOverviewSheet', () => {
     expect(text).toContain('知识库状态');
     expect(text).toContain('当前');
     expect(text).toContain('缺少维护人');
-    expect(text).toContain('代码类型统计');
-    expect(text).toContain('应用与服务');
-    expect(text).toContain('当前阻塞与缺口');
+    expect(text).toContain('代码类型与系统结构');
+    expect(text).toContain('Java');
+    expect(text).toContain('前后端分离 Web 应用');
+    expect(text).toContain('当前问题');
     expect(text).not.toContain('技术栈');
     expect(text).not.toContain('Spring Boot');
     expect(text).not.toContain('README 原文');
@@ -209,7 +214,7 @@ describe('ProjectOverviewSheet', () => {
 it('shows unavailable statistics instead of reporting zero code files on a failed request', async () => {
   const wrapper = mountSheet();
   await wrapper.setProps({ codeFacts: null });
-  expect(wrapper.text()).toContain('代码统计未能加载，请刷新重试。');
+  expect(wrapper.text()).toContain('项目结构未能加载，请刷新重试。');
   expect(wrapper.find('[data-accent="violet"] strong').text()).toBe('—');
 });
 
@@ -233,11 +238,22 @@ it('keeps incomplete vector coverage below 100% and names character retrieval', 
   expect(wrapper.get('[data-accent="cyan"] strong').text()).toBe('—');
 });
 
-it('shows all categories with their share of source files', async () => {
+it('shows source language types with their share of code files', async () => {
   const wrapper = mountSheet();
-  const fileCategories = Array.from({ length: 10 }, (_, index) => ({ key: String(index), label: `类别${index}`, count: 1, detail: '', samples: [] }));
-  await wrapper.setProps({ codeFacts: { ...codeFacts, codeFileCount: 10, fileCategories } });
-  expect(wrapper.findAll('.category-row')).toHaveLength(10);
-  expect(wrapper.get('.category-row b').attributes('style')).toContain('width: 10%');
-  expect(wrapper.get('[data-accent="violet"]').text()).toContain('10 类');
+  expect(wrapper.findAll('[data-testid="code-type-row"]')).toHaveLength(2);
+  expect(wrapper.get('[role="progressbar"]').attributes('aria-valuenow')).toContain('66.666');
+  expect(wrapper.text()).toContain('66.7%');
+  expect(wrapper.get('[data-accent="violet"]').text()).toContain('2 种源码类型');
+});
+
+it('summarizes system layers and omits low-value sample paths', async () => {
+  const wrapper = mountSheet();
+  expect(wrapper.text()).toContain('系统结构');
+  expect(wrapper.text()).toContain('应用逻辑');
+  expect(wrapper.text()).toContain('主要模块');
+  expect(wrapper.text()).toContain('backend');
+  expect(wrapper.text()).not.toContain('backend/src/UserService.java');
+  expect(wrapper.text()).not.toContain('应用与服务');
+  expect(wrapper.text()).not.toContain('来源版本标记为 CURRENT');
+  expect(wrapper.text()).not.toContain('覆盖率只衡量向量齐备程度');
 });

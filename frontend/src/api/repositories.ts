@@ -65,6 +65,11 @@ export interface ProjectFileCategory {
   samples: string[];
 }
 
+export interface ProjectCodeTypeCount {
+  name: string;
+  count: number;
+}
+
 export interface ProjectModuleHotspot {
   module: string;
   codeFiles: number;
@@ -102,6 +107,7 @@ export interface ProjectCodeFacts {
   projectType: string;
   confidence: number;
   codeFileCount: number;
+  codeTypes: ProjectCodeTypeCount[];
   technologies: ProjectTechnologyFact[];
   fileCategories: ProjectFileCategory[];
   graph: ProjectGraphFacts;

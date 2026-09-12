@@ -23,6 +23,7 @@ import type {
   RepositoryPreparation,
 } from '@/api/repositories';
 import type { Repository } from '@/types/api';
+import ProjectCompositionOverview from './ProjectCompositionOverview.vue';
 
 interface Props {
   repository: Repository;
@@ -45,11 +46,11 @@ const emit = defineEmits<{
 }>();
 
 const HEALTH_COPY = {
-  READY: { label: '代码与知识可检索', detail: '当前快照已经建立内容索引，可以开始联合检索', tone: 'ready' },
-  DEGRADED: { label: '检索可用，部分能力降级', detail: '查看具体问题；关键词结果仍可能可用', tone: 'warning' },
-  BLOCKED: { label: '检索条件不足', detail: '先完成代码快照和内容索引', tone: 'danger' },
-  UNKNOWN: { label: '状态尚未获取', detail: '请等待数据加载或刷新重试', tone: 'muted' },
-  PREPARING: { label: '正在准备', detail: '正在生成当前快照对应的工程证据', tone: 'running' },
+  READY: { label: '代码与知识可检索', detail: '可开始联合检索', tone: 'ready' },
+  DEGRADED: { label: '检索可用，部分能力降级', detail: '查看下方问题', tone: 'warning' },
+  BLOCKED: { label: '检索条件不足', detail: '先完成项目准备', tone: 'danger' },
+  UNKNOWN: { label: '状态尚未获取', detail: '刷新后重试', tone: 'muted' },
+  PREPARING: { label: '正在准备', detail: '正在更新代码证据', tone: 'running' },
 } as const;
 
 const healthState = computed(() => props.health?.state ?? 'UNKNOWN');
@@ -62,6 +63,9 @@ const vectorCoverage = computed(() => {
 });
 const categories = computed(() => (
   props.codeFacts?.fileCategories.filter(item => item.count > 0) ?? []
+));
+const codeTypes = computed(() => (
+  props.codeFacts?.codeTypes?.filter(item => item.count > 0) ?? []
 ));
 const prepareLabel = computed(() => {
   if (props.preparation?.state === 'NOT_READY') return '准备项目';
@@ -80,14 +84,6 @@ const searchActionTitle = computed(() => (
 
 function short(value: string | null | undefined, length: number) {
   return value ? value.slice(0, length) : '—';
-}
-
-function categoryWidth(value: number) {
-  return categoryPercent(value) + '%';
-}
-
-function categoryPercent(value: number) {
-  return props.codeFacts?.codeFileCount ? Math.round(value / props.codeFacts.codeFileCount * 1000) / 10 : 0;
 }
 
 function stageTone(stageState: string) {
@@ -123,7 +119,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <span class="project-mark"><Code2 :size="22" /></span>
         <div class="identity-copy">
           <h1>{{ repository.name }}</h1>
-          <p>{{ repository.description || '在同一个入口检索当前代码快照与项目知识。' }}</p>
+          <p v-if="repository.description">{{ repository.description }}</p>
         </div>
       </div>
 
@@ -185,82 +181,70 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <span><Network :size="17" />代码图谱</span>
         <strong>{{ profile && profile.graphNodes > 0 ? profile.graphNodes : '—' }}</strong>
         <small>节点 · {{ profile && profile.graphNodes > 0 ? profile.graphEdges : '—' }} 条关系</small>
-        <small>{{ profile && profile.graphNodes > 0 ? '当前快照的已发布图谱' : '尚无可用图谱统计' }} · 关系包含调用、引用、包含等类型</small>
       </article>
       <article data-accent="cyan">
         <span><Database :size="17" />向量数据</span>
         <strong>{{ vectorCoverage }}</strong>
-        <small>{{ profile?.vectorizedChunks ?? '—' }} / {{ profile?.chunkCount ?? '—' }} 个已索引片段</small>
-        <small>{{ profile?.retrievalCapabilityLabel ?? '检索能力未知' }} · {{ profile?.missingChunks ?? '—' }} 个片段缺少向量</small>
+        <small>{{ profile?.vectorizedChunks ?? '—' }} / {{ profile?.chunkCount ?? '—' }} 个片段 · {{ profile?.retrievalCapabilityLabel ?? '能力未知' }}</small>
+        <small v-if="profile && profile.missingChunks > 0">{{ profile.missingChunks }} 个片段缺少向量</small>
         <small v-if="profile?.retrievalCapability === 'CHARACTER_HASH'">当前使用字符相似度，不具备语义理解能力</small>
-        <small>覆盖率只衡量向量齐备程度，不代表召回准确率</small>
       </article>
       <article data-accent="green">
         <span><BookOpenCheck :size="17" />已审核的当前知识</span>
         <strong>{{ knowledge?.trusted ?? '—' }}</strong>
-        <small>{{ knowledge?.total ?? '—' }} 条未归档知识 · 按治理状态筛选</small>
+        <small>{{ knowledge?.total ?? '—' }} 条未归档知识</small>
       </article>
       <article data-accent="violet">
         <span><FileCode2 :size="17" />代码文件</span>
         <strong>{{ codeFacts?.codeFileCount ?? '—' }}</strong>
-        <small>{{ codeFacts ? categories.length : '—' }} 类 · {{ profile?.fileCount ?? '—' }} 个快照文件</small>
+        <small>{{ codeFacts ? codeTypes.length : '—' }} 种源码类型 · {{ profile?.fileCount ?? '—' }} 个快照文件</small>
       </article>
     </section>
 
-    <p class="data-note">统计读取时间：{{ preparation ? formatTime(preparation.generatedAt) : '尚未获取' }}。
-      页面展示已发布快照；刷新统计不会同步代码。准备流程的进度按阶段计算，不代表耗时或文件完成比例。</p>
+    <p class="data-note">更新于 {{ preparation ? formatTime(preparation.generatedAt) : '尚未获取' }} · 刷新只重新读取统计</p>
 
     <div class="overview-body">
       <main class="primary-column">
         <section class="overview-section knowledge-section" aria-labelledby="knowledge-health-title">
           <header class="section-heading">
-            <div>
-              <span>知识状态</span>
-              <h2 id="knowledge-health-title">知识库状态</h2>
-              <p>计数来自未归档知识卡的审核、发布和来源版本标记，不验证知识内容是否正确。</p>
-            </div>
+            <h2 id="knowledge-health-title">知识库状态</h2>
             <button v-if="repository.capabilities?.canUpdate" type="button" @click="emit('openKnowledge')">管理知识 <ArrowRight :size="13" /></button>
           </header>
 
           <div class="knowledge-states">
-            <article data-tone="current"><small>当前</small><strong>{{ knowledge?.current ?? '—' }}</strong><span>来源版本标记为 CURRENT</span></article>
-            <article data-tone="suspect"><small>待复核</small><strong>{{ knowledge?.suspect ?? '—' }}</strong><span>变化后待复核</span></article>
-            <article data-tone="stale"><small>已失效</small><strong>{{ knowledge?.stale ?? '—' }}</strong><span>已排除出可信依据</span></article>
-            <article data-tone="unverified"><small>未验证</small><strong>{{ knowledge?.unverified ?? '—' }}</strong><span>来源版本尚未验证</span></article>
+            <article data-tone="current"><small>当前</small><strong>{{ knowledge?.current ?? '—' }}</strong></article>
+            <article data-tone="suspect"><small>待复核</small><strong>{{ knowledge?.suspect ?? '—' }}</strong></article>
+            <article data-tone="stale"><small>已失效</small><strong>{{ knowledge?.stale ?? '—' }}</strong></article>
+            <article data-tone="unverified"><small>未验证</small><strong>{{ knowledge?.unverified ?? '—' }}</strong></article>
           </div>
 
           <div class="governance-ledger">
-            <div><span>可信知识</span><strong>{{ knowledge?.trusted ?? '—' }}</strong><small>已发布 + 审核通过 + 来源版本 CURRENT</small></div>
-            <div><span>未审核</span><strong>{{ knowledge?.unreviewed ?? '—' }}</strong><small>审核状态为 UNREVIEWED</small></div>
-            <div><span>缺少维护人</span><strong>{{ knowledge?.requiredWithoutOwner ?? '—' }}</strong><small>重要知识尚未明确维护责任</small></div>
+            <div><span>可信知识</span><strong>{{ knowledge?.trusted ?? '—' }}</strong></div>
+            <div><span>未审核</span><strong>{{ knowledge?.unreviewed ?? '—' }}</strong></div>
+            <div><span>缺少维护人</span><strong>{{ knowledge?.requiredWithoutOwner ?? '—' }}</strong></div>
           </div>
-          <p class="data-note">上方四种来源状态互斥；下方审核与负责人计数可重叠。联合检索会保留知识状态和代码版本，方便用户自行核对。</p>
         </section>
 
         <section class="overview-section code-section" aria-labelledby="code-types-title">
           <header class="section-heading">
-            <div>
-              <span>代码分布</span>
-              <h2 id="code-types-title">代码类型统计</h2>
-              <p>按文件路径、扩展名和命名规则推断职责，仅统计支持识别的源码语言，每个文件归入一类。条形长度为占识别源码总数的比例，不是测试覆盖率。</p>
-            </div>
+            <h2 id="code-types-title">代码类型与系统结构</h2>
           </header>
 
-          <div v-if="categories.length" class="category-list">
-            <article v-for="category in categories" :key="category.key" class="category-row">
-              <div class="category-main"><span>{{ category.label }}</span><strong>{{ category.count }} · {{ categoryPercent(category.count) }}%</strong></div>
-              <i><b :style="{ width: categoryWidth(category.count) }"></b></i>
-              <small>{{ category.detail }}<template v-if="category.samples.length"> · {{ category.samples.slice(0, 2).join('、') }}</template></small>
-            </article>
-          </div>
-          <p v-else class="empty-copy">{{ codeFacts ? '当前快照没有可分类的代码文件。' : '代码统计未能加载，请刷新重试。' }}</p>
+          <ProjectCompositionOverview
+            v-if="codeFacts"
+            :code-types="codeTypes"
+            :project-type="codeFacts.projectType"
+            :categories="categories"
+            :modules="profile?.modules ?? []"
+          />
+          <p v-else class="empty-copy">项目结构未能加载，请刷新重试。</p>
         </section>
 
       </main>
 
       <aside class="secondary-column">
         <section class="side-section issue-section" aria-labelledby="issues-title">
-          <header class="side-heading"><span>当前问题</span><h2 id="issues-title">当前阻塞与缺口</h2></header>
+          <header class="side-heading"><h2 id="issues-title">当前问题</h2></header>
           <div v-if="health?.issues.length" class="issue-list">
             <article v-for="issue in health.issues" :key="issue.code" class="issue-row" :data-severity="issue.severity">
               <AlertTriangle :size="15" />
@@ -271,13 +255,12 @@ function canResolveIssue(issue: ProjectHealthIssue) {
               </div>
             </article>
           </div>
-          <div v-else-if="health" class="all-clear"><Check :size="15" /><span>准备与知识治理规则未发现缺口</span></div>
+          <div v-else-if="health" class="all-clear"><Check :size="15" /><span>未发现问题</span></div>
           <p v-else class="empty-copy">尚未获取检查结果，无法判断是否存在缺口。</p>
         </section>
 
         <section class="side-section readiness-section" aria-labelledby="readiness-title">
           <header class="side-heading">
-            <span>准备状态</span>
             <h2 id="readiness-title">准备流程</h2>
             <p>{{ preparation?.message ?? '尚未获取准备状态' }}</p>
           </header>
@@ -302,7 +285,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
               </div>
             </article>
           </div>
-          <p v-else class="empty-copy">准备后会显示快照、内容、向量和代码图谱状态。</p>
+          <p v-else class="empty-copy">暂无准备记录。</p>
         </section>
       </aside>
     </div>
@@ -345,7 +328,6 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 .identity-block { display: flex; min-width: 0; align-items: center; gap: 12px; }
 .project-mark { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; color: #fff; border-radius: 5px; background: var(--navy); }
 .identity-copy { min-width: 0; }
-.eyebrow, .section-heading span, .side-heading > span { color: var(--blue); font: 750 12px/1.2 "SFMono-Regular", Consolas, monospace; letter-spacing: .14em; }
 .identity-copy h1 { overflow: hidden; margin: 0; font-size: clamp(22px, 2.4vw, 28px); line-height: 1.12; letter-spacing: -.03em; text-overflow: ellipsis; white-space: nowrap; }
 .identity-copy p { overflow: hidden; margin: 3px 0 0; color: var(--text); font-size: 12px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .version-line { display: flex; grid-column: 1; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-left: 50px; color: #60727e; font: 600 12px/1.35 "SFMono-Regular", Consolas, monospace; }
@@ -381,8 +363,8 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 .overview-section { padding: 24px 27px 27px; }
 .side-section { padding: 22px 22px 24px; }
 .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
-.section-heading h2, .side-heading h2 { margin: 4px 0 0; color: var(--navy); font-size: 16px; }
-.section-heading p, .side-heading p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.section-heading h2, .side-heading h2 { margin: 0; color: var(--navy); font-size: 16px; }
+.side-heading p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .section-heading button { padding: 7px 9px; color: var(--blue); border: 1px solid #cbd9e1; border-radius: 4px; background: #fff; font-size: 12px; font-weight: 700; }
 .knowledge-states { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); }
 .knowledge-states article { display: grid; gap: 4px; padding: 16px; border-right: 1px solid var(--line); }
@@ -392,21 +374,11 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 .knowledge-states article[data-tone='stale'] small { color: var(--red); }
 .knowledge-states article[data-tone='unverified'] small { color: var(--muted); }
 .knowledge-states strong { font: 740 22px/1.15 "SFMono-Regular", Consolas, monospace; }
-.knowledge-states span { color: var(--muted); font-size: 12px; }
 .governance-ledger { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .governance-ledger div { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; padding: 13px 10px; border-right: 1px solid var(--line); }
 .governance-ledger div:last-child { border-right: 0; }
 .governance-ledger span { color: #405663; font-size: 12px; font-weight: 700; }
 .governance-ledger strong { color: var(--navy); font: 700 14px/1 "SFMono-Regular", Consolas, monospace; }
-.governance-ledger small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
-.category-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 28px; }
-.category-row { display: grid; min-width: 0; gap: 6px; }
-.category-main { display: flex; justify-content: space-between; gap: 12px; color: #405663; font-size: 12px; }
-.category-main span { font-weight: 700; }
-.category-main strong { font-family: "SFMono-Regular", Consolas, monospace; }
-.category-row > i { display: block; height: 4px; overflow: hidden; background: #e7edf0; }
-.category-row > i b { display: block; height: 100%; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
-.category-row > small { overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
 .review-list { border-top: 1px solid var(--line); }
 .review-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 13px 3px; border-bottom: 1px solid var(--line); }
 .review-status { min-width: 44px; padding: 4px 6px; color: var(--green); border: 1px solid rgb(33 138 96 / 24%); border-radius: 3px; background: rgb(33 138 96 / 6%); font-size: 12px; font-weight: 750; text-align: center; }
@@ -468,7 +440,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
   .knowledge-states { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .knowledge-states article:nth-child(2) { border-right: 0; }
   .knowledge-states article:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
-  .governance-ledger, .category-list { grid-template-columns: 1fr; }
+  .governance-ledger { grid-template-columns: 1fr; }
   .governance-ledger div { border-right: 0; border-bottom: 1px solid var(--line); }
   .governance-ledger div:last-child { border-bottom: 0; }
   .review-row { grid-template-columns: auto minmax(0, 1fr); }

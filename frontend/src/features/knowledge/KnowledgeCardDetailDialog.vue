@@ -31,11 +31,8 @@ const kindLabels: Record<string, string> = {
 const enforcementLabels: Record<string, string> = {
   REFERENCE: '参考', ADVISORY: '重点提醒', REQUIRED: '强约束',
 };
-const severityLabels: Record<string, string> = { INFO: '提示', WARNING: '警告', CRITICAL: '严重' };
 const hasScope = computed(() => Boolean(props.card && (
-  props.card.scope.pathPatterns.length || props.card.scope.symbols.length || props.card.scope.modules.length
-  || props.card.scope.repositoryIds?.length || props.card.scope.serviceNames?.length
-  || props.card.scope.contractIds?.length
+  props.card.scope.pathPatterns.length || props.card.scope.symbols.length
 )));
 </script>
 
@@ -46,9 +43,6 @@ const hasScope = computed(() => Boolean(props.card && (
         <el-tag effect="plain">{{ kindLabels[card.knowledgeKind] }}</el-tag>
         <el-tag :type="card.enforcement === 'REQUIRED' ? 'danger' : card.enforcement === 'ADVISORY' ? 'warning' : 'info'">
           {{ enforcementLabels[card.enforcement] }}
-        </el-tag>
-        <el-tag :type="card.severity === 'CRITICAL' ? 'danger' : card.severity === 'WARNING' ? 'warning' : 'info'">
-          {{ severityLabels[card.severity] }}
         </el-tag>
         <el-tag :type="card.publicationStatus === 'PUBLISHED' ? 'success' : 'info'">
           {{ statusLabel }}
@@ -63,7 +57,6 @@ const hasScope = computed(() => Boolean(props.card && (
         <time>{{ new Date(card.updatedAt).toLocaleString() }}</time>
       </div>
       <dl class="engineering-facts">
-        <div><dt>原有分类</dt><dd>{{ card.cardType || '未分类' }}</dd></div>
         <div><dt>负责人</dt><dd class="mono">{{ card.ownerAccountId || '未指定' }}</dd></div>
         <div><dt>最近验证快照</dt><dd class="mono">{{ card.lastVerifiedSnapshotId || '尚未验证' }}</dd></div>
         <div><dt>验证说明</dt><dd>{{ card.verificationNote || '暂无' }}</dd></div>
@@ -87,10 +80,6 @@ const hasScope = computed(() => Boolean(props.card && (
         <h3>适用范围</h3>
         <div v-if="card.scope.pathPatterns.length"><b>路径</b><code v-for="item in card.scope.pathPatterns" :key="item">{{ item }}</code></div>
         <div v-if="card.scope.symbols.length"><b>符号</b><code v-for="item in card.scope.symbols" :key="item">{{ item }}</code></div>
-        <div v-if="card.scope.modules.length"><b>模块</b><code v-for="item in card.scope.modules" :key="item">{{ item }}</code></div>
-        <div v-if="card.scope.repositoryIds?.length"><b>跨仓库</b><code v-for="item in card.scope.repositoryIds" :key="item">{{ item }}</code></div>
-        <div v-if="card.scope.serviceNames?.length"><b>服务</b><code v-for="item in card.scope.serviceNames" :key="item">{{ item }}</code></div>
-        <div v-if="card.scope.contractIds?.length"><b>契约</b><code v-for="item in card.scope.contractIds" :key="item">{{ item }}</code></div>
       </section>
     </template>
       <section v-if="card?.codeReferences.length" class="detail-code-links">

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Upload } from '@element-plus/icons-vue';
-import { computed, reactive, ref, shallowRef, watch } from 'vue';
+import { computed, shallowRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   intelligenceApi,
@@ -8,18 +7,14 @@ import {
   type CodeReference,
   type KnowledgeAttachment,
   type KnowledgeCard,
-  type KnowledgeEnforcement,
-  type KnowledgeKind,
-  type KnowledgeSeverity,
 } from '@/api/intelligence';
-import { engineeringProjectsApi, type EngineeringProject } from '@/api/engineeringProjects';
 import { listChunks } from '@/api/repositories';
 import { repositoryGovernanceApi, type RepositoryMember } from '@/api/repositoryGovernance';
 import { useAuthStore } from '@/stores/authStore';
-import KnowledgeAccountSelect from './KnowledgeAccountSelect.vue';
-import KnowledgeAttachmentList from './KnowledgeAttachmentList.vue';
-import KnowledgeMarkdownEditor from './KnowledgeMarkdownEditor.vue';
-import KnowledgeCodeReferenceSelector from './KnowledgeCodeReferenceSelector.vue';
+import KnowledgeCardContentSection from './KnowledgeCardContentSection.vue';
+import KnowledgeCardPolicySection from './KnowledgeCardPolicySection.vue';
+import KnowledgeCodeAssociationSection from './KnowledgeCodeAssociationSection.vue';
+import { useKnowledgeCardEditor } from './useKnowledgeCardEditor';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -39,106 +34,55 @@ const emit = defineEmits<{
 }>();
 
 const auth = useAuthStore();
-const expanded = ref<string[]>([]);
-const form = reactive<CardInput>(emptyForm());
-const engineeringText = reactive({
-  paths: '', symbols: '', modules: '', services: '',
-  tests: '', instructions: '', prohibitedPaths: '',
-});
-const items = shallowRef<KnowledgeAttachment[]>([]);
+const { form, scopeText, reset, toPayload } = useKnowledgeCardEditor(() => auth.account?.id ?? null);
+const attachments = shallowRef<KnowledgeAttachment[]>([]);
 const uploading = shallowRef(false);
 const codeReferences = shallowRef<CodeReference[]>([]);
 const members = shallowRef<RepositoryMember[]>([]);
 const membersLoading = shallowRef(false);
-const engineeringProjects = shallowRef<EngineeringProject[]>([]);
-const topologyLoading = shallowRef(false);
+const loadedMembersRepository = shallowRef<string | null>(null);
 let referencePrimeVersion = 0;
 
-const kindOptions: { value: KnowledgeKind; label: string }[] = [
-  { value: 'REFERENCE', label: '参考资料' },
-  { value: 'BUSINESS_RULE', label: '业务规则' },
-  { value: 'ARCH_DECISION', label: '架构决策' },
-  { value: 'API_CONTRACT', label: '接口契约' },
-  { value: 'DATA_CONSTRAINT', label: '数据约束' },
-  { value: 'TEST_OBLIGATION', label: '测试义务' },
-  { value: 'SECURITY_POLICY', label: '安全策略' },
-  { value: 'RUNBOOK', label: '运行手册' },
-  { value: 'INCIDENT_LESSON', label: '事故经验' },
-  { value: 'OWNERSHIP', label: '责任归属' },
-  { value: 'TECH_DEBT', label: '技术债' },
-];
-const severityOptions: { value: KnowledgeSeverity; label: string }[] = [
-  { value: 'INFO', label: '提示' },
-  { value: 'WARNING', label: '警告' },
-  { value: 'CRITICAL', label: '严重' },
-];
-const enforcementOptions: { value: KnowledgeEnforcement; label: string; hint: string }[] = [
-  { value: 'REFERENCE', label: '参考', hint: '作为理解项目的背景信息' },
-  { value: 'ADVISORY', label: '重点提醒', hint: '检索命中时提醒开发者关注' },
-  { value: 'REQUIRED', label: '强约束', hint: '发布前需要负责人、范围和当前代码证据' },
-];
+const scopeReady = computed(() => Boolean(
+  scopeText.paths.trim()
+  || scopeText.symbols.trim()
+  || form.scope.modules.length
+  || form.scope.repositoryIds.length
+  || form.scope.serviceNames.length
+  || form.scope.contractIds.length,
+));
 
-const repositoryOptions = computed(() => [...new Map(engineeringProjects.value
-  .flatMap(project => project.repositories)
-  .map(repository => [repository.repositoryId, repository])).values()]);
-const contractOptions = computed(() => [...new Map(engineeringProjects.value
-  .flatMap(project => project.contracts)
-  .map(contract => [contract.id, contract])).values()]);
-const requiredIncomplete = computed(() => form.enforcement === 'REQUIRED'
-  && (!form.ownerAccountId || !hasScope()));
+watch(
+  () => [props.modelValue, props.card] as const,
+  () => {
+    if (!props.modelValue) {
+      referencePrimeVersion += 1;
+      return;
+    }
+    reset(props.card);
+    const cardReferences = props.card?.codeReferences ?? [];
+    attachments.value = props.card ? [...props.card.attachments] : [];
+    codeReferences.value = [...cardReferences];
+    if (form.enforcement === 'REQUIRED') void loadMembers();
+    const primeVersion = ++referencePrimeVersion;
+    if (!props.card && props.initialReference) {
+      void primeInitialReference(props.initialReference, primeVersion);
+    }
+  },
+  { immediate: true },
+);
 
-watch(() => [props.modelValue, props.card] as const, () => {
-  if (!props.modelValue) return;
-  const cardReferences = props.card?.codeReferences ?? [];
-  Object.assign(form, props.card ? {
-    title: props.card.title,
-    cardType: props.card.cardType,
-    content: props.card.content,
-    tags: [...props.card.tags],
-    knowledgeKind: props.card.knowledgeKind,
-    severity: props.card.severity,
-    enforcement: props.card.enforcement,
-    ownerAccountId: props.card.ownerAccountId,
-    scope: {
-      pathPatterns: [...props.card.scope.pathPatterns],
-      symbols: [...props.card.scope.symbols],
-      modules: [...props.card.scope.modules],
-      repositoryIds: [...(props.card.scope.repositoryIds ?? [])],
-      serviceNames: [...(props.card.scope.serviceNames ?? [])],
-      contractIds: [...(props.card.scope.contractIds ?? [])],
-    },
-    obligations: {
-      requiredTests: [...props.card.obligations.requiredTests],
-      requiredApproverAccountIds: [...props.card.obligations.requiredApproverAccountIds],
-      instructions: [...props.card.obligations.instructions],
-      prohibitedPathPatterns: [...(props.card.obligations.prohibitedPathPatterns ?? [])],
-      knowledgeUpdateRequired: props.card.obligations.knowledgeUpdateRequired ?? false,
-    },
-    attachmentIds: props.card.attachments.map(item => item.id),
-    codeReferences: cardReferences.filter(item => item.chunkId).map(item => ({ chunkId: item.chunkId! })),
-  } : emptyForm());
-  items.value = props.card ? [...props.card.attachments] : [];
-  codeReferences.value = [...cardReferences];
-  engineeringText.paths = form.scope.pathPatterns.join('\n');
-  engineeringText.symbols = form.scope.symbols.join('\n');
-  engineeringText.modules = form.scope.modules.join('\n');
-  engineeringText.services = form.scope.serviceNames.join('\n');
-  engineeringText.tests = form.obligations.requiredTests.join('\n');
-  engineeringText.instructions = form.obligations.instructions.join('\n');
-  engineeringText.prohibitedPaths = form.obligations.prohibitedPathPatterns.join('\n');
-  expanded.value = props.card && props.card.enforcement !== 'REFERENCE' ? ['engineering'] : [];
-  const primeVersion = ++referencePrimeVersion;
-  if (!props.card && props.initialReference) void primeInitialReference(props.initialReference, primeVersion);
-  void Promise.all([loadMembers(), loadTopology()]);
-}, { immediate: true });
+watch(
+  () => [props.modelValue, form.enforcement, props.repositoryId] as const,
+  ([visible, enforcement]) => {
+    if (visible && enforcement === 'REQUIRED') void loadMembers();
+  },
+);
 
 async function primeInitialReference(
   target: NonNullable<typeof props.initialReference>,
   version: number,
 ) {
-  engineeringText.paths = target.filePath;
-  engineeringText.symbols = target.symbolName ?? '';
-  expanded.value = ['engineering'];
   try {
     const response = await listChunks(props.repositoryId, {
       q: target.symbolName || target.filePath,
@@ -151,7 +95,7 @@ async function primeInitialReference(
       ?? candidates.find(chunk => chunk.chunkType === 'FILE')
       ?? candidates[0];
     if (!selected) {
-      ElMessage.warning('已预填文件适用范围，但内容索引中没有可直接绑定的代码片段');
+      ElMessage.warning('内容索引中没有可直接绑定的代码片段，请在关联代码区域手动选择');
       return;
     }
     codeReferences.value = [{
@@ -168,47 +112,14 @@ async function primeInitialReference(
     ElMessage.success(`已关联 ${selected.symbolName || selected.filePath}`);
   } catch (error) {
     if (version === referencePrimeVersion) {
-      ElMessage.warning(error instanceof Error ? error.message : '代码引用预绑定失败，请在证据区域手动选择');
+      ElMessage.warning(error instanceof Error ? error.message : '代码引用预绑定失败，请手动选择');
     }
   }
 }
 
-watch(() => form.enforcement, enforcement => {
-  if (enforcement !== 'REFERENCE' && !expanded.value.includes('engineering')) {
-    expanded.value = [...expanded.value, 'engineering'];
-  }
-});
-
-function emptyForm(): CardInput {
-  return {
-    title: '', cardType: '模块说明', content: '', tags: [],
-    knowledgeKind: 'REFERENCE', severity: 'INFO', enforcement: 'REFERENCE',
-    ownerAccountId: auth.account?.id ?? null,
-    scope: { pathPatterns: [], symbols: [], modules: [], repositoryIds: [], serviceNames: [], contractIds: [] },
-    obligations: {
-      requiredTests: [], requiredApproverAccountIds: [], instructions: [],
-      prohibitedPathPatterns: [], knowledgeUpdateRequired: false,
-    },
-    attachmentIds: [], codeReferences: [],
-  };
-}
-
-function lines(value: string) {
-  return [...new Set(value.split(/\r?\n/).map(item => item.trim()).filter(Boolean))];
-}
-
-function hasScope() {
-  return Boolean(engineeringText.paths.trim() || engineeringText.symbols.trim()
-    || engineeringText.modules.trim() || form.scope.repositoryIds.length
-    || engineeringText.services.trim() || form.scope.contractIds.length);
-}
-
-function useCurrentAccount() {
-  form.ownerAccountId = auth.account?.id ?? null;
-}
-
 async function loadMembers() {
-  if (!props.modelValue || !props.repositoryId) return;
+  if (!props.modelValue || !props.repositoryId
+    || membersLoading.value || loadedMembersRepository.value === props.repositoryId) return;
   membersLoading.value = true;
   try {
     members.value = await repositoryGovernanceApi.members(props.repositoryId);
@@ -224,24 +135,16 @@ async function loadMembers() {
     }] : [];
     ElMessage.error(error instanceof Error ? error.message : '仓库成员加载失败');
   } finally {
+    loadedMembersRepository.value = props.repositoryId;
     membersLoading.value = false;
   }
 }
 
-async function loadTopology() {
-  if (!props.modelValue) return;
-  topologyLoading.value = true;
-  try {
-    engineeringProjects.value = await engineeringProjectsApi.list();
-  } catch (error) {
-    engineeringProjects.value = [];
-    ElMessage.error(error instanceof Error ? error.message : '工程项目拓扑加载失败');
-  } finally {
-    topologyLoading.value = false;
-  }
+function useCurrentAccount() {
+  form.ownerAccountId = auth.account?.id ?? null;
 }
 
-async function choose(event: Event) {
+async function chooseFiles(event: Event) {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files ?? []);
   if (!files.length) return;
@@ -249,7 +152,7 @@ async function choose(event: Event) {
   try {
     for (const file of files) {
       const attachment = await intelligenceApi.uploadAttachment(props.repositoryId, file);
-      items.value = [...items.value, attachment];
+      attachments.value = [...attachments.value, attachment];
     }
     ElMessage.success(`已上传 ${files.length} 个附件`);
   } catch (error) {
@@ -260,263 +163,104 @@ async function choose(event: Event) {
   }
 }
 
-function remove(id: string) { items.value = items.value.filter(item => item.id !== id); }
-function insert(item: KnowledgeAttachment) {
+function removeAttachment(id: string) {
+  attachments.value = attachments.value.filter(item => item.id !== id);
+}
+
+function insertAttachment(item: KnowledgeAttachment) {
   const alt = item.originalName.replace(/\.[^.]+$/, '');
   form.content += `${form.content.endsWith('\n') || !form.content ? '' : '\n'}![${alt}](knowledge-attachment://${item.id})\n`;
 }
 
 function save() {
-  form.tags = [...new Set(form.tags.map(value => value.trim()).filter(Boolean))];
-  form.attachmentIds = items.value.map(item => item.id);
-  form.codeReferences = codeReferences.value.filter(item => item.chunkId).map(item => ({ chunkId: item.chunkId! }));
-  form.scope = {
-    pathPatterns: lines(engineeringText.paths),
-    symbols: lines(engineeringText.symbols),
-    modules: lines(engineeringText.modules),
-    repositoryIds: [...form.scope.repositoryIds],
-    serviceNames: lines(engineeringText.services),
-    contractIds: [...form.scope.contractIds],
-  };
-  form.obligations = {
-    requiredTests: lines(engineeringText.tests),
-    requiredApproverAccountIds: [...form.obligations.requiredApproverAccountIds],
-    instructions: lines(engineeringText.instructions),
-    prohibitedPathPatterns: lines(engineeringText.prohibitedPaths),
-    knowledgeUpdateRequired: form.obligations.knowledgeUpdateRequired,
-  };
-  form.ownerAccountId = form.ownerAccountId?.trim() || null;
-  emit('submit', {
-    ...form,
-    tags: [...form.tags],
-    scope: { ...form.scope },
-    obligations: { ...form.obligations },
-    attachmentIds: [...form.attachmentIds],
-    codeReferences: [...form.codeReferences],
-  });
+  emit('submit', toPayload({
+    attachmentIds: attachments.value.map(item => item.id),
+    codeReferences: codeReferences.value,
+  }));
 }
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" :title="card ? '编辑工程知识' : '新建工程知识'"
-    width="960" top="3vh" destroy-on-close @update:model-value="emit('update:modelValue', $event)">
-    <div class="editor-thesis">
-      <span>工程知识</span>
-      <p>记录内容和适用范围，让检索能够把知识与相关代码放在一起。</p>
-      <b :data-enforcement="form.enforcement">
-        {{ enforcementOptions.find(item => item.value === form.enforcement)?.label }}
-      </b>
-    </div>
+  <el-dialog
+    :model-value="modelValue"
+    :title="card ? '编辑知识卡片' : '新建知识卡片'"
+    width="920"
+    top="3vh"
+    destroy-on-close
+    @update:model-value="emit('update:modelValue', $event)"
+  >
+    <p class="editor-intro">记录一条可检索、可回到源码的项目知识。新卡片会先保存为草稿。</p>
 
     <el-form label-position="top" class="knowledge-card-form">
-      <section class="form-section basic-section">
-        <div class="section-marker"><span>01</span><small>内容</small></div>
-        <div class="section-body">
-          <div class="form-grid title-grid">
-            <el-form-item label="标题" required>
-              <el-input v-model="form.title" maxlength="200" show-word-limit />
-            </el-form-item>
-            <el-form-item label="工程知识类型">
-              <el-select v-model="form.knowledgeKind" class="full-width" filterable>
-                <el-option v-for="option in kindOptions" :key="option.value"
-                  :label="option.label" :value="option.value" />
-              </el-select>
-            </el-form-item>
-          </div>
-          <div class="form-grid policy-grid">
-            <el-form-item label="业务分类">
-              <el-input v-model="form.cardType" maxlength="40" placeholder="例如：模块说明、开发规范" />
-            </el-form-item>
-            <el-form-item label="严重程度">
-              <el-segmented v-model="form.severity" :options="severityOptions" block />
-            </el-form-item>
-            <el-form-item label="提示级别">
-              <el-select v-model="form.enforcement" class="full-width">
-                <el-option v-for="option in enforcementOptions" :key="option.value"
-                  :label="option.label" :value="option.value">
-                  <div class="enforcement-option"><b>{{ option.label }}</b><span>{{ option.hint }}</span></div>
-                </el-option>
-              </el-select>
-            </el-form-item>
-          </div>
-          <el-form-item label="知识正文（Markdown）" required>
-            <KnowledgeMarkdownEditor v-model="form.content" :repository-id="repositoryId" class="full-width" />
-          </el-form-item>
-          <el-form-item label="标签">
-            <el-select v-model="form.tags" class="full-width" multiple filterable allow-create
-              default-first-option placeholder="输入标签后按回车，可添加多个" />
-          </el-form-item>
-        </div>
-      </section>
+      <KnowledgeCardContentSection
+        v-model:title="form.title"
+        v-model:knowledge-kind="form.knowledgeKind"
+        v-model:content="form.content"
+        v-model:tags="form.tags"
+        :repository-id="repositoryId"
+        :attachments="attachments"
+        :uploading="uploading"
+        @choose-files="chooseFiles"
+        @remove-attachment="removeAttachment"
+        @insert-attachment="insertAttachment"
+      />
 
-      <el-collapse v-model="expanded" class="engineering-collapse">
-        <el-collapse-item name="engineering">
-          <template #title>
-            <div class="collapse-title">
-              <span>02—04</span>
-              <div><b>适用范围与代码证据</b><small>用于提升知识和代码的关联检索</small></div>
-              <em>{{ codeReferences.length }} 条代码证据</em>
-            </div>
-          </template>
+      <KnowledgeCodeAssociationSection
+        v-model:references="codeReferences"
+        v-model:paths="scopeText.paths"
+        v-model:symbols="scopeText.symbols"
+        :repository-id="repositoryId"
+        @open-code="emit('openCode', $event)"
+      />
 
-          <div class="engineering-spine">
-            <section class="form-section">
-              <div class="section-marker"><span>02</span><small>范围</small></div>
-              <div class="section-body">
-                <div class="section-heading"><h3>这条知识适用于哪里</h3><p>每行一项；路径使用仓库相对通配规则。</p></div>
-                <div class="form-grid three-columns">
-                  <el-form-item label="路径规则">
-                    <el-input v-model="engineeringText.paths" type="textarea" :rows="4"
-                      placeholder="backend/src/**/refund/**" />
-                  </el-form-item>
-                  <el-form-item label="符号">
-                    <el-input v-model="engineeringText.symbols" type="textarea" :rows="4"
-                      placeholder="RefundService&#10;approveRefund" />
-                  </el-form-item>
-                  <el-form-item label="模块">
-                    <el-input v-model="engineeringText.modules" type="textarea" :rows="4" placeholder="backend" />
-                  </el-form-item>
-                </div>
-                <div class="form-grid three-columns cross-scope-grid">
-                  <el-form-item label="工程项目仓库">
-                    <el-select v-model="form.scope.repositoryIds" class="full-width" multiple filterable
-                      collapse-tags collapse-tags-tooltip :loading="topologyLoading"
-                      placeholder="从工程项目中选择仓库">
-                      <el-option v-for="repository in repositoryOptions" :key="repository.repositoryId"
-                        :value="repository.repositoryId"
-                        :label="`${repository.repositoryName}（${repository.serviceName}）`" />
-                    </el-select>
-                    <small v-if="!topologyLoading && !repositoryOptions.length">尚未配置跨仓工程项目时可留空。</small>
-                  </el-form-item>
-                  <el-form-item label="工程服务名">
-                    <el-input v-model="engineeringText.services" type="textarea" :rows="3"
-                      placeholder="order-service" />
-                  </el-form-item>
-                  <el-form-item label="已验证契约">
-                    <el-select v-model="form.scope.contractIds" class="full-width" multiple filterable
-                      collapse-tags collapse-tags-tooltip :loading="topologyLoading"
-                      placeholder="从工程项目中选择契约">
-                      <el-option v-for="contract in contractOptions" :key="contract.id" :value="contract.id"
-                        :disabled="!contract.current"
-                        :label="`${contract.name}（${contract.contractKey}）${contract.current ? '' : ' · 证据待刷新'}`" />
-                    </el-select>
-                    <small v-if="!topologyLoading && !contractOptions.length">尚未登记跨仓契约时可留空。</small>
-                  </el-form-item>
-                </div>
-              </div>
-            </section>
+      <KnowledgeCardPolicySection
+        v-model:enforcement="form.enforcement"
+        v-model:owner-account-id="form.ownerAccountId"
+        :members="members"
+        :members-loading="membersLoading"
+        :current-account-available="Boolean(auth.account)"
+        :scope-ready="scopeReady"
+        @use-current-account="useCurrentAccount"
+      />
 
-            <section class="form-section">
-              <div class="section-marker"><span>03</span><small>负责</small></div>
-              <div class="section-body owner-row">
-                <div class="section-heading"><h3>谁负责确认它仍然有效</h3><p>强约束知识发布前需要负责人。</p></div>
-                <el-form-item label="负责人">
-                  <div class="owner-control">
-                    <KnowledgeAccountSelect
-                      v-model="form.ownerAccountId"
-                      :members="members"
-                      :loading="membersLoading"
-                      placeholder="选择负责维护这条知识的成员"
-                    />
-                    <el-button :disabled="!auth.account" @click="useCurrentAccount">设为我</el-button>
-                  </div>
-                </el-form-item>
-                <el-alert v-if="requiredIncomplete" type="warning" :closable="false"
-                  title="当前草稿可以保存，但强约束知识发布前需要负责人和至少一种适用范围。" />
-              </div>
-            </section>
-
-            <section class="form-section">
-              <div class="section-marker"><span>04</span><small>证据</small></div>
-              <div class="section-body">
-                <div class="section-heading"><h3>把知识绑定到当前代码</h3><p>代码引用用于验证来源版本，不等同于适用范围。</p></div>
-                <KnowledgeCodeReferenceSelector v-model="codeReferences" :repository-id="repositoryId"
-                  @open-code="emit('openCode', $event)" />
-                <el-form-item label="图片与附件" class="attachment-field">
-                  <div class="upload-area">
-                    <label class="upload-button">
-                      <el-icon><Upload /></el-icon>{{ uploading ? '上传中…' : '选择文件' }}
-                      <input type="file" multiple :disabled="uploading" @change="choose" />
-                    </label>
-                    <span>图片最大 10 MiB；文档最大 50 MiB；每个修订最多 20 个。</span>
-                  </div>
-                  <KnowledgeAttachmentList :items="items" :repository-id="repositoryId" removable
-                    @remove="remove" @insert="insert" />
-                </el-form-item>
-              </div>
-            </section>
-          </div>
-        </el-collapse-item>
-      </el-collapse>
-
-      <el-alert type="info" :closable="false"
-        title="保存会生成草稿和未评审修订；评审、来源验证和发布仍是三个独立动作。" />
+      <el-alert
+        class="draft-note"
+        type="info"
+        :closable="false"
+        title="保存后可在卡片列表中完成评审、来源确认和发布。"
+      />
     </el-form>
 
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="busy"
+      <el-button
+        type="primary"
+        :loading="busy"
         :disabled="uploading || !form.title.trim() || !form.content.trim()"
-        @click="save">{{ card ? '保存新修订' : '创建草稿' }}</el-button>
+        @click="save"
+      >
+        {{ card ? '保存新修订' : '创建草稿' }}
+      </el-button>
     </template>
   </el-dialog>
 </template>
 
 <style scoped>
-.editor-thesis { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; margin: -8px 0 18px; padding: 12px 14px; color: #25313c; border-left: 4px solid #2f6f94; background: #f2f7fa; }
-.editor-thesis > span { color: #2f6f94; font: 700 13px/1.2 Consolas, monospace; letter-spacing: .1em; }
-.editor-thesis p { margin: 0; font-size: 15px; }
-.editor-thesis b { padding: 4px 9px; color: #50606d; border: 1px solid #aebdc8; border-radius: 999px; font-size: 14px; }
-.editor-thesis b[data-enforcement='ADVISORY'] { color: #8a5a1d; border-color: #d5a258; background: #fff8e9; }
-.editor-thesis b[data-enforcement='REQUIRED'] { color: #983d32; border-color: #d78a7f; background: #fff2f0; }
-.knowledge-card-form { max-height: calc(94vh - 176px); padding-right: 8px; overflow: auto; overscroll-behavior: contain; }
-.form-section { display: grid; grid-template-columns: 58px minmax(0, 1fr); }
-.section-marker { position: relative; display: flex; align-items: center; flex-direction: column; gap: 2px; color: #2f6f94; }
-.section-marker::after { position: absolute; top: 42px; bottom: 0; width: 1px; background: #cbd9e2; content: ''; }
-.section-marker span { font: 700 14px/1 Consolas, monospace; }
-.section-marker small { color: #768794; font-size: 13px; letter-spacing: .12em; }
-.section-body { min-width: 0; padding: 0 0 20px 12px; }
-.form-grid { display: grid; gap: 14px; }
-.title-grid { grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); }
-.policy-grid { grid-template-columns: minmax(180px, .8fr) minmax(230px, 1fr) minmax(200px, 1fr); }
-.three-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.cross-scope-grid { margin-top: 14px; padding-top: 14px; border-top: 1px dashed #d4e0e7; }
-.full-width { width: 100%; }
-.enforcement-option { display: grid; line-height: 1.35; }
-.enforcement-option span { color: var(--el-text-color-secondary); font-size: 13px; }
-.engineering-collapse { margin: 2px 0 16px 58px; border-top-color: #cbd9e2; border-bottom-color: #cbd9e2; }
-.collapse-title { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; padding-right: 12px; }
-.collapse-title > span { color: #2f6f94; font: 700 13px/1 Consolas, monospace; }
-.collapse-title > div { display: grid; line-height: 1.3; }
-.collapse-title small { color: var(--el-text-color-secondary); font-weight: 400; }
-.collapse-title em { color: #667784; font-size: 14px; font-style: normal; }
-.engineering-spine { padding-top: 18px; }
-.engineering-spine .form-section:last-child .section-marker::after { display: none; }
-.section-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
-.section-heading h3 { margin: 0; color: #25313c; font-size: 15px; }
-.section-heading p { margin: 0; color: #768794; font-size: 14px; }
-.owner-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, .75fr); column-gap: 20px; }
-.owner-row .section-heading { display: block; }
-.owner-row .section-heading p { margin-top: 4px; }
-.owner-row .el-alert { grid-column: 1 / -1; }
-.owner-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; width: 100%; }
-.field-error { display: block; margin-top: 4px; color: var(--el-color-danger); }
-.attachment-field { margin-top: 20px; }
-.attachment-field :deep(.el-form-item__content) { display: grid; gap: 10px; }
-.upload-area { display: flex; align-items: center; gap: 12px; }
-.upload-area > span { color: var(--el-text-color-secondary); font-size: 14px; line-height: 1.5; }
-.upload-button { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 7px 13px; color: #2f6f94; border: 1px solid #2f6f94; border-radius: 6px; cursor: pointer; }
-.upload-button input { display: none; }
-@media (max-width: 760px) {
-  .editor-thesis { grid-template-columns: 1fr auto; }
-  .editor-thesis p { grid-column: 1 / -1; grid-row: 2; }
-  .form-section { grid-template-columns: 38px minmax(0, 1fr); }
-  .engineering-collapse { margin-left: 38px; }
-  .title-grid, .policy-grid, .three-columns, .ci-policy-grid, .owner-row { grid-template-columns: 1fr; }
-  .owner-control { grid-template-columns: 1fr; }
-  .owner-row .el-alert { grid-column: auto; }
-  .section-heading { display: block; }
-  .section-heading p { margin-top: 4px; }
-  .upload-area { align-items: flex-start; flex-direction: column; }
+.editor-intro {
+  margin: -6px 0 16px;
+  padding-left: 11px;
+  color: #5f707c;
+  border-left: 3px solid #2f6f94;
+  font-size: 14px;
+  line-height: 1.55;
 }
+.knowledge-card-form {
+  display: grid;
+  max-height: calc(94vh - 176px);
+  gap: 14px;
+  padding: 2px 8px 2px 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draft-note { margin-bottom: 2px; }
 </style>

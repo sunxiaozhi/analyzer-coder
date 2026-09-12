@@ -77,6 +77,13 @@ class ProjectCodeFactsServiceTest {
 
         assertThat(facts.projectType()).isEqualTo("前后端分离 Web 应用");
         assertThat(facts.codeFileCount()).isEqualTo(5);
+        assertThat(facts.codeTypes())
+                .extracting(
+                        ProjectCodeFactsService.CodeTypeCount::name,
+                        ProjectCodeFactsService.CodeTypeCount::count)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("Java", 3L),
+                        org.assertj.core.groups.Tuple.tuple("Vue SFC", 2L));
         assertThat(facts.technologies())
                 .extracting(ProjectCodeFactsService.TechnologyFact::name)
                 .contains("Spring Boot", "MyBatis", "Vue", "Pinia", "Vite", "Maven")

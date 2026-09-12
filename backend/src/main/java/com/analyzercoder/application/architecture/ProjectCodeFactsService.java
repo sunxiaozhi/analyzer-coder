@@ -70,6 +70,7 @@ public class ProjectCodeFactsService {
                 snapshot.files().stream()
                         .filter(ProjectCodeFactsService::isCodeFile)
                         .toList();
+        List<CodeTypeCount> codeTypes = codeTypes(codeFiles);
         List<FileCategory> categories = categories(codeFiles);
         List<TechnologyFact> technologies = technologies(snapshot.files(), contentReader, json);
         GraphFacts graph = graphFacts(architecture, artifact);
@@ -83,6 +84,7 @@ public class ProjectCodeFactsService {
                 projectType(technologies, codeFiles),
                 confidence,
                 codeFiles.size(),
+                codeTypes,
                 technologies,
                 categories,
                 graph,
@@ -98,6 +100,24 @@ public class ProjectCodeFactsService {
         return RepositoryAssetClassifier.classify(file.path(), file.language())
                         == RepositoryAssetType.CODE
                 && SOURCE_LANGUAGES.contains(file.language().toLowerCase(Locale.ROOT));
+    }
+
+    private static List<CodeTypeCount> codeTypes(
+            List<RepositoryCodeBrowserService.FileEntry> codeFiles) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        codeFiles.forEach(
+                file ->
+                        counts.merge(
+                                technologyLabel(file.language().toLowerCase(Locale.ROOT)),
+                                1L,
+                                Long::sum));
+        return counts.entrySet().stream()
+                .sorted(
+                        Map.Entry.<String, Long>comparingByValue()
+                                .reversed()
+                                .thenComparing(Map.Entry::getKey))
+                .map(entry -> new CodeTypeCount(entry.getKey(), entry.getValue()))
+                .toList();
     }
 
     private static List<FileCategory> categories(
@@ -652,11 +672,14 @@ public class ProjectCodeFactsService {
             String projectType,
             int confidence,
             long codeFileCount,
+            List<CodeTypeCount> codeTypes,
             List<TechnologyFact> technologies,
             List<FileCategory> fileCategories,
             GraphFacts graph,
             List<ProjectSuggestion> suggestions,
             List<String> evidenceNotes) {}
+
+    public record CodeTypeCount(String name, long count) {}
 
     public record TechnologyFact(
             String name,

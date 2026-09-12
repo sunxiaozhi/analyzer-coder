@@ -33,9 +33,9 @@ const cards = shallowRef<KnowledgeCard[]>([]);
 const markdownSources = shallowRef<MarkdownKnowledgeSourceOverview | null>(null);
 const cardQuery = shallowRef('');
 const sourceQuery = shallowRef('');
-const allCardTypes = '__ALL__';
+const allKnowledgeKinds = '__ALL__';
 const allSourceStatuses = '__ALL__';
-const selectedType = shallowRef(allCardTypes);
+const selectedKnowledgeKind = shallowRef<KnowledgeCard['knowledgeKind'] | typeof allKnowledgeKinds>(allKnowledgeKinds);
 const selectedSourceStatus = shallowRef<MarkdownKnowledgeSourceStatus | typeof allSourceStatuses>(allSourceStatuses);
 const dialog = shallowRef(false);
 const detailDialog = shallowRef(false);
@@ -62,14 +62,13 @@ let handledCreateRequest = '';
 const emptySourceCounts = { total: 0, pending: 0, current: 0, stale: 0 };
 const canMaintain = computed(() => repositories.selectedRepository?.capabilities.canUpdate ?? false);
 const canManage = computed(() => repositories.selectedRepository?.capabilities.canConfigure ?? false);
-const cardTypes = computed(() => [...new Set(cards.value
-  .map(card => card.cardType?.trim())
-  .filter((value): value is string => Boolean(value)))]
-  .sort((left, right) => left.localeCompare(right, 'zh-CN')));
+const knowledgeKinds = computed(() => [...new Set(cards.value.map(card => card.knowledgeKind))]
+  .sort((left, right) => knowledgeKindLabel(left).localeCompare(knowledgeKindLabel(right), 'zh-CN')));
 const cardRows = computed(() => cards.value.filter(card => {
   const value = cardQuery.value.trim().toLowerCase();
   const matchesTitle = !value || card.title.toLowerCase().includes(value);
-  const matchesType = selectedType.value === allCardTypes || card.cardType === selectedType.value;
+  const matchesType = selectedKnowledgeKind.value === allKnowledgeKinds
+    || card.knowledgeKind === selectedKnowledgeKind.value;
   return matchesTitle && matchesType;
 }));
 const sourceRows = computed(() => (markdownSources.value?.items ?? []).filter(source => {
@@ -434,7 +433,7 @@ async function restore(revision: number) {
 }
 watch(() => repositories.selectedRepositoryId, () => {
   handledCreateRequest = '';
-  selectedType.value = allCardTypes;
+  selectedKnowledgeKind.value = allKnowledgeKinds;
   selectedSourceStatus.value = allSourceStatuses;
   cardQuery.value = '';
   sourceQuery.value = '';
@@ -500,15 +499,20 @@ onMounted(() => void load());
         />
         <el-select
           v-if="activeMode === 'cards'"
-          v-model="selectedType"
+          v-model="selectedKnowledgeKind"
           class="knowledge-type-filter"
           placeholder="全部类型"
           aria-label="按知识类型筛选"
           clearable
-          @clear="selectedType = allCardTypes"
+          @clear="selectedKnowledgeKind = allKnowledgeKinds"
         >
-          <el-option label="全部类型" :value="allCardTypes" />
-          <el-option v-for="type in cardTypes" :key="type" :label="type" :value="type" />
+          <el-option label="全部类型" :value="allKnowledgeKinds" />
+          <el-option
+            v-for="kind in knowledgeKinds"
+            :key="kind"
+            :label="knowledgeKindLabel(kind)"
+            :value="kind"
+          />
         </el-select>
         <el-select
           v-else
@@ -607,7 +611,7 @@ onMounted(() => void load());
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">
         <el-card shadow="never"><template #header><div class="toolbar"><b>v{{ item.revision }} · {{ statusLabel(item.publicationStatus) }}</b><span class="spacer" /><el-button link type="primary" @click="restore(item.revision)">恢复为新草稿</el-button></div></template>
           <div class="history-markdown" v-html="renderMarkdown(item.content, item.repositoryId)" />
-          <small>{{ knowledgeKindLabel(item.knowledgeKind) }} · {{ enforcementLabel(item.enforcement) }} · {{ item.cardType || '未分类' }} · {{ item.tags.join('、')||'无标签' }}</small>
+          <small>{{ knowledgeKindLabel(item.knowledgeKind) }} · {{ enforcementLabel(item.enforcement) }} · {{ item.tags.join('、')||'无标签' }}</small>
         </el-card>
       </el-timeline-item></el-timeline>
     </el-dialog>

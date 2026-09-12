@@ -28,7 +28,7 @@ describe('knowledge evidence access', () => {
       selectedRepository: { capabilities: { canUpdate: false, canConfigure: false } },
     });
     vi.mocked(intelligenceApi.cards).mockResolvedValue([
-      { id: 'card-1', title: 'Published rule', cardType: '规则', tags: [] },
+      { id: 'card-1', title: 'Published rule', cardType: '规则', knowledgeKind: 'BUSINESS_RULE', tags: [] },
     ] as unknown as Awaited<ReturnType<typeof intelligenceApi.cards>>);
     vi.mocked(intelligenceApi.sourceDrift).mockResolvedValue(null);
     vi.mocked(intelligenceApi.markdownSources).mockResolvedValue({
