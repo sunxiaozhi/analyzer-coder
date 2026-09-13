@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper">
+    <update id="retireSnapshot">UPDATE codegraph_artifacts SET status='RETIRED'
+        WHERE repo_id=#{repositoryId} AND snapshot_id=#{snapshotId} AND status='PUBLISHED'</update>
     <resultMap id="versionRow" type="com.analyzercoder.infrastructure.persistence.model.RepositoryVersionRow">
         <constructor>
             <idArg column="current_snapshot_id" javaType="java.util.UUID"/>
@@ -24,6 +26,7 @@
     </select>
     <update id="retirePublished">UPDATE codegraph_artifacts SET status='RETIRED' WHERE repo_id=#{repositoryId} AND
         status='PUBLISHED'
+        AND NOT EXISTS(SELECT 1 FROM branch_snapshots bs WHERE bs.id=codegraph_artifacts.snapshot_id)
     </update>
     <insert id="insertPublished">INSERT INTO
         codegraph_artifacts(id,repo_id,snapshot_id,cli_version,status,artifact_path,node_count,edge_count,published_at)

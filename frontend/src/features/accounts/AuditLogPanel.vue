@@ -33,6 +33,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
         <el-select v-model="result" placeholder="结果" clearable><el-option v-for="item in results" :key="item" :label="item==='SUCCESS'?'成功':'拒绝/失败'" :value="item"/></el-select>
         <el-date-picker v-model="range" class="audit-date-range" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期"/>
         <el-button @click="clearFilters">清空</el-button>
+        <slot name="actions" />
       </div>
       <el-alert v-if="focusUsername" :title="`已从账号列表定位：${focusUsername}`" type="info" show-icon closable @close="target=''"/>
     </div>

@@ -39,6 +39,14 @@ public class CodeGraphService {
         return build(repoId, BuildControl.none());
     }
 
+    public Artifact buildSnapshot(UUID repoId,UUID snapshotId,Path snapshotPath,BuildControl control) {
+        throw new IllegalStateException("分支图谱需要受管 CodeGraph 构建器");
+    }
+    public Artifact latestSnapshot(UUID repoId,UUID snapshotId) { return artifact(mapper.findLatest(repoId,snapshotId)); }
+    public CodeGraphPropagation impactSnapshot(UUID repoId,UUID snapshotId,String symbol,int depth) {
+        throw new IllegalStateException("分支影响分析需要受管 CodeGraph 查询器");
+    }
+
     @Transactional
     public Artifact build(UUID repoId, BuildControl control) {
         RepoVersion repo = version(repoId);
@@ -184,6 +192,24 @@ public class CodeGraphService {
         static BuildControl none() {
             return step -> {};
         }
+    }
+
+    public CodeGraphExplorer.View explore(UUID repoId, String module, String query) {
+        RepoVersion repo = version(repoId);
+        return exploreSnapshot(repoId,repo.snapshotId(),module,query);
+    }
+
+    public CodeGraphExplorer.View exploreSnapshot(UUID repoId,UUID snapshotId,String module,String query) {
+        Artifact current = artifact(mapper.findPublished(repoId, snapshotId));
+        if (current == null)
+            throw new CodeGraphException(
+                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 Snapshot 尚未发布 CodeGraph 产物");
+        return CodeGraphExplorer.project(
+                CodeGraphDatabaseReader.read(json, Path.of(current.artifactPath())),
+                repoId,
+                snapshotId,
+                module,
+                query);
     }
 
     public static class BuildCanceledException extends RuntimeException {

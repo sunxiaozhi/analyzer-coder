@@ -40,6 +40,10 @@
     </sql>
     <sql id="validKnowledge">
         c.repo_id=#{repositoryId} AND c.publication_status='PUBLISHED'
+        AND EXISTS(SELECT 1 FROM knowledge_branch_scopes bs
+            JOIN repositories br ON br.id=bs.repo_id
+            JOIN repository_branches bb ON bb.repo_id=br.id AND bb.name=COALESCE(br.default_branch,'WORKSPACE')
+            WHERE bs.card_id=c.id AND (bs.mode='ALL_BRANCHES' OR bb.id=ANY(bs.branch_ids)))
         AND c.review_status='APPROVED'
         AND c.source_version_status NOT IN ('SUSPECT','STALE')
         AND NOT EXISTS(
@@ -332,6 +336,7 @@
         (c.id IS NULL) stale
         FROM knowledge_code_refs r LEFT JOIN code_chunks c
           ON c.repo_id=r.repo_id AND c.file_path=r.file_path AND c.start_line=r.start_line
+         AND c.snapshot_id=r.snapshot_id
          AND c.content_hash=r.content_hash
         WHERE r.repo_id=#{repositoryId} AND r.card_id=#{cardId} AND r.revision=#{revision}
         ORDER BY r.position
@@ -381,4 +386,115 @@
         dimension=EXCLUDED.dimension,retrieval_capability=EXCLUDED.retrieval_capability,
         content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
     </insert>
+    <sql id="validBranchKnowledge">
+        c.repo_id=#{repositoryId} AND live.publication_status='PUBLISHED' AND live.review_status='APPROVED'
+        AND EXISTS(SELECT 1 FROM knowledge_branch_scopes scope WHERE scope.card_id=c.id
+            AND (scope.mode='ALL_BRANCHES' OR #{branchId}=ANY(scope.branch_ids)))
+        AND (
+            (c.enforcement='REFERENCE' AND NOT EXISTS(SELECT 1 FROM knowledge_code_refs refs WHERE refs.card_id=c.id AND refs.revision=c.revision))
+            OR EXISTS(SELECT 1 FROM knowledge_branch_validations v WHERE v.card_id=c.id AND v.revision=c.revision
+                AND v.branch_id=#{branchId} AND v.snapshot_id=#{snapshotId} AND v.state='CURRENT')
+        )
+        AND NOT EXISTS(SELECT 1 FROM knowledge_branch_validations v WHERE v.card_id=c.id AND v.revision=c.revision
+            AND v.branch_id=#{branchId} AND v.snapshot_id=#{snapshotId} AND v.state IN ('REVIEW_REQUIRED','INVALID'))
+    </sql>
+
+    <select id="searchBranchCodeKeyword" resultType="map">
+        SELECT <include refid="codeColumns"/>,
+        GREATEST(
+          CASE WHEN FALSE
+            <foreach collection="terms" item="term">
+              OR LOWER(COALESCE(c.symbol_name,''))=#{term}
+            </foreach>
+          THEN .98 ELSE 0 END,
+          LEAST(1.0,
+          CASE WHEN POSITION(#{query} IN LOWER(c.file_path))&gt;0 THEN .75 ELSE 0 END
+          +CASE WHEN POSITION(#{query} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0 THEN .95 ELSE 0 END
+          +CASE WHEN POSITION(#{query} IN LOWER(c.content))&gt;0 THEN .65 ELSE 0 END
+          +(
+            <foreach collection="terms" item="term" separator="+">
+              CASE
+                WHEN LOWER(COALESCE(c.symbol_name,''))=#{term} THEN .85
+                WHEN POSITION(#{term} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0 THEN .65
+                WHEN POSITION(#{term} IN LOWER(c.file_path))&gt;0 THEN .5
+                WHEN POSITION(#{term} IN LOWER(c.content))&gt;0 THEN .3
+                ELSE 0
+              END
+            </foreach>
+          ) / #{termCount}
+        )) lexical_score,0.0 semantic_score
+        FROM code_chunks c
+        WHERE c.repo_id=#{repositoryId}
+        AND c.snapshot_id=#{snapshotId}
+        AND(
+          POSITION(#{query} IN LOWER(c.file_path))&gt;0
+          OR POSITION(#{query} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0
+          OR POSITION(#{query} IN LOWER(c.content))&gt;0
+          <foreach collection="terms" item="term">
+            OR POSITION(#{term} IN LOWER(c.file_path))&gt;0
+            OR POSITION(#{term} IN LOWER(COALESCE(c.symbol_name,'')))&gt;0
+            OR POSITION(#{term} IN LOWER(c.content))&gt;0
+          </foreach>
+        )
+        ORDER BY lexical_score DESC,c.file_path,c.start_line NULLS FIRST
+        LIMIT #{limit}
+    </select>
+
+    <select id="searchBranchCodeVector" resultType="map">
+        SELECT <include refid="codeColumns"/>,0.0 lexical_score,
+        GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
+        FROM chunk_embeddings e JOIN code_chunks c ON c.id=e.chunk_id
+        WHERE c.repo_id=#{repositoryId}
+        AND c.snapshot_id=#{snapshotId}
+        AND e.model=#{model} AND e.dimension=#{dimension}
+        AND e.content_hash=c.content_hash
+        ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.file_path,c.start_line NULLS FIRST
+        LIMIT #{limit}
+    </select>
+
+    <select id="searchBranchKnowledgeKeyword" resultType="map">
+        SELECT <include refid="knowledgeColumns"/>,
+        LEAST(1.0,
+          CASE WHEN POSITION(#{query} IN LOWER(c.title))&gt;0 THEN .95 ELSE 0 END
+          +CASE WHEN POSITION(#{query} IN LOWER(c.content))&gt;0 THEN .65 ELSE 0 END
+          +CASE WHEN POSITION(#{query} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0 THEN .8 ELSE 0 END
+          +(
+            <foreach collection="terms" item="term" separator="+">
+              CASE
+                WHEN POSITION(#{term} IN LOWER(c.title))&gt;0 THEN .7
+                WHEN POSITION(#{term} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0 THEN .6
+                WHEN POSITION(#{term} IN LOWER(c.content))&gt;0 THEN .35
+                ELSE 0
+              END
+            </foreach>
+          ) / #{termCount}
+        ) lexical_score,0.0 semantic_score
+        FROM (SELECT r.*,r.card_id AS id FROM knowledge_card_revisions r) c
+        JOIN knowledge_cards live ON live.id=c.id
+        JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
+        WHERE <include refid="validBranchKnowledge"/> AND(
+          POSITION(#{query} IN LOWER(c.title))&gt;0
+          OR POSITION(#{query} IN LOWER(c.content))&gt;0
+          OR POSITION(#{query} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0
+          <foreach collection="terms" item="term">
+            OR POSITION(#{term} IN LOWER(c.title))&gt;0
+            OR POSITION(#{term} IN LOWER(c.content))&gt;0
+            OR POSITION(#{term} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0
+          </foreach>
+        )
+        ORDER BY lexical_score DESC,c.changed_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="searchBranchKnowledgeVector" resultType="map">
+        SELECT <include refid="knowledgeColumns"/>,0.0 lexical_score,
+        GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
+        FROM knowledge_card_embeddings e
+        JOIN (SELECT r.*,r.card_id AS id FROM knowledge_card_revisions r) c ON c.id=e.card_id AND c.revision=e.revision
+        JOIN knowledge_cards live ON live.id=c.id
+        JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
+        WHERE <include refid="validBranchKnowledge"/> AND e.model=#{model} AND e.dimension=#{dimension}
+        ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.changed_at DESC
+        LIMIT #{limit}
+    </select>
 </mapper>

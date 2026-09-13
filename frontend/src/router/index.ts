@@ -23,6 +23,7 @@ export const router = createRouter({
       { path: 'repositories', name: 'repositories', component: RepositoriesView, meta: { title: '项目管理', projectManage: true } },
       { path: 'indexing', name: 'indexing', component: IndexJobsView, meta: { admin: true, title: '索引任务' } },
       { path: 'search', name: 'search', component: ChunksView, meta: { title: '代码与知识' } },
+      { path: 'atlas', name: 'atlas', component: () => import('@/views/CodeAtlasView.vue'), meta: { title: '代码图谱' } },
       { path: 'ask', name: 'ask', component: AskView, meta: { title: '问项目' } },
       {
         path: 'graph',

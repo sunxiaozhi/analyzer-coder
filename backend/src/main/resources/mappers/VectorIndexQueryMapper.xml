@@ -28,6 +28,10 @@
     </sql>
     <sql id="validKnowledge">
         k.repo_id=#{repositoryId}
+        AND EXISTS(SELECT 1 FROM knowledge_branch_scopes bs
+            JOIN repositories br ON br.id=bs.repo_id
+            JOIN repository_branches bb ON bb.repo_id=br.id AND bb.name=COALESCE(br.default_branch,'WORKSPACE')
+            WHERE bs.card_id=k.id AND (bs.mode='ALL_BRANCHES' OR bb.id=ANY(bs.branch_ids)))
         AND k.publication_status='PUBLISHED'
         AND k.review_status='APPROVED'
         AND k.source_version_status NOT IN ('SUSPECT','STALE')

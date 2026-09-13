@@ -16,7 +16,7 @@ public class CodeGraphArtifactPublisher {
 
     @Transactional
     public void publish(CodeGraphArtifactRow artifact) {
-        mapper.retirePublished(artifact.repositoryId());
+        mapper.retireSnapshot(artifact.repositoryId(),artifact.snapshotId());
         mapper.insertPublished(artifact);
     }
 }

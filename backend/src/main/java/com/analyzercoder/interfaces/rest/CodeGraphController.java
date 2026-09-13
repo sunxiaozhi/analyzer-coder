@@ -1,30 +1,32 @@
 package com.analyzercoder.interfaces.rest;
 
+import com.analyzercoder.application.intelligence.CodeGraphPropagation;
 import com.analyzercoder.application.intelligence.CodeGraphService;
 import com.analyzercoder.application.intelligence.CodeGraphTaskService;
-import com.analyzercoder.application.intelligence.CodeGraphPropagation;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.RepositoryPermission;
 import com.analyzercoder.security.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 /** 提供代码图谱相关 HTTP 接口，负责请求参数绑定并将已认证的调用委派给应用服务。 */
 @RestController
 @RequestMapping("/api/repositories/{repoId}/codegraph")
 public class CodeGraphController {
+    @org.springframework.beans.factory.annotation.Autowired private com.analyzercoder.application.branch.BranchGraphTasks branchTasks;
     private final CodeGraphService service;
     private final CodeGraphTaskService tasks;
     private final AccessControlService access;
+    @org.springframework.beans.factory.annotation.Autowired private BranchRequestContext branchContexts;
 
     public CodeGraphController(
             CodeGraphService service, CodeGraphTaskService tasks, AccessControlService access) {
@@ -39,6 +41,8 @@ public class CodeGraphController {
             @PathVariable UUID repoId, HttpServletRequest request) {
         var id = CodeRepositoryId.of(repoId);
         access.require(SecurityContext.account(request), id, RepositoryPermission.MAINTAIN);
+        var context=branchContexts==null?null:branchContexts.resolve(request,repoId);
+        if(context!=null) return IndexController.IndexJobResponse.from(branchTasks.start(context));
         return IndexController.IndexJobResponse.from(tasks.start(id));
     }
 
@@ -48,7 +52,8 @@ public class CodeGraphController {
                 SecurityContext.account(request),
                 CodeRepositoryId.of(repoId),
                 RepositoryPermission.READ);
-        return service.latest(repoId);
+        var context=branchContexts==null?null:branchContexts.resolve(request,repoId);
+        return context==null?service.latest(repoId):service.latestSnapshot(repoId,context.snapshotId());
     }
 
     @GetMapping("/impact")
@@ -61,6 +66,24 @@ public class CodeGraphController {
                 SecurityContext.account(request),
                 CodeRepositoryId.of(repoId),
                 RepositoryPermission.READ);
-        return service.impact(repoId, symbol, depth);
+        var context=branchContexts==null?null:branchContexts.resolve(request,repoId);
+        return context==null?service.impact(repoId, symbol, depth):service.impactSnapshot(repoId,context.snapshotId(),symbol,depth);
+    }
+
+    @GetMapping("/explore")
+    public com.analyzercoder.application.intelligence.CodeGraphExplorer.View explore(
+            @PathVariable UUID repoId,
+            @RequestParam(defaultValue = "") String module,
+            @RequestParam(defaultValue = "") String query,
+            HttpServletRequest request) {
+        access.require(
+                SecurityContext.account(request),
+                CodeRepositoryId.of(repoId),
+                RepositoryPermission.READ);
+        if (query.length() > 500 || module.length() > 500)
+            throw new IllegalArgumentException("查询范围过长");
+        var context=branchContexts==null?null:branchContexts.resolve(request,repoId);
+        if(context!=null) return service.exploreSnapshot(repoId,context.snapshotId(),module,query);
+        return service.explore(repoId, module, query);
     }
 }

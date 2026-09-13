@@ -20,5 +20,6 @@ public class WebSecurityConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(accessTokenInterceptor).addPathPatterns("/**");
         registry.addInterceptor(sessionInterceptor).addPathPatterns("/**");
+        registry.addInterceptor(new BranchContextInterceptor()).addPathPatterns("/api/**");
     }
 }

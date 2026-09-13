@@ -32,7 +32,10 @@ public class RepositoryCodeBrowserService {
     }
 
     public SnapshotFiles list(CodeRepositoryId repositoryId) {
-        CodeRepository repository = published(repositoryId);
+        return list(published(repositoryId));
+    }
+
+    public SnapshotFiles list(CodeRepository repository) {
         Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
         try (var paths = Files.walk(root)) {
             List<FileEntry> files =
@@ -53,7 +56,10 @@ public class RepositoryCodeBrowserService {
     }
 
     public FileContent read(CodeRepositoryId repositoryId, String requestedPath) {
-        CodeRepository repository = published(repositoryId);
+        return read(published(repositoryId),requestedPath);
+    }
+
+    public FileContent read(CodeRepository repository,String requestedPath) {
         Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
         Path file = resolve(root, requestedPath);
         try {
@@ -88,7 +94,10 @@ public class RepositoryCodeBrowserService {
 
     /** 读取 README 引用的图片资源；仅允许受控图片类型并复用快照路径越界校验。 */
     public BinaryContent readImage(CodeRepositoryId repositoryId, String requestedPath) {
-        CodeRepository repository = published(repositoryId);
+        return readImage(published(repositoryId),requestedPath);
+    }
+
+    public BinaryContent readImage(CodeRepository repository,String requestedPath) {
         Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
         Path file = resolve(root, requestedPath);
         try {

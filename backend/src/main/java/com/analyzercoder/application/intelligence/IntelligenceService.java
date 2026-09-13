@@ -1,5 +1,6 @@
 package com.analyzercoder.application.intelligence;
 
+import com.analyzercoder.application.branch.BranchReadContext;
 import com.analyzercoder.application.knowledge.EngineeringKnowledgePolicy;
 import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.domain.knowledge.KnowledgeEnforcement;
@@ -37,8 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class IntelligenceService {
     private static final int DIMENSION = 64;
     private static final int MAX_CANDIDATES_PER_CHANNEL = 40;
-    private static final Set<String> REVIEW_STATUSES =
-            Set.of("APPROVED", "CHANGES_REQUESTED");
+    private static final Set<String> REVIEW_STATUSES = Set.of("APPROVED", "CHANGES_REQUESTED");
     private static final Set<String> PUBLICATION_STATUSES =
             Set.of("DRAFT", "PUBLISHED", "ARCHIVED");
 
@@ -83,12 +83,18 @@ public class IntelligenceService {
 
     @Transactional
     public SearchResponse hybridSearchDetailed(UUID repositoryId, String query, int limit) {
+        return hybridSearchDetailed(repositoryId, query, limit, null);
+    }
+
+    @Transactional
+    public SearchResponse hybridSearchDetailed(
+            UUID repositoryId, String query, int limit, BranchReadContext context) {
         RetrievalQueryAnalyzer.Query analyzed = queryAnalyzer.analyze(query);
         if (analyzed.normalized().isBlank()) {
             return new SearchResponse(List.of(), RetrievalDiagnostics.notExecuted("EMPTY_QUERY"));
         }
         int resolvedLimit = Math.max(1, Math.min(limit, 100));
-        RetrievalOutcome outcome = retrieve(repositoryId, analyzed, false, resolvedLimit);
+        RetrievalOutcome outcome = retrieve(repositoryId, analyzed, false, resolvedLimit, context);
         return new SearchResponse(
                 outcome.ranked().stream().map(this::searchHit).toList(), outcome.diagnostics());
     }
@@ -100,13 +106,19 @@ public class IntelligenceService {
 
     @Transactional
     public EvidenceSearchResult unifiedSearchDetailed(UUID repositoryId, String query, int limit) {
+        return unifiedSearchDetailed(repositoryId, query, limit, null);
+    }
+
+    @Transactional
+    public EvidenceSearchResult unifiedSearchDetailed(
+            UUID repositoryId, String query, int limit, BranchReadContext context) {
         RetrievalQueryAnalyzer.Query analyzed = queryAnalyzer.analyze(query);
         if (analyzed.normalized().isBlank()) {
             return new EvidenceSearchResult(
                     List.of(), RetrievalDiagnostics.notExecuted("EMPTY_QUERY"));
         }
         int resolvedLimit = Math.max(1, Math.min(limit, 50));
-        RetrievalOutcome outcome = retrieve(repositoryId, analyzed, true, resolvedLimit);
+        RetrievalOutcome outcome = retrieve(repositoryId, analyzed, true, resolvedLimit, context);
         return new EvidenceSearchResult(
                 outcome.ranked().stream()
                         .map(candidate -> evidence(repositoryId, candidate))
@@ -126,11 +138,33 @@ public class IntelligenceService {
             UUID clientRequestId,
             UUID requestedThreadId,
             UUID modelConfigId) {
+        return ask(
+                repositoryId,
+                accountId,
+                question,
+                clientRequestId,
+                requestedThreadId,
+                modelConfigId,
+                null);
+    }
+
+    @Transactional
+    public Answer ask(
+            UUID repositoryId,
+            UUID accountId,
+            String question,
+            UUID clientRequestId,
+            UUID requestedThreadId,
+            UUID modelConfigId,
+            BranchReadContext context) {
         if (clientRequestId != null) {
             Map<String, Object> existing =
                     mapper.findConversationByRequest(repositoryId, accountId, clientRequestId);
             if (existing != null && !existing.isEmpty()) {
-                return answerSnapshot(existing);
+                Answer saved = answerSnapshot(existing);
+                if (context != null && !context.snapshotId().equals(saved.snapshotId()))
+                    throw new IllegalArgumentException("请求标识已用于其他分支版本，请发起新请求");
+                return saved;
             }
         }
 
@@ -145,16 +179,22 @@ public class IntelligenceService {
                 throw new IllegalArgumentException("问答会话不存在");
             }
             mapper.lockThread(threadId);
-            history = mapper.listThreadTurns(threadId, repositoryId, accountId).stream()
-                    .map(this::answerSnapshot)
-                    .toList();
+            history =
+                    mapper.listThreadTurns(threadId, repositoryId, accountId).stream()
+                            .map(this::answerSnapshot)
+                            .toList();
+            if (context != null
+                    && history.stream()
+                            .anyMatch(turn -> !context.snapshotId().equals(turn.snapshotId())))
+                throw new IllegalArgumentException("会话属于其他代码版本，请在当前分支新建会话");
             Integer next = mapper.nextTurnNo(threadId);
             turnNo = next == null ? history.size() + 1 : next;
             threadTitle = string(thread, "title");
         }
 
         String retrievalQuery = contextualQuery(question, history);
-        EvidenceSearchResult retrieval = unifiedSearchDetailed(repositoryId, retrievalQuery, 10);
+        EvidenceSearchResult retrieval =
+                unifiedSearchDetailed(repositoryId, retrievalQuery, 10, context);
         return answer(
                 repositoryId,
                 accountId,
@@ -183,7 +223,8 @@ public class IntelligenceService {
             List<Evidence> evidence,
             RetrievalDiagnostics retrieval,
             UUID modelConfigId) {
-        UUID snapshotId = evidence.stream()
+        UUID snapshotId =
+                evidence.stream()
                         .map(Evidence::snapshotId)
                         .filter(Objects::nonNull)
                         .findFirst()
@@ -211,14 +252,23 @@ public class IntelligenceService {
                 if (validation.valid()) {
                     answer = generated.get().answer();
                     provider = generated.get().provider();
-                    evidenceStatus = validation.complete() ? "CITATION_COMPLETE" : "CITATION_INCOMPLETE";
+                    evidenceStatus =
+                            validation.complete() ? "CITATION_COMPLETE" : "CITATION_INCOMPLETE";
                     fallbackReason = null;
-                    cited = validation.citedEvidence().stream()
-                            .map(index -> new IndexedEvidence(index, evidence.get(index - 1)))
-                            .toList();
+                    cited =
+                            validation.citedEvidence().stream()
+                                    .map(
+                                            index ->
+                                                    new IndexedEvidence(
+                                                            index, evidence.get(index - 1)))
+                                    .toList();
                     citationAssessment = validation.assessment();
                 } else {
-                    answer = deterministicAnswer(evidence) + "\n\n外部模型回答因“" + validation.reason() + "”未通过引用校验，已安全降级。";
+                    answer =
+                            deterministicAnswer(evidence)
+                                    + "\n\n外部模型回答因“"
+                                    + validation.reason()
+                                    + "”未通过引用校验，已安全降级。";
                     evidenceStatus = "MODEL_OUTPUT_REJECTED";
                     fallbackReason = "CITATION_VALIDATION_FAILED";
                     cited = indexed(evidence, Math.min(5, evidence.size()));
@@ -227,19 +277,47 @@ public class IntelligenceService {
             } else {
                 answer = deterministicAnswer(evidence);
                 evidenceStatus = "DEGRADED";
-                fallbackReason = modelConfigId == null ? "LOCAL_EVIDENCE_MODE" : "MODEL_UNAVAILABLE";
+                fallbackReason =
+                        modelConfigId == null ? "LOCAL_EVIDENCE_MODE" : "MODEL_UNAVAILABLE";
                 cited = indexed(evidence, Math.min(5, evidence.size()));
-                citationAssessment = citationValidator.validate(answer, evidence.size()).assessment();
+                citationAssessment =
+                        citationValidator.validate(answer, evidence.size()).assessment();
             }
         }
         Instant createdAt = Instant.now();
         List<Citation> citations = citations(cited);
-        Answer result = new Answer(conversationId, threadId, turnNo, repositoryId, threadTitle, question,
-                answer, snapshotId, citations, provider, evidenceStatus, fallbackReason, citationAssessment,
-                retrieval, createdAt);
-        mapper.insertConversation(conversationId, threadId, turnNo, repositoryId, accountId,
-                clientRequestId, threadTitle, question, answer, snapshotId, provider, evidenceStatus,
-                fallbackReason, writeJson(result));
+        Answer result =
+                new Answer(
+                        conversationId,
+                        threadId,
+                        turnNo,
+                        repositoryId,
+                        threadTitle,
+                        question,
+                        answer,
+                        snapshotId,
+                        citations,
+                        provider,
+                        evidenceStatus,
+                        fallbackReason,
+                        citationAssessment,
+                        retrieval,
+                        createdAt);
+        mapper.insertConversation(
+                conversationId,
+                threadId,
+                turnNo,
+                repositoryId,
+                accountId,
+                clientRequestId,
+                threadTitle,
+                question,
+                answer,
+                snapshotId,
+                provider,
+                evidenceStatus,
+                fallbackReason,
+                writeJson(result));
         persistCitations(conversationId, citations);
         return result;
     }
@@ -247,20 +325,26 @@ public class IntelligenceService {
     public List<HistoryRecord> history(UUID repositoryId, UUID accountId, int limit, int offset) {
         int resolvedLimit = Math.max(1, Math.min(limit, 100));
         int resolvedOffset = Math.max(0, offset);
-        return mapper.listConversations(repositoryId, accountId, resolvedLimit, resolvedOffset).stream()
-                .map(this::historyRecord).toList();
+        return mapper
+                .listConversations(repositoryId, accountId, resolvedLimit, resolvedOffset)
+                .stream()
+                .map(this::historyRecord)
+                .toList();
     }
 
     public ThreadDetail historyDetail(UUID repositoryId, UUID accountId, UUID threadId) {
         Map<String, Object> thread = mapper.findThread(threadId, repositoryId, accountId);
         if (thread == null) throw new IllegalArgumentException("问答会话不存在");
-        List<Answer> turns = mapper.listThreadTurns(threadId, repositoryId, accountId).stream()
-                .map(this::answerSnapshot).toList();
+        List<Answer> turns =
+                mapper.listThreadTurns(threadId, repositoryId, accountId).stream()
+                        .map(this::answerSnapshot)
+                        .toList();
         return new ThreadDetail(threadId, repositoryId, string(thread, "title"), turns);
     }
 
     @Transactional
-    public HistoryRecord renameHistory(UUID repositoryId, UUID accountId, UUID threadId, String title) {
+    public HistoryRecord renameHistory(
+            UUID repositoryId, UUID accountId, UUID threadId, String title) {
         String cleaned = clean(title, 1, 80, "记录标题");
         if (mapper.renameConversation(threadId, repositoryId, accountId, cleaned) < 1) {
             throw new IllegalArgumentException("问答会话不存在");
@@ -284,6 +368,7 @@ public class IntelligenceService {
         }
         return query.append(question).toString();
     }
+
     public boolean prepareRepositoryEmbeddings(UUID repositoryId) {
         try {
             rebuildHeuristicCallReferences(repositoryId);
@@ -299,7 +384,10 @@ public class IntelligenceService {
             UUID repositoryId,
             RetrievalQueryAnalyzer.Query query,
             boolean includeKnowledge,
-            int limit) {
+            int limit,
+            BranchReadContext context) {
+        if (context != null && !repositoryId.equals(context.repositoryId()))
+            throw new IllegalArgumentException("上下文仓库不匹配");
         long retrievalStarted = System.nanoTime();
         int candidateLimit = Math.min(MAX_CANDIDATES_PER_CHANNEL, Math.max(16, limit * 4));
         int termCount = Math.max(1, query.terms().size());
@@ -311,7 +399,8 @@ public class IntelligenceService {
         String retrievalCapability = null;
 
         try {
-            snapshotId = mapper.currentSnapshotId(repositoryId);
+            snapshotId =
+                    context == null ? mapper.currentSnapshotId(repositoryId) : context.snapshotId();
         } catch (RuntimeException exception) {
             unavailable.add(unavailable("CURRENT_SNAPSHOT", "SNAPSHOT_LOOKUP_FAILED", exception));
         }
@@ -320,12 +409,20 @@ public class IntelligenceService {
         long channelStarted = System.nanoTime();
         try {
             codeKeywordRows =
-                    mapper.searchCodeKeyword(
-                            repositoryId,
-                            query.normalized(),
-                            query.terms(),
-                            termCount,
-                            candidateLimit);
+                    context != null
+                            ? mapper.searchBranchCodeKeyword(
+                                    repositoryId,
+                                    context.snapshotId(),
+                                    query.normalized(),
+                                    query.terms(),
+                                    termCount,
+                                    candidateLimit)
+                            : mapper.searchCodeKeyword(
+                                    repositoryId,
+                                    query.normalized(),
+                                    query.terms(),
+                                    termCount,
+                                    candidateLimit);
             channels.add(channel("CODE_KEYWORD", 1.15, "CODE", codeKeywordRows, true));
             metrics.add(metric("CODE_KEYWORD", codeKeywordRows.size(), channelStarted));
         } catch (RuntimeException exception) {
@@ -339,17 +436,14 @@ public class IntelligenceService {
                         .distinct()
                         .limit(8)
                         .toList();
-        if (!matchedSymbols.isEmpty()) {
+        if (context == null && !matchedSymbols.isEmpty()) {
             channelStarted = System.nanoTime();
             try {
                 List<Map<String, Object>> graphRows =
                         graphRetrievalMapper.relatedCodeChunks(
                                 repositoryId, matchedSymbols, candidateLimit);
-                channels.add(
-                        channel(
-                                "HEURISTIC_CALL_REFERENCE", 0.9, "CODE", graphRows, true));
-                metrics.add(
-                        metric("HEURISTIC_CALL_REFERENCE", graphRows.size(), channelStarted));
+                channels.add(channel("HEURISTIC_CALL_REFERENCE", 0.9, "CODE", graphRows, true));
+                metrics.add(metric("HEURISTIC_CALL_REFERENCE", graphRows.size(), channelStarted));
             } catch (RuntimeException exception) {
                 unavailable.add(
                         unavailable(
@@ -362,19 +456,23 @@ public class IntelligenceService {
             channelStarted = System.nanoTime();
             try {
                 List<Map<String, Object>> knowledgeRows =
-                        mapper.searchKnowledgeKeyword(
-                                repositoryId,
-                                query.normalized(),
-                                query.terms(),
-                                termCount,
-                                candidateLimit);
-                channels.add(
-                        channel(
-                                "KNOWLEDGE_KEYWORD",
-                                1.2,
-                                "KNOWLEDGE",
-                                knowledgeRows,
-                                true));
+                        context != null
+                                ? mapper.searchBranchKnowledgeKeyword(
+                                        repositoryId,
+                                        context.snapshotId(),
+                                        context.branchId(),
+                                        context.contextId(),
+                                        query.normalized(),
+                                        query.terms(),
+                                        termCount,
+                                        candidateLimit)
+                                : mapper.searchKnowledgeKeyword(
+                                        repositoryId,
+                                        query.normalized(),
+                                        query.terms(),
+                                        termCount,
+                                        candidateLimit);
+                channels.add(channel("KNOWLEDGE_KEYWORD", 1.2, "KNOWLEDGE", knowledgeRows, true));
                 metrics.add(metric("KNOWLEDGE_KEYWORD", knowledgeRows.size(), channelStarted));
             } catch (RuntimeException exception) {
                 unavailable.add(
@@ -393,18 +491,31 @@ public class IntelligenceService {
                             : embedding.vector();
             String model = embedding.model();
             boolean semantic = "SEMANTIC_EMBEDDING".equals(embedding.retrievalCapability());
-            String codeVectorChannel =
-                    semantic ? "CODE_SEMANTIC" : "CODE_CHARACTER_SIMILARITY";
+            String codeVectorChannel = semantic ? "CODE_SEMANTIC" : "CODE_CHARACTER_SIMILARITY";
             channelStarted = System.nanoTime();
             try {
                 List<Map<String, Object>> vectorRows =
-                        mapper.searchCodeVector(
-                                repositoryId,
-                                vector,
-                                model,
-                                embedding.dimension(),
-                                candidateLimit);
-                channels.add(channel(codeVectorChannel, 1.0, "CODE", vectorRows, false));
+                        context != null
+                                ? mapper.searchBranchCodeVector(
+                                        repositoryId,
+                                        context.snapshotId(),
+                                        vector,
+                                        model,
+                                        embedding.dimension(),
+                                        candidateLimit)
+                                : mapper.searchCodeVector(
+                                        repositoryId,
+                                        vector,
+                                        model,
+                                        embedding.dimension(),
+                                        candidateLimit);
+                if (context != null && vectorRows.isEmpty()) {
+                    unavailable.add(
+                            new UnavailableChannel(
+                                    codeVectorChannel,
+                                    "BRANCH_VECTOR_NOT_READY",
+                                    "当前分支快照尚无匹配模型的向量索引，使用关键词检索"));
+                } else channels.add(channel(codeVectorChannel, 1.0, "CODE", vectorRows, false));
                 metrics.add(metric(codeVectorChannel, vectorRows.size(), channelStarted));
             } catch (RuntimeException exception) {
                 unavailable.add(
@@ -416,21 +527,25 @@ public class IntelligenceService {
                 channelStarted = System.nanoTime();
                 try {
                     List<Map<String, Object>> vectorRows =
-                            mapper.searchKnowledgeVector(
-                                    repositoryId,
-                                    vector,
-                                    model,
-                                    embedding.dimension(),
-                                    candidateLimit);
+                            context != null
+                                    ? mapper.searchBranchKnowledgeVector(
+                                            repositoryId,
+                                            context.snapshotId(),
+                                            context.branchId(),
+                                            context.contextId(),
+                                            vector,
+                                            model,
+                                            embedding.dimension(),
+                                            candidateLimit)
+                                    : mapper.searchKnowledgeVector(
+                                            repositoryId,
+                                            vector,
+                                            model,
+                                            embedding.dimension(),
+                                            candidateLimit);
                     channels.add(
-                            channel(
-                                    knowledgeVectorChannel,
-                                    1.05,
-                                    "KNOWLEDGE",
-                                    vectorRows,
-                                    false));
-                    metrics.add(
-                            metric(knowledgeVectorChannel, vectorRows.size(), channelStarted));
+                            channel(knowledgeVectorChannel, 1.05, "KNOWLEDGE", vectorRows, false));
+                    metrics.add(metric(knowledgeVectorChannel, vectorRows.size(), channelStarted));
                 } catch (RuntimeException exception) {
                     unavailable.add(
                             unavailable(
@@ -454,9 +569,8 @@ public class IntelligenceService {
             }
         }
         List<RetrievalRanker.RankedCandidate> ranked = ranker.fuse(channels, limit);
-        List<String> enabledChannels = channels.stream()
-                .map(RetrievalRanker.ChannelResult::channel)
-                .toList();
+        List<String> enabledChannels =
+                channels.stream().map(RetrievalRanker.ChannelResult::channel).toList();
         RetrievalDiagnostics diagnostics =
                 new RetrievalDiagnostics(
                         snapshotId,
@@ -656,11 +770,14 @@ public class IntelligenceService {
         return answer.append("。\n\n当前未使用外部模型生成解释，请打开引用核对原文，并使用调用图谱验证结构关系。").toString();
     }
 
-    private static String llmPrompt(String question, List<Answer> history, List<Evidence> evidence) {
-        StringBuilder prompt = new StringBuilder("你是仓库知识与代码问答助手。只能依据下面带编号的本轮证据回答；"
-                        + "历史对话只用于理解指代和用户意图，不能作为仓库事实证据；"
-                        + "不能从本轮证据推出的内容必须明确说不知道；不要编造调用关系。")
-                .append("\n历史对话：");
+    private static String llmPrompt(
+            String question, List<Answer> history, List<Evidence> evidence) {
+        StringBuilder prompt =
+                new StringBuilder(
+                                "你是仓库知识与代码问答助手。只能依据下面带编号的本轮证据回答；"
+                                        + "历史对话只用于理解指代和用户意图，不能作为仓库事实证据；"
+                                        + "不能从本轮证据推出的内容必须明确说不知道；不要编造调用关系。")
+                        .append("\n历史对话：");
         int historyStart = Math.max(0, history.size() - 4);
         for (int index = historyStart; index < history.size(); index++) {
             Answer turn = history.get(index);
@@ -672,8 +789,15 @@ public class IntelligenceService {
         int remaining = 14_000;
         for (int index = 0; index < evidence.size() && remaining > 0; index++) {
             Evidence item = evidence.get(index);
-            String header = "\n[S" + (index + 1) + "][" + item.sourceType() + "] " + item.title()
-                    + (item.startLine() == null ? "" : ":" + item.startLine()) + "\n";
+            String header =
+                    "\n[S"
+                            + (index + 1)
+                            + "]["
+                            + item.sourceType()
+                            + "] "
+                            + item.title()
+                            + (item.startLine() == null ? "" : ":" + item.startLine())
+                            + "\n";
             prompt.append(header);
             remaining -= header.length();
             int length = Math.min(Math.min(item.content().length(), 2_400), Math.max(0, remaining));
@@ -686,8 +810,7 @@ public class IntelligenceService {
                 remaining -= link.length();
             }
         }
-        return prompt.append("\n请用中文回答当前问题；每个仓库事实句末必须标注一个或多个 [S编号]；"
-                        + "区分团队知识和源码事实；冲突时以当前快照源码为准。")
+        return prompt.append("\n请用中文回答当前问题；每个仓库事实句末必须标注一个或多个 [S编号]；" + "区分团队知识和源码事实；冲突时以当前快照源码为准。")
                 .toString();
     }
 
@@ -876,8 +999,7 @@ public class IntelligenceService {
     @Transactional
     public KnowledgeCard setCardPublication(
             UUID repositoryId, UUID id, UUID actor, String requestedStatus) {
-        String status =
-                normalizeState(requestedStatus, PUBLICATION_STATUSES, "知识发布状态无效");
+        String status = normalizeState(requestedStatus, PUBLICATION_STATUSES, "知识发布状态无效");
         KnowledgeCard current = findCard(repositoryId, id);
         if ("PUBLISHED".equals(status) && !"APPROVED".equals(current.reviewStatus())) {
             throw new IllegalStateException("知识卡片尚未通过人工评审，不能发布");
@@ -960,8 +1082,7 @@ public class IntelligenceService {
                 input.codeReferences());
     }
 
-    private static String normalizeState(
-            String value, Set<String> allowed, String errorMessage) {
+    private static String normalizeState(String value, Set<String> allowed, String errorMessage) {
         String normalized = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
         if (!allowed.contains(normalized)) throw new IllegalArgumentException(errorMessage);
         return normalized;
@@ -1170,25 +1291,44 @@ public class IntelligenceService {
     private Answer answerSnapshot(Map<String, Object> row) {
         String payload = string(row, "answer_payload");
         if (payload == null || payload.isBlank()) {
-            return new Answer(uuid(row, "id"),
+            return new Answer(
+                    uuid(row, "id"),
                     uuid(row, "thread_id") == null ? uuid(row, "id") : uuid(row, "thread_id"),
                     integer(row, "turn_no") == null ? 1 : integer(row, "turn_no"),
-                    uuid(row, "repo_id"), string(row, "title"), string(row, "question"),
-                    string(row, "answer"), uuid(row, "snapshot_id"), List.of(), string(row, "provider"),
-                    string(row, "evidence_status"), string(row, "fallback_reason"),
-                    CitationAssessment.empty(), RetrievalDiagnostics.notExecuted("LEGACY_RECORD"),
+                    uuid(row, "repo_id"),
+                    string(row, "title"),
+                    string(row, "question"),
+                    string(row, "answer"),
+                    uuid(row, "snapshot_id"),
+                    List.of(),
+                    string(row, "provider"),
+                    string(row, "evidence_status"),
+                    string(row, "fallback_reason"),
+                    CitationAssessment.empty(),
+                    RetrievalDiagnostics.notExecuted("LEGACY_RECORD"),
                     instant(row, "created_at"));
         }
         try {
             Answer restored = json.readValue(payload, Answer.class);
-            UUID restoredThreadId = restored.threadId() == null ? uuid(row, "thread_id") : restored.threadId();
-            int restoredTurnNo = restored.turnNo() < 1
-                    ? (integer(row, "turn_no") == null ? 1 : integer(row, "turn_no"))
-                    : restored.turnNo();
+            UUID restoredThreadId =
+                    restored.threadId() == null ? uuid(row, "thread_id") : restored.threadId();
+            int restoredTurnNo =
+                    restored.turnNo() < 1
+                            ? (integer(row, "turn_no") == null ? 1 : integer(row, "turn_no"))
+                            : restored.turnNo();
             if (restoredThreadId == null) restoredThreadId = restored.conversationId();
-            return new Answer(restored.conversationId(), restoredThreadId, restoredTurnNo,
-                    restored.repositoryId(), restored.title(), restored.question(), restored.answer(),
-                    restored.snapshotId(), restored.citations(), restored.provider(), restored.evidenceStatus(),
+            return new Answer(
+                    restored.conversationId(),
+                    restoredThreadId,
+                    restoredTurnNo,
+                    restored.repositoryId(),
+                    restored.title(),
+                    restored.question(),
+                    restored.answer(),
+                    restored.snapshotId(),
+                    restored.citations(),
+                    restored.provider(),
+                    restored.evidenceStatus(),
                     restored.fallbackReason(),
                     restored.citationAssessment() == null
                             ? CitationAssessment.empty()
@@ -1205,12 +1345,18 @@ public class IntelligenceService {
     private HistoryRecord historyRecord(Map<String, Object> row) {
         return new HistoryRecord(
                 uuid(row, "thread_id") == null ? uuid(row, "id") : uuid(row, "thread_id"),
-                uuid(row, "repo_id"), string(row, "title"), string(row, "question"),
-                string(row, "provider"), string(row, "evidence_status"), string(row, "fallback_reason"),
+                uuid(row, "repo_id"),
+                string(row, "title"),
+                string(row, "question"),
+                string(row, "provider"),
+                string(row, "evidence_status"),
+                string(row, "fallback_reason"),
                 integer(row, "citation_count") == null ? 0 : integer(row, "citation_count"),
                 integer(row, "turn_count") == null ? 1 : integer(row, "turn_count"),
-                instant(row, "created_at"), instant(row, "updated_at"));
+                instant(row, "created_at"),
+                instant(row, "updated_at"));
     }
+
     private String writeJson(Object value) {
         try {
             return json.writeValueAsString(value);
@@ -1296,13 +1442,11 @@ public class IntelligenceService {
     private record IndexedEvidence(int index, Evidence evidence) {}
 
     private record RetrievalOutcome(
-            List<RetrievalRanker.RankedCandidate> ranked,
-            RetrievalDiagnostics diagnostics) {}
+            List<RetrievalRanker.RankedCandidate> ranked, RetrievalDiagnostics diagnostics) {}
 
     public record SearchResponse(List<SearchHit> hits, RetrievalDiagnostics retrieval) {}
 
-    public record EvidenceSearchResult(
-            List<Evidence> evidence, RetrievalDiagnostics retrieval) {}
+    public record EvidenceSearchResult(List<Evidence> evidence, RetrievalDiagnostics retrieval) {}
 
     public record ChannelMetric(String channel, int recalledCount, long durationMs) {}
 

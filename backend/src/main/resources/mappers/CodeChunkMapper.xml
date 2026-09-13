@@ -39,18 +39,23 @@
             SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId}
         )
     </sql>
-    <delete id="deleteByRepositoryId">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}</delete>
-    <delete id="deleteByPaths">DELETE FROM code_chunks WHERE repo_id=#{repositoryId} AND file_path IN
+    <delete id="deleteByRepositoryId">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}
+        AND NOT EXISTS(SELECT 1 FROM branch_snapshots b WHERE b.id=code_chunks.snapshot_id)</delete>
+    <delete id="deleteByPaths">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}
+        AND NOT EXISTS(SELECT 1 FROM branch_snapshots b WHERE b.id=code_chunks.snapshot_id) AND file_path IN
         <foreach collection="paths" item="path" open="(" close=")" separator=",">#{path}</foreach>
     </delete>
     <update id="rebaseUnchanged">UPDATE code_chunks SET snapshot_id=#{snapshotId},commit_sha=#{commitSha}
         WHERE repo_id=#{repositoryId}
+        AND NOT EXISTS(SELECT 1 FROM branch_snapshots b WHERE b.id=code_chunks.snapshot_id)
         <if test="paths != null and !paths.isEmpty()">AND file_path NOT IN
             <foreach collection="paths" item="path" open="(" close=")" separator=",">#{path}</foreach>
         </if>
     </update>
     <select id="latestIndexedCommit" resultType="string">
-        SELECT commit_sha FROM code_chunks WHERE repo_id=#{repositoryId} ORDER BY created_at DESC LIMIT 1
+        SELECT commit_sha FROM code_chunks WHERE repo_id=#{repositoryId}
+        AND NOT EXISTS(SELECT 1 FROM branch_snapshots b WHERE b.id=code_chunks.snapshot_id)
+        ORDER BY created_at DESC LIMIT 1
     </select>
     <insert id="insertBatch">INSERT INTO code_chunks(<include refid="columns"/>) VALUES
         <foreach collection="rows" item="row" separator=",">

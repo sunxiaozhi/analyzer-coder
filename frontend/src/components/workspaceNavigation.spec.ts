@@ -13,6 +13,7 @@ describe('workspaceNavigation', () => {
     expect(groups[0].items.map(item => item.label)).toEqual([
       '项目总览',
       '代码与知识',
+      '代码图谱',
       '问项目',
     ]);
   });

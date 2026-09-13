@@ -19,6 +19,7 @@ import {
 import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
+import KnowledgeBranchScopeDialog from '@/features/knowledge/KnowledgeBranchScopeDialog.vue';
 import MarkdownKnowledgeSourceList from '@/features/knowledge/MarkdownKnowledgeSourceList.vue';
 import { renderMarkdown } from '@/features/knowledge/markdown';
 import { useRepositoryStore } from '@/stores/repositoryStore';
@@ -38,6 +39,8 @@ const allSourceStatuses = '__ALL__';
 const selectedKnowledgeKind = shallowRef<KnowledgeCard['knowledgeKind'] | typeof allKnowledgeKinds>(allKnowledgeKinds);
 const selectedSourceStatus = shallowRef<MarkdownKnowledgeSourceStatus | typeof allSourceStatuses>(allSourceStatuses);
 const dialog = shallowRef(false);
+const scopeDialog = shallowRef(false);
+const scopeCard = shallowRef<KnowledgeCard | null>(null);
 const detailDialog = shallowRef(false);
 const historyDialog = shallowRef(false);
 const busy = shallowRef(false);
@@ -565,6 +568,7 @@ onMounted(() => void load());
             :can-maintain="canMaintain"
             @view="openDetail"
             @edit="openEdit"
+            @scope="card => { scopeCard = card; scopeDialog = true; }"
             @history="showHistory"
             @review="reviewCard"
             @publish="setPublication"
@@ -591,6 +595,7 @@ onMounted(() => void load());
         />
       </div>
     </div>
+    <KnowledgeBranchScopeDialog v-model="scopeDialog" :repository-id="repositories.selectedRepositoryId ?? ''" :card="scopeCard" @saved="loadCards" />
     <KnowledgeCardDetailDialog
       v-model="detailDialog"
       :card="viewing"

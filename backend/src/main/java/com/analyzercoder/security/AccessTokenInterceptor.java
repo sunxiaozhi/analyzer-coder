@@ -12,6 +12,7 @@ public class AccessTokenInterceptor implements HandlerInterceptor {
     private static final String ID = "[0-9a-fA-F-]{36}";
     private static final Pattern SEARCH =
             Pattern.compile("/api/repositories/" + ID + "/evidence-search");
+    private static final Pattern CONTEXT = Pattern.compile("/api/repositories/" + ID + "/contexts");
     private final AccessTokenService tokens;
 
     public AccessTokenInterceptor(AccessTokenService tokens) {
@@ -47,7 +48,8 @@ public class AccessTokenInterceptor implements HandlerInterceptor {
     }
 
     static boolean allowed(String method, String path) {
-        return "GET".equals(method) && SEARCH.matcher(path).matches();
+        return ("GET".equals(method) && SEARCH.matcher(path).matches())
+                || ("POST".equals(method) && CONTEXT.matcher(path).matches());
     }
 
     private static void validateOrigin(HttpServletRequest request) {

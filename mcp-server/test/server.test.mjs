@@ -13,13 +13,13 @@ test('builds the MCP server without making eager backend calls', () => {
   assert.equal(calls, 0);
 });
 
-test('exposes only the focused project search tool', async () => {
+test('exposes project search and branch context resolution', async () => {
   const session = startMcp({ ANALYZER_API_BASE: 'http://127.0.0.1:8080' });
   try {
     await initialize(session);
     session.send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
     const listed = await waitFor(session.messages, message => message.id === 2);
-    assert.deepEqual(listed.result.tools.map(tool => tool.name), ['search_project']);
+    assert.deepEqual(listed.result.tools.map(tool => tool.name), ['search_project', 'resolve_project_context']);
   } finally {
     session.child.kill();
   }
@@ -65,6 +65,38 @@ test('searches code and knowledge through the read-only HTTP endpoint', async ()
       `/api/repositories/${repositoryId}/evidence-search?${new URLSearchParams({ query: '退款 幂等', limit: '10' })}`,
     );
     assert.equal(received.authorization, 'Bearer search-token');
+  } finally {
+    session.child.kill();
+    await new Promise(resolve => backend.close(resolve));
+  }
+});
+
+test('resolves the branch and forwards its pinned context to search', async () => {
+  const repositoryId = '11111111-1111-4111-8111-111111111111';
+  const branchId = '22222222-2222-4222-8222-222222222222';
+  const contextId = '33333333-3333-4333-8333-333333333333';
+  const received = [];
+  const backend = createServer(async (request, response) => {
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    received.push({ url: request.url, method: request.method, context: request.headers['x-branch-context'], body });
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(request.url.endsWith('/contexts')
+      ? { repositoryId, branchId, contextId, branchName: 'release', commitSha: 'abc' }
+      : { evidence: [], retrieval: { degraded: false } }));
+  });
+  await new Promise(resolve => backend.listen(0, '127.0.0.1', resolve));
+  const session = startMcp({ ANALYZER_API_BASE: `http://127.0.0.1:${backend.address().port}`, ANALYZER_ACCESS_TOKEN: 'test-token' });
+  try {
+    await initialize(session);
+    session.send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'search_project', arguments: { repositoryId, branchId, query: 'refund' } } });
+    const called = await waitFor(session.messages, message => message.id === 2);
+    assert.equal(called.result.isError, undefined);
+    assert.equal(called.result.structuredContent.context.contextId, contextId);
+    assert.equal(received.length, 2);
+    assert.equal(received[0].method, 'POST');
+    assert.deepEqual(JSON.parse(received[0].body), { branchId });
+    assert.equal(received[1].context, contextId);
   } finally {
     session.child.kill();
     await new Promise(resolve => backend.close(resolve));

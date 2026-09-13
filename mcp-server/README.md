@@ -3,6 +3,9 @@
 MCP 接口随 Java 后端启动，远程地址为 `https://<平台域名>/api/mcp`。它只暴露一个只读工具：
 
 - `search_project`：在指定仓库的当前快照中联合检索代码与知识。
+- `resolve_project_context`：通过已准备的 `branchId` 获取账户绑定、有效期一小时的 `contextId`；后续 `search_project` 传入该 ID 可固定分支快照与知识修订。过期后需要重新解析，不会回退到默认分支。
+
+分支检索返回 `{ context, result }`，未提供分支参数时保持原来的默认快照响应。网页“分支工作区”选择已准备分支后，点击“复制 MCP 参数”即可获取 `repositoryId`、`branchId`。将它们交给 `resolve_project_context`，再复用返回的 `contextId`。分支准备和知识范围修改只在有相应权限的网页/API 操作，MCP 访问令牌不具备这些写入权限。
 
 参数如下：
 

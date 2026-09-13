@@ -23,14 +23,62 @@
           "minimum": 1,
           "maximum": 50,
           "default": 20
+        },
+        "branchId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "description": "分支 ID；首次检索解析为固定上下文"
+        },
+        "contextId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "description": "复用返回的分支上下文；不会自动切换到最新提交"
         }
       },
-      "required": ["repositoryId", "query"]
+      "required": [
+        "repositoryId",
+        "query"
+      ]
     },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true
+    }
+  },
+  {
+    "name": "resolve_project_context",
+    "title": "Resolve branch context",
+    "description": "Pins an indexed branch snapshot and applicable knowledge revisions for this account.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "repositoryId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "branchId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "contextId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "repositoryId"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false
     }
   }
 ]

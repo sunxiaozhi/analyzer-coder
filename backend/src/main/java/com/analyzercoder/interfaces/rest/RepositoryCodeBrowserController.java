@@ -24,6 +24,9 @@ public class RepositoryCodeBrowserController {
     private final RepositoryCodeBrowserService browser;
     private final AccessControlService accessControl;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private BranchRequestContext branchContexts;
+
     public RepositoryCodeBrowserController(
             RepositoryCodeBrowserService browser, AccessControlService accessControl) {
         this.browser = browser;
@@ -35,7 +38,10 @@ public class RepositoryCodeBrowserController {
             @PathVariable UUID repositoryId, HttpServletRequest request) {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
-        return browser.list(id);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repositoryId);
+        return context == null
+                ? browser.list(id)
+                : browser.list(branchContexts.repository(context));
     }
 
     @GetMapping("/content")
@@ -45,7 +51,10 @@ public class RepositoryCodeBrowserController {
             HttpServletRequest request) {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
-        return browser.read(id, path);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repositoryId);
+        return context == null
+                ? browser.read(id, path)
+                : browser.read(branchContexts.repository(context), path);
     }
 
     @GetMapping("/raw")
@@ -55,12 +64,18 @@ public class RepositoryCodeBrowserController {
             HttpServletRequest request) {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
-        RepositoryCodeBrowserService.BinaryContent content = browser.readImage(id, path);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repositoryId);
+        RepositoryCodeBrowserService.BinaryContent content =
+                context == null
+                        ? browser.readImage(id, path)
+                        : browser.readImage(branchContexts.repository(context), path);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType(content.mediaType()));
         headers.setCacheControl(CacheControl.noCache());
         headers.set("X-Content-Type-Options", "nosniff");
-        headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+        headers.set(
+                "Content-Security-Policy",
+                "default-src 'none'; style-src 'unsafe-inline'; sandbox");
         return ResponseEntity.ok().headers(headers).body(content.bytes());
     }
 }

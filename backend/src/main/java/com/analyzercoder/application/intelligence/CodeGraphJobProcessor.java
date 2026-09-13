@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 /** 在 Worker 线程执行 CodeGraph 复制、构建和原子发布，并持续报告心跳。 */
 @Service
 public class CodeGraphJobProcessor {
+    @Autowired private com.analyzercoder.application.branch.BranchGraphTasks branchTasks;
     private static final Logger log = LoggerFactory.getLogger(CodeGraphJobProcessor.class);
     private final IndexJobStore jobs;
     private final CodeGraphService codeGraph;
@@ -50,8 +51,9 @@ public class CodeGraphJobProcessor {
 
     private boolean process(IndexJob running) {
         try {
+            var branch=branchTasks==null?java.util.Optional.<com.analyzercoder.application.branch.BranchGraphTasks.Target>empty():branchTasks.target(running.id().value());
             CodeGraphService.Artifact artifact =
-                    codeGraph.build(
+                    branch.isPresent()?codeGraph.buildSnapshot(branch.get().repoId(),branch.get().snapshotId(),branch.get().path(),step->checkpoint(running,step)):codeGraph.build(
                             running.repositoryId().value(), step -> checkpoint(running, step));
             IndexJob latest = jobs.findById(running.id()).orElseThrow();
             if (latest.status() == IndexJobStatus.FAILED) return false;
@@ -60,7 +62,7 @@ public class CodeGraphJobProcessor {
                 return true;
             }
             jobs.save(latest.succeed("codegraph_published:" + artifact.snapshotId()));
-            enqueueKnowledgeDrift(running);
+            if(branch.isEmpty()) enqueueKnowledgeDrift(running);
             return true;
         } catch (CodeGraphService.BuildCanceledException exception) {
             IndexJob latest = jobs.findById(running.id()).orElse(running);

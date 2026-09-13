@@ -31,6 +31,9 @@ public class IntelligenceController {
     private final IntelligenceService service;
     private final AccessControlService access;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private BranchRequestContext branchContexts;
+
     public IntelligenceController(IntelligenceService service, AccessControlService access) {
         this.service = service;
         this.access = access;
@@ -43,7 +46,10 @@ public class IntelligenceController {
             @RequestParam(defaultValue = "20") int limit,
             HttpServletRequest request) {
         require(request, repoId, RepositoryPermission.READ);
-        return service.hybridSearchDetailed(repoId, query, limit);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.hybridSearchDetailed(repoId, query, limit)
+                : service.hybridSearchDetailed(repoId, query, limit, context);
     }
 
     @GetMapping("/repositories/{repoId}/evidence-search")
@@ -53,7 +59,10 @@ public class IntelligenceController {
             @RequestParam(defaultValue = "20") int limit,
             HttpServletRequest request) {
         require(request, repoId, RepositoryPermission.READ);
-        return service.unifiedSearchDetailed(repoId, query, limit);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.unifiedSearchDetailed(repoId, query, limit)
+                : service.unifiedSearchDetailed(repoId, query, limit, context);
     }
 
     @PostMapping("/repositories/{repoId}/ask")
@@ -62,6 +71,16 @@ public class IntelligenceController {
             @Valid @RequestBody Question body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        if (context != null)
+            return service.ask(
+                    repoId,
+                    account.id(),
+                    body.question(),
+                    body.clientRequestId(),
+                    body.threadId(),
+                    body.modelConfigId(),
+                    context);
         return service.ask(
                 repoId,
                 account.id(),
@@ -140,7 +159,8 @@ public class IntelligenceController {
             @PathVariable UUID repoId, HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
         boolean includeDraft =
-                access.canAccess(account, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
+                access.canAccess(
+                        account, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
         return service.cards(repoId, includeDraft);
     }
 
@@ -180,8 +200,7 @@ public class IntelligenceController {
             @RequestBody PublicationRequest body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.MANAGE);
-        return service.setCardPublication(
-                repoId, cardId, account.id(), body.publicationStatus());
+        return service.setCardPublication(repoId, cardId, account.id(), body.publicationStatus());
     }
 
     @GetMapping("/settings")
@@ -209,10 +228,7 @@ public class IntelligenceController {
     }
 
     public record Question(
-            @NotBlank String question,
-            UUID clientRequestId,
-            UUID threadId,
-            UUID modelConfigId) {}
+            @NotBlank String question, UUID clientRequestId, UUID threadId, UUID modelConfigId) {}
 
     public record HistoryTitle(String title) {}
 }

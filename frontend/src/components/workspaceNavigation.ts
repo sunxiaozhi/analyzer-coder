@@ -1,5 +1,6 @@
 export type WorkspaceNavIcon =
   | 'overview'
+  | 'atlas'
   | 'code'
   | 'ask'
   | 'knowledge'
@@ -31,6 +32,7 @@ export interface WorkspaceNavigationContext {
 const developerItems: WorkspaceNavItem[] = [
   { to: '/overview', label: '项目总览', icon: 'overview' },
   { to: '/search', label: '代码与知识', icon: 'code' },
+  { to: '/atlas', label: '代码图谱', icon: 'atlas' },
   { to: '/ask', label: '问项目', icon: 'ask' },
 ];
 

@@ -6,6 +6,7 @@ import {
   Cpu,
   FolderCog,
   LayoutDashboard,
+  Orbit,
   ListChecks,
   LogOut,
   Plug,
@@ -23,6 +24,7 @@ import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useWorkspaceTabsStore, type WorkspaceTab } from '@/stores/workspaceTabs';
 import WorkspaceTabs from '@/components/WorkspaceTabs.vue';
 import ProductLogo from '@/components/ProductLogo.vue';
+import BranchWorkspace from '@/features/branches/BranchWorkspace.vue';
 import {
   workspaceNavigation,
   type WorkspaceNavIcon,
@@ -32,8 +34,10 @@ const route = useRoute(); const router = useRouter(); const auth = useAuthStore(
 const workspaceTabs = useWorkspaceTabsStore();
 const refreshVersions = reactive<Record<string, number>>({});
 const systemOpen = shallowRef(true);
+const branchesOpen = shallowRef(false);
 const iconComponents: Record<WorkspaceNavIcon, object> = {
   overview: LayoutDashboard,
+  atlas: Orbit,
   code: Search,
   ask: MessageSquareText,
   knowledge: BookOpenCheck,
@@ -53,7 +57,7 @@ const navGroups = computed(() => workspaceNavigation({
 }));
 const visibleNavItems = computed(() => navGroups.value.flatMap(group => group.items));
 const titles: Record<string, string> = { help: '功能导航', mcp: 'MCP 接入', overview: '项目总览', repositories: '项目管理', indexing: '索引任务', search: '代码与知识', ask: '问项目', graph: '代码与知识', knowledge: '知识库', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
-const pageTitle = computed(() => titles[String(route.name)] ?? '代码知识平台');
+const pageTitle = computed(() => route.name === 'atlas' ? '代码图谱' : titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
 async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }
 async function changeRepository(repositoryId: string | null) {
@@ -166,6 +170,7 @@ onMounted(() => {
   </aside>
   <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><RouterLink class="help-entry" to="/help" title="查看功能导航和数据来源"><CircleHelp :size="16" /><span>帮助说明</span></RouterLink><RouterLink class="mcp-entry" to="/mcp" title="查看 MCP 接入指导"><Plug :size="16" /><span>MCP 接入</span></RouterLink><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
     <div class="page-frame">
+      <div class="workspace-tab-row">
       <WorkspaceTabs
         :tabs="workspaceTabs.tabs"
         :active-name="activeRouteName"
@@ -178,6 +183,8 @@ onMounted(() => {
         @close-all="closeAllTabs"
         @copy-link="copyTabLink"
       />
+      <el-button v-if="repositoryStore.selectedRepositoryId" class="branch-entry" link type="primary" @click="branchesOpen = true">分支工作区</el-button>
+      </div>
 
       <div class="route-view">
         <RouterView v-slot="{ Component, route: viewRoute }">
@@ -190,11 +197,19 @@ onMounted(() => {
         </RouterView>
       </div>
     </div>
+    <el-drawer v-model="branchesOpen" title="分支工作区" size="min(760px, 96vw)" destroy-on-close>
+      <BranchWorkspace v-if="branchesOpen && repositoryStore.selectedRepositoryId" :key="repositoryStore.selectedRepositoryId"
+        :repository-id="repositoryStore.selectedRepositoryId"
+        :can-maintain="repositoryStore.selectedRepository?.capabilities.canUpdate ?? false" />
+    </el-drawer>
   </main>
 </div></template>
 
 <style scoped>
 .page-frame { grid-template-rows: 44px minmax(0, 1fr); }
+.workspace-tab-row { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.workspace-tab-row > :first-child { flex: 1; min-width: 0; }
+.branch-entry { flex: none; margin-right: 12px; }
 .help-entry, .mcp-entry { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 10px; border-radius: 6px; color: #526071; font-size: 13px; text-decoration: none; }
 .help-entry:hover, .help-entry.router-link-active, .mcp-entry:hover, .mcp-entry.router-link-active { color: #2563eb; background: #eff6ff; }
 .help-entry:focus-visible, .mcp-entry:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
