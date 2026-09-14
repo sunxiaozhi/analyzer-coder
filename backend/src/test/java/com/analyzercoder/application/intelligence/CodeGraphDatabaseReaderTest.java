@@ -41,8 +41,7 @@ class CodeGraphDatabaseReaderTest {
                           ('focus','charge','Gateway::charge','method','src/Gateway.java',4,9),
                           ('caller','checkout','Checkout::checkout','method','src/Checkout.java',12,20)
                         """);
-                statement.execute(
-                        "INSERT INTO edges VALUES (1,'caller','focus','calls',16)");
+                statement.execute("INSERT INTO edges VALUES (1,'caller','focus','calls',16)");
             }
         }
 

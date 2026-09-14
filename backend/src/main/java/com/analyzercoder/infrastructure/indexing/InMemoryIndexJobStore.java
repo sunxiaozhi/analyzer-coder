@@ -5,13 +5,13 @@ import com.analyzercoder.domain.indexing.IndexJobId;
 import com.analyzercoder.domain.indexing.IndexJobStatus;
 import com.analyzercoder.domain.indexing.IndexJobStore;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.time.Instant;
 
 /** 提供索引任务的存储实现，并负责领域对象与持久化数据之间的转换。 */
 public class InMemoryIndexJobStore implements IndexJobStore {
@@ -100,7 +100,8 @@ public class InMemoryIndexJobStore implements IndexJobStore {
                                 job.start(initialStep)
                                         .withTimeout(
                                                 Instant.now()
-                                                        .plusSeconds(Math.max(1, timeoutSeconds)))));
+                                                        .plusSeconds(
+                                                                Math.max(1, timeoutSeconds)))));
         return queued.map(job -> findById(job.id()).orElseThrow());
     }
 
@@ -113,8 +114,7 @@ public class InMemoryIndexJobStore implements IndexJobStore {
     }
 
     @Override
-    public synchronized int expireTimedOut(
-            com.analyzercoder.domain.indexing.IndexJobType type) {
+    public synchronized int expireTimedOut(com.analyzercoder.domain.indexing.IndexJobType type) {
         int[] count = {0};
         indexJobs.replaceAll(
                 (id, job) -> {
@@ -125,19 +125,14 @@ public class InMemoryIndexJobStore implements IndexJobStore {
                             && job.timeoutAt().isBefore(Instant.now())) {
                         count[0]++;
                         String failureCode =
-                                type
-                                                == com.analyzercoder.domain.indexing.IndexJobType
-                                                        .CODEGRAPH
+                                type == com.analyzercoder.domain.indexing.IndexJobType.CODEGRAPH
                                         ? "CODEGRAPH_TIMEOUT"
                                         : "KNOWLEDGE_DRIFT_TIMEOUT";
                         String errorMessage =
-                                type
-                                                == com.analyzercoder.domain.indexing.IndexJobType
-                                                        .CODEGRAPH
+                                type == com.analyzercoder.domain.indexing.IndexJobType.CODEGRAPH
                                         ? "CodeGraph 后台任务超过固定执行时限"
                                         : "知识失效检查超过固定执行时限";
-                        return job.fail(
-                                "timed_out", failureCode, errorMessage);
+                        return job.fail("timed_out", failureCode, errorMessage);
                     }
                     return job;
                 });

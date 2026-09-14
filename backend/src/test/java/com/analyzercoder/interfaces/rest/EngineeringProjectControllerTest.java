@@ -23,7 +23,12 @@ class EngineeringProjectControllerTest {
         HttpServletRequest request = mock(HttpServletRequest.class);
         AuthenticatedAccount actor =
                 new AuthenticatedAccount(
-                        UUID.randomUUID(), "manager", "Manager", AccountRole.NORMAL, false, Instant.now());
+                        UUID.randomUUID(),
+                        "manager",
+                        "Manager",
+                        AccountRole.NORMAL,
+                        false,
+                        Instant.now());
         when(request.getAttribute(SecurityContext.SESSION_ATTRIBUTE))
                 .thenReturn(new AuthenticatedSession("token", "csrf", actor));
         when(request.getRemoteAddr()).thenReturn("127.0.0.1");

@@ -1,10 +1,10 @@
 package com.analyzercoder.interfaces.rest;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.application.knowledge.KnowledgeDriftService;
@@ -53,8 +53,7 @@ class KnowledgeDriftControllerTest {
         UUID repositoryId = UUID.randomUUID();
         UUID cardId = UUID.randomUUID();
         var body =
-                new KnowledgeDriftController.SourceReviewRequest(
-                        "CONFIRM_CURRENT", 4, "已核对当前实现");
+                new KnowledgeDriftController.SourceReviewRequest("CONFIRM_CURRENT", 4, "已核对当前实现");
 
         controller.latest(repositoryId, cardId, request);
         controller.review(repositoryId, cardId, body, request);

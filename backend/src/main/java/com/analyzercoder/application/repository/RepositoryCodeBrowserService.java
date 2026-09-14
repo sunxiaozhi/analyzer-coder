@@ -56,10 +56,10 @@ public class RepositoryCodeBrowserService {
     }
 
     public FileContent read(CodeRepositoryId repositoryId, String requestedPath) {
-        return read(published(repositoryId),requestedPath);
+        return read(published(repositoryId), requestedPath);
     }
 
-    public FileContent read(CodeRepository repository,String requestedPath) {
+    public FileContent read(CodeRepository repository, String requestedPath) {
         Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
         Path file = resolve(root, requestedPath);
         try {
@@ -94,10 +94,10 @@ public class RepositoryCodeBrowserService {
 
     /** 读取 README 引用的图片资源；仅允许受控图片类型并复用快照路径越界校验。 */
     public BinaryContent readImage(CodeRepositoryId repositoryId, String requestedPath) {
-        return readImage(published(repositoryId),requestedPath);
+        return readImage(published(repositoryId), requestedPath);
     }
 
-    public BinaryContent readImage(CodeRepository repository,String requestedPath) {
+    public BinaryContent readImage(CodeRepository repository, String requestedPath) {
         Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
         Path file = resolve(root, requestedPath);
         try {

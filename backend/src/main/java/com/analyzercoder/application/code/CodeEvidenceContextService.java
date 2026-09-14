@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
@@ -38,17 +39,28 @@ public class CodeEvidenceContextService {
                 repositories
                         .findById(repositoryId)
                         .orElseThrow(() -> new IllegalArgumentException("代码仓库不存在"));
+        return context(repository, filePath, symbol, includeDraftKnowledge, null);
+    }
+
+    public CodeEvidenceContext context(
+            CodeRepository repository,
+            String filePath,
+            String symbol,
+            boolean includeDraftKnowledge,
+            Set<UUID> applicableCardIds) {
+        CodeRepositoryId repositoryId = repository.id();
         String normalizedPath = normalizeFilePath(filePath);
         String normalizedSymbol = symbol == null || symbol.isBlank() ? null : symbol.trim();
         List<KnowledgeReference> knowledge =
                 intelligence.cards(repositoryId.value(), includeDraftKnowledge).stream()
+                        .filter(
+                                card ->
+                                        applicableCardIds == null
+                                                || applicableCardIds.contains(card.id()))
                         .map(
                                 card ->
                                         knowledgeReference(
-                                                repository,
-                                                card,
-                                                normalizedPath,
-                                                normalizedSymbol))
+                                                repository, card, normalizedPath, normalizedSymbol))
                         .filter(Objects::nonNull)
                         .sorted(
                                 Comparator.comparing(KnowledgeReference::trusted)
@@ -81,7 +93,10 @@ public class CodeEvidenceContextService {
             String symbol) {
         List<CodeBinding> bindings =
                 card.codeReferences().stream()
-                        .filter(reference -> filePath.equals(normalizeNullablePath(reference.filePath())))
+                        .filter(
+                                reference ->
+                                        filePath.equals(
+                                                normalizeNullablePath(reference.filePath())))
                         .map(
                                 reference ->
                                         new CodeBinding(
@@ -101,21 +116,22 @@ public class CodeEvidenceContextService {
         LinkedHashSet<ApplicabilityReason> applicability = new LinkedHashSet<>();
         if (!bindings.isEmpty()) {
             applicability.add(
-                    new ApplicabilityReason(
-                            "DIRECT_BINDING", filePath, "知识修订直接绑定到该文件的代码片段"));
+                    new ApplicabilityReason("DIRECT_BINDING", filePath, "知识修订直接绑定到该文件的代码片段"));
         }
-        card.scope().pathPatterns().forEach(
-                rule -> {
-                    try {
-                        if (globMatcher.matches(rule, filePath)) {
-                            applicability.add(
-                                    new ApplicabilityReason(
-                                            "PATH_SCOPE", rule, "文件路径命中知识卡片的适用范围"));
-                        }
-                    } catch (IllegalArgumentException ignored) {
-                        // 无效的旧范围规则不能扩大适用结论；知识治理页负责修正该规则。
-                    }
-                });
+        card.scope()
+                .pathPatterns()
+                .forEach(
+                        rule -> {
+                            try {
+                                if (globMatcher.matches(rule, filePath)) {
+                                    applicability.add(
+                                            new ApplicabilityReason(
+                                                    "PATH_SCOPE", rule, "文件路径命中知识卡片的适用范围"));
+                                }
+                            } catch (IllegalArgumentException ignored) {
+                                // 无效的旧范围规则不能扩大适用结论；知识治理页负责修正该规则。
+                            }
+                        });
         if (symbol != null) {
             card.scope().symbols().stream()
                     .filter(symbol::equals)
@@ -123,9 +139,7 @@ public class CodeEvidenceContextService {
                             rule ->
                                     applicability.add(
                                             new ApplicabilityReason(
-                                                    "SYMBOL_SCOPE",
-                                                    rule,
-                                                    "当前符号与知识卡片的适用符号精确一致")));
+                                                    "SYMBOL_SCOPE", rule, "当前符号与知识卡片的适用符号精确一致")));
         }
         if (card.scope().repositoryIds().contains(repository.id().value())) {
             applicability.add(

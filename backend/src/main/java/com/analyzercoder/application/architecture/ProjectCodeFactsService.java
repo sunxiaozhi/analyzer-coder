@@ -26,9 +26,24 @@ public class ProjectCodeFactsService {
     private static final int MAX_MANIFEST_BYTES = 512_000;
     private static final Set<String> SOURCE_LANGUAGES =
             Set.of(
-                    "java", "kotlin", "typescript", "tsx", "javascript", "jsx", "vue",
-                    "python", "go", "rust", "c", "cpp", "csharp", "php", "ruby", "sql",
-                    "shell", "batch");
+                    "java",
+                    "kotlin",
+                    "typescript",
+                    "tsx",
+                    "javascript",
+                    "jsx",
+                    "vue",
+                    "python",
+                    "go",
+                    "rust",
+                    "c",
+                    "cpp",
+                    "csharp",
+                    "php",
+                    "ruby",
+                    "sql",
+                    "shell",
+                    "batch");
 
     private final RepositoryCodeBrowserService browser;
     private final ProjectArchitectureMapService architecture;
@@ -67,9 +82,7 @@ public class ProjectCodeFactsService {
             ObjectMapper json,
             Instant generatedAt) {
         List<RepositoryCodeBrowserService.FileEntry> codeFiles =
-                snapshot.files().stream()
-                        .filter(ProjectCodeFactsService::isCodeFile)
-                        .toList();
+                snapshot.files().stream().filter(ProjectCodeFactsService::isCodeFile).toList();
         List<CodeTypeCount> codeTypes = codeTypes(codeFiles);
         List<FileCategory> categories = categories(codeFiles);
         List<TechnologyFact> technologies = technologies(snapshot.files(), contentReader, json);
@@ -127,7 +140,9 @@ public class ProjectCodeFactsService {
             CategoryRule rule = category(file.path());
             values.computeIfAbsent(
                             rule.key(),
-                            ignored -> new CategoryAccumulator(rule.key(), rule.label(), rule.detail()))
+                            ignored ->
+                                    new CategoryAccumulator(
+                                            rule.key(), rule.label(), rule.detail()))
                     .add(file.path());
         }
         return values.values().stream()
@@ -142,8 +157,7 @@ public class ProjectCodeFactsService {
     private static CategoryRule category(String path) {
         String value = normalized(path);
         String name = fileName(value);
-        if (isTest(value, name))
-            return new CategoryRule("TEST", "测试代码", "单元、集成和端到端测试");
+        if (isTest(value, name)) return new CategoryRule("TEST", "测试代码", "单元、集成和端到端测试");
         if (matches(value, "/controller/", "/controllers/", "/api/", "/interfaces/rest/")
                 || name.endsWith("controller.java")
                 || name.endsWith("resource.java")
@@ -233,10 +247,20 @@ public class ProjectCodeFactsService {
 
     private static boolean isManifest(String name, String path) {
         return Set.of(
-                        "package.json", "pom.xml", "build.gradle", "build.gradle.kts", "go.mod",
-                        "cargo.toml", "requirements.txt", "pyproject.toml", "dockerfile",
-                        "compose.yml", "compose.yaml", "docker-compose.yml", "docker-compose.yaml")
-                .contains(name)
+                                "package.json",
+                                "pom.xml",
+                                "build.gradle",
+                                "build.gradle.kts",
+                                "go.mod",
+                                "cargo.toml",
+                                "requirements.txt",
+                                "pyproject.toml",
+                                "dockerfile",
+                                "compose.yml",
+                                "compose.yaml",
+                                "docker-compose.yml",
+                                "docker-compose.yaml")
+                        .contains(name)
                 || name.endsWith(".csproj")
                 || path.endsWith("/vite.config.ts")
                 || path.endsWith("/vite.config.js");
@@ -251,8 +275,22 @@ public class ProjectCodeFactsService {
         String lower = content.toLowerCase(Locale.ROOT);
         if ("package.json".equals(name)) inspectPackageJson(facts, path, content, lower, json);
         if ("pom.xml".equals(name) || name.startsWith("build.gradle")) {
-            addTechnology(facts, "Maven", "BUILD", "HIGH", "Maven 构建清单", List.of(path), "pom.xml".equals(name));
-            addTechnology(facts, "Gradle", "BUILD", "HIGH", "Gradle 构建清单", List.of(path), name.startsWith("build.gradle"));
+            addTechnology(
+                    facts,
+                    "Maven",
+                    "BUILD",
+                    "HIGH",
+                    "Maven 构建清单",
+                    List.of(path),
+                    "pom.xml".equals(name));
+            addTechnology(
+                    facts,
+                    "Gradle",
+                    "BUILD",
+                    "HIGH",
+                    "Gradle 构建清单",
+                    List.of(path),
+                    name.startsWith("build.gradle"));
             detect(facts, lower, "spring-boot", "Spring Boot", "FRAMEWORK", path);
             detect(facts, lower, "spring-security", "Spring Security", "FRAMEWORK", path);
             detect(facts, lower, "spring-cloud", "Spring Cloud", "FRAMEWORK", path);
@@ -267,11 +305,46 @@ public class ProjectCodeFactsService {
             detect(facts, lower, "flask", "Flask", "FRAMEWORK", path);
             detect(facts, lower, "sqlalchemy", "SQLAlchemy", "DATA", path);
         }
-        addTechnology(facts, "Go Modules", "BUILD", "HIGH", "Go 模块清单", List.of(path), "go.mod".equals(name));
-        addTechnology(facts, "Cargo", "BUILD", "HIGH", "Rust 包清单", List.of(path), "cargo.toml".equals(name));
-        addTechnology(facts, ".NET", "FRAMEWORK", "HIGH", ".NET 项目清单", List.of(path), name.endsWith(".csproj"));
-        addTechnology(facts, "Vite", "BUILD", "HIGH", "Vite 配置文件", List.of(path), name.startsWith("vite.config"));
-        addTechnology(facts, "Docker", "INFRASTRUCTURE", "HIGH", "容器构建或编排文件", List.of(path), name.contains("docker") || name.startsWith("compose."));
+        addTechnology(
+                facts,
+                "Go Modules",
+                "BUILD",
+                "HIGH",
+                "Go 模块清单",
+                List.of(path),
+                "go.mod".equals(name));
+        addTechnology(
+                facts,
+                "Cargo",
+                "BUILD",
+                "HIGH",
+                "Rust 包清单",
+                List.of(path),
+                "cargo.toml".equals(name));
+        addTechnology(
+                facts,
+                ".NET",
+                "FRAMEWORK",
+                "HIGH",
+                ".NET 项目清单",
+                List.of(path),
+                name.endsWith(".csproj"));
+        addTechnology(
+                facts,
+                "Vite",
+                "BUILD",
+                "HIGH",
+                "Vite 配置文件",
+                List.of(path),
+                name.startsWith("vite.config"));
+        addTechnology(
+                facts,
+                "Docker",
+                "INFRASTRUCTURE",
+                "HIGH",
+                "容器构建或编排文件",
+                List.of(path),
+                name.contains("docker") || name.startsWith("compose."));
     }
 
     private static void inspectPackageJson(
@@ -348,8 +421,7 @@ public class ProjectCodeFactsService {
         if (!condition) return;
         facts.computeIfAbsent(
                         name,
-                        ignored ->
-                                new TechnologyAccumulator(name, category, confidence, detail))
+                        ignored -> new TechnologyAccumulator(name, category, confidence, detail))
                 .addEvidence(evidence);
     }
 
@@ -380,13 +452,25 @@ public class ProjectCodeFactsService {
                                 module -> {
                                     int outgoing =
                                             dependencies.stream()
-                                                    .filter(edge -> edge.source().equals(module.id()))
-                                                    .mapToInt(ProjectArchitectureMapService.ArchitectureEdge::weight)
+                                                    .filter(
+                                                            edge ->
+                                                                    edge.source()
+                                                                            .equals(module.id()))
+                                                    .mapToInt(
+                                                            ProjectArchitectureMapService
+                                                                            .ArchitectureEdge
+                                                                    ::weight)
                                                     .sum();
                                     int incoming =
                                             dependencies.stream()
-                                                    .filter(edge -> edge.target().equals(module.id()))
-                                                    .mapToInt(ProjectArchitectureMapService.ArchitectureEdge::weight)
+                                                    .filter(
+                                                            edge ->
+                                                                    edge.target()
+                                                                            .equals(module.id()))
+                                                    .mapToInt(
+                                                            ProjectArchitectureMapService
+                                                                            .ArchitectureEdge
+                                                                    ::weight)
                                                     .sum();
                                     return new ModuleHotspot(
                                             module.id(),
@@ -426,7 +510,10 @@ public class ProjectCodeFactsService {
             GraphFacts graph) {
         List<ProjectSuggestion> result = new ArrayList<>();
         FileCategory tests =
-                categories.stream().filter(value -> "TEST".equals(value.key())).findFirst().orElse(null);
+                categories.stream()
+                        .filter(value -> "TEST".equals(value.key()))
+                        .findFirst()
+                        .orElse(null);
         long testCount = tests == null ? 0 : tests.count();
         if (testCount == 0 && !codeFiles.isEmpty()) {
             result.add(
@@ -454,7 +541,11 @@ public class ProjectCodeFactsService {
                             "GRAPH",
                             "构建当前快照的 CodeGraph",
                             "当前没有已发布的符号图谱，无法可靠查看符号调用与变更影响。",
-                            List.of("snapshot:" + (architecture == null ? "unknown" : architecture.snapshotId()))));
+                            List.of(
+                                    "snapshot:"
+                                            + (architecture == null
+                                                    ? "unknown"
+                                                    : architecture.snapshotId()))));
         }
         if (graph.partial()) {
             result.add(
@@ -462,7 +553,11 @@ public class ProjectCodeFactsService {
                             "MEDIUM",
                             "COVERAGE",
                             "扩大静态依赖扫描覆盖",
-                            "仅分析 " + graph.analyzedCodeFiles() + "/" + graph.totalCodeFiles() + " 个代码文件；总览中的模块关系并不完整。",
+                            "仅分析 "
+                                    + graph.analyzedCodeFiles()
+                                    + "/"
+                                    + graph.totalCodeFiles()
+                                    + " 个代码文件；总览中的模块关系并不完整。",
                             architecture.coverage().notes()));
         }
         if (architecture != null) {
@@ -478,22 +573,24 @@ public class ProjectCodeFactsService {
                                             risk.modules()))
                     .forEach(result::add);
         }
-        graph.hotspots().stream().findFirst().ifPresent(
-                hotspot -> {
-                    if (hotspot.relationWeight() >= 8) {
-                        result.add(
-                                new ProjectSuggestion(
-                                        "MEDIUM",
-                                        "MAINTAINABILITY",
-                                        "优先梳理图谱热点模块 " + hotspot.module(),
-                                        "该模块累计 "
-                                                + hotspot.relationWeight()
-                                                + " 次静态依赖关系、"
-                                                + hotspot.codeFiles()
-                                                + " 个代码文件；改动前先确认上下游边界。",
-                                        List.of(hotspot.module())));
-                    }
-                });
+        graph.hotspots().stream()
+                .findFirst()
+                .ifPresent(
+                        hotspot -> {
+                            if (hotspot.relationWeight() >= 8) {
+                                result.add(
+                                        new ProjectSuggestion(
+                                                "MEDIUM",
+                                                "MAINTAINABILITY",
+                                                "优先梳理图谱热点模块 " + hotspot.module(),
+                                                "该模块累计 "
+                                                        + hotspot.relationWeight()
+                                                        + " 次静态依赖关系、"
+                                                        + hotspot.codeFiles()
+                                                        + " 个代码文件；改动前先确认上下游边界。",
+                                                List.of(hotspot.module())));
+                            }
+                        });
         boolean hasBuild =
                 technologies.stream()
                         .anyMatch(value -> Set.of("BUILD", "RUNTIME").contains(value.category()));
@@ -504,7 +601,10 @@ public class ProjectCodeFactsService {
                             "ONBOARDING",
                             "补充机器可读的构建入口",
                             "未识别到常见构建或包管理清单。建议提供可自动验证的构建脚本或容器入口。",
-                            codeFiles.stream().limit(2).map(RepositoryCodeBrowserService.FileEntry::path).toList()));
+                            codeFiles.stream()
+                                    .limit(2)
+                                    .map(RepositoryCodeBrowserService.FileEntry::path)
+                                    .toList()));
         }
         return result.stream().limit(8).toList();
     }
@@ -535,10 +635,15 @@ public class ProjectCodeFactsService {
                         .anyMatch(
                                 name ->
                                         Set.of(
-                                                        "Spring Boot", "Django", "FastAPI", "Flask",
-                                                        ".NET", "Go")
+                                                        "Spring Boot",
+                                                        "Django",
+                                                        "FastAPI",
+                                                        "Flask",
+                                                        ".NET",
+                                                        "Go")
                                                 .contains(name));
-        boolean frontend = names.stream().anyMatch(name -> Set.of("Vue", "React", "Angular").contains(name));
+        boolean frontend =
+                names.stream().anyMatch(name -> Set.of("Vue", "React", "Angular").contains(name));
         if (backend && frontend) return "前后端分离 Web 应用";
         if (backend) return "后端服务";
         if (frontend) return "前端应用";
@@ -661,7 +766,11 @@ public class ProjectCodeFactsService {
 
         private TechnologyFact view() {
             return new TechnologyFact(
-                    name, category, confidence, detail, evidence.stream().limit(MAX_EVIDENCE_PATHS).toList());
+                    name,
+                    category,
+                    confidence,
+                    detail,
+                    evidence.stream().limit(MAX_EVIDENCE_PATHS).toList());
         }
     }
 
@@ -705,7 +814,11 @@ public class ProjectCodeFactsService {
             boolean partial) {}
 
     public record ModuleHotspot(
-            String module, long codeFiles, int incomingWeight, int outgoingWeight, int relationWeight) {}
+            String module,
+            long codeFiles,
+            int incomingWeight,
+            int outgoingWeight,
+            int relationWeight) {}
 
     public record ProjectSuggestion(
             String severity, String category, String title, String detail, List<String> evidence) {}

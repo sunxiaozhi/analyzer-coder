@@ -1,5 +1,6 @@
 package com.analyzercoder.interfaces.rest;
 
+import com.analyzercoder.application.branch.BranchKnowledgeService;
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.security.AccessControlService;
@@ -33,6 +34,9 @@ public class IntelligenceController {
 
     @org.springframework.beans.factory.annotation.Autowired
     private BranchRequestContext branchContexts;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private BranchKnowledgeService branchKnowledge;
 
     public IntelligenceController(IntelligenceService service, AccessControlService access) {
         this.service = service;
@@ -104,7 +108,10 @@ public class IntelligenceController {
             @RequestParam(defaultValue = "0") int offset,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
-        return service.history(repoId, account.id(), limit, offset);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.history(repoId, account.id(), limit, offset)
+                : service.history(repoId, account.id(), limit, offset, context);
     }
 
     @GetMapping("/repositories/{repoId}/qa/records/{conversationId}")
@@ -113,7 +120,10 @@ public class IntelligenceController {
             @PathVariable UUID conversationId,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
-        return service.historyDetail(repoId, account.id(), conversationId);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.historyDetail(repoId, account.id(), conversationId)
+                : service.historyDetail(repoId, account.id(), conversationId, context);
     }
 
     @PatchMapping("/repositories/{repoId}/qa/records/{conversationId}")
@@ -123,7 +133,11 @@ public class IntelligenceController {
             @RequestBody HistoryTitle body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
-        return service.renameHistory(repoId, account.id(), conversationId, body.title());
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.renameHistory(repoId, account.id(), conversationId, body.title())
+                : service.renameHistory(
+                        repoId, account.id(), conversationId, body.title(), context);
     }
 
     @DeleteMapping("/repositories/{repoId}/qa/records/{conversationId}")
@@ -133,14 +147,19 @@ public class IntelligenceController {
             @PathVariable UUID conversationId,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.READ);
-        service.deleteHistory(repoId, account.id(), conversationId);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        if (context == null) service.deleteHistory(repoId, account.id(), conversationId);
+        else service.deleteHistory(repoId, account.id(), conversationId, context);
     }
 
     @GetMapping("/repositories/{repoId}/chunks/{chunkId}/graph-target")
     public IntelligenceService.GraphTarget graphTarget(
             @PathVariable UUID repoId, @PathVariable UUID chunkId, HttpServletRequest request) {
         require(request, repoId, RepositoryPermission.READ);
-        return service.graphTarget(repoId, chunkId);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.graphTarget(repoId, chunkId)
+                : service.graphTarget(repoId, chunkId, context.snapshotId());
     }
 
     @GetMapping("/repositories/{repoId}/graph")
@@ -161,7 +180,11 @@ public class IntelligenceController {
         boolean includeDraft =
                 access.canAccess(
                         account, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
-        return service.cards(repoId, includeDraft);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        List<IntelligenceService.KnowledgeCard> cards = service.cards(repoId, includeDraft);
+        if (context == null || branchKnowledge == null) return cards;
+        var applicable = branchKnowledge.applicable(repoId, context.branchId());
+        return cards.stream().filter(card -> applicable.contains(card.id())).toList();
     }
 
     @PostMapping("/repositories/{repoId}/knowledge")
@@ -170,7 +193,11 @@ public class IntelligenceController {
             @Valid @RequestBody IntelligenceService.CardInput body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.MAINTAIN);
-        return service.createCard(repoId, account.id(), body);
+        IntelligenceService.KnowledgeCard card = service.createCard(repoId, account.id(), body);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        if (context != null && branchKnowledge != null)
+            branchKnowledge.bindCreated(repoId, card.id(), context.branchId());
+        return card;
     }
 
     @PutMapping("/repositories/{repoId}/knowledge/{cardId}")

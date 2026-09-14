@@ -12,7 +12,8 @@ import org.springframework.stereotype.Service;
 /** 编排索引任务相关应用流程，协调领域对象、权限校验与基础设施端口。 */
 @Service
 public class IndexJobService implements IndexJobUseCase {
-    @org.springframework.beans.factory.annotation.Autowired private com.analyzercoder.application.branch.BranchGraphTasks branchTasks;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.analyzercoder.application.branch.BranchGraphTasks branchTasks;
 
     private final CodeRepositoryStore repositoryStore;
     private final IndexJobStore indexJobStore;
@@ -87,7 +88,8 @@ public class IndexJobService implements IndexJobUseCase {
     @Override
     public synchronized IndexJob retry(IndexJobId indexJobId) {
         IndexJob failedJob = get(indexJobId);
-        if(branchTasks!=null && branchTasks.target(indexJobId.value()).isPresent()) return branchTasks.retry(failedJob);
+        if (branchTasks != null && branchTasks.target(indexJobId.value()).isPresent())
+            return branchTasks.retry(failedJob);
         IndexJob activeJob = findActiveJob(failedJob.repositoryId());
         if (activeJob != null) {
             return activeJob;

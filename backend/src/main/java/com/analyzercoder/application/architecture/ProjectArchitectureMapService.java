@@ -39,9 +39,7 @@ public class ProjectArchitectureMapService {
     private static final Pattern JAVA_IMPORT =
             Pattern.compile("(?m)^\\s*import\\s+(?:static\\s+)?([\\w.*]+)\\s*;");
     private static final Pattern SCRIPT_IMPORT =
-            Pattern.compile(
-                    "(?:from\\s*|import\\s*\\(|require\\s*\\()"
-                            + "['\"]([^'\"]+)['\"]");
+            Pattern.compile("(?:from\\s*|import\\s*\\(|require\\s*\\()" + "['\"]([^'\"]+)['\"]");
     private static final Pattern PYTHON_IMPORT =
             Pattern.compile("(?m)^\\s*(?:from|import)\\s+([\\w.]+)");
     private static final Set<String> LAYERS =
@@ -83,12 +81,12 @@ public class ProjectArchitectureMapService {
                 .removeIf(key -> key.startsWith(repositoryPrefix) && !key.equals(cacheKey));
         return snapshotCache.computeIfAbsent(
                 cacheKey,
-                        ignored ->
-                                analyze(
-                                        repositoryId,
-                                        snapshot,
-                                        path -> readSnapshotContent(repositoryId, snapshot, path),
-                                        Instant.now()));
+                ignored ->
+                        analyze(
+                                repositoryId,
+                                snapshot,
+                                path -> readSnapshotContent(repositoryId, snapshot, path),
+                                Instant.now()));
     }
 
     private String readSnapshotContent(
@@ -97,8 +95,7 @@ public class ProjectArchitectureMapService {
             String path) {
         RepositoryCodeBrowserService.FileContent file = browser.read(repositoryId, path);
         if (!snapshot.snapshotId().equals(file.snapshotId())) {
-            throw new ArchitectureSnapshotChangedException(
-                    "架构分析期间仓库快照已切换，请基于新快照重试");
+            throw new ArchitectureSnapshotChangedException("架构分析期间仓库快照已切换，请基于新快照重试");
         }
         return file.content();
     }
@@ -159,7 +156,6 @@ public class ProjectArchitectureMapService {
             }
         }
 
-
         Map<String, ModuleAccumulator> modules = new LinkedHashMap<>();
         for (RepositoryCodeBrowserService.FileEntry file : codeFiles) {
             String module = moduleOf(file.path());
@@ -213,8 +209,7 @@ public class ProjectArchitectureMapService {
         List<ArchitectureEdge> edges = new ArrayList<>();
         for (String module : modules.keySet().stream().sorted().toList()) {
             edges.add(
-                    new ArchitectureEdge(
-                            "$project", module, "CONTAINS", 1, List.of(), List.of()));
+                    new ArchitectureEdge("$project", module, "CONTAINS", 1, List.of(), List.of()));
         }
         dependencies.entrySet().stream()
                 .sorted(
@@ -252,9 +247,7 @@ public class ProjectArchitectureMapService {
         notes.add("反射、动态主机和运行时装配关系可能无法识别");
         if (skippedLarge + skippedByLimit + unreadable > 0) {
             notes.add(
-                    "有 "
-                            + (skippedLarge + skippedByLimit + unreadable)
-                            + " 个文件因大小、数量或编码限制未参与依赖分析");
+                    "有 " + (skippedLarge + skippedByLimit + unreadable) + " 个文件因大小、数量或编码限制未参与依赖分析");
         }
         if (runtimeUnreadable > 0) {
             notes.add(runtimeUnreadable + " 个运行依赖候选文件无法读取");
@@ -276,10 +269,10 @@ public class ProjectArchitectureMapService {
                         contents.size() < codeFiles.size(),
                         notes));
     }
+
     private static RuntimeGraph runtimeGraph(
             Map<String, String> runtimeContents, Set<String> moduleIds, String snapshotId) {
-        Map<String, RuntimeDependencyDetector.DetectedResource> resources =
-                new LinkedHashMap<>();
+        Map<String, RuntimeDependencyDetector.DetectedResource> resources = new LinkedHashMap<>();
         Map<EdgeKey, EdgeAccumulator> links = new LinkedHashMap<>();
         Map<String, ArchitectureRisk> risks = new LinkedHashMap<>();
         for (Map.Entry<String, String> source : runtimeContents.entrySet()) {
@@ -292,10 +285,7 @@ public class ProjectArchitectureMapService {
                         .add(
                                 source.getKey(),
                                 evidenceSample(
-                                        source.getKey(),
-                                        null,
-                                        snapshotId,
-                                        source.getValue()));
+                                        source.getKey(), null, snapshotId, source.getValue()));
 
                 if (resource.insecure()) {
                     String riskId = "transport:" + sourceModule + ":" + resource.id();
@@ -321,10 +311,7 @@ public class ProjectArchitectureMapService {
                                     "HIGH",
                                     "BOUNDARY",
                                     "领域层直接耦合运行基础设施",
-                                    sourceModule
-                                            + " 直接引用 "
-                                            + resource.label()
-                                            + "，建议通过领域端口隔离。",
+                                    sourceModule + " 直接引用 " + resource.label() + "，建议通过领域端口隔离。",
                                     List.of(sourceModule, resource.id())));
                 }
             }
@@ -374,8 +361,7 @@ public class ProjectArchitectureMapService {
         return moduleIds.contains(module) ? module : "$project";
     }
 
-    private static String resourceLabel(
-            RuntimeDependencyDetector.DetectedResource resource) {
+    private static String resourceLabel(RuntimeDependencyDetector.DetectedResource resource) {
         return "configured".equals(resource.locator())
                 ? resource.label()
                 : resource.label() + " · " + resource.locator();
@@ -398,7 +384,6 @@ public class ProjectArchitectureMapService {
         }
     }
 
-
     private static Map<String, String> javaTypes(Map<String, String> contents) {
         Map<String, String> result = new HashMap<>();
         for (Map.Entry<String, String> entry : contents.entrySet()) {
@@ -420,7 +405,8 @@ public class ProjectArchitectureMapService {
             result.put(withoutExtension, portable);
             if (withoutExtension.endsWith("/index")) {
                 result.put(
-                        withoutExtension.substring(0, withoutExtension.length() - "/index".length()),
+                        withoutExtension.substring(
+                                0, withoutExtension.length() - "/index".length()),
                         portable);
             }
             if (portable.endsWith(".py")) {
@@ -464,9 +450,8 @@ public class ProjectArchitectureMapService {
     }
 
     private static String resolveJava(String imported, Map<String, String> javaTypes) {
-        String candidate = imported.endsWith(".*")
-                ? imported.substring(0, imported.length() - 2)
-                : imported;
+        String candidate =
+                imported.endsWith(".*") ? imported.substring(0, imported.length() - 2) : imported;
         while (candidate.contains(".")) {
             String match = javaTypes.get(candidate);
             if (match != null) return match;
@@ -496,7 +481,8 @@ public class ProjectArchitectureMapService {
         Set<String> cycleKeys = new HashSet<>();
         Map<String, Set<String>> adjacency = new HashMap<>();
         for (EdgeKey edge : dependencies) {
-            adjacency.computeIfAbsent(edge.source(), ignored -> new LinkedHashSet<>())
+            adjacency
+                    .computeIfAbsent(edge.source(), ignored -> new LinkedHashSet<>())
                     .add(edge.target());
             String sourceLayer = layerOf(edge.source());
             String targetLayer = layerOf(edge.target());
@@ -632,8 +618,7 @@ public class ProjectArchitectureMapService {
         return value.replace('\\', '/');
     }
 
-    private static String primaryLanguage(
-            List<RepositoryCodeBrowserService.FileEntry> files) {
+    private static String primaryLanguage(List<RepositoryCodeBrowserService.FileEntry> files) {
         Map<String, Long> counts = new HashMap<>();
         for (RepositoryCodeBrowserService.FileEntry file : files) {
             counts.merge(file.language(), 1L, Long::sum);
@@ -666,8 +651,14 @@ public class ProjectArchitectureMapService {
 
         private ArchitectureNode view() {
             return new ArchitectureNode(
-                    id, id.substring(id.lastIndexOf('/') + 1), id, "MODULE",
-                    files.size(), files.size(), primaryLanguage(files), null);
+                    id,
+                    id.substring(id.lastIndexOf('/') + 1),
+                    id,
+                    "MODULE",
+                    files.size(),
+                    files.size(),
+                    primaryLanguage(files),
+                    null);
         }
     }
 
@@ -721,16 +712,12 @@ public class ProjectArchitectureMapService {
             List<ArchitectureEvidenceSample> evidenceSamples) {
         public ArchitectureEdge {
             samples = samples == null ? List.of() : List.copyOf(samples);
-            evidenceSamples =
-                    evidenceSamples == null ? List.of() : List.copyOf(evidenceSamples);
+            evidenceSamples = evidenceSamples == null ? List.of() : List.copyOf(evidenceSamples);
         }
     }
 
     public record ArchitectureEvidenceSample(
-            String filePath,
-            String relatedFilePath,
-            String snapshotId,
-            String contentHash) {}
+            String filePath, String relatedFilePath, String snapshotId, String contentHash) {}
 
     public record ArchitectureRisk(
             String id,
@@ -749,8 +736,7 @@ public class ProjectArchitectureMapService {
             boolean partial,
             List<String> notes) {}
 
-    public static final class ArchitectureSnapshotChangedException
-            extends IllegalStateException {
+    public static final class ArchitectureSnapshotChangedException extends IllegalStateException {
         public ArchitectureSnapshotChangedException(String message) {
             super(message);
         }

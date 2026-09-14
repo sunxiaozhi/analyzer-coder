@@ -1,6 +1,7 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import { reactive } from 'vue';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
 import CodeAtlasView from './CodeAtlasView.vue';
 import { getCodeAtlas, type AtlasView } from '@/api/codeAtlas';
 import { getRepositoryFile } from '@/api/repositories';
@@ -11,7 +12,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/api/codeAtlas', () => ({ getCodeAtlas: vi.fn() }));
 vi.mock('@/api/repositories', () => ({ getRepositoryFile: vi.fn() }));
 const view = (repo = 'a'): AtlasView => ({ repositoryId: repo, snapshotId: 'snapshot', level: 'SYMBOL', nodes: [{ id: 'n', label: 'save', kind: 'method', filePath: 'src/a.ts', module: 'src', startLine: 1, endLine: 2, count: 1 }], edges: [], totalNodes: 1, totalEdges: 0, partial: false });
-beforeEach(() => { vi.resetAllMocks(); store.selectedRepositoryId = 'a'; });
+beforeEach(() => { vi.resetAllMocks(); setActivePinia(createPinia()); store.selectedRepositoryId = 'a'; });
 
 it('keeps view controls and search in one toolbar, with context outside the canvas', async () => {
   vi.mocked(getCodeAtlas).mockResolvedValue(view());

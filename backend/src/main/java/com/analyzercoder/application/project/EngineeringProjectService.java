@@ -79,34 +79,34 @@ public class EngineeringProjectService {
         UUID id = UUID.randomUUID();
         Instant now = Instant.now();
         mapper.insertProject(
-                id,
-                input.name(),
-                normalized(input.name()),
-                input.description(),
-                actor.id(),
-                now);
+                id, input.name(), normalized(input.name()), input.description(), actor.id(), now);
         persistTopology(id, actor.id(), input, now);
         auth.audit(
-                actor.id(), null, input.repositories().get(0).repositoryId(),
-                "ENGINEERING_PROJECT_CREATED", "SUCCESS", sourceIp);
+                actor.id(),
+                null,
+                input.repositories().get(0).repositoryId(),
+                "ENGINEERING_PROJECT_CREATED",
+                "SUCCESS",
+                sourceIp);
         return view(required(id));
     }
 
     @Transactional
     public EngineeringProject update(
-            AuthenticatedAccount actor,
-            UUID id,
-            ProjectInput requested,
-            String sourceIp) {
+            AuthenticatedAccount actor, UUID id, ProjectInput requested, String sourceIp) {
         EngineeringProjectRow existing = required(id);
         List<EngineeringProjectRepositoryRow> oldMembers = mapper.repositories(id);
         List<EngineeringContractRow> oldContracts = mapper.contracts(id);
-        requireManage(actor, oldMembers.stream().map(EngineeringProjectRepositoryRow::repositoryId).toList());
+        requireManage(
+                actor,
+                oldMembers.stream().map(EngineeringProjectRepositoryRow::repositoryId).toList());
         ValidatedProject input =
                 validate(
                         requested,
                         oldContracts.stream()
-                                .collect(Collectors.toMap(EngineeringContractRow::id, Function.identity())));
+                                .collect(
+                                        Collectors.toMap(
+                                                EngineeringContractRow::id, Function.identity())));
         requireManage(actor, input.repositories().stream().map(Member::repositoryId).toList());
         if (mapper.crossScopedKnowledgeCount(id) > 0) {
             requireStableReferencedTopology(oldMembers, oldContracts, input);
@@ -127,17 +127,17 @@ public class EngineeringProjectService {
         mapper.deleteRepositories(id);
         persistTopology(id, actor.id(), input, Instant.now());
         auth.audit(
-                actor.id(), null, input.repositories().get(0).repositoryId(),
-                "ENGINEERING_PROJECT_UPDATED", "SUCCESS", sourceIp);
+                actor.id(),
+                null,
+                input.repositories().get(0).repositoryId(),
+                "ENGINEERING_PROJECT_UPDATED",
+                "SUCCESS",
+                sourceIp);
         return view(required(id));
     }
 
     @Transactional
-    public void delete(
-            AuthenticatedAccount actor,
-            UUID id,
-            long expectedVersion,
-            String sourceIp) {
+    public void delete(AuthenticatedAccount actor, UUID id, long expectedVersion, String sourceIp) {
         EngineeringProjectRow existing = required(id);
         List<UUID> repositoryIds =
                 mapper.repositories(id).stream()
@@ -154,13 +154,18 @@ public class EngineeringProjectService {
                     "ENGINEERING_PROJECT_VERSION_CONFLICT", "工程项目已被其他操作修改，请刷新后重试");
         }
         auth.audit(
-                actor.id(), null, repositoryIds.isEmpty() ? null : repositoryIds.get(0),
-                "ENGINEERING_PROJECT_DELETED", "SUCCESS", sourceIp);
+                actor.id(),
+                null,
+                repositoryIds.isEmpty() ? null : repositoryIds.get(0),
+                "ENGINEERING_PROJECT_DELETED",
+                "SUCCESS",
+                sourceIp);
     }
 
     /** Task Review 使用；SQL 已限制源仓库及契约两端必须对创建者可见。 */
     public ReviewTopology reviewTopology(UUID targetRepositoryId, UUID actorId) {
-        List<EngineeringReviewContractRow> rows = mapper.reviewContracts(targetRepositoryId, actorId);
+        List<EngineeringReviewContractRow> rows =
+                mapper.reviewContracts(targetRepositoryId, actorId);
         Map<UUID, List<ContractBinding>> contractsByProject = new LinkedHashMap<>();
         for (EngineeringReviewContractRow row : rows) {
             boolean current =
@@ -178,9 +183,7 @@ public class EngineeringProjectService {
                                             .fingerprint());
             contractsByProject
                     .computeIfAbsent(row.projectId(), ignored -> new ArrayList<>())
-                    .add(
-                            new ContractBinding(
-                                    row.contractId(), row.targetEvidencePath(), current));
+                    .add(new ContractBinding(row.contractId(), row.targetEvidencePath(), current));
         }
         List<RepositoryBinding> repositories =
                 mapper.reviewRepositories(targetRepositoryId, actorId).stream()
@@ -255,7 +258,9 @@ public class EngineeringProjectService {
         String name = required(requested.name(), 120, "工程项目名称");
         String description = optional(requested.description(), 500, "工程项目说明");
         List<MemberInput> requestedMembers =
-                requested.repositories() == null ? List.of() : List.copyOf(requested.repositories());
+                requested.repositories() == null
+                        ? List.of()
+                        : List.copyOf(requested.repositories());
         if (requestedMembers.size() < 2 || requestedMembers.size() > MAX_MEMBERS) {
             throw new IllegalArgumentException("工程项目必须包含 2–" + MAX_MEMBERS + " 个仓库");
         }
@@ -311,10 +316,14 @@ public class EngineeringProjectService {
             }
             Evidence provider =
                     requireEvidence(
-                            contract.providerRepositoryId(), contract.providerEvidencePath(), "提供方");
+                            contract.providerRepositoryId(),
+                            contract.providerEvidencePath(),
+                            "提供方");
             Evidence consumer =
                     requireEvidence(
-                            contract.consumerRepositoryId(), contract.consumerEvidencePath(), "消费方");
+                            contract.consumerRepositoryId(),
+                            contract.consumerEvidencePath(),
+                            "消费方");
             contracts.add(
                     new ValidatedContract(
                             contractId,
@@ -326,7 +335,10 @@ public class EngineeringProjectService {
                             consumer));
         }
         return new ValidatedProject(
-                name, description == null ? "" : description, List.copyOf(members.values()), contracts);
+                name,
+                description == null ? "" : description,
+                List.copyOf(members.values()),
+                contracts);
     }
 
     private void persistTopology(
@@ -379,7 +391,8 @@ public class EngineeringProjectService {
                 oldContracts.stream().map(EngineeringContractRow::id).collect(Collectors.toSet());
         Set<UUID> afterContracts =
                 updated.contracts().stream().map(ValidatedContract::id).collect(Collectors.toSet());
-        if (!afterMembers.containsAll(beforeMembers) || !afterContracts.containsAll(beforeContracts)) {
+        if (!afterMembers.containsAll(beforeMembers)
+                || !afterContracts.containsAll(beforeContracts)) {
             throw new EngineeringProjectException(
                     "ENGINEERING_PROJECT_IN_USE",
                     "跨仓库知识正在引用当前拓扑；可以新增成员/契约或刷新证据，但不能删除或重命名既有仓库、服务和契约");
@@ -391,8 +404,7 @@ public class EngineeringProjectService {
         Evidence evidence = currentEvidence(repositoryId, path);
         if (evidence.snapshotId() == null || evidence.fingerprint() == null) {
             throw new EngineeringProjectException(
-                    "ENGINEERING_CONTRACT_EVIDENCE_NOT_FOUND",
-                    side + "契约证据路径不在当前内容索引中: " + path);
+                    "ENGINEERING_CONTRACT_EVIDENCE_NOT_FOUND", side + "契约证据路径不在当前内容索引中: " + path);
         }
         return evidence;
     }
@@ -420,9 +432,7 @@ public class EngineeringProjectService {
 
     private void requireManage(AuthenticatedAccount actor, List<UUID> repositoryIds) {
         repositoryIds.forEach(
-                id ->
-                        access.require(
-                                actor, CodeRepositoryId.of(id), RepositoryPermission.MANAGE));
+                id -> access.require(actor, CodeRepositoryId.of(id), RepositoryPermission.MANAGE));
     }
 
     private EngineeringProjectRow required(UUID id) {

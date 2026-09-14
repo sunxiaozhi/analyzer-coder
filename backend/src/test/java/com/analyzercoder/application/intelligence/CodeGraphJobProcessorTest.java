@@ -35,8 +35,7 @@ class CodeGraphJobProcessorTest {
                         });
 
         boolean processed =
-                new CodeGraphJobProcessor(jobs, codeGraph, driftTasks, 12)
-                        .processNextQueuedJob();
+                new CodeGraphJobProcessor(jobs, codeGraph, driftTasks, 12).processNextQueuedJob();
         IndexJob result = jobs.findById(queued.id()).orElseThrow();
 
         assertThat(processed).isTrue();
@@ -97,8 +96,9 @@ class CodeGraphJobProcessorTest {
                         .withTimeout(Instant.now().minusSeconds(1));
         jobs.save(running);
 
-        int expired = new CodeGraphJobProcessor(jobs, mock(CodeGraphService.class), 12)
-                .expireTimedOutJobs();
+        int expired =
+                new CodeGraphJobProcessor(jobs, mock(CodeGraphService.class), 12)
+                        .expireTimedOutJobs();
         IndexJob result = jobs.findById(running.id()).orElseThrow();
 
         assertThat(expired).isEqualTo(1);

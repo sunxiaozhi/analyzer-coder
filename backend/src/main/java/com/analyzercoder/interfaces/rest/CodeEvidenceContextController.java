@@ -20,6 +20,12 @@ public class CodeEvidenceContextController {
     private final CodeEvidenceContextService service;
     private final AccessControlService access;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private BranchRequestContext branchContexts;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.analyzercoder.application.branch.BranchKnowledgeService branchKnowledge;
+
     public CodeEvidenceContextController(
             CodeEvidenceContextService service, AccessControlService access) {
         this.service = service;
@@ -36,6 +42,15 @@ public class CodeEvidenceContextController {
         var account = SecurityContext.account(request);
         access.require(account, id, RepositoryPermission.READ);
         boolean includeDraft = access.canAccess(account, id, RepositoryPermission.MAINTAIN);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repositoryId);
+        if (context != null) {
+            return service.context(
+                    branchContexts.repository(context),
+                    filePath,
+                    symbol,
+                    includeDraft,
+                    branchKnowledge.applicable(repositoryId, context.branchId()));
+        }
         return service.context(id, filePath, symbol, includeDraft);
     }
 }

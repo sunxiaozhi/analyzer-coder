@@ -30,9 +30,21 @@ class ProjectArchitectureSymbolServiceTest {
                         repositoryId.value(), snapshotId, "backend", "domain", false, 3))
                 .thenReturn(
                         List.of(
-                                symbol("Order", "CLASS", "backend/src/main/java/acme/domain/Order.java", 3),
-                                symbol("create", "METHOD", "backend/src/main/java/acme/domain/Order.java", 12),
-                                symbol("cancel", "METHOD", "backend/src/main/java/acme/domain/Order.java", 24)));
+                                symbol(
+                                        "Order",
+                                        "CLASS",
+                                        "backend/src/main/java/acme/domain/Order.java",
+                                        3),
+                                symbol(
+                                        "create",
+                                        "METHOD",
+                                        "backend/src/main/java/acme/domain/Order.java",
+                                        12),
+                                symbol(
+                                        "cancel",
+                                        "METHOD",
+                                        "backend/src/main/java/acme/domain/Order.java",
+                                        24)));
 
         ProjectArchitectureSymbolService.ModuleSymbols result =
                 service.symbols(repositoryId, "backend/domain", 2);
@@ -44,8 +56,7 @@ class ProjectArchitectureSymbolServiceTest {
                 .containsExactly("Order", "create");
         assertThat(result.truncated()).isTrue();
         verify(chunks)
-                .findModuleSymbols(
-                        repositoryId.value(), snapshotId, "backend", "domain", false, 3);
+                .findModuleSymbols(repositoryId.value(), snapshotId, "backend", "domain", false, 3);
     }
 
     @Test
@@ -79,8 +90,7 @@ class ProjectArchitectureSymbolServiceTest {
                         2, 2, 0, 0, 0, false, List.of()));
     }
 
-    private static ModuleSymbolRow symbol(
-            String name, String kind, String path, int startLine) {
+    private static ModuleSymbolRow symbol(String name, String kind, String path, int startLine) {
         return new ModuleSymbolRow(name, kind, path, startLine, startLine + 4, "java");
     }
 }

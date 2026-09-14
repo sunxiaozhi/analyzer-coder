@@ -4,6 +4,7 @@ import type { UnifiedSearchResponse } from './intelligence';
 export interface RepositoryBranch {
   id: string; name: string; snapshotId: string | null; commitSha: string | null;
   status: 'PENDING' | 'BUILDING' | 'READY' | 'FAILED'; error: string | null; generation: number;
+  trackingStatus: 'ACTIVE' | 'ARCHIVED'; archivedAt: string | null;
 }
 export interface RemoteBranch {
   name: string;
@@ -32,6 +33,8 @@ export const branchesApi = {
   list: (repositoryId: string) => request<RepositoryBranch[]>(`${base(repositoryId)}/branches`),
   discover: (repositoryId: string) => request<RemoteBranch[]>(`${base(repositoryId)}/branches/discover`),
   track: (repositoryId: string, name: string) => request<RepositoryBranch>(`${base(repositoryId)}/branches`, { method: 'POST', body: json({ name }) }),
+  archive: (repositoryId: string, branchId: string) => request<RepositoryBranch>(`${base(repositoryId)}/branches/${branchId}/archive`, { method: 'POST' }),
+  restore: (repositoryId: string, branchId: string) => request<RepositoryBranch>(`${base(repositoryId)}/branches/${branchId}/restore`, { method: 'POST' }),
   prepare: (repositoryId: string, branchId: string) => request<BranchPreparationJob>(`${base(repositoryId)}/branches/${branchId}/prepare`, { method: 'POST' }),
   preparationJobs: (repositoryId: string) => request<BranchPreparationJob[]>(`${base(repositoryId)}/branch-preparation-jobs`),
   prepareVectors: (context: BranchContext) => request<BranchPreparationJob>(`${base(context.repositoryId)}/branch-vector-jobs`, { method: 'POST', body: json({ contextId: context.contextId, branchId: context.branchId }) }),

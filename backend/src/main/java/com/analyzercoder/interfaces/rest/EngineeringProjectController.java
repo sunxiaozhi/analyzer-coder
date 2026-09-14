@@ -37,10 +37,8 @@ public class EngineeringProjectController {
 
     @PostMapping
     public EngineeringProjectService.EngineeringProject create(
-            @RequestBody EngineeringProjectService.ProjectInput body,
-            HttpServletRequest request) {
-        return service.create(
-                SecurityContext.account(request), body, request.getRemoteAddr());
+            @RequestBody EngineeringProjectService.ProjectInput body, HttpServletRequest request) {
+        return service.create(SecurityContext.account(request), body, request.getRemoteAddr());
     }
 
     @PutMapping("/{id}")
@@ -48,15 +46,12 @@ public class EngineeringProjectController {
             @PathVariable UUID id,
             @RequestBody EngineeringProjectService.ProjectInput body,
             HttpServletRequest request) {
-        return service.update(
-                SecurityContext.account(request), id, body, request.getRemoteAddr());
+        return service.update(SecurityContext.account(request), id, body, request.getRemoteAddr());
     }
 
     @DeleteMapping("/{id}")
     public void delete(
-            @PathVariable UUID id,
-            @RequestParam long expectedVersion,
-            HttpServletRequest request) {
+            @PathVariable UUID id, @RequestParam long expectedVersion, HttpServletRequest request) {
         service.delete(
                 SecurityContext.account(request), id, expectedVersion, request.getRemoteAddr());
     }

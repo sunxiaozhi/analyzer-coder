@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus';
 import { repositoryCredentialsApi } from '@/api/repositoryCredentials';
 import type { RepositoryCredential } from '@/api/repositoryCredentials';
 import RepositoryCredentialManagerDialog from './RepositoryCredentialManagerDialog.vue';
+import type { ProjectDraft } from '@/api/projectDrafts';
 
 const repositorySourceOptions = [
   { value: 'GITLAB', label: 'GitLab' },
@@ -15,11 +16,12 @@ type RepositorySourceType = (typeof repositorySourceOptions)[number]['value'];
 const defaultRepositorySource = repositorySourceOptions[0].value;
 
 const open = defineModel<boolean>({ required: true });
-const props = withDefaults(defineProps<{ busy?: boolean }>(), { busy: false });
+const props = withDefaults(defineProps<{ busy?: boolean; initialDraft?: ProjectDraft | null }>(), { busy: false, initialDraft: null });
 const emit = defineEmits<{
   submit: [payload: {
     sourceType: RepositorySourceType;
     name: string;
+    description: string;
     path: string;
     url: string;
     branch: string;
@@ -30,6 +32,7 @@ const emit = defineEmits<{
 const form = reactive({
   sourceType: defaultRepositorySource as RepositorySourceType,
   name: '',
+  description: '',
   path: '',
   url: '',
   branch: '',
@@ -41,11 +44,25 @@ const credentials = shallowRef<RepositoryCredential[]>([]);
 const credentialsLoading = shallowRef(false);
 const validatingCredential = shallowRef(false);
 const credentialManagerOpen = shallowRef(false);
+const step = shallowRef<0 | 1>(0);
 const submitLocked = computed(() => props.busy || submitted.value);
 
 watch(open, value => {
   if (value) {
-    Object.assign(form, { sourceType: defaultRepositorySource, name: '', path: '', url: '', branch: '', credentialId: '' });
+    const draft = props.initialDraft;
+    const sourceType = repositorySourceOptions.some(item => item.value === draft?.sourceType)
+      ? draft?.sourceType as RepositorySourceType
+      : defaultRepositorySource;
+    Object.assign(form, {
+      sourceType,
+      name: draft?.name ?? '',
+      description: draft?.description ?? '',
+      path: sourceType === 'LOCAL_GIT' ? draft?.sourceLocation ?? '' : '',
+      url: sourceType === 'REMOTE_GIT' || sourceType === 'GITLAB' ? draft?.sourceLocation ?? '' : '',
+      branch: '',
+      credentialId: draft?.credentialId ?? '',
+    });
+    step.value = 0;
     file.value = null;
     submitted.value = false;
     void loadCredentials();
@@ -87,18 +104,35 @@ function submit() {
   submitted.value = true;
   emit('submit', { ...form, name: form.name.trim(), file: file.value });
 }
+function next() {
+  if (!form.name.trim()) {
+    ElMessage.warning('请先填写项目名称');
+    return;
+  }
+  step.value = 1;
+}
 </script>
 
 <template>
   <el-dialog
     v-model="open"
-    title="接入代码仓库"
+    title="接入项目"
     width="560"
     :close-on-click-modal="!submitLocked"
     :close-on-press-escape="!submitLocked"
     :show-close="!submitLocked"
   >
+    <el-steps :active="step" finish-status="success" simple class="project-steps">
+      <el-step title="项目资料" />
+      <el-step title="代码来源" />
+    </el-steps>
     <el-form label-position="top" :disabled="submitLocked">
+      <template v-if="step === 0">
+        <el-form-item label="项目名称" required><el-input v-model="form.name" maxlength="100" /></el-form-item>
+        <el-form-item label="项目说明"><el-input v-model="form.description" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="说明项目目标、边界或维护团队，可稍后继续完善" /></el-form-item>
+        <el-alert title="项目资料会先保存；代码来源验证失败时，草稿仍会保留供重新配置。" type="info" :closable="false" />
+      </template>
+      <template v-else>
       <el-form-item label="来源类型">
         <el-radio-group v-model="form.sourceType">
           <el-radio-button
@@ -110,7 +144,6 @@ function submit() {
           </el-radio-button>
         </el-radio-group>
       </el-form-item>
-      <el-form-item label="仓库名称" required><el-input v-model="form.name" maxlength="100" /></el-form-item>
       <el-form-item v-if="form.sourceType === 'LOCAL_GIT'" label="服务端本地 Git 路径" required>
         <el-input v-model="form.path" placeholder="C:\workspace\project" />
       </el-form-item>
@@ -141,11 +174,14 @@ function submit() {
           <el-button>选择 ZIP</el-button>
         </el-upload>
       </el-form-item>
+      </template>
     </el-form>
     <template #footer>
       <el-button :disabled="submitLocked" @click="open = false">取消</el-button>
-      <el-button type="primary" :loading="submitLocked" :disabled="submitLocked" @click="submit">
-        {{ submitLocked ? '验证并导入中…' : '验证并导入' }}
+      <el-button v-if="step === 1" :disabled="submitLocked" @click="step = 0">上一步</el-button>
+      <el-button v-if="step === 0" type="primary" :disabled="submitLocked" @click="next">下一步：代码来源</el-button>
+      <el-button v-else type="primary" :loading="submitLocked" :disabled="submitLocked" @click="submit">
+        {{ submitLocked ? '保存并验证中…' : '保存来源并开始验证' }}
       </el-button>
     </template>
     <RepositoryCredentialManagerDialog v-model="credentialManagerOpen" :repository-url="form.url"
@@ -156,5 +192,6 @@ function submit() {
 
 <style scoped>
 .credential-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;width:100%}
+.project-steps{margin-bottom:20px}
 @media(max-width:640px){.credential-row{grid-template-columns:1fr 1fr}.credential-row .el-select{grid-column:1/-1}}
 </style>

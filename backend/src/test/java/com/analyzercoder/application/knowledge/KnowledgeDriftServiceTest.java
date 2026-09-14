@@ -3,7 +3,6 @@ package com.analyzercoder.application.knowledge;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,8 +11,8 @@ import static org.mockito.Mockito.when;
 import com.analyzercoder.application.change.GitChangeRequest;
 import com.analyzercoder.application.change.RepositoryChange;
 import com.analyzercoder.application.change.RepositoryChangeService;
-import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.chunk.CodeChunk;
+import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
@@ -63,9 +62,15 @@ class KnowledgeDriftServiceTest {
 
     @Test
     void unrelatedCodeChangeKeepsKnowledgeCurrent() {
-        KnowledgeDriftCandidateRow candidate = candidate("{\"pathPatterns\":[\"src/payment/**\"],\"symbols\":[],\"modules\":[]}", "CURRENT");
+        KnowledgeDriftCandidateRow candidate =
+                candidate(
+                        "{\"pathPatterns\":[\"src/payment/**\"],\"symbols\":[],\"modules\":[]}",
+                        "CURRENT");
         RepositoryChange change = change("src/catalog/Product.java");
-        arrange(candidate, change, new ChangedSymbolResolver.ResolutionResult(List.of(), List.of()));
+        arrange(
+                candidate,
+                change,
+                new ChangedSymbolResolver.ResolutionResult(List.of(), List.of()));
 
         KnowledgeDriftService.InspectionReport report = service.inspect(repository);
 
@@ -78,9 +83,15 @@ class KnowledgeDriftServiceTest {
 
     @Test
     void pathScopeMatchMarksOnlyThatCardSuspectAndAuditsDiffReason() {
-        KnowledgeDriftCandidateRow candidate = candidate("{\"pathPatterns\":[\"src/payment/**\"],\"symbols\":[],\"modules\":[]}", "CURRENT");
+        KnowledgeDriftCandidateRow candidate =
+                candidate(
+                        "{\"pathPatterns\":[\"src/payment/**\"],\"symbols\":[],\"modules\":[]}",
+                        "CURRENT");
         RepositoryChange change = change("src/payment/RefundService.java");
-        arrange(candidate, change, new ChangedSymbolResolver.ResolutionResult(List.of(), List.of()));
+        arrange(
+                candidate,
+                change,
+                new ChangedSymbolResolver.ResolutionResult(List.of(), List.of()));
         when(mapper.markSuspect(repository.id().value(), candidate.id(), 4, "old-commit"))
                 .thenReturn(1);
 
@@ -100,7 +111,10 @@ class KnowledgeDriftServiceTest {
         KnowledgeDriftCandidateRow candidate = candidate(emptyScope(), "CURRENT");
         String path = "src/payment/RefundService.java";
         RepositoryChange change = change(path);
-        arrange(candidate, change, new ChangedSymbolResolver.ResolutionResult(List.of(), List.of()));
+        arrange(
+                candidate,
+                change,
+                new ChangedSymbolResolver.ResolutionResult(List.of(), List.of()));
         when(mapper.references(repository.id().value(), candidate.id(), 4))
                 .thenReturn(
                         List.of(
@@ -124,7 +138,10 @@ class KnowledgeDriftServiceTest {
         KnowledgeDriftCandidateRow candidate = candidate(emptyScope(), "CURRENT");
         String path = "src/payment/RefundService.java";
         RepositoryChange change = change(path);
-        arrange(candidate, change, new ChangedSymbolResolver.ResolutionResult(List.of(), List.of()));
+        arrange(
+                candidate,
+                change,
+                new ChangedSymbolResolver.ResolutionResult(List.of(), List.of()));
         when(mapper.references(repository.id().value(), candidate.id(), 4))
                 .thenReturn(
                         List.of(
@@ -247,8 +264,7 @@ class KnowledgeDriftServiceTest {
                 "current-commit",
                 "digest",
                 false,
-                RepositorySnapshotId.of(
-                        UUID.fromString("20000000-0000-0000-0000-000000000002")),
+                RepositorySnapshotId.of(UUID.fromString("20000000-0000-0000-0000-000000000002")),
                 path,
                 path.resolve(".codegraph"),
                 now,
@@ -259,8 +275,6 @@ class KnowledgeDriftServiceTest {
 
     private static final UUID REPOSITORY_ID =
             UUID.fromString("10000000-0000-0000-0000-000000000001");
-    private static final UUID CARD_ID =
-            UUID.fromString("40000000-0000-0000-0000-000000000004");
-    private static final UUID ACCOUNT_ID =
-            UUID.fromString("50000000-0000-0000-0000-000000000005");
+    private static final UUID CARD_ID = UUID.fromString("40000000-0000-0000-0000-000000000004");
+    private static final UUID ACCOUNT_ID = UUID.fromString("50000000-0000-0000-0000-000000000005");
 }

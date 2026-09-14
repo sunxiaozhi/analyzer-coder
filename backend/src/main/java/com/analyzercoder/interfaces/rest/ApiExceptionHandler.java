@@ -57,8 +57,7 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> knowledgeDrift(KnowledgeDriftException e) {
         HttpStatus status =
                 switch (e.code()) {
-                    case "KNOWLEDGE_CARD_NOT_FOUND", "REPOSITORY_NOT_FOUND" ->
-                            HttpStatus.NOT_FOUND;
+                    case "KNOWLEDGE_CARD_NOT_FOUND", "REPOSITORY_NOT_FOUND" -> HttpStatus.NOT_FOUND;
                     case "KNOWLEDGE_REVISION_CONFLICT", "CURRENT_SNAPSHOT_REQUIRED" ->
                             HttpStatus.CONFLICT;
                     default -> HttpStatus.BAD_REQUEST;
@@ -72,8 +71,8 @@ public class ApiExceptionHandler {
                 switch (e.code()) {
                     case "CODEGRAPH_SYMBOL_NOT_FOUND" -> HttpStatus.NOT_FOUND;
                     case "CODEGRAPH_CLI_OUTPUT_INVALID",
-                                    "CODEGRAPH_IMPACT_SCHEMA_UNSUPPORTED",
-                                    "CODEGRAPH_EXPORT_SCHEMA_UNSUPPORTED" ->
+                            "CODEGRAPH_IMPACT_SCHEMA_UNSUPPORTED",
+                            "CODEGRAPH_EXPORT_SCHEMA_UNSUPPORTED" ->
                             HttpStatus.UNPROCESSABLE_ENTITY;
                     case "CODEGRAPH_IMPACT_QUERY_FAILED", "CODEGRAPH_EXPORT_NOT_AVAILABLE" ->
                             HttpStatus.SERVICE_UNAVAILABLE;

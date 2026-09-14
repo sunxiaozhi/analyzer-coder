@@ -14,6 +14,7 @@ const props = withDefaults(defineProps<{ repositoryId: string; canMaintain: bool
   canManage: false,
   showBranchList: false,
 });
+const emit = defineEmits<{ changed: [] }>();
 const branches = shallowRef<RepositoryBranch[]>([]);
 const remoteBranches = shallowRef<RemoteBranch[]>([]);
 const selectedId = shallowRef('');
@@ -112,6 +113,33 @@ async function prepareVectors() {
   } catch (cause) { if (alive) error.value = message(cause); }
   finally { if (alive) busy.value = false; }
 }
+async function archive(branchId: string) {
+  if (!props.canManage || busy.value) return;
+  busy.value = true; error.value = '';
+  try {
+    await branchesApi.archive(props.repositoryId, branchId);
+    if (selectedId.value === branchId) {
+      selectedId.value = '';
+      context.value = null;
+      result.value = null;
+    }
+    await reload();
+    emit('changed');
+    ElMessage.success('分支已逻辑归档，历史快照和引用仍保留');
+  } catch (cause) { if (alive) error.value = message(cause); }
+  finally { if (alive) busy.value = false; }
+}
+async function restoreBranch(branchId: string) {
+  if (!props.canManage || busy.value) return;
+  busy.value = true; error.value = '';
+  try {
+    await branchesApi.restore(props.repositoryId, branchId);
+    await reload();
+    emit('changed');
+    ElMessage.success('分支已恢复跟踪');
+  } catch (cause) { if (alive) error.value = message(cause); }
+  finally { if (alive) busy.value = false; }
+}
 async function copyCoordinates() {
   if (!context.value) return;
   try {
@@ -125,7 +153,7 @@ onBeforeUnmount(() => { alive = false; ++sequence; ++searchSequence; });
 
 <template>
   <div class="branch-workspace">
-    <BranchListTable v-if="showBranchList" :branches="branches" :selected-id="selectedId" :disabled="busy" @select="select" />
+    <BranchListTable v-if="showBranchList" :branches="branches" :selected-id="selectedId" :disabled="busy" @select="select" @archive="archive" @restore="restoreBranch" />
     <div class="branch-controls">
       <GitBranch :size="18" />
       <el-select v-if="!showBranchList" :model-value="selectedId" placeholder="选择分支" filterable :disabled="busy" aria-label="查看分支" @change="select">
@@ -134,6 +162,7 @@ onBeforeUnmount(() => { alive = false; ++sequence; ++searchSequence; });
       <strong v-else>{{ selected?.name ?? '选择分支后操作' }}</strong>
       <el-button :disabled="busy" aria-label="刷新分支" @click="reload"><RefreshCw :size="15" /></el-button>
       <el-button v-if="canMaintain" :disabled="!selected || busy || preparing" :loading="busy" @click="prepare">{{ selectedJob?.status === 'FAILED' ? '重试准备' : selected?.snapshotId ? '更新分支快照' : '准备分支' }}</el-button>
+      <el-button v-if="canManage && selected?.trackingStatus === 'ACTIVE'" :disabled="busy" @click="archive(selected.id)">归档跟踪</el-button>
     </div>
     <RemoteBranchDiscoveryPanel
       v-if="canMaintain && remoteSource"

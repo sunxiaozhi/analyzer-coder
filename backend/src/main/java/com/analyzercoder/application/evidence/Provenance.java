@@ -88,10 +88,25 @@ public record Provenance(
         relationPath = relationPath == null ? List.of() : List.copyOf(relationPath);
         detail = safe(detail, "未提供来源说明");
         if (id == null) {
-            id = stableId(sourceType, repositoryId, snapshotId, commitSha, worktreeDigest,
-                    filePath, symbolName, knowledgeCardId, knowledgeRevision, graphArtifactId,
-                    relationPath, retrievalChannel, findingId, detail, engineeringProjectId,
-                    serviceName, contractId);
+            id =
+                    stableId(
+                            sourceType,
+                            repositoryId,
+                            snapshotId,
+                            commitSha,
+                            worktreeDigest,
+                            filePath,
+                            symbolName,
+                            knowledgeCardId,
+                            knowledgeRevision,
+                            graphArtifactId,
+                            relationPath,
+                            retrievalChannel,
+                            findingId,
+                            detail,
+                            engineeringProjectId,
+                            serviceName,
+                            contractId);
         }
         switch (sourceType) {
             case GIT_FACT, CODE_FACT -> requireVersion(snapshotId, commitSha, worktreeDigest);
@@ -101,8 +116,8 @@ public record Provenance(
                     throw new IllegalArgumentException("平台关系事实必须包含目标仓库");
                 }
             }
-            case VERIFIED_KNOWLEDGE -> requireKnowledge(
-                    knowledgeCardId, knowledgeRevision, knowledgeReviewStatus);
+            case VERIFIED_KNOWLEDGE ->
+                    requireKnowledge(knowledgeCardId, knowledgeRevision, knowledgeReviewStatus);
             case GRAPH_INFERENCE -> {
                 requireVersion(snapshotId, commitSha, worktreeDigest);
                 if (blank(graphArtifactId) || relationPath.isEmpty()) {
@@ -310,8 +325,7 @@ public record Provenance(
                 detail);
     }
 
-    public static Provenance modelSuggestion(
-            UUID repositoryId, String findingId, String detail) {
+    public static Provenance modelSuggestion(UUID repositoryId, String findingId, String detail) {
         return create(
                 TruthSource.MODEL_SUGGESTION,
                 repositoryId,
@@ -405,8 +419,7 @@ public record Provenance(
                 detail);
     }
 
-    private static void requireVersion(
-            UUID snapshotId, String commitSha, String worktreeDigest) {
+    private static void requireVersion(UUID snapshotId, String commitSha, String worktreeDigest) {
         if (snapshotId == null && blank(commitSha) && blank(worktreeDigest)) {
             throw new IllegalArgumentException("Git 和代码事实必须包含版本信息");
         }

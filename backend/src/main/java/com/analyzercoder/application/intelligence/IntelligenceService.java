@@ -174,15 +174,21 @@ public class IntelligenceService {
         int turnNo = 1;
         String threadTitle = title(question);
         if (requestedThreadId != null) {
-            Map<String, Object> thread = mapper.findThread(threadId, repositoryId, accountId);
+            Map<String, Object> thread =
+                    context == null
+                            ? mapper.findThread(threadId, repositoryId, accountId)
+                            : mapper.findThreadByBranch(
+                                    threadId, repositoryId, accountId, context.branchId());
             if (thread == null) {
                 throw new IllegalArgumentException("问答会话不存在");
             }
             mapper.lockThread(threadId);
             history =
-                    mapper.listThreadTurns(threadId, repositoryId, accountId).stream()
-                            .map(this::answerSnapshot)
-                            .toList();
+                    (context == null
+                                    ? mapper.listThreadTurns(threadId, repositoryId, accountId)
+                                    : mapper.listThreadTurnsByBranch(
+                                            threadId, repositoryId, accountId, context.branchId()))
+                            .stream().map(this::answerSnapshot).toList();
             if (context != null
                     && history.stream()
                             .anyMatch(turn -> !context.snapshotId().equals(turn.snapshotId())))
@@ -207,7 +213,8 @@ public class IntelligenceService {
                 history,
                 retrieval.evidence(),
                 retrieval.retrieval(),
-                modelConfigId);
+                modelConfigId,
+                context);
     }
 
     private Answer answer(
@@ -222,7 +229,8 @@ public class IntelligenceService {
             List<Answer> history,
             List<Evidence> evidence,
             RetrievalDiagnostics retrieval,
-            UUID modelConfigId) {
+            UUID modelConfigId,
+            BranchReadContext context) {
         UUID snapshotId =
                 evidence.stream()
                         .map(Evidence::snapshotId)
@@ -292,6 +300,9 @@ public class IntelligenceService {
                         threadId,
                         turnNo,
                         repositoryId,
+                        context == null ? null : context.branchId(),
+                        context == null ? null : context.branchName(),
+                        context == null ? null : context.commitSha(),
                         threadTitle,
                         question,
                         answer,
@@ -314,6 +325,10 @@ public class IntelligenceService {
                 question,
                 answer,
                 snapshotId,
+                context == null ? null : context.branchId(),
+                context == null ? null : context.contextId(),
+                context == null ? null : context.branchName(),
+                context == null ? null : context.commitSha(),
                 provider,
                 evidenceStatus,
                 fallbackReason,
@@ -323,38 +338,97 @@ public class IntelligenceService {
     }
 
     public List<HistoryRecord> history(UUID repositoryId, UUID accountId, int limit, int offset) {
+        return history(repositoryId, accountId, limit, offset, null);
+    }
+
+    public List<HistoryRecord> history(
+            UUID repositoryId, UUID accountId, int limit, int offset, BranchReadContext context) {
         int resolvedLimit = Math.max(1, Math.min(limit, 100));
         int resolvedOffset = Math.max(0, offset);
-        return mapper
-                .listConversations(repositoryId, accountId, resolvedLimit, resolvedOffset)
-                .stream()
-                .map(this::historyRecord)
-                .toList();
+        List<Map<String, Object>> rows =
+                context == null
+                        ? mapper.listConversations(
+                                repositoryId, accountId, resolvedLimit, resolvedOffset)
+                        : mapper.listConversationsByBranch(
+                                repositoryId,
+                                accountId,
+                                context.branchId(),
+                                resolvedLimit,
+                                resolvedOffset);
+        return rows.stream().map(this::historyRecord).toList();
     }
 
     public ThreadDetail historyDetail(UUID repositoryId, UUID accountId, UUID threadId) {
-        Map<String, Object> thread = mapper.findThread(threadId, repositoryId, accountId);
+        return historyDetail(repositoryId, accountId, threadId, null);
+    }
+
+    public ThreadDetail historyDetail(
+            UUID repositoryId, UUID accountId, UUID threadId, BranchReadContext context) {
+        Map<String, Object> thread =
+                context == null
+                        ? mapper.findThread(threadId, repositoryId, accountId)
+                        : mapper.findThreadByBranch(
+                                threadId, repositoryId, accountId, context.branchId());
         if (thread == null) throw new IllegalArgumentException("问答会话不存在");
         List<Answer> turns =
-                mapper.listThreadTurns(threadId, repositoryId, accountId).stream()
-                        .map(this::answerSnapshot)
-                        .toList();
-        return new ThreadDetail(threadId, repositoryId, string(thread, "title"), turns);
+                (context == null
+                                ? mapper.listThreadTurns(threadId, repositoryId, accountId)
+                                : mapper.listThreadTurnsByBranch(
+                                        threadId, repositoryId, accountId, context.branchId()))
+                        .stream().map(this::answerSnapshot).toList();
+        return new ThreadDetail(
+                threadId,
+                repositoryId,
+                uuid(thread, "branch_id"),
+                string(thread, "branch_name"),
+                string(thread, "commit_sha"),
+                string(thread, "title"),
+                turns);
     }
 
     @Transactional
     public HistoryRecord renameHistory(
             UUID repositoryId, UUID accountId, UUID threadId, String title) {
+        return renameHistory(repositoryId, accountId, threadId, title, null);
+    }
+
+    @Transactional
+    public HistoryRecord renameHistory(
+            UUID repositoryId,
+            UUID accountId,
+            UUID threadId,
+            String title,
+            BranchReadContext context) {
         String cleaned = clean(title, 1, 80, "记录标题");
-        if (mapper.renameConversation(threadId, repositoryId, accountId, cleaned) < 1) {
+        int changed =
+                context == null
+                        ? mapper.renameConversation(threadId, repositoryId, accountId, cleaned)
+                        : mapper.renameConversationByBranch(
+                                threadId, repositoryId, accountId, context.branchId(), cleaned);
+        if (changed < 1) {
             throw new IllegalArgumentException("问答会话不存在");
         }
-        return historyRecord(mapper.findThread(threadId, repositoryId, accountId));
+        return historyRecord(
+                context == null
+                        ? mapper.findThread(threadId, repositoryId, accountId)
+                        : mapper.findThreadByBranch(
+                                threadId, repositoryId, accountId, context.branchId()));
     }
 
     @Transactional
     public void deleteHistory(UUID repositoryId, UUID accountId, UUID threadId) {
-        if (mapper.deleteConversation(threadId, repositoryId, accountId) < 1) {
+        deleteHistory(repositoryId, accountId, threadId, null);
+    }
+
+    @Transactional
+    public void deleteHistory(
+            UUID repositoryId, UUID accountId, UUID threadId, BranchReadContext context) {
+        int changed =
+                context == null
+                        ? mapper.deleteConversation(threadId, repositoryId, accountId)
+                        : mapper.deleteConversationByBranch(
+                                threadId, repositoryId, accountId, context.branchId());
+        if (changed < 1) {
             throw new IllegalArgumentException("问答会话不存在");
         }
     }
@@ -667,6 +741,7 @@ public class IntelligenceService {
                     candidate.semanticScore(),
                     similarityKind(candidate.channels()),
                     candidate.channels(),
+                    string(row, "source_scope"),
                     codeReferences(repositoryId, cardId, revision));
         }
         return new Evidence(
@@ -690,6 +765,7 @@ public class IntelligenceService {
                 candidate.semanticScore(),
                 similarityKind(candidate.channels()),
                 candidate.channels(),
+                null,
                 List.of());
     }
 
@@ -718,6 +794,7 @@ public class IntelligenceService {
                             item.similarityScore(),
                             item.similarityKind(),
                             item.channels(),
+                            item.sourceScope(),
                             item.codeReferences()));
         }
         return citations;
@@ -776,7 +853,9 @@ public class IntelligenceService {
                 new StringBuilder(
                                 "你是仓库知识与代码问答助手。只能依据下面带编号的本轮证据回答；"
                                         + "历史对话只用于理解指代和用户意图，不能作为仓库事实证据；"
-                                        + "不能从本轮证据推出的内容必须明确说不知道；不要编造调用关系。")
+                                        + "不能从本轮证据推出的内容必须明确说不知道；不要编造调用关系；"
+                                        + "不同知识卡片必须视为独立来源，不得因标题或正文相同而合并；"
+                                        + "若项目共享与分支专属知识矛盾，分别陈述并标注来源差异，不自行决定优先级。")
                         .append("\n历史对话：");
         int historyStart = Math.max(0, history.size() - 4);
         for (int index = historyStart; index < history.size(); index++) {
@@ -948,7 +1027,14 @@ public class IntelligenceService {
     }
 
     public GraphTarget graphTarget(UUID repositoryId, UUID chunkId) {
-        Map<String, Object> row = mapper.findChunk(repositoryId, chunkId);
+        return graphTarget(mapper.findChunk(repositoryId, chunkId));
+    }
+
+    public GraphTarget graphTarget(UUID repositoryId, UUID chunkId, UUID snapshotId) {
+        return graphTarget(mapper.findChunkAtSnapshot(repositoryId, chunkId, snapshotId));
+    }
+
+    private GraphTarget graphTarget(Map<String, Object> row) {
         if (row == null) {
             throw new IllegalArgumentException("代码片段不存在");
         }
@@ -1329,6 +1415,9 @@ public class IntelligenceService {
                     uuid(row, "thread_id") == null ? uuid(row, "id") : uuid(row, "thread_id"),
                     integer(row, "turn_no") == null ? 1 : integer(row, "turn_no"),
                     uuid(row, "repo_id"),
+                    uuid(row, "branch_id"),
+                    string(row, "branch_name"),
+                    string(row, "commit_sha"),
                     string(row, "title"),
                     string(row, "question"),
                     string(row, "answer"),
@@ -1355,6 +1444,11 @@ public class IntelligenceService {
                     restoredThreadId,
                     restoredTurnNo,
                     restored.repositoryId(),
+                    restored.branchId() == null ? uuid(row, "branch_id") : restored.branchId(),
+                    restored.branchName() == null
+                            ? string(row, "branch_name")
+                            : restored.branchName(),
+                    restored.commitSha() == null ? string(row, "commit_sha") : restored.commitSha(),
                     restored.title(),
                     restored.question(),
                     restored.answer(),
@@ -1379,6 +1473,9 @@ public class IntelligenceService {
         return new HistoryRecord(
                 uuid(row, "thread_id") == null ? uuid(row, "id") : uuid(row, "thread_id"),
                 uuid(row, "repo_id"),
+                uuid(row, "branch_id"),
+                string(row, "branch_name"),
+                string(row, "commit_sha"),
                 string(row, "title"),
                 string(row, "question"),
                 string(row, "provider"),
@@ -1546,6 +1643,7 @@ public class IntelligenceService {
             @JsonAlias("semanticScore") double similarityScore,
             String similarityKind,
             List<String> channels,
+            String sourceScope,
             List<CodeReference> codeReferences) {}
 
     public record Citation(
@@ -1567,6 +1665,7 @@ public class IntelligenceService {
             @JsonAlias("semanticScore") double similarityScore,
             String similarityKind,
             List<String> channels,
+            String sourceScope,
             List<CodeReference> codeReferences) {}
 
     public record Answer(
@@ -1574,6 +1673,9 @@ public class IntelligenceService {
             UUID threadId,
             int turnNo,
             UUID repositoryId,
+            UUID branchId,
+            String branchName,
+            String commitSha,
             String title,
             String question,
             String answer,
@@ -1587,11 +1689,20 @@ public class IntelligenceService {
             Instant createdAt) {}
 
     public record ThreadDetail(
-            UUID threadId, UUID repositoryId, String title, List<Answer> turns) {}
+            UUID threadId,
+            UUID repositoryId,
+            UUID branchId,
+            String branchName,
+            String commitSha,
+            String title,
+            List<Answer> turns) {}
 
     public record HistoryRecord(
             UUID threadId,
             UUID repositoryId,
+            UUID branchId,
+            String branchName,
+            String commitSha,
             String title,
             String question,
             String provider,

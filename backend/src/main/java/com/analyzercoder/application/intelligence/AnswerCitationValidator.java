@@ -14,7 +14,8 @@ public class AnswerCitationValidator {
     private static final Pattern LIST_ITEM = Pattern.compile("^\\s*(?:[-*+]\\s+|\\d+[.)]\\s+).+");
     private static final Pattern HEADING = Pattern.compile("^\\s*#{1,6}\\s+.+$");
     private static final Pattern HORIZONTAL_RULE = Pattern.compile("^\\s*(?:[-*_]\\s*){3,}$");
-    private static final Pattern SUBSTANTIVE_TEXT = Pattern.compile(".*[\\p{L}\\p{N}].*", Pattern.DOTALL);
+    private static final Pattern SUBSTANTIVE_TEXT =
+            Pattern.compile(".*[\\p{L}\\p{N}].*", Pattern.DOTALL);
 
     public Validation validate(String answer, int evidenceCount) {
         if (answer == null || answer.isBlank()) {
@@ -49,14 +50,16 @@ public class AnswerCitationValidator {
         }
         int factualBlockCount = factualBlocks.size();
         int uncitedBlockCount = factualBlockCount - citedBlockCount;
-        double coverageRate = factualBlockCount == 0 ? 0.0d : (double) citedBlockCount / factualBlockCount;
-        CitationAssessment assessment = new CitationAssessment(
-                factualBlockCount,
-                citedBlockCount,
-                uncitedBlockCount,
-                coverageRate,
-                List.copyOf(invalidReferences),
-                false);
+        double coverageRate =
+                factualBlockCount == 0 ? 0.0d : (double) citedBlockCount / factualBlockCount;
+        CitationAssessment assessment =
+                new CitationAssessment(
+                        factualBlockCount,
+                        citedBlockCount,
+                        uncitedBlockCount,
+                        coverageRate,
+                        List.copyOf(invalidReferences),
+                        false);
 
         if (!invalidReferences.isEmpty()) {
             return Validation.invalid("模型引用了不存在的证据", assessment);
@@ -70,20 +73,25 @@ public class AnswerCitationValidator {
     private static List<String> factualBlocks(String answer) {
         return Pattern.compile("(?:\\R\\s*){2,}")
                 .splitAsStream(answer.strip())
-                .flatMap(block -> {
-                    List<String> lines = block.lines().filter(line -> !line.isBlank()).toList();
-                    if (!lines.isEmpty() && lines.stream().allMatch(line -> LIST_ITEM.matcher(line).matches())) {
-                        return lines.stream();
-                    }
-                    return java.util.stream.Stream.of(block);
-                })
+                .flatMap(
+                        block -> {
+                            List<String> lines =
+                                    block.lines().filter(line -> !line.isBlank()).toList();
+                            if (!lines.isEmpty()
+                                    && lines.stream()
+                                            .allMatch(line -> LIST_ITEM.matcher(line).matches())) {
+                                return lines.stream();
+                            }
+                            return java.util.stream.Stream.of(block);
+                        })
                 .map(String::strip)
                 .filter(AnswerCitationValidator::isFactualBlock)
                 .toList();
     }
 
     private static boolean isFactualBlock(String block) {
-        if (HEADING.matcher(block).matches() || HORIZONTAL_RULE.matcher(block).matches()) return false;
+        if (HEADING.matcher(block).matches() || HORIZONTAL_RULE.matcher(block).matches())
+            return false;
         String withoutCitations = CITATION.matcher(block).replaceAll("");
         return SUBSTANTIVE_TEXT.matcher(withoutCitations).matches();
     }

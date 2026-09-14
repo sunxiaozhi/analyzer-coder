@@ -155,7 +155,6 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
         return path.getFileName().toString().toLowerCase(Locale.ROOT);
     }
 
-
     private String extension(Path path) {
         String fileName = path.getFileName().toString();
         int index = fileName.lastIndexOf('.');

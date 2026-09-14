@@ -32,8 +32,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 
 @EnabledIfEnvironmentVariable(named = "APP_RUN_POSTGRES_IT", matches = "true")
@@ -58,7 +58,9 @@ class PostgresMyBatisContextIT {
     @Autowired RepositorySourceImportService imports;
     @Autowired RepositorySnapshotPort managedFiles;
     @Autowired JdbcTemplate jdbc;
-    @Autowired com.analyzercoder.infrastructure.persistence.mapper.ProjectHealthMapper projectHealth;
+
+    @Autowired
+    com.analyzercoder.infrastructure.persistence.mapper.ProjectHealthMapper projectHealth;
 
     @Test
     void loadsFlywaySchemaAndExecutesRepresentativeMapperSql() {
@@ -177,9 +179,7 @@ class PostgresMyBatisContextIT {
                 "current-only");
 
         assertEquals(1, chunks.count(repositoryId, null));
-        assertEquals(
-                "src/Current.java",
-                chunks.find(repositoryId, null, 20, 0).get(0).filePath());
+        assertEquals("src/Current.java", chunks.find(repositoryId, null, 20, 0).get(0).filePath());
         assertTrue(chunks.find(repositoryId, "old-only", 20, 0).isEmpty());
 
         jdbc.update(
@@ -190,15 +190,12 @@ class PostgresMyBatisContextIT {
         assertEquals(1, chunks.count(repositoryId, null));
         assertEquals("src/Old.java", chunks.find(repositoryId, null, 20, 0).get(0).filePath());
         assertTrue(chunks.find(repositoryId, "current-only", 20, 0).isEmpty());
-        assertEquals(3, jdbc.queryForObject("SELECT vector_dims('[1,2,3]'::vector)", Integer.class));
+        assertEquals(
+                3, jdbc.queryForObject("SELECT vector_dims('[1,2,3]'::vector)", Integer.class));
     }
 
     private void insertChunk(
-            UUID repositoryId,
-            UUID snapshotId,
-            String commit,
-            String path,
-            String content) {
+            UUID repositoryId, UUID snapshotId, String commit, String path, String content) {
         jdbc.update(
                 """
                 INSERT INTO code_chunks(

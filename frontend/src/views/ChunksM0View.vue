@@ -16,12 +16,14 @@ import {
   listRepositoryFiles,
 } from '@/api/repositories';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 import type { RepositoryFileContent, RepositorySnapshotFiles } from '@/types/api';
 
 type MobilePane = 'tree' | 'code' | 'results';
 type RightPane = 'results' | 'context' | null;
 
 const repositories = useRepositoryStore();
+const branchContext = useBranchContextStore();
 const route = useRoute();
 const router = useRouter();
 const snapshot = shallowRef<RepositorySnapshotFiles | null>(null);
@@ -115,7 +117,9 @@ async function loadSnapshot(repositoryId: string | null) {
   if (!repositoryId) return;
   filesLoading.value = true;
   try {
-    const result = await listRepositoryFiles(repositoryId);
+    const result = branchContext.context?.contextId
+      ? await listRepositoryFiles(repositoryId, branchContext.context.contextId)
+      : await listRepositoryFiles(repositoryId);
     if (requestId !== snapshotRequest) return;
     snapshot.value = result;
     if (typeof route.query.snapshotId === 'string' && route.query.snapshotId !== result.snapshotId) {
@@ -194,7 +198,9 @@ async function openFile(
   selectedFile.value = null;
   fileLoading.value = true;
   try {
-    const file = await getRepositoryFile(repositoryId, path);
+    const file = branchContext.context?.contextId
+      ? await getRepositoryFile(repositoryId, path, branchContext.context.contextId)
+      : await getRepositoryFile(repositoryId, path);
     if (requestId !== fileRequest || repositoryId !== repositories.selectedRepositoryId) return;
     if (file.snapshotId !== snapshot.value?.snapshotId) {
       previewError.value = '代码快照已更新，请重新加载页面后查看源码。';
@@ -223,7 +229,9 @@ async function search() {
   const snapshotId = snapshot.value?.snapshotId;
   searchLoading.value = true;
   try {
-    const result = await intelligenceApi.unifiedSearch(repositoryId, keyword, 50);
+    const result = branchContext.context?.contextId
+      ? await intelligenceApi.unifiedSearch(repositoryId, keyword, 50, branchContext.context.contextId)
+      : await intelligenceApi.unifiedSearch(repositoryId, keyword, 50);
     if (requestId !== searchRequest || repositoryId !== repositories.selectedRepositoryId || snapshotId !== snapshot.value?.snapshotId) return;
     retrieval.value = result.retrieval;
     const current = result.evidence.filter(hit => (
@@ -283,7 +291,7 @@ function excerpt(content: string) {
   return content.replace(/\s+/g, ' ').trim().slice(0, 150);
 }
 
-watch(() => [repositories.selectedRepositoryId, repository.value?.snapshotId] as const,
+watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const,
   ([repositoryId]) => loadSnapshot(repositoryId), { immediate: true });
 onScopeDispose(() => { snapshotRequest++; fileRequest++; searchRequest++; });
 function routeNumber(value: unknown) {
@@ -295,7 +303,11 @@ onMounted(async () => {
   if (!repositories.repositories.length) await repositories.loadRepositories();
 });
 function openKnowledge(knowledgeId: string) {
-  void router.push({ name: 'knowledge', query: { cardId: knowledgeId } });
+  void router.push({ name: 'knowledge', query: {
+    cardId: knowledgeId,
+    branchId: branchContext.context?.branchId,
+    contextId: branchContext.context?.contextId,
+  } });
 }
 
 function createKnowledgeForFile() {
@@ -307,6 +319,8 @@ function createKnowledgeForFile() {
       path: selectedPath.value,
       snapshotId: snapshot.value?.snapshotId,
       symbol: selectedSymbol.value ?? undefined,
+      branchId: branchContext.context?.branchId,
+      contextId: branchContext.context?.contextId,
     },
   });
 }
@@ -494,6 +508,7 @@ watch(
         :initial-symbol="selectedSymbol"
         :can-build-graph="repository?.capabilities.canBuildCodeGraph ?? false"
         :snapshot-id="snapshot?.snapshotId ?? null"
+        :context-id="branchContext.context?.contextId ?? null"
         :initial-depth="routeNumber(route.query.depth) ?? 3"
         :auto-analyze="route.query.relation === '1' || route.query.analyze === '1'"
         :can-maintain-knowledge="repository?.capabilities.canUpdate ?? false"

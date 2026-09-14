@@ -15,10 +15,12 @@ import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
 import AskHistorySidebar from '@/features/ask/AskHistorySidebar.vue';
 import { useAskConversation } from '@/features/ask/useAskConversation';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useAuthStore } from '@/stores/authStore';
 import { statusLabel } from '@/utils/displayLabels';
 
 const repositories = useRepositoryStore();
+const branchContext = useBranchContextStore();
 const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
@@ -34,7 +36,9 @@ let contextVersion = 0;
 
 const repository = computed(() => repositories.selectedRepository);
 const canAsk = computed(() => Boolean(
-  repository.value && readiness.value?.profile.chunkCount,
+  repository.value && (branchContext.activeBranches.length
+    ? branchContext.ready
+    : readiness.value?.profile.chunkCount),
 ));
 const selectedModel = computed(() =>
   askModels.value.find(item => item.id === selectedModelId.value) ?? null
@@ -53,6 +57,7 @@ const readinessCopy = computed(() => {
 
 async function loadContext(repositoryId: string | null) {
   const version = ++contextVersion;
+  const branchIdentity = branchContext.identity;
   conversation.invalidate();
   history.value = [];
   readiness.value = null;
@@ -65,14 +70,15 @@ async function loadContext(repositoryId: string | null) {
   historyLoading.value = true;
   modelsLoading.value = true;
   const isCurrent = () => version === contextVersion
-    && repositoryId === repositories.selectedRepositoryId;
+    && repositoryId === repositories.selectedRepositoryId
+    && branchIdentity === branchContext.identity;
   const profileTask = getRepositoryProfile(repositoryId)
     .then((result) => { if (isCurrent()) readiness.value = result; })
     .catch((error) => {
       if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法检查仓库状态');
     })
     .finally(() => { if (isCurrent()) readinessLoading.value = false; });
-  const historyTask = intelligenceApi.history(repositoryId)
+  const historyTask = intelligenceApi.history(repositoryId, 50, 0, branchContext.context?.contextId)
     .then((result) => { if (isCurrent()) history.value = result; })
     .catch((error) => {
       if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法加载历史记录');
@@ -96,7 +102,7 @@ async function reloadHistory() {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   historyLoading.value = true;
-  try { history.value = await intelligenceApi.history(repositoryId); }
+  try { history.value = await intelligenceApi.history(repositoryId, 50, 0, branchContext.context?.contextId); }
   finally { historyLoading.value = false; }
 }
 
@@ -120,11 +126,14 @@ async function refreshReadinessForAsk(repositoryId: string): Promise<boolean | n
 async function send() {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return ElMessage.warning('请先选择仓库');
+  if (branchContext.activeBranches.length && !branchContext.context) {
+    return ElMessage.warning('当前分支快照尚未就绪，请先在分支工作区完成准备');
+  }
   const ready = canAsk.value || await refreshReadinessForAsk(repositoryId);
   if (ready === null || repositoryId !== repositories.selectedRepositoryId) return;
   if (!ready) return ElMessage.warning('当前仓库尚未完成问答准备，请先完成索引');
   try {
-    const result = await conversation.send(repositoryId, selectedModelId.value || null);
+    const result = await conversation.send(repositoryId, selectedModelId.value || null, branchContext.context?.contextId ?? null);
     if (!result || result.repositoryId !== repositories.selectedRepositoryId) return;
     await reloadHistory();
   } catch { /* 错误保留在回答区，可直接重试。 */ }
@@ -134,7 +143,7 @@ async function retry() {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   try {
-    const result = await conversation.retry(repositoryId, selectedModelId.value || null);
+    const result = await conversation.retry(repositoryId, selectedModelId.value || null, branchContext.context?.contextId ?? null);
     if (result) await reloadHistory();
   } catch { /* 错误保留在回答区。 */ }
 }
@@ -143,7 +152,7 @@ async function openHistory(record: QaHistoryRecord) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId || record.repositoryId !== repositoryId) return;
   try {
-    const result = await intelligenceApi.historyDetail(repositoryId, record.threadId);
+    const result = await intelligenceApi.historyDetail(repositoryId, record.threadId, branchContext.context?.contextId);
     if (repositoryId !== repositories.selectedRepositoryId) return;
     conversation.restore(result);
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法打开历史记录'); }
@@ -154,7 +163,7 @@ async function renameHistory(record: QaHistoryRecord) {
     const { value } = await ElMessageBox.prompt('输入新的历史记录标题', '重命名记录', {
       inputValue: record.title, inputPattern: /^.{1,80}$/s, inputErrorMessage: '标题长度必须为 1–80 个字符',
     });
-    await intelligenceApi.renameHistory(record.repositoryId, record.threadId, value.trim());
+    await intelligenceApi.renameHistory(record.repositoryId, record.threadId, value.trim(), branchContext.context?.contextId);
     await reloadHistory();
     ElMessage.success('历史记录已重命名');
   } catch (error) {
@@ -165,7 +174,7 @@ async function renameHistory(record: QaHistoryRecord) {
 async function deleteHistory(record: QaHistoryRecord) {
   try {
     await ElMessageBox.confirm(`删除“${record.title}”及其引用证据？`, '删除历史记录', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' });
-    await intelligenceApi.deleteHistory(record.repositoryId, record.threadId);
+    await intelligenceApi.deleteHistory(record.repositoryId, record.threadId, branchContext.context?.contextId);
     if (conversation.threadId.value === record.threadId) conversation.reset();
     await reloadHistory();
     ElMessage.success('历史记录已删除');
@@ -208,7 +217,7 @@ async function openGraph(reference: CodeReference) {
   try {
     await selectTargetRepository(reference.repositoryId);
     const target = reference.chunkId
-      ? await intelligenceApi.graphTarget(reference.repositoryId, reference.chunkId)
+      ? await intelligenceApi.graphTarget(reference.repositoryId, reference.chunkId, branchContext.context?.contextId)
       : { symbol: reference.symbolName || reference.filePath };
     await router.push({ name: 'search', query: {
       path: ('filePath' in target ? target.filePath : null) || reference.filePath,
@@ -231,7 +240,7 @@ watch(
   },
   { immediate: true },
 );
-watch(() => repositories.selectedRepositoryId, loadContext);
+watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const, ([repositoryId]) => loadContext(repositoryId));
 onMounted(async () => {
   if (!repositories.repositories.length) await repositories.loadRepositories();
   await loadContext(repositories.selectedRepositoryId);
@@ -244,7 +253,7 @@ onMounted(async () => {
       <div class="scope-copy">
         <span>问答范围</span>
         <strong>{{ repository?.name ?? '未选择仓库' }}</strong>
-        <small>{{ repository?.branch ?? '无分支' }}<template v-if="repository?.commit"> · {{ repository.commit.slice(0, 8) }}</template></small>
+        <small>{{ branchContext.context?.branchName ?? repository?.branch ?? '无分支' }}<template v-if="branchContext.context?.commitSha ?? repository?.commit"> · {{ (branchContext.context?.commitSha ?? repository?.commit)?.slice(0, 8) }}</template></small>
       </div>
       <el-tag :type="readinessCopy?.type" effect="plain" round>{{ readinessCopy?.label }}</el-tag>
       <div v-if="!repository || (readiness && !canAsk)" class="command-notice">

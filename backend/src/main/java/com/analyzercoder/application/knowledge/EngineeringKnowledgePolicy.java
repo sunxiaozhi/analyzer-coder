@@ -130,11 +130,7 @@ public class EngineeringKnowledgePolicy {
                         "禁止修改路径",
                         RepositoryGlobMatcher::normalizePattern);
         return new KnowledgeObligations(
-                tests,
-                approvers,
-                instructions,
-                prohibitedPaths,
-                value.knowledgeUpdateRequired());
+                tests, approvers, instructions, prohibitedPaths, value.knowledgeUpdateRequired());
     }
 
     private static List<String> normalizeStrings(
@@ -164,11 +160,8 @@ public class EngineeringKnowledgePolicy {
 
     private static List<UUID> normalizeIds(List<UUID> values, int maximum, String label) {
         List<UUID> normalized =
-                (values == null ? List.<UUID>of() : values).stream()
-                        .filter(Objects::nonNull)
-                        .distinct()
-                        .limit(maximum + 1L)
-                        .toList();
+                (values == null ? List.<UUID>of() : values)
+                        .stream().filter(Objects::nonNull).distinct().limit(maximum + 1L).toList();
         if (normalized.size() > maximum) {
             throw new IllegalArgumentException(label + "最多允许 " + maximum + " 项");
         }

@@ -23,17 +23,19 @@ class ProjectArchitectureMapServiceTest {
         String path = "src/Example.java";
         String listedSnapshot = UUID.randomUUID().toString();
         when(browser.list(repositoryId))
-                .thenReturn(new RepositoryCodeBrowserService.SnapshotFiles(
-                        listedSnapshot, "main", "abc123", List.of(file(path, "java"))));
+                .thenReturn(
+                        new RepositoryCodeBrowserService.SnapshotFiles(
+                                listedSnapshot, "main", "abc123", List.of(file(path, "java"))));
         when(browser.read(repositoryId, path))
-                .thenReturn(new RepositoryCodeBrowserService.FileContent(
-                        UUID.randomUUID().toString(),
-                        path,
-                        "Example.java",
-                        "java",
-                        20,
-                        1,
-                        "class Example {}"));
+                .thenReturn(
+                        new RepositoryCodeBrowserService.FileContent(
+                                UUID.randomUUID().toString(),
+                                path,
+                                "Example.java",
+                                "java",
+                                20,
+                                1,
+                                "class Example {}"));
 
         assertThatThrownBy(() -> service.map(repositoryId))
                 .isInstanceOf(
@@ -108,11 +110,12 @@ class ProjectArchitectureMapServiceTest {
         assertThat(result.edges())
                 .filteredOn(edge -> !edge.evidenceSamples().isEmpty())
                 .flatExtracting(ProjectArchitectureMapService.ArchitectureEdge::evidenceSamples)
-                .allSatisfy(sample -> {
-                    assertThat(sample.snapshotId()).isEqualTo(snapshotId.toString());
-                    assertThat(sample.contentHash()).matches("[0-9a-f]{64}");
-                    assertThat(sample.filePath()).isNotBlank();
-                });
+                .allSatisfy(
+                        sample -> {
+                            assertThat(sample.snapshotId()).isEqualTo(snapshotId.toString());
+                            assertThat(sample.contentHash()).matches("[0-9a-f]{64}");
+                            assertThat(sample.filePath()).isNotBlank();
+                        });
         assertThat(result.risks())
                 .extracting(ProjectArchitectureMapService.ArchitectureRisk::type)
                 .contains("BOUNDARY", "CYCLE", "INSECURE_TRANSPORT");

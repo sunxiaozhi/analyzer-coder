@@ -2,6 +2,7 @@
 import { reactive } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
 import ChunksM0View from './ChunksM0View.vue';
 import RepositoryFileTree from '@/components/RepositoryFileTree.vue';
 import RepositoryFilePreview from '@/components/RepositoryFilePreview.vue';
@@ -38,6 +39,7 @@ function mountCode() {
 describe('code browsing continuity', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    setActivePinia(createPinia());
     route = reactive({ query: {} });
     store = reactive({ selectedRepositoryId: 'r1', selectedRepository: { snapshotId: 's1', capabilities: {} }, repositories: [{}] });
     api.files.mockResolvedValue({ snapshotId: 's1', files: [{ path: 'a.ts' }, { path: 'b.ts' }] });

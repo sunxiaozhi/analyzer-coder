@@ -71,12 +71,10 @@ public interface EngineeringProjectMapper {
             @Param("repositoryId") UUID repositoryId, @Param("filePath") String filePath);
 
     List<EngineeringReviewRepositoryRow> reviewRepositories(
-            @Param("targetRepositoryId") UUID targetRepositoryId,
-            @Param("actorId") UUID actorId);
+            @Param("targetRepositoryId") UUID targetRepositoryId, @Param("actorId") UUID actorId);
 
     List<EngineeringReviewContractRow> reviewContracts(
-            @Param("targetRepositoryId") UUID targetRepositoryId,
-            @Param("actorId") UUID actorId);
+            @Param("targetRepositoryId") UUID targetRepositoryId, @Param("actorId") UUID actorId);
 
     int crossScopedKnowledgeCount(@Param("projectId") UUID projectId);
 

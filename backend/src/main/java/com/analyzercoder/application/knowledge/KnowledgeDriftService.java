@@ -65,7 +65,11 @@ public class KnowledgeDriftService {
         requirePublished(repository);
         List<KnowledgeDriftCandidateRow> candidates =
                 mapper.candidates(repository.id().value()).stream()
-                        .filter(candidate -> !Objects.equals(candidate.verifiedCommit(), repository.currentCommit()))
+                        .filter(
+                                candidate ->
+                                        !Objects.equals(
+                                                candidate.verifiedCommit(),
+                                                repository.currentCommit()))
                         .toList();
         int suspect = 0;
         int unchanged = 0;
@@ -82,8 +86,11 @@ public class KnowledgeDriftService {
                 RepositoryChange change =
                         changes.analyze(
                                 GitChangeRequest.commitRange(
-                                        repository.path(), entry.getKey(), repository.currentCommit()));
-                ChangedSymbolResolver.ResolutionResult resolution = symbols.resolve(repository, change);
+                                        repository.path(),
+                                        entry.getKey(),
+                                        repository.currentCommit()));
+                ChangedSymbolResolver.ResolutionResult resolution =
+                        symbols.resolve(repository, change);
                 for (KnowledgeDriftCandidateRow candidate : entry.getValue()) {
                     List<DriftReason> reasons = reasons(repository, candidate, change, resolution);
                     if (reasons.isEmpty()) {
@@ -110,10 +117,7 @@ public class KnowledgeDriftService {
 
     @Transactional
     public DriftEvent reviewSource(
-            CodeRepositoryId repositoryId,
-            UUID cardId,
-            UUID actorId,
-            SourceReviewRequest request) {
+            CodeRepositoryId repositoryId, UUID cardId, UUID actorId, SourceReviewRequest request) {
         if (request == null || request.expectedRevision() <= 0) {
             throw new IllegalArgumentException("expectedRevision 必须是正整数");
         }
@@ -127,13 +131,11 @@ public class KnowledgeDriftService {
                                         new KnowledgeDriftException(
                                                 "REPOSITORY_NOT_FOUND", "代码仓库不存在"));
         requirePublished(repository);
-        KnowledgeDriftCandidateRow candidate =
-                mapper.findCandidate(repositoryId.value(), cardId);
+        KnowledgeDriftCandidateRow candidate = mapper.findCandidate(repositoryId.value(), cardId);
         if (candidate == null) {
             throw new KnowledgeDriftException("KNOWLEDGE_CARD_NOT_FOUND", "知识卡片不存在");
         }
-        String resultStatus =
-                action == SourceReviewAction.CONFIRM_CURRENT ? "CURRENT" : "STALE";
+        String resultStatus = action == SourceReviewAction.CONFIRM_CURRENT ? "CURRENT" : "STALE";
         if (mapper.reviewSource(
                         repositoryId.value(),
                         cardId,
@@ -144,8 +146,7 @@ public class KnowledgeDriftService {
                         note,
                         actorId)
                 != 1) {
-            throw new KnowledgeDriftException(
-                    "KNOWLEDGE_REVISION_CONFLICT", "知识修订已变化，请刷新后重新核对");
+            throw new KnowledgeDriftException("KNOWLEDGE_REVISION_CONFLICT", "知识修订已变化，请刷新后重新核对");
         }
         DriftReason manualReason =
                 new DriftReason(
@@ -196,7 +197,10 @@ public class KnowledgeDriftService {
             }
             boolean hashStillExists =
                     chunks.findByRepositoryPath(repository.id(), reference.filePath()).stream()
-                            .anyMatch(chunk -> Objects.equals(reference.contentHash(), chunk.contentHash()));
+                            .anyMatch(
+                                    chunk ->
+                                            Objects.equals(
+                                                    reference.contentHash(), chunk.contentHash()));
             if (!hashStillExists) {
                 RepositoryChange.FileChange file = changeFor(change, reference.filePath());
                 result.add(
@@ -232,8 +236,13 @@ public class KnowledgeDriftService {
 
         Set<String> symbolRules = new LinkedHashSet<>(scope.symbols());
         resolution.symbols().stream()
-                .filter(symbol -> symbol.resolution() != ChangedSymbolResolver.Resolution.FILE_LEVEL)
-                .filter(symbol -> symbolRules.contains(symbol.name()) || symbolRules.contains(symbol.symbolId()))
+                .filter(
+                        symbol ->
+                                symbol.resolution() != ChangedSymbolResolver.Resolution.FILE_LEVEL)
+                .filter(
+                        symbol ->
+                                symbolRules.contains(symbol.name())
+                                        || symbolRules.contains(symbol.symbolId()))
                 .forEach(
                         symbol ->
                                 result.add(
@@ -357,8 +366,7 @@ public class KnowledgeDriftService {
         return result;
     }
 
-    private static RepositoryChange.FileChange changeFor(
-            RepositoryChange change, String path) {
+    private static RepositoryChange.FileChange changeFor(RepositoryChange change, String path) {
         return change.changes().stream()
                 .filter(file -> paths(file).contains(path))
                 .findFirst()
@@ -391,8 +399,7 @@ public class KnowledgeDriftService {
         if (repository == null
                 || repository.currentSnapshotId() == null
                 || repository.currentCommit() == null) {
-            throw new KnowledgeDriftException(
-                    "CURRENT_SNAPSHOT_REQUIRED", "仓库尚未发布可用于知识复核的代码快照");
+            throw new KnowledgeDriftException("CURRENT_SNAPSHOT_REQUIRED", "仓库尚未发布可用于知识复核的代码快照");
         }
     }
 

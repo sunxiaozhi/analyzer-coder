@@ -43,20 +43,17 @@ class RepositoryImportToAskIT {
     @Test
     @Transactional
     void importsZipIndexesCurrentSnapshotAndAnswersFromPersistedEvidence() throws Exception {
-        jdbc.update("UPDATE vector_model_activation SET active_config_id='00000000-0000-0000-0000-000000000064' WHERE singleton_id=1");
+        jdbc.update(
+                "UPDATE vector_model_activation SET active_config_id='00000000-0000-0000-0000-000000000064' WHERE singleton_id=1");
 
         var owner = auth.listAccounts().get(0);
         MockMultipartFile upload =
-                new MockMultipartFile(
-                        "file", "e2e.zip", "application/zip", repositoryZip());
+                new MockMultipartFile("file", "e2e.zip", "application/zip", repositoryZip());
         CodeRepository repository = null;
         try {
             repository =
-                    imports.importZip(
-                            "import-to-ask-" + UUID.randomUUID(), upload, owner.id());
-            var queued =
-                    jobs.start(
-                            new StartIndexCommand(repository.id(), IndexJobType.FULL));
+                    imports.importZip("import-to-ask-" + UUID.randomUUID(), upload, owner.id());
+            var queued = jobs.start(new StartIndexCommand(repository.id(), IndexJobType.FULL));
 
             assertThat(processor.processNextQueuedJob()).isTrue();
             assertThat(jobs.get(queued.id()).status()).isEqualTo(IndexJobStatus.SUCCEEDED);
@@ -74,11 +71,16 @@ class RepositoryImportToAskIT {
             assertThat(answer.evidenceStatus()).isEqualTo("DEGRADED");
             assertThat(answer.fallbackReason()).isEqualTo("LOCAL_EVIDENCE_MODE");
             assertThat(answer.citations()).isNotEmpty();
-            assertThat(answer.citations().get(0).filePath()).isEqualTo("src/OrderCheckoutWorkflow.java");
+            assertThat(answer.citations().get(0).filePath())
+                    .isEqualTo("src/OrderCheckoutWorkflow.java");
             assertThat(answer.retrieval().enabledChannels()).contains("CODE_KEYWORD");
             assertThat(answer.retrieval().snapshotId())
                     .isEqualTo(repository.currentSnapshotId().value());
-            assertThat(intelligence.historyDetail(repository.id().value(), owner.id(), answer.threadId()).turns())
+            assertThat(
+                            intelligence
+                                    .historyDetail(
+                                            repository.id().value(), owner.id(), answer.threadId())
+                                    .turns())
                     .hasSize(1);
 
             // Switching models must invalidate coverage before any user query is made.
@@ -87,15 +89,26 @@ class RepositoryImportToAskIT {
             assertThat(beforeSwitch.totalChunks()).isPositive();
             UUID nextModel = UUID.randomUUID();
             String nextModelName = "integration-hash-" + nextModel;
-            jdbc.update("INSERT INTO vector_model_configs(id,name,provider_type,model,dimension) VALUES(?,?,'LOCAL_HASH',?,64)",
-                    nextModel, "integration-model", nextModelName);
-            jdbc.update("UPDATE vector_model_activation SET active_config_id=? WHERE singleton_id=1", nextModel);
+            jdbc.update(
+                    "INSERT INTO vector_model_configs(id,name,provider_type,model,dimension) VALUES(?,?,'LOCAL_HASH',?,64)",
+                    nextModel,
+                    "integration-model",
+                    nextModelName);
+            jdbc.update(
+                    "UPDATE vector_model_activation SET active_config_id=? WHERE singleton_id=1",
+                    nextModel);
             var afterSwitch = vectors.summary(repository.id().value());
             assertThat(afterSwitch.vectorModel()).isEqualTo(nextModelName);
             assertThat(afterSwitch.missingChunks()).isEqualTo(beforeSwitch.totalChunks());
-            assertThat(vectors.chunks(repository.id().value(), null, "MISSING", null, 1, 15).items())
+            assertThat(
+                            vectors.chunks(repository.id().value(), null, "MISSING", null, 1, 15)
+                                    .items())
                     .hasSize((int) beforeSwitch.totalChunks());
-            assertThat(intelligence.hybridSearchDetailed(repository.id().value(), "OrderCheckoutWorkflow", 10).hits())
+            assertThat(
+                            intelligence
+                                    .hybridSearchDetailed(
+                                            repository.id().value(), "OrderCheckoutWorkflow", 10)
+                                    .hits())
                     .isNotEmpty();
             assertThat(vectors.summary(repository.id().value()).missingChunks())
                     .isEqualTo(beforeSwitch.totalChunks());
@@ -116,9 +129,11 @@ class RepositoryImportToAskIT {
                             .getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
             zip.putNextEntry(new ZipEntry("src/OrderCheckoutWorkflow.java"));
-            zip.write(("public class OrderCheckoutWorkflow {\n"
-                    + "  public boolean checkout(int quantity) { return quantity > 0; }\n"
-                    + "}\n").getBytes(StandardCharsets.UTF_8));
+            zip.write(
+                    ("public class OrderCheckoutWorkflow {\n"
+                                    + "  public boolean checkout(int quantity) { return quantity > 0; }\n"
+                                    + "}\n")
+                            .getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
         }
         return bytes.toByteArray();

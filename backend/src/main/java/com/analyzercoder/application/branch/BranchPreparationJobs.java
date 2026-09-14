@@ -10,6 +10,7 @@ import com.analyzercoder.security.RepositoryPermission;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -88,7 +89,8 @@ public class BranchPreparationJobs {
                             db.queryForList(
                                     """
                     SELECT b.id FROM repository_branches b JOIN repositories r ON r.id=b.repo_id
-                    WHERE b.repo_id=? AND b.id=? AND r.deleted_at IS NULL FOR UPDATE OF b
+                    WHERE b.repo_id=? AND b.id=? AND b.tracking_status='ACTIVE'
+                      AND r.deleted_at IS NULL FOR UPDATE OF b
                     """,
                                     UUID.class,
                                     repoId,
@@ -132,35 +134,48 @@ public class BranchPreparationJobs {
                 });
     }
 
-    // A session lock spans Git/filesystem work without holding a database transaction open.
-    // When a process exits, PostgreSQL releases the lock and the next worker resumes RUNNING rows.
-    public synchronized void processNext() throws SQLException {
+    // A branch-scoped session lock spans Git/filesystem work without holding a database
+    // transaction open. Separate branches may run concurrently; one branch remains serialized.
+    public boolean processNext() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
-            try (var statement = connection.createStatement();
-                    var rows = statement.executeQuery("SELECT pg_try_advisory_lock(184732,5)")) {
-                rows.next();
-                if (!rows.getBoolean(1)) return;
+            var pending =
+                    db.queryForList(
+                            """
+                            SELECT id,repo_id,branch_id,account_id,target_commit,kind,target_snapshot
+                            FROM branch_preparation_jobs
+                            WHERE status='QUEUED'
+                               OR (status='RUNNING' AND updated_at<CURRENT_TIMESTAMP-INTERVAL '1 hour')
+                            ORDER BY created_at,id LIMIT 32
+                            """);
+            if (pending.isEmpty()) return false;
+            Map<String, Object> row = null;
+            long lockKey = 0;
+            for (var candidate : pending) {
+                UUID candidateBranch = (UUID) candidate.get("branch_id");
+                long candidateKey =
+                        candidateBranch.getMostSignificantBits()
+                                ^ candidateBranch.getLeastSignificantBits();
+                if (tryLock(connection, candidateKey)) {
+                    row = candidate;
+                    lockKey = candidateKey;
+                    break;
+                }
             }
+            if (row == null) return false;
+            UUID branchId = (UUID) row.get("branch_id");
             try {
-                var pending =
-                        db.queryForList(
-                                """
-                        SELECT id,repo_id,branch_id,account_id,target_commit,kind,target_snapshot FROM branch_preparation_jobs
-                        WHERE status IN ('QUEUED','RUNNING') ORDER BY created_at,id LIMIT 1
-                        """);
-                if (pending.isEmpty()) return;
-                var row = pending.get(0);
                 UUID id = (UUID) row.get("id"),
                         repoId = (UUID) row.get("repo_id"),
-                        branchId = (UUID) row.get("branch_id"),
                         token = UUID.randomUUID();
-                db.update(
-                        """
+                if (db.update(
+                                """
                         UPDATE branch_preparation_jobs SET status='RUNNING',stage='RESOLVING',
                         attempt_token=?,updated_at=CURRENT_TIMESTAMP WHERE id=?
+                          AND (status='QUEUED' OR (status='RUNNING' AND updated_at<CURRENT_TIMESTAMP-INTERVAL '1 hour'))
                         """,
-                        token,
-                        id);
+                                token,
+                                id)
+                        != 1) return false;
                 try {
                     AuthenticatedAccount actor = actor((UUID) row.get("account_id"));
                     if ("VECTORS".equals(row.get("kind"))) {
@@ -189,7 +204,7 @@ public class BranchPreparationJobs {
                                         id,
                                         token)
                                 != 1) throw superseded();
-                        return;
+                        return true;
                     }
                     branches.executePreparation(
                             actor,
@@ -236,9 +251,21 @@ public class BranchPreparationJobs {
                             token);
                 }
             } finally {
-                try (var statement = connection.createStatement()) {
-                    statement.execute("SELECT pg_advisory_unlock(184732,5)");
+                try (var statement = connection.prepareStatement("SELECT pg_advisory_unlock(?)")) {
+                    statement.setLong(1, lockKey);
+                    statement.execute();
                 }
+            }
+            return true;
+        }
+    }
+
+    private static boolean tryLock(Connection connection, long lockKey) throws SQLException {
+        try (var statement = connection.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
+            statement.setLong(1, lockKey);
+            try (var rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getBoolean(1);
             }
         }
     }

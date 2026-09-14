@@ -37,7 +37,8 @@ class CodeEvidenceContextServiceTest {
         String filePath = "src/refund/RefundService.java";
         when(repositories.findById(repository.id())).thenReturn(Optional.of(repository));
         when(intelligence.cards(repositoryId, true))
-                .thenReturn(List.of(card(repository, filePath), card(repository, "src/Other.java")));
+                .thenReturn(
+                        List.of(card(repository, filePath), card(repository, "src/Other.java")));
 
         CodeEvidenceContextService.CodeEvidenceContext result =
                 service.context(repository.id(), filePath, "approveRefund", true);
@@ -57,8 +58,7 @@ class CodeEvidenceContextServiceTest {
                                                 assertThat(binding.contentHash()).isEqualTo("hash");
                                             });
                         });
-        assertThat(result.limitations())
-                .containsExactly("DETERMINISTIC_KNOWLEDGE_MATCHING_ONLY");
+        assertThat(result.limitations()).containsExactly("DETERMINISTIC_KNOWLEDGE_MATCHING_ONLY");
         verify(intelligence).cards(repositoryId, true);
     }
 

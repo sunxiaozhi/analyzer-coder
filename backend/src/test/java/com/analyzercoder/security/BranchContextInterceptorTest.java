@@ -13,12 +13,14 @@ class BranchContextInterceptorTest {
     @Test
     void rejectsIgnoredContextsButAllowsExplicitReaders() {
         var interceptor = new BranchContextInterceptor();
-        var request = new MockHttpServletRequest("GET", base + "/codegraph/latest");
+        var request = new MockHttpServletRequest("GET", base + "/profile");
         request.addHeader("X-Branch-Context", "pinned");
         assertThatThrownBy(
                         () -> interceptor.preHandle(request, new MockHttpServletResponse(), null))
                 .isInstanceOf(ApiSecurityException.class);
-        request.setRequestURI(base + "/evidence-search");
+        request.setRequestURI(base + "/codegraph/latest");
+        assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), null)).isTrue();
+        request.setRequestURI(base + "/knowledge/markdown-sources");
         assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), null)).isTrue();
     }
 

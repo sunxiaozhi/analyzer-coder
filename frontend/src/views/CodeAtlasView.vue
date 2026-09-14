@@ -5,6 +5,7 @@ import { Search, Orbit, ArrowLeft, Plus, Minus, Maximize, RefreshCw, X, ArrowUpR
 import { getCodeAtlas, type AtlasView, type AtlasNode } from '@/api/codeAtlas';
 import { getRepositoryFile } from '@/api/repositories';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 import { layoutAtlas } from '@/features/graph/atlasLayout';
 import { atlasFileType, fileIconUrl } from '@/features/graph/atlasFileType';
 
@@ -39,6 +40,7 @@ function chooseMode(value: '3d' | '2d') {
   mode.value = value;
 }
 const repositories = useRepositoryStore();
+const branchContext = useBranchContextStore();
 const router = useRouter();
 const data = ref<AtlasView | null>(null);
 const loading = ref(false), error = ref(''), query = ref(''), module = ref('');
@@ -108,7 +110,9 @@ async function load() {
   if (!id) { loading.value = false; return; }
   loading.value = true;
   try {
-    const result = await getCodeAtlas(id, module.value, query.value.trim());
+    const result = branchContext.context?.contextId
+      ? await getCodeAtlas(id, module.value, query.value.trim(), branchContext.context.contextId)
+      : await getCodeAtlas(id, module.value, query.value.trim());
     if (version === revision && id === repositories.selectedRepositoryId) { data.value = result; resetCamera(); }
   } catch (e) { if (version === revision) error.value = e instanceof Error ? e.message : '图谱加载失败'; }
   finally { if (version === revision) loading.value = false; }
@@ -122,7 +126,9 @@ async function select(node: AtlasNode) {
   const version = ++sourceRevision, repoId = data.value.repositoryId, snapshot = data.value.snapshotId;
   sourceLoading.value = true;
   try {
-    const file = await getRepositoryFile(repoId, node.filePath);
+    const file = branchContext.context?.contextId
+      ? await getRepositoryFile(repoId, node.filePath, branchContext.context.contextId)
+      : await getRepositoryFile(repoId, node.filePath);
     if (version !== sourceRevision) return;
     if (file.snapshotId !== snapshot) throw new Error('源码版本已更新，请刷新图谱后查看。');
     source.value = file.content;
@@ -146,7 +152,7 @@ function pointerMove(event: PointerEvent) {
   const factor = Math.max(1200 / rect.width, 800 / rect.height);
   pan.value = { x: dragging.px + (event.clientX - dragging.x) * factor, y: dragging.py + (event.clientY - dragging.y) * factor };
 }
-watch(() => repositories.selectedRepositoryId, () => { module.value = ''; query.value = ''; void load(); }, { immediate: true });
+watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const, () => { module.value = ''; query.value = ''; void load(); }, { immediate: true });
 onMounted(() => { if (!repositories.repositories.length) void repositories.loadRepositories(); });
 onBeforeUnmount(() => { revision++; sourceRevision++; });
 </script>

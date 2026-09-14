@@ -7,6 +7,7 @@ defineProps<{
   card: KnowledgeCard;
   canManage: boolean;
   canMaintain: boolean;
+  scopeLabel: string;
 }>();
 
 const emit = defineEmits<{
@@ -47,6 +48,7 @@ const enforcementLabels: Record<string, string> = {
         {{ enforcementLabels[card.enforcement] }}
       </el-tag>
       <el-tag :type="statusType(card.publicationStatus)" size="small">{{ statusLabel(card.publicationStatus) }}</el-tag>
+      <span class="branch-scope">{{ scopeLabel }}</span>
     </header>
 
     <h3 class="card-title">{{ card.title }}</h3>
@@ -106,10 +108,12 @@ const enforcementLabels: Record<string, string> = {
 
 .card-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
+.branch-scope { margin-left: auto; color: #50647a; font-size: 12px; font-weight: 650; }
 
 .card-title {
   min-height: 42px;

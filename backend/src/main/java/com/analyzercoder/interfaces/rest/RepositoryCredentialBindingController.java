@@ -25,10 +25,8 @@ public class RepositoryCredentialBindingController {
     }
 
     @GetMapping
-    public BindingStatus current(
-            @PathVariable UUID repositoryId, HttpServletRequest request) {
-        return service.current(
-                SecurityContext.account(request), CodeRepositoryId.of(repositoryId));
+    public BindingStatus current(@PathVariable UUID repositoryId, HttpServletRequest request) {
+        return service.current(SecurityContext.account(request), CodeRepositoryId.of(repositoryId));
     }
 
     @PutMapping

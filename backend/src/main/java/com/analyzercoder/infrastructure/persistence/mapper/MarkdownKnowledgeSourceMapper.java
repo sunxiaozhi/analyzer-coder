@@ -23,12 +23,10 @@ public interface MarkdownKnowledgeSourceMapper {
             @Param("byteSize") long byteSize);
 
     int deleteMissingSources(
-            @Param("repositoryId") UUID repositoryId,
-            @Param("filePaths") List<String> filePaths);
+            @Param("repositoryId") UUID repositoryId, @Param("filePaths") List<String> filePaths);
 
     List<Map<String, Object>> listSources(
-            @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId);
+            @Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId);
 
     Map<String, Object> findSource(
             @Param("repositoryId") UUID repositoryId,
@@ -58,4 +56,53 @@ public interface MarkdownKnowledgeSourceMapper {
             @Param("snapshotId") UUID snapshotId,
             @Param("commitSha") String commitSha,
             @Param("commitAvailable") boolean commitAvailable);
+
+    int upsertBranchSource(
+            @Param("id") UUID id,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
+            @Param("snapshotId") UUID snapshotId,
+            @Param("filePath") String filePath,
+            @Param("contentHash") String contentHash,
+            @Param("title") String title,
+            @Param("assetType") String assetType,
+            @Param("content") String content,
+            @Param("lineCount") int lineCount,
+            @Param("byteSize") long byteSize);
+
+    int deleteMissingBranchSources(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
+            @Param("filePaths") List<String> filePaths);
+
+    List<Map<String, Object>> listBranchSources(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
+            @Param("snapshotId") UUID snapshotId);
+
+    Map<String, Object> findBranchSource(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
+            @Param("snapshotId") UUID snapshotId,
+            @Param("filePath") String filePath);
+
+    Map<String, Object> lockBranchSource(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
+            @Param("filePath") String filePath);
+
+    int insertBranchProvenance(
+            @Param("cardId") UUID cardId,
+            @Param("revision") int revision,
+            @Param("sourceId") UUID sourceId,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("sourceBranchId") UUID sourceBranchId,
+            @Param("sourceSnapshotId") UUID sourceSnapshotId,
+            @Param("sourcePath") String sourcePath,
+            @Param("sourceContentHash") String sourceContentHash);
+
+    int reconcileBranchValidations(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
+            @Param("snapshotId") UUID snapshotId);
 }

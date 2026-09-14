@@ -57,8 +57,7 @@ final class RuntimeDependencyDetector {
         }
     }
 
-    private static void detectServiceUris(
-            String content, Map<String, DetectedResource> result) {
+    private static void detectServiceUris(String content, Map<String, DetectedResource> result) {
         Matcher matcher = SERVICE_URI.matcher(content);
         while (matcher.find()) {
             String scheme = matcher.group(1).toLowerCase(Locale.ROOT);
@@ -94,8 +93,7 @@ final class RuntimeDependencyDetector {
         }
     }
 
-    private static void detectSignatures(
-            String content, Map<String, DetectedResource> result) {
+    private static void detectSignatures(String content, Map<String, DetectedResource> result) {
         String lower = content.toLowerCase(Locale.ROOT);
         signature(
                 result,
@@ -181,10 +179,11 @@ final class RuntimeDependencyDetector {
             String locator,
             boolean insecure) {
         String normalizedLocator =
-                locator == null || locator.isBlank() ? "configured" : locator.toLowerCase(Locale.ROOT);
+                locator == null || locator.isBlank()
+                        ? "configured"
+                        : locator.toLowerCase(Locale.ROOT);
         String id = "resource:" + type.toLowerCase(Locale.ROOT) + ":" + normalizedLocator;
-        result.putIfAbsent(
-                id, new DetectedResource(id, type, label, normalizedLocator, insecure));
+        result.putIfAbsent(id, new DetectedResource(id, type, label, normalizedLocator, insecure));
     }
 
     private static String safeLocator(String raw) {

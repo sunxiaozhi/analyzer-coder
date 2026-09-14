@@ -1,16 +1,16 @@
 package com.analyzercoder.application.indexing;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.assertj.core.api.Assertions.assertThat;
 
-import com.analyzercoder.application.intelligence.MarkdownKnowledgeSourceService;
 import com.analyzercoder.application.intelligence.CodeGraphTaskService;
 import com.analyzercoder.application.intelligence.IntelligenceService;
+import com.analyzercoder.application.intelligence.MarkdownKnowledgeSourceService;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.indexing.IndexJob;
 import com.analyzercoder.domain.indexing.IndexJobStore;
@@ -62,20 +62,13 @@ class IndexJobProcessorTest {
 
         IndexJobProcessor processor =
                 new IndexJobProcessor(
-                        jobs,
-                        repositories,
-                        scanner,
-                        chunks,
-                        null,
-                        markdownSources,
-                        gitDiff);
+                        jobs, repositories, scanner, chunks, null, markdownSources, gitDiff);
 
         processor.processNextQueuedJob();
 
         verify(gitDiff, never()).diff(any(), any());
         verify(chunks).replaceRepositoryChunks(eq(repository.id()), any());
-        verify(chunks, never())
-                .replaceRepositoryPaths(any(), any(), any(), any(), any());
+        verify(chunks, never()).replaceRepositoryPaths(any(), any(), any(), any(), any());
         verify(markdownSources).synchronize(repository, List.of(markdown), false, Set.of());
         assertExecutionPlan(jobs, "FULL", "DIRTY_WORKTREE");
     }
@@ -156,7 +149,9 @@ class IndexJobProcessorTest {
                         chunkCaptor.capture(),
                         eq(fixture.repository().currentSnapshotId()),
                         eq(fixture.repository().currentCommit()));
-        assertThat(chunkCaptor.getValue()).extracting(chunk -> chunk.filePath()).containsOnly("new-name.java");
+        assertThat(chunkCaptor.getValue())
+                .extracting(chunk -> chunk.filePath())
+                .containsOnly("new-name.java");
         assertExecutionPlan(fixture.jobs(), "INCREMENTAL", null);
     }
 
@@ -177,7 +172,8 @@ class IndexJobProcessorTest {
         verify(fixture.chunks(), never()).replaceRepositoryChunks(any(), any());
         ArgumentCaptor<IndexJob> saved = ArgumentCaptor.forClass(IndexJob.class);
         verify(fixture.jobs()).save(saved.capture());
-        assertThat(saved.getValue().status()).isEqualTo(com.analyzercoder.domain.indexing.IndexJobStatus.FAILED);
+        assertThat(saved.getValue().status())
+                .isEqualTo(com.analyzercoder.domain.indexing.IndexJobStatus.FAILED);
         assertThat(saved.getValue().errorMessage()).contains("没有可索引的文本内容");
     }
 
@@ -190,7 +186,8 @@ class IndexJobProcessorTest {
         CodeGraphArtifactMapper graphArtifacts = mock(CodeGraphArtifactMapper.class);
         CodeGraphTaskService graphTasks = mock(CodeGraphTaskService.class);
         IntelligenceService intelligence = mock(IntelligenceService.class);
-        when(intelligence.prepareRepositoryEmbeddings(repository.id().value())).thenReturn(vectorsReady);
+        when(intelligence.prepareRepositoryEmbeddings(repository.id().value()))
+                .thenReturn(vectorsReady);
         IndexJob running = IndexJob.create(repository.id(), IndexJobType.FULL).start("scan");
         when(jobs.claimNextQueued()).thenReturn(Optional.of(running));
         when(jobs.findById(running.id())).thenReturn(Optional.of(running));
@@ -215,20 +212,24 @@ class IndexJobProcessorTest {
         order.verify(chunks).replaceRepositoryChunks(eq(repository.id()), any());
         order.verify(graphTasks).start(repository.id());
         verify(graphArtifacts)
-                .findPublished(
-                        repository.id().value(), repository.currentSnapshotId().value());
+                .findPublished(repository.id().value(), repository.currentSnapshotId().value());
         ArgumentCaptor<IndexJob> saved = ArgumentCaptor.forClass(IndexJob.class);
         verify(jobs, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
-        assertThat(saved.getAllValues()).anySatisfy(job -> {
-            assertThat(job.status()).isEqualTo(com.analyzercoder.domain.indexing.IndexJobStatus.SUCCEEDED);
-            assertThat(job.currentStep()).contains(vectorsReady ? ":vectors-ready" : ":vectors-degraded");
-        });
+        assertThat(saved.getAllValues())
+                .anySatisfy(
+                        job -> {
+                            assertThat(job.status())
+                                    .isEqualTo(
+                                            com.analyzercoder.domain.indexing.IndexJobStatus
+                                                    .SUCCEEDED);
+                            assertThat(job.currentStep())
+                                    .contains(
+                                            vectorsReady ? ":vectors-ready" : ":vectors-degraded");
+                        });
     }
 
     private static Fixture fixture(
-            CodeRepository repository,
-            String baseline,
-            List<ScannedRepositoryFile> files) {
+            CodeRepository repository, String baseline, List<ScannedRepositoryFile> files) {
         IndexJobStore jobs = mock(IndexJobStore.class);
         CodeRepositoryStore repositories = mock(CodeRepositoryStore.class);
         RepositoryScannerPort scanner = mock(RepositoryScannerPort.class);
@@ -281,8 +282,7 @@ class IndexJobProcessorTest {
                 "current-commit",
                 "worktree-digest",
                 true,
-                RepositorySnapshotId.of(
-                        UUID.fromString("20000000-0000-0000-0000-000000000002")),
+                RepositorySnapshotId.of(UUID.fromString("20000000-0000-0000-0000-000000000002")),
                 path,
                 path.resolve(".codegraph"),
                 now,

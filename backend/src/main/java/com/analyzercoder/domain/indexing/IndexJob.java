@@ -73,9 +73,20 @@ public record IndexJob(
             throw new IllegalStateException("只有运行中的任务可以设置超时截止时间");
         }
         return new IndexJob(
-                id, repositoryId, type, status, currentStep, executionMode, fallbackReason,
-                failureCode, errorMessage,
-                startedAt, heartbeatAt, deadline, finishedAt, createdAt);
+                id,
+                repositoryId,
+                type,
+                status,
+                currentStep,
+                executionMode,
+                fallbackReason,
+                failureCode,
+                errorMessage,
+                startedAt,
+                heartbeatAt,
+                deadline,
+                finishedAt,
+                createdAt);
     }
 
     public IndexJob heartbeat(String step) {
@@ -83,9 +94,20 @@ public record IndexJob(
             throw new IllegalStateException("只有活动任务可以写入心跳");
         }
         return new IndexJob(
-                id, repositoryId, type, status, step, executionMode, fallbackReason,
-                failureCode, errorMessage,
-                startedAt, Instant.now(), timeoutAt, finishedAt, createdAt);
+                id,
+                repositoryId,
+                type,
+                status,
+                step,
+                executionMode,
+                fallbackReason,
+                failureCode,
+                errorMessage,
+                startedAt,
+                Instant.now(),
+                timeoutAt,
+                finishedAt,
+                createdAt);
     }
 
     public IndexJob withExecutionPlan(String mode, String reason) {
@@ -96,8 +118,20 @@ public record IndexJob(
             throw new IllegalArgumentException("未知索引执行模式: " + mode);
         }
         return new IndexJob(
-                id, repositoryId, type, status, currentStep, mode, reason, failureCode,
-                errorMessage, startedAt, Instant.now(), timeoutAt, finishedAt, createdAt);
+                id,
+                repositoryId,
+                type,
+                status,
+                currentStep,
+                mode,
+                reason,
+                failureCode,
+                errorMessage,
+                startedAt,
+                Instant.now(),
+                timeoutAt,
+                finishedAt,
+                createdAt);
     }
 
     public IndexJob requestCancel() {

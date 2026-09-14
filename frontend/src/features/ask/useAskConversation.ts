@@ -34,7 +34,12 @@ export function useAskConversation() {
       ?? null
   );
 
-  async function send(repositoryId: string, modelConfigId: string | null, retrying = false) {
+  async function send(
+    repositoryId: string,
+    modelConfigId: string | null,
+    contextId: string | null = null,
+    retrying = false,
+  ) {
     const value = (retrying ? pendingQuestion.value : question.value).trim();
     if (!value || requestState.value === 'sending') return null;
     const version = ++requestVersion;
@@ -43,13 +48,13 @@ export function useAskConversation() {
     error.value = null;
     try {
       if (!retrying || !clientRequestId) clientRequestId = createClientRequestId();
-      const result = await intelligenceApi.ask(
-        repositoryId,
-        value,
-        clientRequestId,
-        threadId.value,
-        modelConfigId,
-      );
+      const result = contextId
+        ? await intelligenceApi.ask(
+          repositoryId, value, clientRequestId, threadId.value, modelConfigId, contextId,
+        )
+        : await intelligenceApi.ask(
+          repositoryId, value, clientRequestId, threadId.value, modelConfigId,
+        );
       if (version !== requestVersion) return null;
       threadId.value = result.threadId;
       turns.value = [...turns.value.filter(turn => turn.conversationId !== result.conversationId), result]
@@ -69,8 +74,8 @@ export function useAskConversation() {
     }
   }
 
-  function retry(repositoryId: string, modelConfigId: string | null) {
-    return send(repositoryId, modelConfigId, true);
+  function retry(repositoryId: string, modelConfigId: string | null, contextId: string | null = null) {
+    return send(repositoryId, modelConfigId, contextId, true);
   }
 
   function restore(thread: QaThreadDetail) {

@@ -12,6 +12,7 @@ import ProjectSelectionList from '@/features/repositories/ProjectSelectionList.v
 import BranchWorkspace from '@/features/branches/BranchWorkspace.vue';
 import EngineeringProjectsDialog from '@/features/repositories/EngineeringProjectsDialog.vue';
 import { sourceImportsApi } from '@/api/sourceImports';
+import { projectDraftsApi, type ProjectDraft } from '@/api/projectDrafts';
 import { listRepositoryPage, syncRemoteRepository, updateRepository } from '@/api/repositories';
 import { intelligenceApi } from '@/api/intelligence';
 import { useRepositoryStore } from '@/stores/repositoryStore';
@@ -21,6 +22,8 @@ const store = useRepositoryStore();
 const router = useRouter();
 const route = useRoute();
 const rows = shallowRef<Repository[]>([]);
+const projectDrafts = shallowRef<ProjectDraft[]>([]);
+const retryingDraft = shallowRef<ProjectDraft | null>(null);
 const query = shallowRef('');
 const pageNum = shallowRef(1);
 const pageSize = shallowRef(15);
@@ -45,7 +48,8 @@ let pageVersion = 0;
 let alive = true;
 let searchTimer: number | undefined;
 
-type Input = { sourceType: 'LOCAL_GIT' | 'REMOTE_GIT' | 'GITLAB' | 'ZIP'; name: string; path: string; url: string; branch: string; credentialId: string; file: File | null };
+type Input = { sourceType: 'LOCAL_GIT' | 'REMOTE_GIT' | 'GITLAB' | 'ZIP'; name: string; description: string; path: string; url: string; branch: string; credentialId: string; file: File | null };
+const unfinishedDrafts = computed(() => projectDrafts.value.filter(draft => draft.lifecycleStatus !== 'READY'));
 
 async function loadPage() {
   const version = ++pageVersion;
@@ -71,24 +75,61 @@ async function selectProject(project: Repository) {
   catch (error) { if (alive) ElMessage.error(`项目选择保存失败：${error instanceof Error ? error.message : '请稍后重试'}`); }
   finally { if (alive) selectingProject.value = false; }
 }
-async function reloadAll() { await Promise.all([store.loadRepositories(), loadPage()]); }
+async function reloadAll() {
+  const [, , drafts] = await Promise.all([
+    store.loadRepositories(),
+    loadPage(),
+    projectDraftsApi.list().catch(() => []),
+  ]);
+  projectDrafts.value = drafts;
+}
 async function changePage(value: number) { pageNum.value = value; await loadPage(); }
 async function changePageSize(value: number) { pageSize.value = value; pageNum.value = 1; await loadPage(); }
 async function create(input: Input) {
   if (importing.value) return;
   importing.value = true;
   try {
-    if (input.sourceType === 'LOCAL_GIT') await store.createRepository({ name: input.name, path: input.path });
-    else if (input.sourceType === 'ZIP') { if (!input.file) throw new Error('请选择 ZIP 文件'); await sourceImportsApi.zip(input.name, input.file); }
-    else { const job=await sourceImportsApi.remoteJob({ name: input.name, url: input.url, branch: input.branch, sourceType: input.sourceType, credentialId: input.credentialId || undefined }); await waitForImport(job.id); }
+    let draft = retryingDraft.value
+      ?? await projectDraftsApi.create(input.name, input.description);
+    const sourceLocation = input.sourceType === 'LOCAL_GIT'
+      ? input.path
+      : input.sourceType === 'ZIP'
+        ? input.file?.name ?? ''
+        : input.url;
+    draft = await projectDraftsApi.configure(
+      draft, input.sourceType, sourceLocation, input.credentialId || undefined,
+    );
+    if (input.sourceType === 'LOCAL_GIT') {
+      const repository = await store.createRepository({ name: input.name, path: input.path });
+      await projectDraftsApi.complete(draft.id, repository);
+    } else if (input.sourceType === 'ZIP') {
+      if (!input.file) throw new Error('请选择 ZIP 文件');
+      const repository = await sourceImportsApi.zip(input.name, input.file);
+      await projectDraftsApi.complete(draft.id, repository);
+    } else {
+      const job = await sourceImportsApi.remoteJob({
+        name: input.name,
+        url: input.url,
+        branch: input.branch,
+        sourceType: input.sourceType,
+        credentialId: input.credentialId || undefined,
+        projectDraftId: draft.id,
+      });
+      await waitForImport(job.id);
+    }
     dialogOpen.value = false;
+    retryingDraft.value = null;
     pageNum.value = 1;
     await reloadAll();
     ElMessage.success('仓库代码版本已验证并发布');
-  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导入失败'); }
+  } catch (error) {
+    projectDrafts.value = await projectDraftsApi.list().catch(() => projectDrafts.value);
+    ElMessage.error(error instanceof Error ? error.message : '导入失败');
+  }
   finally { importing.value = false; }
 }
-async function waitForImport(id:string){for(let attempt=0;attempt<120;attempt++){const job=await sourceImportsApi.job(id);if(job.status==='SUCCEEDED')return;if(job.status==='FAILED'||job.status==='CANCELED')throw new Error(job.errorMessage??'仓库导入未完成');await new Promise(resolve=>window.setTimeout(resolve,1000));}throw new Error('仓库导入仍在后台运行，请稍后刷新列表')}
+async function waitForImport(id:string){for(let attempt=0;attempt<120;attempt++){const job=await sourceImportsApi.job(id);if(job.status==='SUCCEEDED')return job;if(job.status==='FAILED'||job.status==='CANCELED')throw new Error(job.errorMessage??'仓库导入未完成');await new Promise(resolve=>window.setTimeout(resolve,1000));}throw new Error('仓库导入仍在后台运行，请稍后刷新列表')}
+function retryDraft(draft: ProjectDraft) { retryingDraft.value = draft; dialogOpen.value = true; }
 function openEdit(repository: Repository) { editing.value = repository; editOpen.value = true; }
 async function saveEdit(input: { name: string; description: string; defaultBranch: string; version: number }) {
   if (!editing.value) return;
@@ -164,8 +205,14 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
     <aside class="surface repository-list-surface" aria-label="项目管理">
       <div class="repository-list-header">
         <h2 class="project-list-title">项目</h2>
-        <div class="toolbar project-list-toolbar"><el-input v-model="query" :prefix-icon="Search" placeholder="搜索项目" aria-label="搜索项目" clearable /><el-button type="primary" :icon="Plus" :loading="importing" @click="dialogOpen=true">接入项目</el-button></div>
+        <div class="toolbar project-list-toolbar"><el-input v-model="query" :prefix-icon="Search" placeholder="搜索项目" aria-label="搜索项目" clearable /><el-button type="primary" :icon="Plus" :loading="importing" @click="retryingDraft=null; dialogOpen=true">接入项目</el-button></div>
         <el-alert v-if="pageError || store.error" :title="pageError ?? store.error ?? ''" type="error" :closable="false" />
+        <div v-if="unfinishedDrafts.length" class="draft-stack">
+          <div v-for="draft in unfinishedDrafts.slice(0, 3)" :key="draft.id" class="draft-row">
+            <span><b>{{ draft.name }}</b><small>{{ draft.error ?? '等待配置代码来源' }}</small></span>
+            <el-button link type="primary" @click="retryDraft(draft)">继续接入</el-button>
+          </div>
+        </div>
       </div>
       <div class="repository-table-region">
         <ProjectSelectionList :rows="rows" :selected-id="store.selectedRepositoryId" :loading="pageLoading" :disabled="selectingProject" @select="selectProject" />
@@ -192,7 +239,7 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
       <RepositoryTable :rows="selectedProject ? [selectedProject] : []" :loading="pageLoading" :rescanning-id="rescanningId" :building-id="buildingId" @overview="openOverview" @edit="openEdit" @index="startIndex" @rescan="rescan" @codegraph="buildCodeGraph" @govern="govern" @remove="remove" />
       <template #footer><el-button :icon="Connection" @click="engineeringProjectsOpen=true">跨仓工程项目</el-button><el-button @click="managementOpen=false">关闭</el-button></template>
     </el-dialog>
-    <RepositoryFormDialog v-model="dialogOpen" :busy="importing" @submit="create" />
+    <RepositoryFormDialog v-model="dialogOpen" :busy="importing" :initial-draft="retryingDraft" @submit="create" />
     <RepositoryEditDialog v-model="editOpen" :repository="editing" :busy="editBusy" @submit="saveEdit" />
     <RepositoryGovernanceDialog v-model="governanceOpen" :repository="governedRepository" @changed="governanceChanged" />
     <EngineeringProjectsDialog v-model="engineeringProjectsOpen" :repositories="store.repositories" />
@@ -208,6 +255,10 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
 .project-list-title { margin: 14px 14px 8px; font-size: 16px; }
 .project-list-toolbar { padding: 0 12px 10px; flex-wrap: wrap; }
 .project-list-toolbar .el-input { flex: 1 1 150px; min-width: 100px; }
+.draft-stack { display: grid; gap: 6px; margin: 0 12px 10px; }
+.draft-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; color: #566577; border: 1px solid #ead7b8; border-radius: 5px; background: #fffaf0; font-size: 12px; }
+.draft-row span { display: grid; min-width: 0; gap: 2px; }
+.draft-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-branches { min-width: 0; min-height: 0; overflow: auto; padding: 20px; }
 .project-branch-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 20px; }
 .project-eyebrow, .project-description { color: #68778a; font-size: 12px; line-height: 1.7; }

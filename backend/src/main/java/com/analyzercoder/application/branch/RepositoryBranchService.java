@@ -1,6 +1,7 @@
 package com.analyzercoder.application.branch;
 
 import com.analyzercoder.application.code.CodeSymbolExtractor;
+import com.analyzercoder.application.intelligence.MarkdownKnowledgeSourceService;
 import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.indexing.RepositoryScannerPort;
 import com.analyzercoder.domain.repository.CodeRepository;
@@ -25,6 +26,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** Branch publication is independent of repositories.current_snapshot_id and legacy index jobs. */
@@ -37,6 +39,7 @@ public class RepositoryBranchService {
     private final GitBranchSnapshotFactory snapshots;
     private final RepositoryScannerPort scanner;
     private final CodeSymbolExtractor symbols;
+    private final MarkdownKnowledgeSourceService markdown;
     private final TransactionTemplate transaction;
 
     public RepositoryBranchService(
@@ -47,6 +50,7 @@ public class RepositoryBranchService {
             GitBranchSnapshotFactory snapshots,
             RepositoryScannerPort scanner,
             CodeSymbolExtractor symbols,
+            MarkdownKnowledgeSourceService markdown,
             PlatformTransactionManager manager) {
         this.db = db;
         this.repositories = repositories;
@@ -55,6 +59,7 @@ public class RepositoryBranchService {
         this.snapshots = snapshots;
         this.scanner = scanner;
         this.symbols = symbols;
+        this.markdown = markdown;
         this.transaction = new TransactionTemplate(manager);
     }
 
@@ -65,7 +70,9 @@ public class RepositoryBranchService {
             String commitSha,
             String status,
             String error,
-            long generation) {}
+            long generation,
+            String trackingStatus,
+            Instant archivedAt) {}
 
     public List<Branch> list(AuthenticatedAccount actor, UUID repoId) {
         require(actor, repoId, RepositoryPermission.READ);
@@ -82,13 +89,25 @@ public class RepositoryBranchService {
                                 r.getString("commit_sha"),
                                 r.getString("preparation_status"),
                                 r.getString("preparation_error"),
-                                r.getLong("generation")),
+                                r.getLong("generation"),
+                                r.getString("tracking_status"),
+                                r.getTimestamp("archived_at") == null
+                                        ? null
+                                        : r.getTimestamp("archived_at").toInstant()),
                 repoId);
     }
 
     public Branch track(AuthenticatedAccount actor, UUID repoId, String name) {
         require(actor, repoId, RepositoryPermission.MAINTAIN);
         GitBranchSnapshotFactory.validateBranch(name);
+        Integer archived =
+                db.queryForObject(
+                        "SELECT COUNT(*) FROM repository_branches WHERE repo_id=? AND name=? AND tracking_status='ARCHIVED'",
+                        Integer.class,
+                        repoId,
+                        name);
+        if (archived != null && archived > 0)
+            throw new ApiSecurityException(409, "BRANCH_ARCHIVED", "同名受管分支已归档；请明确恢复，避免继承错误的历史身份");
         db.update(
                 "INSERT INTO repository_branches(id,repo_id,name) VALUES(?,?,?) ON CONFLICT(repo_id,name) DO NOTHING",
                 UUID.randomUUID(),
@@ -98,6 +117,76 @@ public class RepositoryBranchService {
                 .filter(b -> b.name().equals(name))
                 .findFirst()
                 .orElseThrow();
+    }
+
+    @Transactional
+    public Branch archive(AuthenticatedAccount actor, UUID repoId, UUID branchId) {
+        require(actor, repoId, RepositoryPermission.MANAGE);
+        int changed =
+                db.update(
+                        """
+                        UPDATE repository_branches SET tracking_status='ARCHIVED',archived_at=CURRENT_TIMESTAMP,
+                            archived_by=?,generation=generation+1,updated_at=CURRENT_TIMESTAMP
+                        WHERE id=? AND repo_id=? AND tracking_status='ACTIVE'
+                          AND NOT EXISTS(SELECT 1 FROM branch_preparation_jobs j WHERE j.branch_id=repository_branches.id AND j.status IN ('QUEUED','RUNNING'))
+                        """,
+                        actor.id(),
+                        branchId,
+                        repoId);
+        if (changed != 1) {
+            Integer activeJobs =
+                    db.queryForObject(
+                            "SELECT COUNT(*) FROM branch_preparation_jobs WHERE branch_id=? AND status IN ('QUEUED','RUNNING')",
+                            Integer.class,
+                            branchId);
+            if (activeJobs != null && activeJobs > 0)
+                throw new ApiSecurityException(409, "BRANCH_HAS_ACTIVE_TASK", "分支仍有准备任务，完成后才能归档");
+            throw new ApiSecurityException(404, "BRANCH_NOT_FOUND", "活动分支不存在");
+        }
+        return branch(repoId, branchId);
+    }
+
+    @Transactional
+    public Branch restore(AuthenticatedAccount actor, UUID repoId, UUID branchId) {
+        require(actor, repoId, RepositoryPermission.MANAGE);
+        if (db.update(
+                        """
+                        UPDATE repository_branches SET tracking_status='ACTIVE',archived_at=NULL,archived_by=NULL,
+                            generation=generation+1,updated_at=CURRENT_TIMESTAMP
+                        WHERE id=? AND repo_id=? AND tracking_status='ARCHIVED'
+                        """,
+                        branchId,
+                        repoId)
+                != 1) throw new ApiSecurityException(404, "BRANCH_NOT_FOUND", "归档分支不存在");
+        return branch(repoId, branchId);
+    }
+
+    private Branch branch(UUID repoId, UUID branchId) {
+        return db
+                .query(
+                        """
+                        SELECT b.*,s.commit_sha FROM repository_branches b
+                        LEFT JOIN branch_snapshots s ON s.id=b.published_snapshot_id
+                        WHERE b.repo_id=? AND b.id=?
+                        """,
+                        (r, n) ->
+                                new Branch(
+                                        r.getObject("id", UUID.class),
+                                        r.getString("name"),
+                                        r.getObject("published_snapshot_id", UUID.class),
+                                        r.getString("commit_sha"),
+                                        r.getString("preparation_status"),
+                                        r.getString("preparation_error"),
+                                        r.getLong("generation"),
+                                        r.getString("tracking_status"),
+                                        r.getTimestamp("archived_at") == null
+                                                ? null
+                                                : r.getTimestamp("archived_at").toInstant()),
+                        repoId,
+                        branchId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ApiSecurityException(404, "BRANCH_NOT_FOUND", "分支不存在"));
     }
 
     void executePreparation(
@@ -110,7 +199,7 @@ public class RepositoryBranchService {
         require(actor, repoId, RepositoryPermission.MAINTAIN);
         Branch branch =
                 list(actor, repoId).stream()
-                        .filter(b -> b.id().equals(branchId))
+                        .filter(b -> b.id().equals(branchId) && "ACTIVE".equals(b.trackingStatus()))
                         .findFirst()
                         .orElseThrow(
                                 () -> new ApiSecurityException(404, "BRANCH_NOT_FOUND", "分支不存在"));
@@ -147,8 +236,9 @@ public class RepositoryBranchService {
                                     branch.name(), commit, commit, false, Instant.now()),
                             snapshot);
             List<CodeChunk> chunks = new ArrayList<>();
+            var scannedFiles = scanner.scan(source);
             progress.accept("INDEXING", commit);
-            for (var file : scanner.scan(source)) {
+            for (var file : scannedFiles) {
                 String[] lines = file.content().split("\\R", -1);
                 for (int start = 0; start < lines.length; start += 100) {
                     int end = Math.min(lines.length, start + 120);
@@ -202,6 +292,8 @@ public class RepositoryBranchService {
                                 branchId,
                                 commit,
                                 snapshot.contentPath().toString());
+                        markdown.synchronizeBranch(
+                                repoId, branchId, snapshot.id().value(), scannedFiles);
                         db.batchUpdate(
                                 """
                     INSERT INTO code_chunks(id,repo_id,snapshot_id,commit_sha,file_path,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at,symbol_id,symbol_name,symbol_kind)
@@ -290,7 +382,8 @@ public class RepositoryBranchService {
                             db.query(
                                     """
                 SELECT b.id,b.name,s.id snapshot_id,s.commit_sha,s.content_path FROM repository_branches b
-                JOIN branch_snapshots s ON s.id=b.published_snapshot_id WHERE b.repo_id=? AND b.id=?
+                JOIN branch_snapshots s ON s.id=b.published_snapshot_id
+                WHERE b.repo_id=? AND b.id=? AND b.tracking_status='ACTIVE'
                 """,
                                     (r, n) ->
                                             new BranchReadContext(

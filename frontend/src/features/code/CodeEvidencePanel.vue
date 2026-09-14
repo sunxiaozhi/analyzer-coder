@@ -27,6 +27,7 @@ interface Props {
   filePath: string | null;
   initialSymbol: string | null;
   snapshotId: string | null;
+  contextId?: string | null;
   initialDepth?: number;
   autoAnalyze?: boolean;
   canBuildGraph?: boolean;
@@ -153,9 +154,15 @@ async function load(resetSymbol = true, rerunRelation = false) {
   if (!props.repositoryId || !props.filePath) return;
   loading.value = true;
   try {
+    const fileContextRequest = props.contextId
+      ? intelligenceApi.codeEvidenceContext(props.repositoryId, props.filePath, symbol.value || null, props.contextId)
+      : intelligenceApi.codeEvidenceContext(props.repositoryId, props.filePath, symbol.value || null);
+    const graphRequest = props.contextId
+      ? intelligenceApi.latestGraph(props.repositoryId, props.contextId)
+      : intelligenceApi.latestGraph(props.repositoryId);
     const [fileContext, graphArtifact] = await Promise.all([
-      intelligenceApi.codeEvidenceContext(props.repositoryId, props.filePath, symbol.value || null),
-      intelligenceApi.latestGraph(props.repositoryId).catch(() => null),
+      fileContextRequest,
+      graphRequest.catch(() => null),
     ]);
     if (version !== contextVersion) return;
     context.value = fileContext;
@@ -197,6 +204,7 @@ async function analyze() {
       symbol.value.trim(),
       depth.value,
       'BOTH',
+      props.contextId,
     );
     if (version !== relationVersion || context !== contextVersion) return;
     if (result.snapshotId !== props.snapshotId) {
@@ -222,7 +230,7 @@ async function buildGraph() {
   buildJob.value = null;
   relationError.value = null;
   try {
-    let task = await intelligenceApi.buildGraph(repositoryId);
+    let task = await intelligenceApi.buildGraph(repositoryId, props.contextId);
     if (version !== buildVersion || disposed) return;
     buildJob.value = task;
     for (let attempt = 0; attempt < 240 && ['QUEUED', 'RUNNING', 'CANCEL_REQUESTED'].includes(task.status); attempt += 1) {

@@ -26,6 +26,9 @@ public class MarkdownKnowledgeSourceController {
     private final MarkdownKnowledgeSourceService service;
     private final AccessControlService access;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private BranchRequestContext branchContexts;
+
     public MarkdownKnowledgeSourceController(
             MarkdownKnowledgeSourceService service, AccessControlService access) {
         this.service = service;
@@ -36,7 +39,8 @@ public class MarkdownKnowledgeSourceController {
     public MarkdownKnowledgeSourceService.MarkdownSourceList list(
             @PathVariable UUID repoId, HttpServletRequest request) {
         require(request, repoId, RepositoryPermission.READ);
-        return service.list(repoId);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null ? service.list(repoId) : service.list(repoId, context);
     }
 
     @PostMapping("/generate")
@@ -45,11 +49,13 @@ public class MarkdownKnowledgeSourceController {
             @Valid @RequestBody GenerateRequest body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.MAINTAIN);
-        return service.generate(
-                repoId,
-                account.id(),
+        var input =
                 new MarkdownKnowledgeSourceService.GenerateInput(
-                        body.sourcePath(), body.expectedSnapshotId(), body.expectedContentHash()));
+                        body.sourcePath(), body.expectedSnapshotId(), body.expectedContentHash());
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.generate(repoId, account.id(), input)
+                : service.generate(repoId, account.id(), input, context);
     }
 
     @PostMapping("/generate-pending")
@@ -58,7 +64,10 @@ public class MarkdownKnowledgeSourceController {
             @Valid @RequestBody GeneratePendingRequest body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.MAINTAIN);
-        return service.generatePending(repoId, account.id(), body.expectedSnapshotId());
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.generatePending(repoId, account.id(), body.expectedSnapshotId())
+                : service.generatePending(repoId, account.id(), body.expectedSnapshotId(), context);
     }
 
     private com.analyzercoder.security.AuthenticatedAccount require(
@@ -71,10 +80,7 @@ public class MarkdownKnowledgeSourceController {
     public record GenerateRequest(
             @NotBlank String sourcePath,
             @NotNull UUID expectedSnapshotId,
-            @NotBlank
-                    @Pattern(
-                            regexp = "(?i)^[0-9a-f]{64}$",
-                            message = "Markdown 内容摘要格式无效")
+            @NotBlank @Pattern(regexp = "(?i)^[0-9a-f]{64}$", message = "Markdown 内容摘要格式无效")
                     String expectedContentHash) {}
 
     public record GeneratePendingRequest(@NotNull UUID expectedSnapshotId) {}

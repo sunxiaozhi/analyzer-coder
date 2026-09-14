@@ -32,9 +32,7 @@ public class KnowledgeDriftJobProcessor {
 
     public boolean processNextQueuedJob() {
         return jobs.claimNextQueued(
-                        IndexJobType.KNOWLEDGE_DRIFT,
-                        "check_knowledge_drift",
-                        timeoutSeconds)
+                        IndexJobType.KNOWLEDGE_DRIFT, "check_knowledge_drift", timeoutSeconds)
                 .map(this::process)
                 .orElse(false);
     }
@@ -52,8 +50,7 @@ public class KnowledgeDriftJobProcessor {
             }
             CodeRepository repository = repository(running);
             inspectedSnapshot =
-                    Objects.requireNonNull(
-                            repository.currentSnapshotId(), "仓库尚未发布可用的代码版本");
+                    Objects.requireNonNull(repository.currentSnapshotId(), "仓库尚未发布可用的代码版本");
             jobs.heartbeat(running.id(), "check_knowledge_drift:" + inspectedSnapshot.value());
             KnowledgeDriftService.InspectionReport report = drift.inspect(repository);
 
@@ -79,7 +76,8 @@ public class KnowledgeDriftJobProcessor {
             if (latest.status() == IndexJobStatus.FAILED) {
                 return false;
             }
-            String snapshot = inspectedSnapshot == null ? "unknown" : inspectedSnapshot.value().toString();
+            String snapshot =
+                    inspectedSnapshot == null ? "unknown" : inspectedSnapshot.value().toString();
             jobs.save(
                     latest.fail(
                             "knowledge_drift_failed:" + snapshot,

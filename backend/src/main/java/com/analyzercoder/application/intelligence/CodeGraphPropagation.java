@@ -48,12 +48,7 @@ public record CodeGraphPropagation(
             JsonNode impact = json.readTree(impactOutput);
             JsonNode exported = json.readTree(exportOutput);
             return assemble(
-                    impact,
-                    exported,
-                    requestedSymbol,
-                    requestedDepth,
-                    artifact,
-                    "CODEGRAPH_CLI");
+                    impact, exported, requestedSymbol, requestedDepth, artifact, "CODEGRAPH_CLI");
         } catch (IOException exception) {
             throw new CodeGraphException(
                     "CODEGRAPH_CLI_OUTPUT_INVALID", "CodeGraph 返回了无法解析的 JSON", exception);
@@ -140,9 +135,10 @@ public record CodeGraphPropagation(
                                         .thenComparing(Map.Entry.comparingByKey()))
                         .map(
                                 entry ->
-                                        nodeById
-                                                .get(entry.getKey())
-                                                .toNode(entry.getValue(), focusIds.contains(entry.getKey())))
+                                        nodeById.get(entry.getKey())
+                                                .toNode(
+                                                        entry.getValue(),
+                                                        focusIds.contains(entry.getKey())))
                         .toList();
         Set<String> representedIds = traversal.depthByNode().keySet();
         List<Edge> edges =
@@ -219,7 +215,10 @@ public record CodeGraphPropagation(
                 artifact.snapshotId(),
                 artifact.cliVersion(),
                 Math.max(0, nodes.size() - focusIds.size()),
-                traversal.depthByNode().values().stream().mapToInt(Integer::intValue).max().orElse(0),
+                traversal.depthByNode().values().stream()
+                        .mapToInt(Integer::intValue)
+                        .max()
+                        .orElse(0),
                 coverage,
                 limitations);
     }
@@ -266,7 +265,8 @@ public record CodeGraphPropagation(
             String identity = source + "\u0000" + target + "\u0000" + relation + "\u0000" + line;
             if (unique.add(identity)) {
                 String id =
-                        UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8)).toString();
+                        UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8))
+                                .toString();
                 edges.add(new RawEdge(id, source, target, relation, line));
             }
         }
@@ -278,7 +278,9 @@ public record CodeGraphPropagation(
         Map<String, List<RawEdge>> incomingByTarget = new HashMap<>();
         for (RawEdge edge : edges) {
             if (allowedIds.contains(edge.source()) && allowedIds.contains(edge.target())) {
-                incomingByTarget.computeIfAbsent(edge.target(), ignored -> new ArrayList<>()).add(edge);
+                incomingByTarget
+                        .computeIfAbsent(edge.target(), ignored -> new ArrayList<>())
+                        .add(edge);
             }
         }
         incomingByTarget

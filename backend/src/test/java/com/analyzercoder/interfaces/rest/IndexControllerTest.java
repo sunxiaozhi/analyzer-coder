@@ -36,10 +36,7 @@ class IndexControllerTest {
         when(request.getAttribute(SecurityContext.SESSION_ATTRIBUTE))
                 .thenReturn(new AuthenticatedSession("token", "csrf", account));
 
-        assertThatThrownBy(
-                        () ->
-                                new IndexController(jobs, access, page)
-                                        .page(1, 20, request))
+        assertThatThrownBy(() -> new IndexController(jobs, access, page).page(1, 20, request))
                 .isInstanceOf(ApiSecurityException.class)
                 .hasMessageContaining("无权限");
         verifyNoInteractions(page);

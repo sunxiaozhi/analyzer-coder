@@ -62,12 +62,17 @@ public class ManagedCodeGraphService extends CodeGraphService {
     @Override
     public Artifact build(UUID repositoryId, BuildControl control) {
         Version version = version(repositoryId);
-        return buildVersion(repositoryId,version,control,false);
+        return buildVersion(repositoryId, version, control, false);
     }
-    @Override public Artifact buildSnapshot(UUID repositoryId,UUID snapshotId,Path snapshotPath,BuildControl control) {
-        return buildVersion(repositoryId,new Version(snapshotId,snapshotPath),control,true);
+
+    @Override
+    public Artifact buildSnapshot(
+            UUID repositoryId, UUID snapshotId, Path snapshotPath, BuildControl control) {
+        return buildVersion(repositoryId, new Version(snapshotId, snapshotPath), control, true);
     }
-    private Artifact buildVersion(UUID repositoryId,Version version,BuildControl control,boolean immutableBranch) {
+
+    private Artifact buildVersion(
+            UUID repositoryId, Version version, BuildControl control, boolean immutableBranch) {
         UUID artifactId = UUID.randomUUID();
         Path project =
                 root.resolve(repositoryId.toString())
@@ -128,9 +133,12 @@ public class ManagedCodeGraphService extends CodeGraphService {
     @Override
     public CodeGraphPropagation impact(UUID repositoryId, String symbol, int depth) {
         Version version = version(repositoryId);
-        return impactSnapshot(repositoryId,version.snapshotId(),symbol,depth);
+        return impactSnapshot(repositoryId, version.snapshotId(), symbol, depth);
     }
-    @Override public CodeGraphPropagation impactSnapshot(UUID repositoryId,UUID snapshotId,String symbol,int depth) {
+
+    @Override
+    public CodeGraphPropagation impactSnapshot(
+            UUID repositoryId, UUID snapshotId, String symbol, int depth) {
         Artifact artifact = published(repositoryId, snapshotId);
         Path project = Path.of(artifact.artifactPath()).getParent();
         int boundedDepth = Math.max(1, Math.min(depth, MAX_IMPACT_DEPTH));
@@ -194,10 +202,18 @@ public class ManagedCodeGraphService extends CodeGraphService {
         return CodeGraphExplorer.project(graph, repositoryId, current.snapshotId(), module, query);
     }
 
-    @Override public CodeGraphExplorer.View exploreSnapshot(UUID repositoryId,UUID snapshotId,String module,String query) {
-        Artifact artifact=published(repositoryId,snapshotId);
-        return CodeGraphExplorer.project(CodeGraphDatabaseReader.read(json,Path.of(artifact.artifactPath())),repositoryId,snapshotId,module,query);
+    @Override
+    public CodeGraphExplorer.View exploreSnapshot(
+            UUID repositoryId, UUID snapshotId, String module, String query) {
+        Artifact artifact = published(repositoryId, snapshotId);
+        return CodeGraphExplorer.project(
+                CodeGraphDatabaseReader.read(json, Path.of(artifact.artifactPath())),
+                repositoryId,
+                snapshotId,
+                module,
+                query);
     }
+
     private Version version(UUID repositoryId) {
         var row = mapper.findRepositoryVersion(repositoryId);
         if (row == null) {

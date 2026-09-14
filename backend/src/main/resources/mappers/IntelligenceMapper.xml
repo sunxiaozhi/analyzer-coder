@@ -158,9 +158,11 @@
     <insert id="insertConversation">
         INSERT INTO qa_conversations(
           id,thread_id,turn_no,repo_id,account_id,client_request_id,title,question,answer,snapshot_id,
+          branch_id,context_id,branch_name,commit_sha,
           provider,evidence_status,fallback_reason,answer_payload,status,finished_at
         ) VALUES(
           #{id},#{threadId},#{turnNo},#{repositoryId},#{accountId},#{clientRequestId},#{title},#{question},#{answer},#{snapshotId},
+          #{branchId},#{contextId},#{branchName},#{commitSha},
           #{provider},#{evidenceStatus},#{fallbackReason},CAST(#{answerPayload} AS jsonb),'COMPLETED',CURRENT_TIMESTAMP
         )
     </insert>
@@ -171,14 +173,14 @@
         WHERE repo_id=#{repositoryId} AND account_id=#{accountId} AND client_request_id=#{clientRequestId}
     </select>
     <select id="findConversation" resultType="map">
-        SELECT c.id,c.thread_id,c.turn_no,c.repo_id,c.account_id,c.title,c.question,c.answer,c.snapshot_id,c.provider,c.evidence_status,
+        SELECT c.id,c.thread_id,c.turn_no,c.repo_id,c.account_id,c.title,c.question,c.answer,c.snapshot_id,c.branch_id,c.branch_name,c.commit_sha,c.provider,c.evidence_status,
         c.fallback_reason,c.answer_payload,c.status,c.created_at,c.updated_at,
         (SELECT COUNT(*) FROM qa_citations q WHERE q.conversation_id=c.id) citation_count
         FROM qa_conversations c
         WHERE c.id=#{id} AND c.repo_id=#{repositoryId} AND c.account_id=#{accountId}
     </select>
     <select id="findThread" resultType="map">
-        SELECT c.id,c.thread_id,c.turn_no,c.repo_id,c.account_id,c.title,c.question,c.answer,c.snapshot_id,c.provider,c.evidence_status,
+        SELECT c.id,c.thread_id,c.turn_no,c.repo_id,c.account_id,c.title,c.question,c.answer,c.snapshot_id,c.branch_id,c.branch_name,c.commit_sha,c.provider,c.evidence_status,
         c.fallback_reason,c.answer_payload,c.status,c.created_at,c.updated_at,
         (SELECT COUNT(*) FROM qa_citations q JOIN qa_conversations t ON t.id=q.conversation_id
          WHERE t.thread_id=c.thread_id) citation_count,
@@ -187,12 +189,32 @@
         WHERE c.thread_id=#{threadId} AND c.repo_id=#{repositoryId} AND c.account_id=#{accountId}
         ORDER BY c.turn_no LIMIT 1
     </select>
+    <select id="findThreadByBranch" resultType="map">
+        SELECT c.id,c.thread_id,c.turn_no,c.repo_id,c.account_id,c.title,c.question,c.answer,c.snapshot_id,c.branch_id,c.branch_name,c.commit_sha,c.provider,c.evidence_status,
+        c.fallback_reason,c.answer_payload,c.status,c.created_at,c.updated_at,
+        (SELECT COUNT(*) FROM qa_citations q JOIN qa_conversations t ON t.id=q.conversation_id
+         WHERE t.thread_id=c.thread_id) citation_count,
+        (SELECT COUNT(*) FROM qa_conversations t WHERE t.thread_id=c.thread_id) turn_count
+        FROM qa_conversations c
+        WHERE c.thread_id=#{threadId} AND c.repo_id=#{repositoryId} AND c.account_id=#{accountId}
+          AND c.branch_id=#{branchId}
+        ORDER BY c.turn_no LIMIT 1
+    </select>
     <select id="listThreadTurns" resultType="map">
-        SELECT c.id,c.thread_id,c.turn_no,c.repo_id,c.account_id,c.title,c.question,c.answer,c.snapshot_id,c.provider,c.evidence_status,
+        SELECT c.id,c.thread_id,c.turn_no,c.repo_id,c.account_id,c.title,c.question,c.answer,c.snapshot_id,c.branch_id,c.branch_name,c.commit_sha,c.provider,c.evidence_status,
         c.fallback_reason,c.answer_payload,c.status,c.created_at,c.updated_at,
         (SELECT COUNT(*) FROM qa_citations q WHERE q.conversation_id=c.id) citation_count
         FROM qa_conversations c
         WHERE c.thread_id=#{threadId} AND c.repo_id=#{repositoryId} AND c.account_id=#{accountId}
+        ORDER BY c.turn_no
+    </select>
+    <select id="listThreadTurnsByBranch" resultType="map">
+        SELECT c.id,c.thread_id,c.turn_no,c.repo_id,c.account_id,c.title,c.question,c.answer,c.snapshot_id,c.branch_id,c.branch_name,c.commit_sha,c.provider,c.evidence_status,
+        c.fallback_reason,c.answer_payload,c.status,c.created_at,c.updated_at,
+        (SELECT COUNT(*) FROM qa_citations q WHERE q.conversation_id=c.id) citation_count
+        FROM qa_conversations c
+        WHERE c.thread_id=#{threadId} AND c.repo_id=#{repositoryId} AND c.account_id=#{accountId}
+          AND c.branch_id=#{branchId}
         ORDER BY c.turn_no
     </select>
     <select id="lockThread" resultType="map">
@@ -222,13 +244,40 @@
         ) stats ON stats.thread_id=latest.thread_id
         ORDER BY stats.updated_at DESC,latest.thread_id DESC LIMIT #{limit} OFFSET #{offset}
     </select>
+    <select id="listConversationsByBranch" resultType="map">
+        SELECT latest.thread_id AS id,latest.thread_id,latest.repo_id,latest.branch_id,latest.branch_name,
+               latest.commit_sha,latest.title,latest.question,latest.provider,latest.evidence_status,latest.fallback_reason,
+               stats.citation_count,stats.turn_count,stats.created_at,stats.updated_at
+        FROM (
+          SELECT DISTINCT ON (thread_id) thread_id,repo_id,branch_id,branch_name,commit_sha,title,question,provider,evidence_status,fallback_reason
+          FROM qa_conversations
+          WHERE repo_id=#{repositoryId} AND account_id=#{accountId} AND branch_id=#{branchId}
+          ORDER BY thread_id,turn_no DESC
+        ) latest
+        JOIN (
+          SELECT c.thread_id,COUNT(DISTINCT c.id) turn_count,COUNT(q.id) citation_count,
+                 MIN(c.created_at) created_at,MAX(c.updated_at) updated_at
+          FROM qa_conversations c LEFT JOIN qa_citations q ON q.conversation_id=c.id
+          WHERE c.repo_id=#{repositoryId} AND c.account_id=#{accountId} AND c.branch_id=#{branchId}
+          GROUP BY c.thread_id
+        ) stats ON stats.thread_id=latest.thread_id
+        ORDER BY stats.updated_at DESC,latest.thread_id DESC LIMIT #{limit} OFFSET #{offset}
+    </select>
     <update id="renameConversation">
         UPDATE qa_conversations SET title=#{title},updated_at=CURRENT_TIMESTAMP
         WHERE thread_id=#{id} AND repo_id=#{repositoryId} AND account_id=#{accountId}
     </update>
+    <update id="renameConversationByBranch">
+        UPDATE qa_conversations SET title=#{title},updated_at=CURRENT_TIMESTAMP
+        WHERE thread_id=#{id} AND repo_id=#{repositoryId} AND account_id=#{accountId} AND branch_id=#{branchId}
+    </update>
     <delete id="deleteConversation">
         DELETE FROM qa_conversations
         WHERE thread_id=#{id} AND repo_id=#{repositoryId} AND account_id=#{accountId}
+    </delete>
+    <delete id="deleteConversationByBranch">
+        DELETE FROM qa_conversations
+        WHERE thread_id=#{id} AND repo_id=#{repositoryId} AND account_id=#{accountId} AND branch_id=#{branchId}
     </delete>
     <insert id="insertCitation">
         INSERT INTO qa_citations(id,conversation_id,repository_id,source_type,chunk_id,knowledge_card_id,title,file_path,symbol_name,start_line,end_line,evidence_hash,rank,citation_payload)
@@ -329,6 +378,11 @@
         SELECT id,snapshot_id,file_path,symbol_name,start_line,end_line,content,content_hash
         FROM code_chunks WHERE repo_id=#{repositoryId} AND id=#{chunkId}
         AND snapshot_id=(SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId})
+    </select>
+    <select id="findChunkAtSnapshot" resultType="map">
+        SELECT id,snapshot_id,file_path,symbol_name,start_line,end_line,content,content_hash
+        FROM code_chunks
+        WHERE repo_id=#{repositoryId} AND id=#{chunkId} AND snapshot_id=#{snapshotId}
     </select>
     <select id="codeReferences" resultType="map">
         SELECT COALESCE(c.id,r.chunk_id) chunk_id,COALESCE(c.snapshot_id,r.snapshot_id) snapshot_id,
@@ -469,6 +523,9 @@
 
     <select id="searchBranchKnowledgeKeyword" resultType="map">
         SELECT <include refid="knowledgeColumns"/>,
+        CASE WHEN scope.mode='ALL_BRANCHES' THEN '项目共享'
+             WHEN CARDINALITY(scope.branch_ids)=1 THEN '分支专属 · ' || COALESCE(scope_branch.name,'未知分支')
+             ELSE '指定分支 · ' || CARDINALITY(scope.branch_ids) END source_scope,
         LEAST(1.0,
           CASE WHEN POSITION(#{query} IN LOWER(c.title))&gt;0 THEN .95 ELSE 0 END
           +CASE WHEN POSITION(#{query} IN LOWER(c.content))&gt;0 THEN .65 ELSE 0 END
@@ -487,6 +544,9 @@
         FROM (SELECT r.*,r.card_id AS id FROM knowledge_card_revisions r) c
         JOIN knowledge_cards live ON live.id=c.id
         JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
+        JOIN knowledge_branch_scopes scope ON scope.card_id=c.id
+        LEFT JOIN repository_branches scope_branch
+          ON CARDINALITY(scope.branch_ids)=1 AND scope_branch.id=scope.branch_ids[1]
         WHERE <include refid="validBranchKnowledge"/> AND(
           POSITION(#{query} IN LOWER(c.title))&gt;0
           OR POSITION(#{query} IN LOWER(c.content))&gt;0
@@ -502,12 +562,19 @@
     </select>
 
     <select id="searchBranchKnowledgeVector" resultType="map">
-        SELECT <include refid="knowledgeColumns"/>,0.0 lexical_score,
+        SELECT <include refid="knowledgeColumns"/>,
+        CASE WHEN scope.mode='ALL_BRANCHES' THEN '项目共享'
+             WHEN CARDINALITY(scope.branch_ids)=1 THEN '分支专属 · ' || COALESCE(scope_branch.name,'未知分支')
+             ELSE '指定分支 · ' || CARDINALITY(scope.branch_ids) END source_scope,
+        0.0 lexical_score,
         GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
         FROM knowledge_card_embeddings e
         JOIN (SELECT r.*,r.card_id AS id FROM knowledge_card_revisions r) c ON c.id=e.card_id AND c.revision=e.revision
         JOIN knowledge_cards live ON live.id=c.id
         JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
+        JOIN knowledge_branch_scopes scope ON scope.card_id=c.id
+        LEFT JOIN repository_branches scope_branch
+          ON CARDINALITY(scope.branch_ids)=1 AND scope_branch.id=scope.branch_ids[1]
         WHERE <include refid="validBranchKnowledge"/> AND e.model=#{model} AND e.dimension=#{dimension}
         ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.changed_at DESC
         LIMIT #{limit}

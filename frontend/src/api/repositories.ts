@@ -1,4 +1,5 @@
 import { request } from '@/api/http';
+import { branchContextOptions } from '@/api/branchContext';
 import type { PageResult } from '@/types/pagination';
 import type {
   CodeChunkListResponse,
@@ -252,13 +253,14 @@ export function retryPreparationStage(
   );
 }
 
-export function listRepositoryFiles(repositoryId: string): Promise<RepositorySnapshotFiles> {
-  return request<RepositorySnapshotFiles>(`/api/repositories/${repositoryId}/files`);
+export function listRepositoryFiles(repositoryId: string, contextId?: string | null): Promise<RepositorySnapshotFiles> {
+  return request<RepositorySnapshotFiles>(`/api/repositories/${repositoryId}/files`, branchContextOptions(contextId));
 }
 
-export function getRepositoryFile(repositoryId: string, path: string): Promise<RepositoryFileContent> {
+export function getRepositoryFile(repositoryId: string, path: string, contextId?: string | null): Promise<RepositoryFileContent> {
   return request<RepositoryFileContent>(
     `/api/repositories/${repositoryId}/files/content?path=${encodeURIComponent(path)}`,
+    branchContextOptions(contextId),
   );
 }
 

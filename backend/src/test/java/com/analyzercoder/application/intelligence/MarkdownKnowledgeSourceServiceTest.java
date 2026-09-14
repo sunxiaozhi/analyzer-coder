@@ -38,10 +38,8 @@ import org.mockito.ArgumentCaptor;
 class MarkdownKnowledgeSourceServiceTest {
     private static final UUID REPOSITORY_ID =
             UUID.fromString("10000000-0000-0000-0000-000000000001");
-    private static final UUID SNAPSHOT_ID =
-            UUID.fromString("20000000-0000-0000-0000-000000000002");
-    private static final UUID ACTOR_ID =
-            UUID.fromString("30000000-0000-0000-0000-000000000003");
+    private static final UUID SNAPSHOT_ID = UUID.fromString("20000000-0000-0000-0000-000000000002");
+    private static final UUID ACTOR_ID = UUID.fromString("30000000-0000-0000-0000-000000000003");
 
     private MarkdownKnowledgeSourceMapper mapper;
     private CodeRepositoryStore repositories;
@@ -64,18 +62,10 @@ class MarkdownKnowledgeSourceServiceTest {
         String content = "前言\r\n### 深入设计\r\n完整正文";
         ScannedRepositoryFile markdown =
                 new ScannedRepositoryFile(
-                        "docs/design.md",
-                        "markdown",
-                        RepositoryAssetType.DOCUMENT,
-                        content,
-                        3);
+                        "docs/design.md", "markdown", RepositoryAssetType.DOCUMENT, content, 3);
         ScannedRepositoryFile code =
                 new ScannedRepositoryFile(
-                        "src/Main.java",
-                        "java",
-                        RepositoryAssetType.CODE,
-                        "class Main {}",
-                        1);
+                        "src/Main.java", "java", RepositoryAssetType.CODE, "class Main {}", 1);
 
         service.synchronize(repository, List.of(markdown, code), false, Set.of());
 
@@ -105,11 +95,19 @@ class MarkdownKnowledgeSourceServiceTest {
         when(mapper.lockSource(REPOSITORY_ID, "README.md"))
                 .thenReturn(lockRow(sourceId, SNAPSHOT_ID, "README.md", hash));
         when(mapper.findSource(REPOSITORY_ID, SNAPSHOT_ID, "README.md"))
-                .thenReturn(sourceRow(sourceId, SNAPSHOT_ID, "README.md", content, hash, "PENDING", null, null));
+                .thenReturn(
+                        sourceRow(
+                                sourceId,
+                                SNAPSHOT_ID,
+                                "README.md",
+                                content,
+                                hash,
+                                "PENDING",
+                                null,
+                                null));
         when(mapper.findChunkIds(REPOSITORY_ID, SNAPSHOT_ID, "README.md", 30))
                 .thenReturn(List.of(chunkId));
-        when(intelligence.createCard(eq(REPOSITORY_ID), eq(ACTOR_ID), any()))
-                .thenReturn(created);
+        when(intelligence.createCard(eq(REPOSITORY_ID), eq(ACTOR_ID), any())).thenReturn(created);
         when(intelligence.cards(REPOSITORY_ID, true)).thenReturn(List.of(created));
 
         IntelligenceService.KnowledgeCard result =
@@ -124,7 +122,9 @@ class MarkdownKnowledgeSourceServiceTest {
         verify(intelligence).createCard(eq(REPOSITORY_ID), eq(ACTOR_ID), input.capture());
         assertEquals("项目说明", input.getValue().cardType());
         assertEquals(content, input.getValue().content());
-        assertEquals(List.of(new IntelligenceService.CodeReferenceInput(chunkId)), input.getValue().codeReferences());
+        assertEquals(
+                List.of(new IntelligenceService.CodeReferenceInput(chunkId)),
+                input.getValue().codeReferences());
         verify(mapper)
                 .insertProvenance(
                         created.id(),
@@ -216,13 +216,7 @@ class MarkdownKnowledgeSourceServiceTest {
         assertEquals(content, input.getValue().content());
         verify(mapper)
                 .insertProvenance(
-                        cardId,
-                        3,
-                        sourceId,
-                        REPOSITORY_ID,
-                        SNAPSHOT_ID,
-                        "docs/guide.md",
-                        hash);
+                        cardId, 3, sourceId, REPOSITORY_ID, SNAPSHOT_ID, "docs/guide.md", hash);
         assertEquals(cardId, result.id());
         assertEquals(3, result.revision());
     }

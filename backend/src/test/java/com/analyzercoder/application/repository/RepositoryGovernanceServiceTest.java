@@ -33,12 +33,7 @@ class RepositoryGovernanceServiceTest {
         UUID repositoryId = UUID.randomUUID();
         AuthenticatedAccount actor =
                 new AuthenticatedAccount(
-                        UUID.randomUUID(),
-                        "maintainer",
-                        "维护者",
-                        AccountRole.NORMAL,
-                        false,
-                        null);
+                        UUID.randomUUID(), "maintainer", "维护者", AccountRole.NORMAL, false, null);
         List<RepositoryMemberRow> members = List.of();
         when(mapper.findMembers(repositoryId)).thenReturn(members);
 

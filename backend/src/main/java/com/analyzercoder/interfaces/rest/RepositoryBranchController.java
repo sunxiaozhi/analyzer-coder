@@ -1,5 +1,6 @@
 package com.analyzercoder.interfaces.rest;
 
+import com.analyzercoder.application.branch.BranchArtifactRetentionService;
 import com.analyzercoder.application.branch.BranchKnowledgeService;
 import com.analyzercoder.application.branch.BranchPreparationJobs;
 import com.analyzercoder.application.branch.BranchReadContext;
@@ -10,6 +11,7 @@ import com.analyzercoder.security.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +29,9 @@ public class RepositoryBranchController {
     private final BranchRemoteService remote;
     private final BranchKnowledgeService knowledge;
     private final BranchPreparationJobs preparation;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private BranchArtifactRetentionService retention;
 
     public RepositoryBranchController(
             RepositoryBranchService branches,
@@ -55,6 +60,22 @@ public class RepositoryBranchController {
     public RepositoryBranchService.Branch track(
             @PathVariable UUID repositoryId, @RequestBody Track body, HttpServletRequest request) {
         return branches.track(SecurityContext.account(request), repositoryId, body.name());
+    }
+
+    @PostMapping("/branches/{branchId}/archive")
+    public RepositoryBranchService.Branch archive(
+            @PathVariable UUID repositoryId,
+            @PathVariable UUID branchId,
+            HttpServletRequest request) {
+        return branches.archive(SecurityContext.account(request), repositoryId, branchId);
+    }
+
+    @PostMapping("/branches/{branchId}/restore")
+    public RepositoryBranchService.Branch restore(
+            @PathVariable UUID repositoryId,
+            @PathVariable UUID branchId,
+            HttpServletRequest request) {
+        return branches.restore(SecurityContext.account(request), repositoryId, branchId);
     }
 
     @PostMapping("/branches/{branchId}/prepare")
@@ -96,6 +117,26 @@ public class RepositoryBranchController {
     public record Track(String name) {}
 
     public record Context(UUID branchId, UUID contextId) {}
+
+    @GetMapping("/branches/{branchId}/snapshots/{snapshotId}/retention")
+    public BranchArtifactRetentionService.Retention retention(
+            @PathVariable UUID repositoryId,
+            @PathVariable UUID branchId,
+            @PathVariable UUID snapshotId,
+            HttpServletRequest request) {
+        return retention.inspect(
+                SecurityContext.account(request), repositoryId, branchId, snapshotId);
+    }
+
+    @DeleteMapping("/branches/{branchId}/snapshots/{snapshotId}")
+    public BranchArtifactRetentionService.Retention removeSnapshot(
+            @PathVariable UUID repositoryId,
+            @PathVariable UUID branchId,
+            @PathVariable UUID snapshotId,
+            HttpServletRequest request) {
+        return retention.remove(
+                SecurityContext.account(request), repositoryId, branchId, snapshotId);
+    }
 
     @GetMapping("/knowledge/branch-scopes")
     public List<BranchKnowledgeService.Scope> scopes(

@@ -79,9 +79,21 @@ class EngineeringProjectServiceTest {
                 .when(mapper)
                 .insertContract(any(), anyString(), any(), any());
         when(mapper.currentPathChunks(providerId, "openapi/order.yaml"))
-                .thenReturn(List.of(new CurrentPathChunkRow(providerSnapshot, "openapi/order.yaml", 1, "provider-hash")));
+                .thenReturn(
+                        List.of(
+                                new CurrentPathChunkRow(
+                                        providerSnapshot,
+                                        "openapi/order.yaml",
+                                        1,
+                                        "provider-hash")));
         when(mapper.currentPathChunks(consumerId, "src/order-client.ts"))
-                .thenReturn(List.of(new CurrentPathChunkRow(consumerSnapshot, "src/order-client.ts", 1, "consumer-hash")));
+                .thenReturn(
+                        List.of(
+                                new CurrentPathChunkRow(
+                                        consumerSnapshot,
+                                        "src/order-client.ts",
+                                        1,
+                                        "consumer-hash")));
         when(mapper.findById(any()))
                 .thenAnswer(
                         invocation ->
@@ -100,11 +112,18 @@ class EngineeringProjectServiceTest {
                         invocation ->
                                 List.of(
                                         new EngineeringProjectRepositoryRow(
-                                                projectId.get(), providerId, "Provider", "order-service"),
+                                                projectId.get(),
+                                                providerId,
+                                                "Provider",
+                                                "order-service"),
                                         new EngineeringProjectRepositoryRow(
-                                                projectId.get(), consumerId, "Consumer", "web-service")));
+                                                projectId.get(),
+                                                consumerId,
+                                                "Consumer",
+                                                "web-service")));
         when(mapper.contracts(any()))
-                .thenAnswer(invocation -> contract.get() == null ? List.of() : List.of(contract.get()));
+                .thenAnswer(
+                        invocation -> contract.get() == null ? List.of() : List.of(contract.get()));
 
         EngineeringProjectService.EngineeringProject result =
                 service.create(
@@ -114,8 +133,10 @@ class EngineeringProjectServiceTest {
                                 "真实边界",
                                 null,
                                 List.of(
-                                        new EngineeringProjectService.MemberInput(providerId, "order-service"),
-                                        new EngineeringProjectService.MemberInput(consumerId, "web-service")),
+                                        new EngineeringProjectService.MemberInput(
+                                                providerId, "order-service"),
+                                        new EngineeringProjectService.MemberInput(
+                                                consumerId, "web-service")),
                                 List.of(
                                         new EngineeringProjectService.ContractInput(
                                                 null,
@@ -128,7 +149,9 @@ class EngineeringProjectServiceTest {
                         "127.0.0.1");
 
         assertThat(result.repositories()).hasSize(2);
-        assertThat(result.contracts()).singleElement().satisfies(item -> assertThat(item.current()).isTrue());
+        assertThat(result.contracts())
+                .singleElement()
+                .satisfies(item -> assertThat(item.current()).isTrue());
         assertThat(contract.get().providerContentFingerprint()).hasSize(64);
         verify(access).require(actor, CodeRepositoryId.of(providerId), RepositoryPermission.MANAGE);
         verify(access).require(actor, CodeRepositoryId.of(consumerId), RepositoryPermission.MANAGE);
@@ -144,8 +167,7 @@ class EngineeringProjectServiceTest {
 
     @Test
     void refusesAContractNameWithoutCurrentCodeEvidence() {
-        when(mapper.currentPathChunks(providerId, "openapi/missing.yaml"))
-                .thenReturn(List.of());
+        when(mapper.currentPathChunks(providerId, "openapi/missing.yaml")).thenReturn(List.of());
 
         assertThatThrownBy(
                         () ->
@@ -219,14 +241,21 @@ class EngineeringProjectServiceTest {
         EngineeringProjectService.ReviewTopology result =
                 service.reviewTopology(consumerId, actor.id());
 
-        assertThat(result.repositories()).singleElement().satisfies(binding -> {
-            assertThat(binding.sourceRepositoryId()).isEqualTo(providerId);
-            assertThat(binding.targetServiceName()).isEqualTo("web-service");
-            assertThat(binding.contracts()).singleElement().satisfies(contractBinding -> {
-                assertThat(contractBinding.contractId()).isEqualTo(contractId);
-                assertThat(contractBinding.current()).isTrue();
-            });
-        });
+        assertThat(result.repositories())
+                .singleElement()
+                .satisfies(
+                        binding -> {
+                            assertThat(binding.sourceRepositoryId()).isEqualTo(providerId);
+                            assertThat(binding.targetServiceName()).isEqualTo("web-service");
+                            assertThat(binding.contracts())
+                                    .singleElement()
+                                    .satisfies(
+                                            contractBinding -> {
+                                                assertThat(contractBinding.contractId())
+                                                        .isEqualTo(contractId);
+                                                assertThat(contractBinding.current()).isTrue();
+                                            });
+                        });
 
         when(mapper.currentPathChunks(providerId, "openapi/order.yaml"))
                 .thenReturn(

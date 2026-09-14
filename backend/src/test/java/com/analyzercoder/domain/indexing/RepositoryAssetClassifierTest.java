@@ -22,17 +22,13 @@ class RepositoryAssetClassifierTest {
 
     @Test
     void recognizesAssetsThatBelongOnProjectOverview() {
-        assertThat(
-                        RepositoryAssetClassifier.isKeyAsset(
-                                "README.md", RepositoryAssetType.DOCUMENT))
+        assertThat(RepositoryAssetClassifier.isKeyAsset("README.md", RepositoryAssetType.DOCUMENT))
                 .isTrue();
         assertThat(
                         RepositoryAssetClassifier.isKeyAsset(
                                 ".github/instructions/java.md", RepositoryAssetType.RULE))
                 .isTrue();
-        assertThat(
-                        RepositoryAssetClassifier.isKeyAsset(
-                                "src/Main.java", RepositoryAssetType.CODE))
+        assertThat(RepositoryAssetClassifier.isKeyAsset("src/Main.java", RepositoryAssetType.CODE))
                 .isFalse();
     }
 }

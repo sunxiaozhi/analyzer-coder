@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ApiError } from '@/api/http';
+import { branchesApi, type BranchScope } from '@/api/branches';
 import {
   intelligenceApi,
   type CardInput,
@@ -23,14 +24,17 @@ import KnowledgeBranchScopeDialog from '@/features/knowledge/KnowledgeBranchScop
 import MarkdownKnowledgeSourceList from '@/features/knowledge/MarkdownKnowledgeSourceList.vue';
 import { renderMarkdown } from '@/features/knowledge/markdown';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 import { enforcementLabel, knowledgeKindLabel, statusLabel } from '@/utils/displayLabels';
 
 const repositories = useRepositoryStore();
+const branchContext = useBranchContextStore();
 const router = useRouter();
 const route = useRoute();
 type KnowledgeMode = 'cards' | 'markdown';
 const activeMode = shallowRef<KnowledgeMode>('cards');
 const cards = shallowRef<KnowledgeCard[]>([]);
+const branchScopes = shallowRef<BranchScope[]>([]);
 const markdownSources = shallowRef<MarkdownKnowledgeSourceOverview | null>(null);
 const cardQuery = shallowRef('');
 const sourceQuery = shallowRef('');
@@ -99,11 +103,18 @@ async function loadCards() {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) {
     cards.value = [];
+    branchScopes.value = [];
     return;
   }
   cardsLoading.value = true;
   try {
-    cards.value = await intelligenceApi.cards(repositoryId);
+    const contextId = branchContext.context?.contextId;
+    const [loadedCards, loadedScopes] = await Promise.all([
+      contextId ? intelligenceApi.cards(repositoryId, contextId) : intelligenceApi.cards(repositoryId),
+      branchesApi.scopes(repositoryId),
+    ]);
+    cards.value = loadedCards;
+    branchScopes.value = loadedScopes;
     syncRequestedCard();
     syncRequestedCreate();
   } catch (error) {
@@ -125,7 +136,9 @@ async function loadMarkdownSources() {
   sourcesLoading.value = true;
   sourceLoadError.value = null;
   try {
-    markdownSources.value = await intelligenceApi.markdownSources(repositoryId);
+    markdownSources.value = branchContext.context?.contextId
+      ? await intelligenceApi.markdownSources(repositoryId, branchContext.context.contextId)
+      : await intelligenceApi.markdownSources(repositoryId);
   } catch (error) {
     markdownSources.value = null;
     sourceLoadError.value = error instanceof ApiError && error.status === 409
@@ -151,6 +164,14 @@ function syncRequestedCard() {
   void loadDrift(card);
 }
 function openCreate() { initialReference.value = null; editing.value = null; dialog.value = true; }
+function scopeLabel(card: KnowledgeCard) {
+  const scope = branchScopes.value.find(item => item.cardId === card.id);
+  if (!scope || scope.mode === 'ALL_BRANCHES') return '项目共享';
+  const names = scope.branchIds
+    .map(id => branchContext.branches.find(branch => branch.id === id)?.name)
+    .filter((name): name is string => Boolean(name));
+  return names.length === 1 ? `分支专属 · ${names[0]}` : `指定分支 · ${names.length || scope.branchIds.length}`;
+}
 function openEdit(card: KnowledgeCard) { initialReference.value = null; editing.value = card; dialog.value = true; }
 function syncRequestedCreate() {
   const path = typeof route.query.path === 'string' ? route.query.path : null;
@@ -201,6 +222,8 @@ function openDrift(event: KnowledgeDriftEvent) {
       path: reason.filePath,
       startLine: reason.startLine ?? undefined,
       snapshotId: event.toSnapshotId,
+      branchId: branchContext.context?.branchId,
+      contextId: branchContext.context?.contextId,
     },
   });
 }
@@ -260,12 +283,18 @@ function openCode(reference: CodeReference) {
       path: reference.filePath,
       startLine: String(reference.startLine ?? 1),
       endLine: String(reference.endLine ?? reference.startLine ?? 1),
+      branchId: branchContext.context?.branchId,
+      contextId: branchContext.context?.contextId,
     },
   });
 }
 
 function openMarkdown(source: MarkdownKnowledgeSource) {
-  void router.push({ name: 'search', query: { path: source.sourcePath } });
+  void router.push({ name: 'search', query: {
+    path: source.sourcePath,
+    branchId: branchContext.context?.branchId,
+    contextId: branchContext.context?.contextId,
+  } });
 }
 
 async function openGeneratedCard(source: MarkdownKnowledgeSource) {
@@ -305,7 +334,7 @@ async function generateMarkdownCard(source: MarkdownKnowledgeSource) {
       sourcePath: source.sourcePath,
       expectedSnapshotId: source.sourceSnapshotId,
       expectedContentHash: source.sourceContentHash,
-    });
+    }, branchContext.context?.contextId);
     await Promise.all([loadCards(), loadMarkdownSources()]);
     ElMessage.success(source.status === 'STALE'
       ? `已同步为知识卡片 v${card.revision}`
@@ -338,7 +367,7 @@ async function generateAllPending() {
   }
   bulkGenerating.value = true;
   try {
-    const result = await intelligenceApi.generatePendingMarkdownSources(repositoryId, expectedSnapshotId);
+    const result = await intelligenceApi.generatePendingMarkdownSources(repositoryId, expectedSnapshotId, branchContext.context?.contextId);
     await Promise.all([loadCards(), loadMarkdownSources()]);
     ElMessage.success(result.generated > 0
       ? result.remaining > 0
@@ -362,7 +391,7 @@ async function openGraph(reference: CodeReference) {
   if (!repositoryId) return;
   try {
     const target = reference.chunkId
-      ? await intelligenceApi.graphTarget(repositoryId, reference.chunkId)
+      ? await intelligenceApi.graphTarget(repositoryId, reference.chunkId, branchContext.context?.contextId)
       : { symbol: reference.symbolName || reference.filePath, filePath: reference.filePath, startLine: reference.startLine };
     detailDialog.value = false;
     await router.push({ name: 'search', query: {
@@ -372,18 +401,30 @@ async function openGraph(reference: CodeReference) {
       symbol: target.symbol,
       depth: '3',
       relation: '1',
+      branchId: branchContext.context?.branchId,
+      contextId: branchContext.context?.contextId,
     } });
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '无法解析图谱目标');
   }
 }
-async function save(input: CardInput) {
+async function save(input: CardInput, creationScope: 'CURRENT_BRANCH' | 'PROJECT_SHARED' = 'CURRENT_BRANCH') {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   busy.value = true;
   try {
     if (editing.value) await intelligenceApi.updateCard(repositoryId, editing.value.id, input);
-    else await intelligenceApi.createCard(repositoryId, input);
+    else {
+      const card = await intelligenceApi.createCard(repositoryId, input, branchContext.context?.contextId);
+      if (creationScope === 'PROJECT_SHARED') {
+        await branchesApi.scope(repositoryId, {
+          cardId: card.id,
+          revision: card.revision,
+          mode: 'ALL_BRANCHES',
+          branchIds: [],
+        });
+      }
+    }
     dialog.value = false;
     await load();
     ElMessage.success(editing.value ? '新修订已保存' : '知识卡片已创建');
@@ -434,7 +475,7 @@ async function restore(revision: number) {
   historyCard.value = cards.value.find(item => item.id === card.id) ?? null;
   ElMessage.success('历史内容及附件已恢复为新草稿');
 }
-watch(() => repositories.selectedRepositoryId, () => {
+watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const, () => {
   handledCreateRequest = '';
   selectedKnowledgeKind.value = allKnowledgeKinds;
   selectedSourceStatus.value = allSourceStatuses;
@@ -566,6 +607,7 @@ onMounted(() => void load());
             :card="card"
             :can-manage="canManage"
             :can-maintain="canMaintain"
+            :scope-label="scopeLabel(card)"
             @view="openDetail"
             @edit="openEdit"
             @scope="card => { scopeCard = card; scopeDialog = true; }"
@@ -611,6 +653,8 @@ onMounted(() => void load());
     <KnowledgeCardEditorDialog v-if="canMaintain && repositories.selectedRepositoryId" v-model="dialog"
       :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy"
       :initial-reference="initialReference"
+      :branch-name="branchContext.context?.branchName ?? null"
+      :allow-shared-scope="canManage"
       @submit="save" @open-code="openCode" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">

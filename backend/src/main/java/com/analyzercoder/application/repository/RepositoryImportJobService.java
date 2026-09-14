@@ -26,14 +26,17 @@ public class RepositoryImportJobService {
     private final RepositoryImportJobMapper mapper;
     private final RepositoryCredentialService credentials;
     private final RepositorySourceImportService imports;
+    private final RepositoryProjectDraftService drafts;
 
     public RepositoryImportJobService(
             RepositoryImportJobMapper mapper,
             RepositoryCredentialService credentials,
-            RepositorySourceImportService imports) {
+            RepositorySourceImportService imports,
+            RepositoryProjectDraftService drafts) {
         this.mapper = mapper;
         this.credentials = credentials;
         this.imports = imports;
+        this.drafts = drafts;
     }
 
     public JobView submit(
@@ -43,6 +46,17 @@ public class RepositoryImportJobService {
             String branch,
             RepositorySourceType type,
             UUID credentialId) {
+        return submit(actor, name, url, branch, type, credentialId, null);
+    }
+
+    public JobView submit(
+            AuthenticatedAccount actor,
+            String name,
+            String url,
+            String branch,
+            RepositorySourceType type,
+            UUID credentialId,
+            UUID projectDraftId) {
         RemoteRepositoryTargetPolicy.requireAllowed(url);
         if (credentialId != null) {
             credentials.resolve(actor, credentialId, url);
@@ -52,7 +66,16 @@ public class RepositoryImportJobService {
         }
 
         UUID id = UUID.randomUUID();
-        mapper.insert(id, actor.id(), credentialId, type.name(), name.trim(), url, branch);
+        if (projectDraftId != null) drafts.importing(actor, projectDraftId);
+        mapper.insert(
+                id,
+                actor.id(),
+                credentialId,
+                type.name(),
+                name.trim(),
+                url,
+                branch,
+                projectDraftId);
         return view(mapper.find(id));
     }
 
@@ -89,6 +112,7 @@ public class RepositoryImportJobService {
         try {
             if (bool(row, "cancel_requested")) {
                 mapper.cancel(id);
+                drafts.fail(uuid(row, "project_draft_id"), "导入已取消，可重新配置代码来源后重试");
                 return true;
             }
             mapper.step(id, "cloning");
@@ -101,9 +125,12 @@ public class RepositoryImportJobService {
                             uuid(row, "credential_id"),
                             uuid(row, "account_id"));
             mapper.succeed(id, repository.id().value());
+            drafts.complete(uuid(row, "project_draft_id"), repository.id().value());
             return true;
         } catch (RuntimeException exception) {
-            mapper.fail(id, safeMessage(exception));
+            String message = safeMessage(exception);
+            mapper.fail(id, message);
+            drafts.fail(uuid(row, "project_draft_id"), message);
             return false;
         }
     }
@@ -128,6 +155,7 @@ public class RepositoryImportJobService {
                 string(row, "current_step"),
                 string(row, "error_message"),
                 uuid(row, "result_repository_id"),
+                uuid(row, "project_draft_id"),
                 instant(row, "created_at"),
                 instant(row, "started_at"),
                 instant(row, "finished_at"));
@@ -188,6 +216,7 @@ public class RepositoryImportJobService {
             String currentStep,
             String errorMessage,
             UUID resultRepositoryId,
+            UUID projectDraftId,
             Instant createdAt,
             Instant startedAt,
             Instant finishedAt) {}

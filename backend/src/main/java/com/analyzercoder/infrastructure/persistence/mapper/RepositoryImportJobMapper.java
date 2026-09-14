@@ -28,7 +28,8 @@ public interface RepositoryImportJobMapper {
             @Param("sourceType") String sourceType,
             @Param("name") String name,
             @Param("url") String url,
-            @Param("branch") String branch);
+            @Param("branch") String branch,
+            @Param("projectDraftId") UUID projectDraftId);
 
     /**
      * 按给定条件查询匹配数据。

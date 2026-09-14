@@ -3,12 +3,13 @@
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.MarkdownKnowledgeSourceMapper">
     <insert id="upsertSource">
         INSERT INTO repository_markdown_sources(
-            id,repo_id,snapshot_id,file_path,content_hash,title,asset_type,content,line_count,byte_size
-        ) VALUES(
-            #{id},#{repositoryId},#{snapshotId},#{filePath},#{contentHash},#{title},#{assetType},
-            #{content},#{lineCount},#{byteSize}
+            id,repo_id,branch_id,snapshot_id,file_path,content_hash,title,asset_type,content,line_count,byte_size
         )
-        ON CONFLICT(repo_id,file_path) DO UPDATE SET
+        SELECT #{id},#{repositoryId},b.id,#{snapshotId},#{filePath},#{contentHash},#{title},#{assetType},
+               #{content},#{lineCount},#{byteSize}
+        FROM repository_branches b JOIN repositories r ON r.id=b.repo_id
+        WHERE b.repo_id=#{repositoryId} AND b.name=COALESCE(r.default_branch,'WORKSPACE')
+        ON CONFLICT(repo_id,branch_id,file_path) DO UPDATE SET
             snapshot_id=EXCLUDED.snapshot_id,
             content_hash=EXCLUDED.content_hash,
             title=EXCLUDED.title,
@@ -19,8 +20,36 @@
             updated_at=CURRENT_TIMESTAMP
     </insert>
 
+    <insert id="upsertBranchSource">
+        INSERT INTO repository_markdown_sources(
+            id,repo_id,branch_id,snapshot_id,file_path,content_hash,title,asset_type,content,line_count,byte_size
+        ) VALUES(
+            #{id},#{repositoryId},#{branchId},#{snapshotId},#{filePath},#{contentHash},#{title},#{assetType},
+            #{content},#{lineCount},#{byteSize}
+        )
+        ON CONFLICT(repo_id,branch_id,file_path) DO UPDATE SET
+            snapshot_id=EXCLUDED.snapshot_id,content_hash=EXCLUDED.content_hash,title=EXCLUDED.title,
+            asset_type=EXCLUDED.asset_type,content=EXCLUDED.content,line_count=EXCLUDED.line_count,
+            byte_size=EXCLUDED.byte_size,updated_at=CURRENT_TIMESTAMP
+    </insert>
+
     <delete id="deleteMissingSources">
         DELETE FROM repository_markdown_sources WHERE repo_id=#{repositoryId}
+        AND branch_id=(
+            SELECT b.id FROM repository_branches b JOIN repositories r ON r.id=b.repo_id
+            WHERE b.repo_id=#{repositoryId} AND b.name=COALESCE(r.default_branch,'WORKSPACE')
+        )
+        <if test="filePaths != null and !filePaths.isEmpty()">
+            AND file_path NOT IN
+            <foreach collection="filePaths" item="path" open="(" close=")" separator=",">
+                #{path}
+            </foreach>
+        </if>
+    </delete>
+
+    <delete id="deleteMissingBranchSources">
+        DELETE FROM repository_markdown_sources
+        WHERE repo_id=#{repositoryId} AND branch_id=#{branchId}
         <if test="filePaths != null and !filePaths.isEmpty()">
             AND file_path NOT IN
             <foreach collection="filePaths" item="path" open="(" close=")" separator=",">
@@ -31,6 +60,7 @@
 
     <sql id="sourceViewColumns">
         s.id source_id,
+        s.branch_id source_branch_id,
         s.snapshot_id source_snapshot_id,
         s.file_path source_path,
         s.content_hash source_content_hash,
@@ -54,7 +84,7 @@
             SELECT l.card_id,c.revision card_revision,l.source_snapshot_id,l.source_content_hash
             FROM knowledge_card_markdown_source_links l
             JOIN knowledge_cards c ON c.id=l.card_id AND c.repo_id=l.repo_id
-            WHERE l.repo_id=s.repo_id AND l.source_path=s.file_path
+            WHERE l.repo_id=s.repo_id AND l.source_branch_id=s.branch_id AND l.source_path=s.file_path
             ORDER BY l.generated_at DESC,l.revision DESC
             LIMIT 1
         ) latest ON TRUE
@@ -74,11 +104,39 @@
             s.file_path
     </select>
 
+    <select id="listBranchSources" resultType="map">
+        SELECT <include refid="sourceViewColumns"/>
+        FROM repository_markdown_sources s
+        LEFT JOIN LATERAL (
+            SELECT l.card_id,c.revision card_revision,l.source_snapshot_id,l.source_content_hash
+            FROM knowledge_card_markdown_source_links l
+            JOIN knowledge_cards c ON c.id=l.card_id AND c.repo_id=l.repo_id
+            WHERE l.repo_id=s.repo_id AND l.source_branch_id=s.branch_id AND l.source_path=s.file_path
+            ORDER BY l.generated_at DESC,l.revision DESC LIMIT 1
+        ) latest ON TRUE
+        WHERE s.repo_id=#{repositoryId} AND s.branch_id=#{branchId} AND s.snapshot_id=#{snapshotId}
+        ORDER BY CASE WHEN latest.card_id IS NULL THEN 0 WHEN latest.source_content_hash&lt;&gt;s.content_hash THEN 1 ELSE 2 END,s.file_path
+    </select>
+
     <select id="findSource" resultType="map">
         SELECT <include refid="sourceViewColumns"/>,s.content
         FROM repository_markdown_sources s
         <include refid="latestProvenanceJoin"/>
         WHERE s.repo_id=#{repositoryId} AND s.snapshot_id=#{snapshotId} AND s.file_path=#{filePath}
+    </select>
+
+    <select id="findBranchSource" resultType="map">
+        SELECT <include refid="sourceViewColumns"/>,s.content
+        FROM repository_markdown_sources s
+        LEFT JOIN LATERAL (
+            SELECT l.card_id,c.revision card_revision,l.source_snapshot_id,l.source_content_hash
+            FROM knowledge_card_markdown_source_links l
+            JOIN knowledge_cards c ON c.id=l.card_id AND c.repo_id=l.repo_id
+            WHERE l.repo_id=s.repo_id AND l.source_branch_id=s.branch_id AND l.source_path=s.file_path
+            ORDER BY l.generated_at DESC,l.revision DESC LIMIT 1
+        ) latest ON TRUE
+        WHERE s.repo_id=#{repositoryId} AND s.branch_id=#{branchId}
+          AND s.snapshot_id=#{snapshotId} AND s.file_path=#{filePath}
     </select>
 
     <select id="lockSource" resultType="map">
@@ -88,7 +146,21 @@
         FROM repository_markdown_sources s
         JOIN repositories r ON r.id=s.repo_id
         WHERE s.repo_id=#{repositoryId} AND s.file_path=#{filePath}
+          AND s.branch_id=(
+            SELECT b.id FROM repository_branches b JOIN repositories r ON r.id=b.repo_id
+            WHERE b.repo_id=#{repositoryId} AND b.name=COALESCE(r.default_branch,'WORKSPACE')
+          )
         FOR UPDATE OF s,r
+    </select>
+
+    <select id="lockBranchSource" resultType="map">
+        SELECT s.id source_id,s.branch_id source_branch_id,s.snapshot_id source_snapshot_id,
+               s.file_path source_path,s.content_hash source_content_hash,s.title,s.asset_type,
+               s.content,s.line_count,s.byte_size,b.published_snapshot_id repository_snapshot_id
+        FROM repository_markdown_sources s
+        JOIN repository_branches b ON b.repo_id=s.repo_id AND b.id=s.branch_id
+        WHERE s.repo_id=#{repositoryId} AND s.branch_id=#{branchId} AND s.file_path=#{filePath}
+        FOR UPDATE OF s,b
     </select>
 
     <select id="findChunkIds" resultType="java.util.UUID">
@@ -100,11 +172,40 @@
 
     <insert id="insertProvenance">
         INSERT INTO knowledge_card_markdown_source_links(
-            card_id,revision,source_id,repo_id,source_snapshot_id,source_path,source_content_hash
-        ) VALUES(
-            #{cardId},#{revision},#{sourceId},#{repositoryId},#{sourceSnapshotId},#{sourcePath},
-            #{sourceContentHash}
+            card_id,revision,source_id,repo_id,source_branch_id,source_snapshot_id,source_path,source_content_hash
         )
+        SELECT #{cardId},#{revision},#{sourceId},#{repositoryId},s.branch_id,#{sourceSnapshotId},
+               #{sourcePath},#{sourceContentHash}
+        FROM repository_markdown_sources s
+        WHERE s.id=#{sourceId} AND s.repo_id=#{repositoryId}
+    </insert>
+
+    <insert id="insertBranchProvenance">
+        INSERT INTO knowledge_card_markdown_source_links(
+            card_id,revision,source_id,repo_id,source_branch_id,source_snapshot_id,source_path,source_content_hash
+        ) VALUES(
+            #{cardId},#{revision},#{sourceId},#{repositoryId},#{sourceBranchId},#{sourceSnapshotId},
+            #{sourcePath},#{sourceContentHash}
+        )
+    </insert>
+
+    <insert id="reconcileBranchValidations">
+        INSERT INTO knowledge_branch_validations(
+            card_id,revision,branch_id,snapshot_id,state,note,checked_at
+        )
+        SELECT l.card_id,l.revision,#{branchId},#{snapshotId},
+               CASE WHEN l.source_content_hash=s.content_hash THEN 'UNVERIFIED' ELSE 'REVIEW_REQUIRED' END,
+               CASE WHEN l.source_content_hash=s.content_hash
+                    THEN 'Markdown 来源内容未变化；该快照仍需独立确认适用性'
+                    ELSE 'Markdown 来源内容已变化，请复核知识修订' END,
+               CURRENT_TIMESTAMP
+        FROM knowledge_card_markdown_source_links l
+        JOIN repository_markdown_sources s
+          ON s.repo_id=l.repo_id AND s.branch_id=l.source_branch_id AND s.file_path=l.source_path
+        WHERE l.repo_id=#{repositoryId} AND l.source_branch_id=#{branchId}
+          AND s.snapshot_id=#{snapshotId}
+          AND l.revision=(SELECT MAX(newer.revision) FROM knowledge_card_markdown_source_links newer WHERE newer.card_id=l.card_id)
+        ON CONFLICT(card_id,revision,branch_id,snapshot_id) DO NOTHING
     </insert>
 
     <update id="reconcileLinkedCards">
@@ -114,7 +215,7 @@
                     SELECT 1
                     FROM knowledge_card_markdown_source_links l
                     JOIN repository_markdown_sources s
-                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                      ON s.repo_id=l.repo_id AND s.branch_id=l.source_branch_id AND s.file_path=l.source_path
                     WHERE l.card_id=c.id
                       AND l.revision=(
                           SELECT MAX(newer.revision)
@@ -130,7 +231,7 @@
                     SELECT 1
                     FROM knowledge_card_markdown_source_links l
                     JOIN repository_markdown_sources s
-                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                      ON s.repo_id=l.repo_id AND s.branch_id=l.source_branch_id AND s.file_path=l.source_path
                     WHERE l.card_id=c.id
                       AND l.revision=(
                           SELECT MAX(newer.revision)
@@ -146,7 +247,7 @@
                     SELECT 1
                     FROM knowledge_card_markdown_source_links l
                     JOIN repository_markdown_sources s
-                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                      ON s.repo_id=l.repo_id AND s.branch_id=l.source_branch_id AND s.file_path=l.source_path
                     WHERE l.card_id=c.id
                       AND l.revision=(
                           SELECT MAX(newer.revision)
@@ -162,7 +263,7 @@
                     SELECT 1
                     FROM knowledge_card_markdown_source_links l
                     JOIN repository_markdown_sources s
-                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                      ON s.repo_id=l.repo_id AND s.branch_id=l.source_branch_id AND s.file_path=l.source_path
                     WHERE l.card_id=c.id
                       AND l.revision=(
                           SELECT MAX(newer.revision)
@@ -178,7 +279,7 @@
                     SELECT 1
                     FROM knowledge_card_markdown_source_links l
                     JOIN repository_markdown_sources s
-                      ON s.repo_id=l.repo_id AND s.file_path=l.source_path
+                      ON s.repo_id=l.repo_id AND s.branch_id=l.source_branch_id AND s.file_path=l.source_path
                     WHERE l.card_id=c.id
                       AND l.revision=(
                           SELECT MAX(newer.revision)

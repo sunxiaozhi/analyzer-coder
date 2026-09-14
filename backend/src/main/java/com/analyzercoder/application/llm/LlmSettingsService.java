@@ -119,8 +119,7 @@ public class LlmSettingsService {
                                         string(row, "availability"),
                                         string(row, "breaker_state"),
                                         "AVAILABLE".equals(string(row, "availability"))
-                                                && "CLOSED".equals(
-                                                        string(row, "breaker_state"))))
+                                                && "CLOSED".equals(string(row, "breaker_state"))))
                 .toList();
     }
 
@@ -304,16 +303,13 @@ public class LlmSettingsService {
 
     public String activeRetrievalCapability() {
         Map<String, Object> row = mapper.activeVectorModel();
-        return row == null
-                ? "CHARACTER_HASH"
-                : retrievalCapability(string(row, "provider_type"));
+        return row == null ? "CHARACTER_HASH" : retrievalCapability(string(row, "provider_type"));
     }
 
     public VectorEmbedding vectorize(String input) {
         Map<String, Object> row = mapper.activeVectorModel();
         if (row == null || "LOCAL_HASH".equals(string(row, "provider_type"))) {
-            return new VectorEmbedding(
-                    activeVectorModelName(), 64, null, "CHARACTER_HASH");
+            return new VectorEmbedding(activeVectorModelName(), 64, null, "CHARACTER_HASH");
         }
         int dimension = integer(row, "dimension", 64);
         String vector =
@@ -324,8 +320,7 @@ public class LlmSettingsService {
                         input,
                         dimension,
                         integer(row, "request_timeout_ms", 30000));
-        return new VectorEmbedding(
-                string(row, "model"), dimension, vector, "SEMANTIC_EMBEDDING");
+        return new VectorEmbedding(string(row, "model"), dimension, vector, "SEMANTIC_EMBEDDING");
     }
 
     public CheckView startCheck(UUID actorId, ConnectivityCheckRequest request) {
@@ -688,11 +683,9 @@ public class LlmSettingsService {
         String model = clean(input.model(), 1, 200, "模型标识");
         int dimension = input.dimension() == null ? 64 : input.dimension();
         if ("LOCAL_HASH".equals(providerType) && dimension != 64) {
-            throw new ApiSecurityException(
-                    400, "VECTOR_DIMENSION_INCOMPATIBLE", "本地哈希模型固定使用 64 维");
+            throw new ApiSecurityException(400, "VECTOR_DIMENSION_INCOMPATIBLE", "本地哈希模型固定使用 64 维");
         }
-        if ("OPENAI_COMPATIBLE".equals(providerType)
-                && (dimension < 1 || dimension > 4096)) {
+        if ("OPENAI_COMPATIBLE".equals(providerType) && (dimension < 1 || dimension > 4096)) {
             throw new ApiSecurityException(
                     400, "VECTOR_DIMENSION_INCOMPATIBLE", "外部向量模型维度必须在 1 到 4096 之间");
         }
@@ -769,9 +762,7 @@ public class LlmSettingsService {
     }
 
     private static String retrievalCapability(String providerType) {
-        return "LOCAL_HASH".equals(providerType)
-                ? "CHARACTER_HASH"
-                : "SEMANTIC_EMBEDDING";
+        return "LOCAL_HASH".equals(providerType) ? "CHARACTER_HASH" : "SEMANTIC_EMBEDDING";
     }
 
     private static String retrievalCapabilityLabel(String providerType) {
@@ -925,8 +916,7 @@ public class LlmSettingsService {
         Matcher matcher = CREDENTIAL_PATTERN.matcher(redacted);
         StringBuffer result = new StringBuffer(redacted.length());
         while (matcher.find()) {
-            matcher.appendReplacement(
-                    result, Matcher.quoteReplacement(matcher.group(1) + "[已脱敏]"));
+            matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(1) + "[已脱敏]"));
         }
         matcher.appendTail(result);
         if (result.length() <= 24_000) {

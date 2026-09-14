@@ -1,5 +1,6 @@
 import type { IndexJob } from '@/types/api';
 import { request } from './http';
+import { branchContextOptions, withBranchContext } from './branchContext';
 
 export interface CodeReference {
   repositoryId: string;
@@ -32,6 +33,7 @@ export interface Citation {
   similarityScore: number;
   similarityKind: 'NONE' | 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING';
   channels: string[];
+  sourceScope: string | null;
   codeReferences: CodeReference[];
 }
 
@@ -98,6 +100,7 @@ export interface UnifiedSearchHit {
   similarityScore: number;
   similarityKind: 'NONE' | 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING';
   channels: string[];
+  sourceScope: string | null;
   codeReferences: CodeReference[];
 }
 
@@ -155,6 +158,9 @@ export interface Answer {
   question: string;
   answer: string;
   snapshotId: string | null;
+  branchId: string | null;
+  branchName: string | null;
+  commitSha: string | null;
   citations: Citation[];
   provider: string;
   evidenceStatus:
@@ -181,12 +187,18 @@ export interface QaThreadDetail {
   threadId: string;
   repositoryId: string;
   title: string;
+  branchId: string | null;
+  branchName: string | null;
+  commitSha: string | null;
   turns: Answer[];
 }
 export interface QaHistoryRecord {
   threadId: string;
   repositoryId: string;
   title: string;
+  branchId: string | null;
+  branchName: string | null;
+  commitSha: string | null;
   question: string;
   provider: string;
   evidenceStatus: Answer['evidenceStatus'];
@@ -357,6 +369,7 @@ export interface MarkdownKnowledgeSourceCounts {
 }
 export interface MarkdownKnowledgeSource {
   sourceId: string;
+  branchId: string | null;
   sourcePath: string;
   sourceSnapshotId: string;
   sourceContentHash: string;
@@ -425,19 +438,22 @@ export interface CardRevision {
 }
 
 export const intelligenceApi = {
-  unifiedSearch: (repositoryId: string, query: string, limit = 50) =>
+  unifiedSearch: (repositoryId: string, query: string, limit = 50, contextId?: string | null) =>
     request<UnifiedSearchResponse>(
       `/api/repositories/${repositoryId}/evidence-search?query=${encodeURIComponent(query)}&limit=${limit}`,
+      branchContextOptions(contextId),
     ),
-  search: (repositoryId: string, query: string, limit = 50) =>
+  search: (repositoryId: string, query: string, limit = 50, contextId?: string | null) =>
     request<HybridSearchResponse>(
       `/api/repositories/${repositoryId}/hybrid-search?query=${encodeURIComponent(query)}&limit=${limit}`,
+      branchContextOptions(contextId),
     ),
-  codeEvidenceContext: (repositoryId: string, filePath: string, symbol: string | null) => {
+  codeEvidenceContext: (repositoryId: string, filePath: string, symbol: string | null, contextId?: string | null) => {
     const query = new URLSearchParams({ filePath });
     if (symbol) query.set('symbol', symbol);
     return request<CodeEvidenceContext>(
       `/api/repositories/${repositoryId}/code-evidence-context?${query}`,
+      branchContextOptions(contextId),
     );
   },
   ask: (
@@ -446,33 +462,37 @@ export const intelligenceApi = {
     clientRequestId: string,
     threadId: string | null,
     modelConfigId: string | null,
+    contextId?: string | null,
   ) =>
     request<Answer>(`/api/repositories/${repositoryId}/ask`, {
+      ...withBranchContext(contextId),
       method: 'POST',
       body: JSON.stringify({ question, clientRequestId, threadId, modelConfigId }),
     }),
   askModels: (repositoryId: string) =>
     request<AskModel[]>(`/api/repositories/${repositoryId}/ask/models`),
-  history: (repositoryId: string, limit = 50, offset = 0) =>
-    request<QaHistoryRecord[]>(`/api/repositories/${repositoryId}/qa/records?limit=${limit}&offset=${offset}`),
-  historyDetail: (repositoryId: string, threadId: string) =>
-    request<QaThreadDetail>(`/api/repositories/${repositoryId}/qa/records/${threadId}`),
-  renameHistory: (repositoryId: string, threadId: string, title: string) =>
+  history: (repositoryId: string, limit = 50, offset = 0, contextId?: string | null) =>
+    request<QaHistoryRecord[]>(`/api/repositories/${repositoryId}/qa/records?limit=${limit}&offset=${offset}`, branchContextOptions(contextId)),
+  historyDetail: (repositoryId: string, threadId: string, contextId?: string | null) =>
+    request<QaThreadDetail>(`/api/repositories/${repositoryId}/qa/records/${threadId}`, branchContextOptions(contextId)),
+  renameHistory: (repositoryId: string, threadId: string, title: string, contextId?: string | null) =>
     request<QaHistoryRecord>(`/api/repositories/${repositoryId}/qa/records/${threadId}`, {
+      ...withBranchContext(contextId),
       method: 'PATCH', body: JSON.stringify({ title }),
     }),
-  deleteHistory: (repositoryId: string, threadId: string) =>
-    request<void>(`/api/repositories/${repositoryId}/qa/records/${threadId}`, { method: 'DELETE' }),
-  graph: (repositoryId: string, symbol: string, depth: number, _direction: string) =>
+  deleteHistory: (repositoryId: string, threadId: string, contextId?: string | null) =>
+    request<void>(`/api/repositories/${repositoryId}/qa/records/${threadId}`, withBranchContext(contextId, { method: 'DELETE' })),
+  graph: (repositoryId: string, symbol: string, depth: number, _direction: string, contextId?: string | null) =>
     request<GraphResult>(
-      `/api/repositories/${repositoryId}/codegraph/impact?symbol=${encodeURIComponent(symbol)}&depth=${depth}`
+      `/api/repositories/${repositoryId}/codegraph/impact?symbol=${encodeURIComponent(symbol)}&depth=${depth}`,
+      branchContextOptions(contextId),
     ),
-  graphTarget: (repositoryId: string, chunkId: string) =>
-    request<GraphTarget>(`/api/repositories/${repositoryId}/chunks/${chunkId}/graph-target`),
-  buildGraph: (repositoryId: string) =>
-    request<IndexJob>(`/api/repositories/${repositoryId}/codegraph/build`, { method: 'POST' }),
-  latestGraph: (repositoryId: string) =>
-    request<CodeGraphArtifact | null>(`/api/repositories/${repositoryId}/codegraph/latest`),
+  graphTarget: (repositoryId: string, chunkId: string, contextId?: string | null) =>
+    request<GraphTarget>(`/api/repositories/${repositoryId}/chunks/${chunkId}/graph-target`, branchContextOptions(contextId)),
+  buildGraph: (repositoryId: string, contextId?: string | null) =>
+    request<IndexJob>(`/api/repositories/${repositoryId}/codegraph/build`, withBranchContext(contextId, { method: 'POST' })),
+  latestGraph: (repositoryId: string, contextId?: string | null) =>
+    request<CodeGraphArtifact | null>(`/api/repositories/${repositoryId}/codegraph/latest`, branchContextOptions(contextId)),
   uploadAttachment: (repositoryId: string, file: File) => {
     const body = new FormData();
     body.append('file', file);
@@ -481,27 +501,30 @@ export const intelligenceApi = {
       { method: 'POST', body }
     );
   },
-  cards: (repositoryId: string) =>
-    request<KnowledgeCard[]>(`/api/repositories/${repositoryId}/knowledge`),
-  markdownSources: (repositoryId: string) =>
+  cards: (repositoryId: string, contextId?: string | null) =>
+    request<KnowledgeCard[]>(`/api/repositories/${repositoryId}/knowledge`, branchContextOptions(contextId)),
+  markdownSources: (repositoryId: string, contextId?: string | null) =>
     request<MarkdownKnowledgeSourceList>(
       `/api/repositories/${repositoryId}/knowledge/markdown-sources`,
+      branchContextOptions(contextId),
     ),
   generateMarkdownSource: (
     repositoryId: string,
     input: GenerateMarkdownKnowledgeSourceInput,
+    contextId?: string | null,
   ) =>
     request<KnowledgeCard>(
       `/api/repositories/${repositoryId}/knowledge/markdown-sources/generate`,
-      { method: 'POST', body: JSON.stringify(input) },
+      withBranchContext(contextId, { method: 'POST', body: JSON.stringify(input) }),
     ),
-  generatePendingMarkdownSources: (repositoryId: string, expectedSnapshotId: string) =>
+  generatePendingMarkdownSources: (repositoryId: string, expectedSnapshotId: string, contextId?: string | null) =>
     request<MarkdownKnowledgeBatchGenerationResult>(
       `/api/repositories/${repositoryId}/knowledge/markdown-sources/generate-pending`,
-      { method: 'POST', body: JSON.stringify({ expectedSnapshotId }) },
+      withBranchContext(contextId, { method: 'POST', body: JSON.stringify({ expectedSnapshotId }) }),
     ),
-  createCard: (repositoryId: string, input: CardInput) =>
+  createCard: (repositoryId: string, input: CardInput, contextId?: string | null) =>
     request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge`, {
+      ...withBranchContext(contextId),
       method: 'POST',
       body: JSON.stringify(input),
     }),

@@ -136,6 +136,10 @@ public interface IntelligenceMapper {
             @Param("question") String question,
             @Param("answer") String answer,
             @Param("snapshotId") UUID snapshotId,
+            @Param("branchId") UUID branchId,
+            @Param("contextId") UUID contextId,
+            @Param("branchName") String branchName,
+            @Param("commitSha") String commitSha,
             @Param("provider") String provider,
             @Param("evidenceStatus") String evidenceStatus,
             @Param("fallbackReason") String fallbackReason,
@@ -156,10 +160,22 @@ public interface IntelligenceMapper {
             @Param("repositoryId") UUID repositoryId,
             @Param("accountId") UUID accountId);
 
+    Map<String, Object> findThreadByBranch(
+            @Param("threadId") UUID threadId,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId,
+            @Param("branchId") UUID branchId);
+
     List<Map<String, Object>> listThreadTurns(
             @Param("threadId") UUID threadId,
             @Param("repositoryId") UUID repositoryId,
             @Param("accountId") UUID accountId);
+
+    List<Map<String, Object>> listThreadTurnsByBranch(
+            @Param("threadId") UUID threadId,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId,
+            @Param("branchId") UUID branchId);
 
     Integer nextTurnNo(@Param("threadId") UUID threadId);
 
@@ -170,6 +186,26 @@ public interface IntelligenceMapper {
             @Param("accountId") UUID accountId,
             @Param("limit") int limit,
             @Param("offset") int offset);
+
+    List<Map<String, Object>> listConversationsByBranch(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId,
+            @Param("branchId") UUID branchId,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
+
+    int renameConversationByBranch(
+            @Param("id") UUID id,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId,
+            @Param("branchId") UUID branchId,
+            @Param("title") String title);
+
+    int deleteConversationByBranch(
+            @Param("id") UUID id,
+            @Param("repositoryId") UUID repositoryId,
+            @Param("accountId") UUID accountId,
+            @Param("branchId") UUID branchId);
 
     int renameConversation(
             @Param("id") UUID id,
@@ -350,6 +386,11 @@ public interface IntelligenceMapper {
      */
     Map<String, Object> findChunk(
             @Param("repositoryId") UUID repositoryId, @Param("chunkId") UUID chunkId);
+
+    Map<String, Object> findChunkAtSnapshot(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("chunkId") UUID chunkId,
+            @Param("snapshotId") UUID snapshotId);
 
     /**
      * 查询知识内容关联的代码引用。

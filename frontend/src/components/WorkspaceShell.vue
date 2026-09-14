@@ -5,6 +5,7 @@ import {
   CircleHelp,
   Cpu,
   FolderCog,
+  GitBranch,
   LayoutDashboard,
   Orbit,
   ListChecks,
@@ -15,12 +16,14 @@ import {
   Search,
   Settings,
   Users,
+  RefreshCw,
 } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, reactive, shallowRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useWorkspaceTabsStore, type WorkspaceTab } from '@/stores/workspaceTabs';
 import WorkspaceTabs from '@/components/WorkspaceTabs.vue';
 import ProductLogo from '@/components/ProductLogo.vue';
@@ -31,6 +34,7 @@ import {
 } from '@/components/workspaceNavigation';
 
 const route = useRoute(); const router = useRouter(); const auth = useAuthStore(); const repositoryStore = useRepositoryStore();
+const branchContext = useBranchContextStore();
 const workspaceTabs = useWorkspaceTabsStore();
 const refreshVersions = reactive<Record<string, number>>({});
 const systemOpen = shallowRef(true);
@@ -56,6 +60,10 @@ const navGroups = computed(() => workspaceNavigation({
   canManageProjects: canManageProjects.value,
 }));
 const visibleNavItems = computed(() => navGroups.value.flatMap(group => group.items));
+const branchAwareRepository = computed(() => {
+  const sourceType = repositoryStore.selectedRepository?.sourceType;
+  return sourceType === 'LOCAL_GIT' || sourceType === 'REMOTE_GIT' || sourceType === 'GITLAB';
+});
 const titles: Record<string, string> = { help: '功能导航', mcp: 'MCP 接入', overview: '项目总览', repositories: '项目管理', indexing: '索引任务', search: '代码与知识', ask: '问项目', graph: '代码与知识', knowledge: '知识库', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
 const pageTitle = computed(() => route.name === 'atlas' ? '代码图谱' : titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
@@ -63,9 +71,45 @@ async function logout() { await auth.logout(); workspaceTabs.closeAll(); await r
 async function changeRepository(repositoryId: string | null) {
   try {
     await repositoryStore.selectRepository(repositoryId);
+    const query = { ...route.query };
+    delete query.branchId;
+    delete query.contextId;
+    await router.replace({ query });
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '保存当前仓库失败');
   }
+}
+async function changeBranch(branchId: string) {
+  try {
+    await branchContext.select(branchId);
+    const query = {
+      ...route.query,
+      branchId,
+      contextId: branchContext.context?.contextId ?? undefined,
+    };
+    await router.replace({ query });
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '切换分支失败');
+  }
+}
+async function refreshBranchContext() {
+  try {
+    await branchContext.refresh();
+    if (branchContext.context) {
+      await router.replace({
+        query: {
+          ...route.query,
+          branchId: branchContext.context.branchId,
+          contextId: branchContext.context.contextId,
+        },
+      });
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '刷新分支版本失败');
+  }
+}
+function branchStatusLabel(status: string) {
+  return ({ READY: '可用', BUILDING: '构建中', PENDING: '待准备', FAILED: '失败' } as Record<string, string>)[status] ?? status;
 }
 function activateTab(tab: WorkspaceTab) {
   if (tab.fullPath !== route.fullPath) void router.push(tab.fullPath);
@@ -137,6 +181,41 @@ watch(() => route.name, name => {
 watch(visibleNavItems, items => {
   workspaceTabs.retain(new Set(['help', 'mcp', ...items.map(item => item.to.slice(1))]));
 });
+watch(
+  () => [repositoryStore.selectedRepositoryId, repositoryStore.selectedRepository?.sourceType] as const,
+  ([repositoryId]) => {
+    if (!branchAwareRepository.value) {
+      branchContext.clear();
+      branchesOpen.value = false;
+      if (route.query.branchId || route.query.contextId) {
+        const query = { ...route.query };
+        delete query.branchId;
+        delete query.contextId;
+        void router.replace({ query });
+      }
+      return;
+    }
+    const preferred = typeof route.query.branchId === 'string' ? route.query.branchId : null;
+    void branchContext.load(repositoryId, preferred).then(async () => {
+      if (!branchContext.context || route.query.branchId === branchContext.context.branchId) return;
+      await router.replace({
+        query: {
+          ...route.query,
+          branchId: branchContext.context.branchId,
+          contextId: branchContext.context.contextId,
+        },
+      });
+    });
+  },
+  { immediate: true },
+);
+watch(
+  () => route.query.branchId,
+  branchId => {
+    if (typeof branchId !== 'string' || branchId === branchContext.selectedBranchId) return;
+    if (branchContext.activeBranches.some(item => item.id === branchId)) void changeBranch(branchId);
+  },
+);
 onMounted(() => {
   workspaceTabs.retain(new Set(['help', 'mcp', ...visibleNavItems.value.map(item => item.to.slice(1))]));
   void repositoryStore.loadRepositories();
@@ -168,7 +247,31 @@ onMounted(() => {
       </section>
     </nav>
   </aside>
-  <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select><div class="topbar-spacer" /><RouterLink class="help-entry" to="/help" title="查看功能导航和数据来源"><CircleHelp :size="16" /><span>帮助说明</span></RouterLink><RouterLink class="mcp-entry" to="/mcp" title="查看 MCP 接入指导"><Plug :size="16" /><span>MCP 接入</span></RouterLink><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
+  <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select>
+    <div v-if="repositoryStore.selectedRepositoryId && branchAwareRepository" class="branch-lock" :data-ready="branchContext.ready">
+      <GitBranch :size="15" />
+      <el-select
+        :model-value="branchContext.selectedBranchId"
+        class="global-branch-switcher"
+        placeholder="选择分支"
+        :loading="branchContext.loading"
+        @change="changeBranch"
+      >
+        <el-option
+          v-for="branch in branchContext.activeBranches"
+          :key="branch.id"
+          :label="`${branch.name} · ${branchStatusLabel(branch.status)}`"
+          :value="branch.id"
+          :disabled="branch.status !== 'READY'"
+        />
+      </el-select>
+      <span v-if="branchContext.context" class="locked-commit mono" title="当前页面数据锁定到该提交">
+        锁定 {{ branchContext.context.commitSha.slice(0, 8) }}
+      </span>
+      <span v-else class="locked-commit">{{ branchContext.error ?? '快照未就绪' }}</span>
+      <button class="branch-refresh" type="button" title="刷新分支和锁定版本" @click="refreshBranchContext"><RefreshCw :size="14" /></button>
+    </div>
+    <div class="topbar-spacer" /><RouterLink class="help-entry" to="/help" title="查看功能导航和数据来源"><CircleHelp :size="16" /><span>帮助说明</span></RouterLink><RouterLink class="mcp-entry" to="/mcp" title="查看 MCP 接入指导"><Plug :size="16" /><span>MCP 接入</span></RouterLink><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
     <div class="page-frame">
       <div class="workspace-tab-row">
       <WorkspaceTabs
@@ -183,7 +286,7 @@ onMounted(() => {
         @close-all="closeAllTabs"
         @copy-link="copyTabLink"
       />
-      <el-button v-if="repositoryStore.selectedRepositoryId" class="branch-entry" link type="primary" @click="branchesOpen = true">分支工作区</el-button>
+      <el-button v-if="repositoryStore.selectedRepositoryId && branchAwareRepository" class="branch-entry" link type="primary" @click="branchesOpen = true">分支工作区</el-button>
       </div>
 
       <div class="route-view">
@@ -198,11 +301,13 @@ onMounted(() => {
       </div>
     </div>
     <el-drawer v-model="branchesOpen" title="分支工作区" size="min(760px, 96vw)" destroy-on-close>
-      <BranchWorkspace v-if="branchesOpen && repositoryStore.selectedRepositoryId" :key="repositoryStore.selectedRepositoryId"
+      <BranchWorkspace v-if="branchesOpen && repositoryStore.selectedRepositoryId && branchAwareRepository" :key="repositoryStore.selectedRepositoryId"
         :repository-id="repositoryStore.selectedRepositoryId"
         :can-maintain="repositoryStore.selectedRepository?.capabilities.canUpdate ?? false"
         :can-manage="repositoryStore.selectedRepository?.capabilities.canConfigure ?? false"
-        :remote-source="['REMOTE_GIT', 'GITLAB'].includes(repositoryStore.selectedRepository?.sourceType ?? '')" />
+        :remote-source="['REMOTE_GIT', 'GITLAB'].includes(repositoryStore.selectedRepository?.sourceType ?? '')"
+        show-branch-list
+        @changed="refreshBranchContext" />
     </el-drawer>
   </main>
 </div></template>
@@ -212,6 +317,12 @@ onMounted(() => {
 .workspace-tab-row { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .workspace-tab-row > :first-child { flex: 1; min-width: 0; }
 .branch-entry { flex: none; margin-right: 12px; }
+.branch-lock { display: flex; min-width: 0; align-items: center; gap: 6px; margin-left: 8px; padding: 3px 5px 3px 8px; color: #8a5a20; border: 1px solid #e3d0b5; border-radius: 6px; background: #fff9ef; }
+.branch-lock[data-ready='true'] { color: #275f4a; border-color: #bad8ca; background: #f1f8f5; }
+.global-branch-switcher { width: 176px; }
+.locked-commit { max-width: 180px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.branch-refresh { display: inline-grid; width: 28px; height: 28px; place-content: center; color: inherit; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
+.branch-refresh:hover { background: rgb(255 255 255 / 80%); }
 .help-entry, .mcp-entry { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 10px; border-radius: 6px; color: #526071; font-size: 13px; text-decoration: none; }
 .help-entry:hover, .help-entry.router-link-active, .mcp-entry:hover, .mcp-entry.router-link-active { color: #2563eb; background: #eff6ff; }
 .help-entry:focus-visible, .mcp-entry:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
@@ -235,11 +346,14 @@ onMounted(() => {
 .system-chevron.open { transform: rotate(180deg); }
 .nav-section[data-group='system'] .nav-link { padding-left: 16px; }
 @media (max-width: 1050px) {
+  .locked-commit { display: none; }
+  .global-branch-switcher { width: 140px; }
   .nav-section-label, .system-toggle span, .system-chevron { display: none; }
   .system-toggle { display: flex; justify-content: center; width: 100%; padding: 0; }
   .nav-section[data-group='system'] .nav-link { padding-left: 0; }
 }
 @media (max-width: 760px) {
+  .branch-lock { display: none; }
   .sidebar { overflow-x: auto; overflow-y: hidden; }
   .nav-list, .nav-section, .nav-section-links { display: flex; flex: none; }
   .nav-list { min-height: auto; overflow: visible; scrollbar-gutter: auto; }

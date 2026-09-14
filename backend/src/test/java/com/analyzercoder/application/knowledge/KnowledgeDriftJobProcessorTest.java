@@ -23,8 +23,7 @@ class KnowledgeDriftJobProcessorTest {
     void recordsCurrentSnapshotAndReadyResult() {
         InMemoryIndexJobStore jobs = new InMemoryIndexJobStore();
         CodeRepository repository = repository(RepositorySnapshotId.newId());
-        IndexJob queued =
-                jobs.save(IndexJob.create(repository.id(), IndexJobType.KNOWLEDGE_DRIFT));
+        IndexJob queued = jobs.save(IndexJob.create(repository.id(), IndexJobType.KNOWLEDGE_DRIFT));
         CodeRepositoryStore repositories = mock(CodeRepositoryStore.class);
         KnowledgeDriftService drift = mock(KnowledgeDriftService.class);
         when(repositories.findById(repository.id())).thenReturn(Optional.of(repository));
@@ -32,8 +31,7 @@ class KnowledgeDriftJobProcessorTest {
                 .thenReturn(new KnowledgeDriftService.InspectionReport(3, 0, 3, 0, false));
 
         boolean processed =
-                new KnowledgeDriftJobProcessor(jobs, repositories, drift, 5)
-                        .processNextQueuedJob();
+                new KnowledgeDriftJobProcessor(jobs, repositories, drift, 5).processNextQueuedJob();
 
         IndexJob result = jobs.findById(queued.id()).orElseThrow();
         assertThat(processed).isTrue();
@@ -59,8 +57,7 @@ class KnowledgeDriftJobProcessorTest {
                 .thenReturn(new KnowledgeDriftService.InspectionReport(1, 0, 1, 0, false));
 
         boolean processed =
-                new KnowledgeDriftJobProcessor(jobs, repositories, drift, 5)
-                        .processNextQueuedJob();
+                new KnowledgeDriftJobProcessor(jobs, repositories, drift, 5).processNextQueuedJob();
 
         IndexJob result = jobs.findById(queued.id()).orElseThrow();
         assertThat(processed).isFalse();

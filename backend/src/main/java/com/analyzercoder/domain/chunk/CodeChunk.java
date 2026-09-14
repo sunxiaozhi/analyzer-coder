@@ -48,9 +48,7 @@ public record CodeChunk(
                 null,
                 language,
                 assetType,
-                assetType == RepositoryAssetType.CONFIG
-                        ? ChunkType.CONFIG
-                        : ChunkType.FILE,
+                assetType == RepositoryAssetType.CONFIG ? ChunkType.CONFIG : ChunkType.FILE,
                 startLine,
                 endLine,
                 content);

@@ -124,5 +124,4 @@ public class LlmSettingsController {
         var account = SecurityContext.requireAdmin(request);
         return service.cancelCheck(account.id(), checkId);
     }
-
 }

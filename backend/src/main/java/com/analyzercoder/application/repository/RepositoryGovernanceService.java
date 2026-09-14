@@ -1,7 +1,7 @@
 package com.analyzercoder.application.repository;
 
-import com.analyzercoder.domain.indexing.IndexJobStore;
 import com.analyzercoder.application.project.EngineeringProjectService;
+import com.analyzercoder.domain.indexing.IndexJobStore;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryGovernanceMapper;
 import com.analyzercoder.infrastructure.persistence.model.GovernanceAccountRow;

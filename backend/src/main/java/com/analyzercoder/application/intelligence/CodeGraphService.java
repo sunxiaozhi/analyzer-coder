@@ -39,11 +39,17 @@ public class CodeGraphService {
         return build(repoId, BuildControl.none());
     }
 
-    public Artifact buildSnapshot(UUID repoId,UUID snapshotId,Path snapshotPath,BuildControl control) {
+    public Artifact buildSnapshot(
+            UUID repoId, UUID snapshotId, Path snapshotPath, BuildControl control) {
         throw new IllegalStateException("分支图谱需要受管 CodeGraph 构建器");
     }
-    public Artifact latestSnapshot(UUID repoId,UUID snapshotId) { return artifact(mapper.findLatest(repoId,snapshotId)); }
-    public CodeGraphPropagation impactSnapshot(UUID repoId,UUID snapshotId,String symbol,int depth) {
+
+    public Artifact latestSnapshot(UUID repoId, UUID snapshotId) {
+        return artifact(mapper.findLatest(repoId, snapshotId));
+    }
+
+    public CodeGraphPropagation impactSnapshot(
+            UUID repoId, UUID snapshotId, String symbol, int depth) {
         throw new IllegalStateException("分支影响分析需要受管 CodeGraph 查询器");
     }
 
@@ -196,10 +202,11 @@ public class CodeGraphService {
 
     public CodeGraphExplorer.View explore(UUID repoId, String module, String query) {
         RepoVersion repo = version(repoId);
-        return exploreSnapshot(repoId,repo.snapshotId(),module,query);
+        return exploreSnapshot(repoId, repo.snapshotId(), module, query);
     }
 
-    public CodeGraphExplorer.View exploreSnapshot(UUID repoId,UUID snapshotId,String module,String query) {
+    public CodeGraphExplorer.View exploreSnapshot(
+            UUID repoId, UUID snapshotId, String module, String query) {
         Artifact current = artifact(mapper.findPublished(repoId, snapshotId));
         if (current == null)
             throw new CodeGraphException(

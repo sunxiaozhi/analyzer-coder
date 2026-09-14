@@ -46,12 +46,15 @@ class ProjectCodeFactsServiceTest {
                         "snapshot-1",
                         "abc123",
                         Instant.parse("2026-01-01T00:00:00Z"),
-                        List.of(
-                                node("backend", 3, "java"),
-                                node("frontend", 2, "vue")),
+                        List.of(node("backend", 3, "java"), node("frontend", 2, "vue")),
                         List.of(
                                 new ProjectArchitectureMapService.ArchitectureEdge(
-                                        "frontend", "backend", "DEPENDS_ON", 9, List.of(), List.of())),
+                                        "frontend",
+                                        "backend",
+                                        "DEPENDS_ON",
+                                        9,
+                                        List.of(),
+                                        List.of())),
                         List.of(),
                         new ProjectArchitectureMapService.AnalysisCoverage(
                                 5, 5, 0, 0, 0, false, List.of("完整扫描")));

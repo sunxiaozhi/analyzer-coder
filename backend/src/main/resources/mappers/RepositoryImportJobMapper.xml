@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.RepositoryImportJobMapper">
- <insert id="insert">INSERT INTO repository_import_jobs(id,account_id,credential_id,source_type,repository_name,remote_url,branch)
- VALUES(#{id},#{actorId},#{credentialId},#{sourceType},#{name},#{url},#{branch})</insert>
+ <insert id="insert">INSERT INTO repository_import_jobs(id,account_id,credential_id,source_type,repository_name,remote_url,branch,project_draft_id)
+ VALUES(#{id},#{actorId},#{credentialId},#{sourceType},#{name},#{url},#{branch},#{projectDraftId})</insert>
  <select id="find" resultType="map">SELECT * FROM repository_import_jobs WHERE id=#{id}</select>
  <select id="list" resultType="map">SELECT * FROM repository_import_jobs WHERE #{admin}=TRUE OR account_id=#{actorId} ORDER BY created_at DESC LIMIT 100</select>
  <select id="claim" resultType="map">

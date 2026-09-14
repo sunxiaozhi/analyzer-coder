@@ -21,6 +21,8 @@ const props = defineProps<{
   repositoryId: string;
   card: KnowledgeCard | null;
   busy: boolean;
+  branchName?: string | null;
+  allowSharedScope?: boolean;
   initialReference?: {
     filePath: string;
     symbolName: string | null;
@@ -29,7 +31,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
-  submit: [value: CardInput];
+  submit: [value: CardInput, scope: 'CURRENT_BRANCH' | 'PROJECT_SHARED'];
   openCode: [reference: CodeReference];
 }>();
 
@@ -41,6 +43,7 @@ const codeReferences = shallowRef<CodeReference[]>([]);
 const members = shallowRef<RepositoryMember[]>([]);
 const membersLoading = shallowRef(false);
 const loadedMembersRepository = shallowRef<string | null>(null);
+const creationScope = shallowRef<'CURRENT_BRANCH' | 'PROJECT_SHARED'>('CURRENT_BRANCH');
 let referencePrimeVersion = 0;
 
 const scopeReady = computed(() => Boolean(
@@ -60,6 +63,7 @@ watch(
       return;
     }
     reset(props.card);
+    creationScope.value = 'CURRENT_BRANCH';
     const cardReferences = props.card?.codeReferences ?? [];
     attachments.value = props.card ? [...props.card.attachments] : [];
     codeReferences.value = [...cardReferences];
@@ -176,7 +180,7 @@ function save() {
   emit('submit', toPayload({
     attachmentIds: attachments.value.map(item => item.id),
     codeReferences: codeReferences.value,
-  }));
+  }), creationScope.value);
 }
 </script>
 
@@ -192,6 +196,13 @@ function save() {
     <p class="editor-intro">记录一条可检索、可回到源码的项目知识。新卡片会先保存为草稿。</p>
 
     <el-form label-position="top" class="knowledge-card-form">
+      <section v-if="!card && branchName" class="knowledge-ownership">
+        <div><b>知识归属</b><small>共享知识与分支专属知识拥有独立卡片、修订和发布记录。</small></div>
+        <el-radio-group v-model="creationScope">
+          <el-radio-button value="CURRENT_BRANCH">分支专属 · {{ branchName }}</el-radio-button>
+          <el-radio-button v-if="allowSharedScope" value="PROJECT_SHARED">项目共享</el-radio-button>
+        </el-radio-group>
+      </section>
       <KnowledgeCardContentSection
         v-model:title="form.title"
         v-model:knowledge-kind="form.knowledgeKind"
@@ -263,4 +274,8 @@ function save() {
   overscroll-behavior: contain;
 }
 .draft-note { margin-bottom: 2px; }
+.knowledge-ownership { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid #cdddea; border-left: 3px solid #2f6f94; border-radius: 5px; background: #f7fafc; }
+.knowledge-ownership > div { display: grid; gap: 3px; }
+.knowledge-ownership b { color: #31475a; font-size: 14px; }
+.knowledge-ownership small { color: #68798a; font-size: 12px; }
 </style>

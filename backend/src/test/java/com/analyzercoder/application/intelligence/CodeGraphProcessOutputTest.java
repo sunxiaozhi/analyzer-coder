@@ -16,8 +16,7 @@ class CodeGraphProcessOutputTest {
     @Test
     void decodesChineseWindowsConsoleOutput() {
         byte[] output =
-                "'codegraph' 不是内部或外部命令，也不是可运行的程序或批处理文件。"
-                        .getBytes(Charset.forName("GB18030"));
+                "'codegraph' 不是内部或外部命令，也不是可运行的程序或批处理文件。".getBytes(Charset.forName("GB18030"));
         String decoded = CodeGraphProcessOutput.decode(output);
         assertThat(decoded).doesNotContain("�").contains("不是内部或外部命令");
         assertThat(CodeGraphProcessOutput.failureMessage(decoded))

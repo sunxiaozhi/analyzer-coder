@@ -68,8 +68,7 @@ public interface IndexJobStore {
      */
     Optional<IndexJob> claimNextQueued();
 
-    Optional<IndexJob> claimNextQueued(
-            IndexJobType type, String initialStep, long timeoutSeconds);
+    Optional<IndexJob> claimNextQueued(IndexJobType type, String initialStep, long timeoutSeconds);
 
     Optional<IndexJob> heartbeat(IndexJobId id, String currentStep);
 

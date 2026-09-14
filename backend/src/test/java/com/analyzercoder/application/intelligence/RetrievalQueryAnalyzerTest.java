@@ -23,6 +23,7 @@ class RetrievalQueryAnalyzerTest {
 
         assertTrue(query.terms().isEmpty());
     }
+
     @Test
     void extractsAnExplicitSymbolNextToChineseWithoutSpaces() {
         var query = analyzer.analyze("OrderCheckoutWorkflow在哪里定义？");

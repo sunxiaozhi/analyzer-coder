@@ -36,7 +36,7 @@ function citationReference(citation: Citation): CodeReference | null {
       <div class="evidence-heading">
         <span :class="['source-badge', citation.sourceType.toLowerCase()]">
           <el-icon><Reading v-if="citation.sourceType === 'KNOWLEDGE'" /><Document v-else /></el-icon>
-          {{ citation.sourceType === 'KNOWLEDGE' ? '团队知识' : '当前代码' }}
+          {{ citation.sourceType === 'KNOWLEDGE' ? (citation.sourceScope || '团队知识') : '当前代码' }}
         </span>
         <small>S{{ citation.rank }}</small>
       </div>

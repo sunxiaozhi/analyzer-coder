@@ -50,7 +50,8 @@ class KnowledgeStateWorkflowTest {
 
     @Test
     void unreviewedCardCannotBePublished() {
-        when(mapper.cards(repositoryId, true)).thenReturn(List.of(row("DRAFT", "CURRENT", "UNREVIEWED")));
+        when(mapper.cards(repositoryId, true))
+                .thenReturn(List.of(row("DRAFT", "CURRENT", "UNREVIEWED")));
 
         assertThatThrownBy(
                         () ->
@@ -83,7 +84,8 @@ class KnowledgeStateWorkflowTest {
 
     @Test
     void staleSourceCannotBePublishedEvenAfterHumanApproval() {
-        when(mapper.cards(repositoryId, true)).thenReturn(List.of(row("DRAFT", "STALE", "APPROVED")));
+        when(mapper.cards(repositoryId, true))
+                .thenReturn(List.of(row("DRAFT", "STALE", "APPROVED")));
 
         assertThatThrownBy(
                         () ->

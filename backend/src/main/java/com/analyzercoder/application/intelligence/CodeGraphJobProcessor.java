@@ -51,10 +51,22 @@ public class CodeGraphJobProcessor {
 
     private boolean process(IndexJob running) {
         try {
-            var branch=branchTasks==null?java.util.Optional.<com.analyzercoder.application.branch.BranchGraphTasks.Target>empty():branchTasks.target(running.id().value());
+            var branch =
+                    branchTasks == null
+                            ? java.util.Optional
+                                    .<com.analyzercoder.application.branch.BranchGraphTasks.Target>
+                                            empty()
+                            : branchTasks.target(running.id().value());
             CodeGraphService.Artifact artifact =
-                    branch.isPresent()?codeGraph.buildSnapshot(branch.get().repoId(),branch.get().snapshotId(),branch.get().path(),step->checkpoint(running,step)):codeGraph.build(
-                            running.repositoryId().value(), step -> checkpoint(running, step));
+                    branch.isPresent()
+                            ? codeGraph.buildSnapshot(
+                                    branch.get().repoId(),
+                                    branch.get().snapshotId(),
+                                    branch.get().path(),
+                                    step -> checkpoint(running, step))
+                            : codeGraph.build(
+                                    running.repositoryId().value(),
+                                    step -> checkpoint(running, step));
             IndexJob latest = jobs.findById(running.id()).orElseThrow();
             if (latest.status() == IndexJobStatus.FAILED) return false;
             if (latest.isCancellationRequested()) {
@@ -62,7 +74,7 @@ public class CodeGraphJobProcessor {
                 return true;
             }
             jobs.save(latest.succeed("codegraph_published:" + artifact.snapshotId()));
-            if(branch.isEmpty()) enqueueKnowledgeDrift(running);
+            if (branch.isEmpty()) enqueueKnowledgeDrift(running);
             return true;
         } catch (CodeGraphService.BuildCanceledException exception) {
             IndexJob latest = jobs.findById(running.id()).orElse(running);

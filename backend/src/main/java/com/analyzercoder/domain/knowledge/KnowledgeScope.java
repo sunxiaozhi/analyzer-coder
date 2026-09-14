@@ -22,8 +22,7 @@ public record KnowledgeScope(
     }
 
     /** 兼容 V9 的仓库内三字段 JSON 和调用代码。 */
-    public KnowledgeScope(
-            List<String> pathPatterns, List<String> symbols, List<String> modules) {
+    public KnowledgeScope(List<String> pathPatterns, List<String> symbols, List<String> modules) {
         this(pathPatterns, symbols, modules, List.of(), List.of(), List.of());
     }
 

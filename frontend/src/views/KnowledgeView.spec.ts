@@ -1,11 +1,13 @@
 import { shallowMount, flushPromises } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
 import { reactive } from 'vue';
 import KnowledgeView from './KnowledgeView.vue';
 import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
 import { intelligenceApi } from '@/api/intelligence';
+import { branchesApi } from '@/api/branches';
 
 let repositories: {
   selectedRepositoryId: string;
@@ -19,10 +21,12 @@ vi.mock('vue-router', () => ({
 vi.mock('@/api/intelligence', () => ({
   intelligenceApi: { cards: vi.fn(), markdownSources: vi.fn(), sourceDrift: vi.fn() },
 }));
+vi.mock('@/api/branches', () => ({ branchesApi: { scopes: vi.fn() } }));
 
 describe('knowledge evidence access', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    setActivePinia(createPinia());
     repositories = reactive({
       selectedRepositoryId: 'repo-1',
       selectedRepository: { capabilities: { canUpdate: false, canConfigure: false } },
@@ -34,6 +38,7 @@ describe('knowledge evidence access', () => {
     vi.mocked(intelligenceApi.markdownSources).mockResolvedValue({
       snapshotId: 'snapshot', counts: { total: 0, pending: 0, current: 0, stale: 0 }, items: [],
     });
+    vi.mocked(branchesApi.scopes).mockResolvedValue([]);
   });
 
   function mountView() {

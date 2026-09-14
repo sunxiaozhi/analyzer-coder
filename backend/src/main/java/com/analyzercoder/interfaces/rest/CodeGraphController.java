@@ -22,11 +22,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/repositories/{repoId}/codegraph")
 public class CodeGraphController {
-    @org.springframework.beans.factory.annotation.Autowired private com.analyzercoder.application.branch.BranchGraphTasks branchTasks;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.analyzercoder.application.branch.BranchGraphTasks branchTasks;
+
     private final CodeGraphService service;
     private final CodeGraphTaskService tasks;
     private final AccessControlService access;
-    @org.springframework.beans.factory.annotation.Autowired private BranchRequestContext branchContexts;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private BranchRequestContext branchContexts;
 
     public CodeGraphController(
             CodeGraphService service, CodeGraphTaskService tasks, AccessControlService access) {
@@ -41,8 +45,9 @@ public class CodeGraphController {
             @PathVariable UUID repoId, HttpServletRequest request) {
         var id = CodeRepositoryId.of(repoId);
         access.require(SecurityContext.account(request), id, RepositoryPermission.MAINTAIN);
-        var context=branchContexts==null?null:branchContexts.resolve(request,repoId);
-        if(context!=null) return IndexController.IndexJobResponse.from(branchTasks.start(context));
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        if (context != null)
+            return IndexController.IndexJobResponse.from(branchTasks.start(context));
         return IndexController.IndexJobResponse.from(tasks.start(id));
     }
 
@@ -52,8 +57,10 @@ public class CodeGraphController {
                 SecurityContext.account(request),
                 CodeRepositoryId.of(repoId),
                 RepositoryPermission.READ);
-        var context=branchContexts==null?null:branchContexts.resolve(request,repoId);
-        return context==null?service.latest(repoId):service.latestSnapshot(repoId,context.snapshotId());
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.latest(repoId)
+                : service.latestSnapshot(repoId, context.snapshotId());
     }
 
     @GetMapping("/impact")
@@ -66,8 +73,10 @@ public class CodeGraphController {
                 SecurityContext.account(request),
                 CodeRepositoryId.of(repoId),
                 RepositoryPermission.READ);
-        var context=branchContexts==null?null:branchContexts.resolve(request,repoId);
-        return context==null?service.impact(repoId, symbol, depth):service.impactSnapshot(repoId,context.snapshotId(),symbol,depth);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        return context == null
+                ? service.impact(repoId, symbol, depth)
+                : service.impactSnapshot(repoId, context.snapshotId(), symbol, depth);
     }
 
     @GetMapping("/explore")
@@ -82,8 +91,9 @@ public class CodeGraphController {
                 RepositoryPermission.READ);
         if (query.length() > 500 || module.length() > 500)
             throw new IllegalArgumentException("查询范围过长");
-        var context=branchContexts==null?null:branchContexts.resolve(request,repoId);
-        if(context!=null) return service.exploreSnapshot(repoId,context.snapshotId(),module,query);
+        var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        if (context != null)
+            return service.exploreSnapshot(repoId, context.snapshotId(), module, query);
         return service.explore(repoId, module, query);
     }
 }

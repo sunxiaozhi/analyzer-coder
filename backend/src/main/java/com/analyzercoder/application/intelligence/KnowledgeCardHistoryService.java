@@ -61,9 +61,7 @@ public class KnowledgeCardHistoryService {
     }
 
     public List<Revision> history(UUID repoId, UUID cardId) {
-        return mapper.findHistory(repoId, cardId).stream()
-                .map(this::revision)
-                .toList();
+        return mapper.findHistory(repoId, cardId).stream().map(this::revision).toList();
     }
 
     @Transactional

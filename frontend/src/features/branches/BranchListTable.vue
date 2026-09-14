@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import type { RepositoryBranch } from '@/api/branches';
 defineProps<{ branches: RepositoryBranch[]; selectedId: string; disabled: boolean }>();
-const emit = defineEmits<{ select: [branchId: string] }>();
+const emit = defineEmits<{
+  select: [branchId: string];
+  archive: [branchId: string];
+  restore: [branchId: string];
+}>();
 const labels = { PENDING: '未准备', BUILDING: '准备中', READY: '可查看', FAILED: '准备失败' };
 </script>
 
@@ -15,7 +19,11 @@ const labels = { PENDING: '未准备', BUILDING: '准备中', READY: '可查看'
           <th scope="row" class="branch-name">{{ branch.name }}</th>
           <td><code>{{ branch.commitSha?.slice(0, 12) ?? '—' }}</code></td>
           <td>{{ labels[branch.status] }}</td>
-          <td><button type="button" class="branch-select" :disabled="disabled" :aria-pressed="selectedId === branch.id" @click="emit('select', branch.id)">{{ selectedId === branch.id ? '当前选择' : '选择分支' }}</button></td>
+          <td class="branch-actions">
+            <button v-if="branch.trackingStatus === 'ACTIVE'" type="button" class="branch-select" :disabled="disabled" :aria-pressed="selectedId === branch.id" @click="emit('select', branch.id)">{{ selectedId === branch.id ? '当前选择' : '选择分支' }}</button>
+            <button v-if="branch.trackingStatus === 'ACTIVE'" type="button" class="branch-lifecycle" :disabled="disabled" @click="emit('archive', branch.id)">归档</button>
+            <button v-else type="button" class="branch-lifecycle" :disabled="disabled" @click="emit('restore', branch.id)">恢复跟踪</button>
+          </td>
         </tr>
         <tr v-if="!branches.length"><td colspan="4">尚未添加分支。请从远程发现或输入已有分支名称。</td></tr>
       </tbody>
@@ -34,4 +42,7 @@ const labels = { PENDING: '未准备', BUILDING: '准备中', READY: '可查看'
 .branch-select { border: 1px solid #dbe3ec; background: #fff; color: #2563eb; padding: 5px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
 .branch-select:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .branch-select:disabled { opacity: .6; cursor: wait; }
+.branch-actions { display: flex; gap: 6px; }
+.branch-lifecycle { padding: 5px 8px; color: #5b6672; border: 0; background: transparent; cursor: pointer; white-space: nowrap; }
+.branch-lifecycle:hover { color: #1f2937; text-decoration: underline; }
 </style>

@@ -44,7 +44,8 @@ public class RepositorySourceImportController {
                 input.url(),
                 input.branch(),
                 input.sourceType(),
-                input.credentialId());
+                input.credentialId(),
+                input.projectDraftId());
     }
 
     @GetMapping("/jobs")
@@ -99,5 +100,6 @@ public class RepositorySourceImportController {
             @NotBlank String url,
             String branch,
             RepositorySourceType sourceType,
-            java.util.UUID credentialId) {}
+            java.util.UUID credentialId,
+            java.util.UUID projectDraftId) {}
 }

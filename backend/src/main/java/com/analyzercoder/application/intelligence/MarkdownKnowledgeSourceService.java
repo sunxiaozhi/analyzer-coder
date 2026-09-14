@@ -1,5 +1,7 @@
 package com.analyzercoder.application.intelligence;
 
+import com.analyzercoder.application.branch.BranchKnowledgeService;
+import com.analyzercoder.application.branch.BranchReadContext;
 import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.indexing.ScannedRepositoryFile;
 import com.analyzercoder.domain.knowledge.KnowledgeObligations;
@@ -28,7 +30,9 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Discovers repository Markdown and turns an exact source version into a reviewable knowledge card. */
+/**
+ * Discovers repository Markdown and turns an exact source version into a reviewable knowledge card.
+ */
 @Service
 public class MarkdownKnowledgeSourceService {
     private static final int MAX_CODE_REFERENCES = 30;
@@ -41,6 +45,9 @@ public class MarkdownKnowledgeSourceService {
     private final MarkdownKnowledgeSourceMapper mapper;
     private final CodeRepositoryStore repositories;
     private final IntelligenceService intelligence;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private BranchKnowledgeService branchKnowledge;
 
     public MarkdownKnowledgeSourceService(
             MarkdownKnowledgeSourceMapper mapper,
@@ -103,6 +110,45 @@ public class MarkdownKnowledgeSourceService {
                 repository.currentCommit() != null && !repository.currentCommit().isBlank());
     }
 
+    /** Stores a complete Markdown manifest under a stable branch identity. */
+    @Transactional
+    public void synchronizeBranch(
+            UUID repositoryId,
+            UUID branchId,
+            UUID snapshotId,
+            List<ScannedRepositoryFile> allFiles) {
+        Objects.requireNonNull(repositoryId, "repositoryId must not be null");
+        Objects.requireNonNull(branchId, "branchId must not be null");
+        Objects.requireNonNull(snapshotId, "snapshotId must not be null");
+        Map<String, SourceDocument> documents = new LinkedHashMap<>();
+        for (ScannedRepositoryFile file : allFiles) {
+            if (isMarkdown(file)) {
+                SourceDocument source = source(file);
+                documents.put(source.path(), source);
+            }
+        }
+        for (SourceDocument source :
+                documents.values().stream()
+                        .sorted(Comparator.comparing(SourceDocument::path))
+                        .toList()) {
+            mapper.upsertBranchSource(
+                    UUID.randomUUID(),
+                    repositoryId,
+                    branchId,
+                    snapshotId,
+                    source.path(),
+                    source.contentHash(),
+                    source.title(),
+                    source.assetType(),
+                    source.content(),
+                    source.lineCount(),
+                    source.byteSize());
+        }
+        mapper.deleteMissingBranchSources(
+                repositoryId, branchId, new ArrayList<>(documents.keySet()));
+        mapper.reconcileBranchValidations(repositoryId, branchId, snapshotId);
+    }
+
     @Transactional(readOnly = true)
     public MarkdownSourceList list(UUID repositoryId) {
         CodeRepository repository = repository(repositoryId);
@@ -115,9 +161,19 @@ public class MarkdownKnowledgeSourceService {
         long stale = items.stream().filter(item -> "STALE".equals(item.status())).count();
         long pending = items.size() - current - stale;
         return new MarkdownSourceList(
-                snapshotId,
-                new Counts(items.size(), pending, current, stale),
-                items);
+                snapshotId, new Counts(items.size(), pending, current, stale), items);
+    }
+
+    @Transactional(readOnly = true)
+    public MarkdownSourceList list(UUID repositoryId, BranchReadContext context) {
+        requireContext(repositoryId, context);
+        List<MarkdownSource> items =
+                mapper
+                        .listBranchSources(repositoryId, context.branchId(), context.snapshotId())
+                        .stream()
+                        .map(MarkdownKnowledgeSourceService::sourceView)
+                        .toList();
+        return sourceList(context.snapshotId(), items);
     }
 
     @Transactional
@@ -140,7 +196,25 @@ public class MarkdownKnowledgeSourceService {
         if (view == null) {
             throw sourceChanged();
         }
-        return generateSource(repositoryId, actorId, view, false);
+        return generateSource(repositoryId, actorId, view, false, null);
+    }
+
+    @Transactional
+    public IntelligenceService.KnowledgeCard generate(
+            UUID repositoryId, UUID actorId, GenerateInput input, BranchReadContext context) {
+        validateInput(input);
+        requireContext(repositoryId, context);
+        verifyExpectedSnapshot(context, input.expectedSnapshotId());
+        String sourcePath = normalizePath(input.sourcePath());
+        Map<String, Object> source =
+                mapper.lockBranchSource(repositoryId, context.branchId(), sourcePath);
+        verifySourceVersion(
+                source, input.expectedSnapshotId(), normalizeHash(input.expectedContentHash()));
+        Map<String, Object> view =
+                mapper.findBranchSource(
+                        repositoryId, context.branchId(), input.expectedSnapshotId(), sourcePath);
+        if (view == null) throw sourceChanged();
+        return generateSource(repositoryId, actorId, view, false, context.branchId());
     }
 
     @Transactional
@@ -157,8 +231,8 @@ public class MarkdownKnowledgeSourceService {
                         candidates.stream()
                                 .filter(
                                         candidate ->
-                                                "PENDING".equals(
-                                                        string(candidate, "source_status")))
+                                                "PENDING"
+                                                        .equals(string(candidate, "source_status")))
                                 .count();
         int generated = 0;
         for (Map<String, Object> candidate : candidates) {
@@ -171,19 +245,51 @@ public class MarkdownKnowledgeSourceService {
             String sourcePath = string(candidate, "source_path");
             Map<String, Object> locked = lockCurrentSource(repositoryId, sourcePath);
             verifySourceVersion(
-                    locked,
-                    expectedSnapshotId,
-                    string(candidate, "source_content_hash"));
+                    locked, expectedSnapshotId, string(candidate, "source_content_hash"));
             Map<String, Object> current =
                     mapper.findSource(repositoryId, expectedSnapshotId, sourcePath);
             if (current == null || !"PENDING".equals(string(current, "source_status"))) {
                 continue;
             }
             IntelligenceService.KnowledgeCard card =
-                    generateSource(repositoryId, actorId, current, true);
+                    generateSource(repositoryId, actorId, current, true, null);
             if (card != null) {
                 generated++;
             }
+        }
+        return new BatchGenerationResult(generated, Math.max(0, pendingTotal - generated));
+    }
+
+    @Transactional
+    public BatchGenerationResult generatePending(
+            UUID repositoryId, UUID actorId, UUID expectedSnapshotId, BranchReadContext context) {
+        requireContext(repositoryId, context);
+        verifyExpectedSnapshot(context, expectedSnapshotId);
+        List<Map<String, Object>> candidates =
+                mapper.listBranchSources(repositoryId, context.branchId(), expectedSnapshotId);
+        int pendingTotal =
+                (int)
+                        candidates.stream()
+                                .filter(
+                                        candidate ->
+                                                "PENDING"
+                                                        .equals(string(candidate, "source_status")))
+                                .count();
+        int generated = 0;
+        for (Map<String, Object> candidate : candidates) {
+            if (generated >= MAX_BATCH_GENERATION) break;
+            if (!"PENDING".equals(string(candidate, "source_status"))) continue;
+            String sourcePath = string(candidate, "source_path");
+            Map<String, Object> locked =
+                    mapper.lockBranchSource(repositoryId, context.branchId(), sourcePath);
+            verifySourceVersion(
+                    locked, expectedSnapshotId, string(candidate, "source_content_hash"));
+            Map<String, Object> current =
+                    mapper.findBranchSource(
+                            repositoryId, context.branchId(), expectedSnapshotId, sourcePath);
+            if (current == null || !"PENDING".equals(string(current, "source_status"))) continue;
+            if (generateSource(repositoryId, actorId, current, true, context.branchId()) != null)
+                generated++;
         }
         return new BatchGenerationResult(generated, Math.max(0, pendingTotal - generated));
     }
@@ -192,7 +298,8 @@ public class MarkdownKnowledgeSourceService {
             UUID repositoryId,
             UUID actorId,
             Map<String, Object> source,
-            boolean pendingOnly) {
+            boolean pendingOnly,
+            UUID sourceBranchId) {
         String status = string(source, "source_status");
         UUID linkedCardId = uuid(source, "card_id");
         if (pendingOnly && !"PENDING".equals(status)) {
@@ -208,19 +315,14 @@ public class MarkdownKnowledgeSourceService {
         }
         if (content.length() > MAX_CARD_CONTENT_LENGTH) {
             throw new ApiSecurityException(
-                    409,
-                    "MARKDOWN_SOURCE_TOO_LARGE",
-                    "Markdown 内容超过知识卡片 600000 字符限制，暂不能直接生成");
+                    409, "MARKDOWN_SOURCE_TOO_LARGE", "Markdown 内容超过知识卡片 600000 字符限制，暂不能直接生成");
         }
 
         UUID snapshotId = uuid(source, "source_snapshot_id");
         String sourcePath = string(source, "source_path");
         List<IntelligenceService.CodeReferenceInput> references =
-                mapper.findChunkIds(
-                                repositoryId,
-                                snapshotId,
-                                sourcePath,
-                                MAX_CODE_REFERENCES)
+                mapper
+                        .findChunkIds(repositoryId, snapshotId, sourcePath, MAX_CODE_REFERENCES)
                         .stream()
                         .map(IntelligenceService.CodeReferenceInput::new)
                         .toList();
@@ -249,16 +351,29 @@ public class MarkdownKnowledgeSourceService {
         IntelligenceService.KnowledgeCard generated =
                 previous == null
                         ? intelligence.createCard(repositoryId, actorId, cardInput)
-                        : intelligence.updateCard(
-                                repositoryId, previous.id(), actorId, cardInput);
-        mapper.insertProvenance(
-                generated.id(),
-                generated.revision(),
-                uuid(source, "source_id"),
-                repositoryId,
-                snapshotId,
-                sourcePath,
-                string(source, "source_content_hash"));
+                        : intelligence.updateCard(repositoryId, previous.id(), actorId, cardInput);
+        if (sourceBranchId == null) {
+            mapper.insertProvenance(
+                    generated.id(),
+                    generated.revision(),
+                    uuid(source, "source_id"),
+                    repositoryId,
+                    snapshotId,
+                    sourcePath,
+                    string(source, "source_content_hash"));
+        } else {
+            mapper.insertBranchProvenance(
+                    generated.id(),
+                    generated.revision(),
+                    uuid(source, "source_id"),
+                    repositoryId,
+                    sourceBranchId,
+                    snapshotId,
+                    sourcePath,
+                    string(source, "source_content_hash"));
+            if (previous == null && branchKnowledge != null)
+                branchKnowledge.bindCreated(repositoryId, generated.id(), sourceBranchId);
+        }
         return generated;
     }
 
@@ -280,11 +395,37 @@ public class MarkdownKnowledgeSourceService {
         }
     }
 
-    private static void verifyExpectedSnapshot(
-            CodeRepository repository, UUID expectedSnapshotId) {
+    private static void verifyExpectedSnapshot(CodeRepository repository, UUID expectedSnapshotId) {
         if (!currentSnapshot(repository).equals(expectedSnapshotId)) {
             throw sourceChanged();
         }
+    }
+
+    private static void verifyExpectedSnapshot(BranchReadContext context, UUID expectedSnapshotId) {
+        if (expectedSnapshotId == null || !context.snapshotId().equals(expectedSnapshotId))
+            throw sourceChanged();
+    }
+
+    private static void requireContext(UUID repositoryId, BranchReadContext context) {
+        if (context == null || !repositoryId.equals(context.repositoryId()))
+            throw new ApiSecurityException(409, "CONTEXT_MISMATCH", "Markdown 来源与分支上下文不匹配");
+    }
+
+    private static void validateInput(GenerateInput input) {
+        if (input == null
+                || input.expectedSnapshotId() == null
+                || input.sourcePath() == null
+                || input.expectedContentHash() == null)
+            throw new IllegalArgumentException("Markdown 来源参数不能为空");
+    }
+
+    private static MarkdownSourceList sourceList(UUID snapshotId, List<MarkdownSource> items) {
+        long current = items.stream().filter(item -> "CURRENT".equals(item.status())).count();
+        long stale = items.stream().filter(item -> "STALE".equals(item.status())).count();
+        return new MarkdownSourceList(
+                snapshotId,
+                new Counts(items.size(), items.size() - current - stale, current, stale),
+                items);
     }
 
     private IntelligenceService.KnowledgeCard card(UUID repositoryId, UUID cardId) {
@@ -308,8 +449,7 @@ public class MarkdownKnowledgeSourceService {
 
     private static UUID currentSnapshot(CodeRepository repository) {
         if (repository.currentSnapshotId() == null) {
-            throw new ApiSecurityException(
-                    409, "MARKDOWN_SOURCE_NOT_READY", "仓库尚未发布可读取的内容快照");
+            throw new ApiSecurityException(409, "MARKDOWN_SOURCE_NOT_READY", "仓库尚未发布可读取的内容快照");
         }
         return repository.currentSnapshotId().value();
     }
@@ -377,8 +517,7 @@ public class MarkdownKnowledgeSourceService {
         return "项目文档";
     }
 
-    private static List<String> tags(
-            IntelligenceService.KnowledgeCard previous, String assetType) {
+    private static List<String> tags(IntelligenceService.KnowledgeCard previous, String assetType) {
         Set<String> values = new LinkedHashSet<>();
         if (previous != null) {
             values.addAll(previous.tags());
@@ -394,6 +533,7 @@ public class MarkdownKnowledgeSourceService {
     private static MarkdownSource sourceView(Map<String, Object> row) {
         return new MarkdownSource(
                 uuid(row, "source_id"),
+                uuid(row, "source_branch_id"),
                 string(row, "source_path"),
                 uuid(row, "source_snapshot_id"),
                 string(row, "source_content_hash"),
@@ -441,8 +581,7 @@ public class MarkdownKnowledgeSourceService {
     }
 
     private static ApiSecurityException sourceChanged() {
-        return new ApiSecurityException(
-                409, "MARKDOWN_SOURCE_CHANGED", "Markdown 来源已变化，请刷新后重试");
+        return new ApiSecurityException(409, "MARKDOWN_SOURCE_CHANGED", "Markdown 来源已变化，请刷新后重试");
     }
 
     private static Object value(Map<String, Object> row, String key) {
@@ -512,6 +651,7 @@ public class MarkdownKnowledgeSourceService {
 
     public record MarkdownSource(
             UUID sourceId,
+            UUID branchId,
             String sourcePath,
             UUID sourceSnapshotId,
             String sourceContentHash,

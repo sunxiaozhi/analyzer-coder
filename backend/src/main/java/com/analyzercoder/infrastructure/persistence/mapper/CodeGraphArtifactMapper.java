@@ -9,7 +9,9 @@ import org.apache.ibatis.annotations.Param;
 /** 定义代码图谱产物数据访问操作的 MyBatis 映射接口，集中维护持久化层查询边界。 */
 @Mapper
 public interface CodeGraphArtifactMapper {
-    int retireSnapshot(@Param("repositoryId") UUID repositoryId,@Param("snapshotId") UUID snapshotId);
+    int retireSnapshot(
+            @Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId);
+
     /**
      * 按给定条件查询匹配数据。
      *
