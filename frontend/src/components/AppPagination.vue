@@ -7,6 +7,7 @@ const props = defineProps<{
   pageSize: number;
   total: number;
   disabled?: boolean;
+  compact?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -37,7 +38,7 @@ const rangeEnd = computed(() => Math.min(currentPage.value * props.pageSize, pro
           :total="total"
           :disabled="disabled || total === 0"
           :pager-count="5"
-          layout="sizes, prev, pager, next, jumper"
+          :layout="compact ? 'prev, pager, next' : 'sizes, prev, pager, next, jumper'"
           background
           @update:current-page="emit('pageChange', $event)"
           @update:page-size="emit('sizeChange', $event)"

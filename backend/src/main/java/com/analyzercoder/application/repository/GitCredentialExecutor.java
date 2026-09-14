@@ -15,34 +15,107 @@ import org.springframework.stereotype.Component;
 /** 在最小暴露范围内向 Git 子进程提供临时凭据，并在执行结束后清理敏感环境。 */
 @Component
 public class GitCredentialExecutor {
+    private static final int MAX_DISCOVERED_BRANCHES = 2_000;
+
     public record RemoteBranch(String name, String commitSha) {}
 
     /** Discovery is bounded and does not implicitly track or index every remote branch. */
     public List<RemoteBranch> discoverBranches(String url, ResolvedCredential credential) {
-        String output=run(List.of("-c","http.followRedirects=false","ls-remote","--heads","--",url),null,credential,60);
-        return output.lines().filter(line->!line.isBlank()).map(line->{
-            String[] fields=line.split("\\s+",2);
-            if(fields.length!=2 || !fields[0].matches("[0-9a-fA-F]{40,64}") || !fields[1].startsWith("refs/heads/"))
-                throw new IllegalStateException("远程分支列表格式无效");
-            String name=com.analyzercoder.infrastructure.repository.GitBranchSnapshotFactory.validateBranch(fields[1].substring(11));
-            return new RemoteBranch(name,fields[0]);
-        }).sorted(java.util.Comparator.comparing(RemoteBranch::name)).toList();
+        String output =
+                run(
+                        List.of(
+                                "-c",
+                                "http.followRedirects=false",
+                                "ls-remote",
+                                "--heads",
+                                "--",
+                                url),
+                        null,
+                        credential,
+                        60);
+        List<RemoteBranch> branches =
+                output.lines()
+                        .filter(line -> !line.isBlank())
+                        .limit(MAX_DISCOVERED_BRANCHES + 1L)
+                        .map(
+                                line -> {
+                                    String[] fields = line.split("\\s+", 2);
+                                    if (fields.length != 2
+                                            || !fields[0].matches("[0-9a-fA-F]{40,64}")
+                                            || !fields[1].startsWith("refs/heads/")) {
+                                        throw new IllegalStateException("远程分支列表格式无效");
+                                    }
+                                    String name =
+                                            com.analyzercoder.infrastructure.repository
+                                                    .GitBranchSnapshotFactory.validateBranch(
+                                                    fields[1].substring(11));
+                                    return new RemoteBranch(name, fields[0]);
+                                })
+                        .sorted(java.util.Comparator.comparing(RemoteBranch::name))
+                        .toList();
+        if (branches.size() > MAX_DISCOVERED_BRANCHES) {
+            throw new IllegalStateException(
+                    "远程分支数量超过 " + MAX_DISCOVERED_BRANCHES + " 条，请清理无用分支后重试");
+        }
+        return branches;
     }
 
     /** Fetch into a generated private ref, never reset/checkout or rewrite a user's branch. */
-    public String fetchBranch(Path worktree,String url,String branch,ResolvedCredential credential) {
+    public String fetchBranch(
+            Path worktree, String url, String branch, ResolvedCredential credential) {
         com.analyzercoder.infrastructure.repository.GitBranchSnapshotFactory.validateBranch(branch);
-        String localRef="refs/analyzer/branches/"+java.util.UUID.randomUUID();
+        String localRef = "refs/analyzer/branches/" + java.util.UUID.randomUUID();
         try {
-            run(List.of("-c","http.followRedirects=false","-c","core.hooksPath="+disabledHooks(),"fetch","--no-tags","--no-write-fetch-head","--depth=1","--",url,"refs/heads/"+branch+":"+localRef),worktree,credential,180);
-            String commit=run(List.of("rev-parse","--verify","--end-of-options",localRef+"^{commit}"),worktree,null,30).trim();
-            if(!commit.matches("[0-9a-fA-F]{40,64}")) throw new IllegalStateException("无法确认远程分支提交");
+            run(
+                    List.of(
+                            "-c",
+                            "http.followRedirects=false",
+                            "-c",
+                            "core.hooksPath=" + disabledHooks(),
+                            "fetch",
+                            "--no-tags",
+                            "--no-write-fetch-head",
+                            "--depth=1",
+                            "--",
+                            url,
+                            "refs/heads/" + branch + ":" + localRef),
+                    worktree,
+                    credential,
+                    180);
+            String commit =
+                    run(
+                                    List.of(
+                                            "rev-parse",
+                                            "--verify",
+                                            "--end-of-options",
+                                            localRef + "^{commit}"),
+                                    worktree,
+                                    null,
+                                    30)
+                            .trim();
+            if (!commit.matches("[0-9a-fA-F]{40,64}"))
+                throw new IllegalStateException("无法确认远程分支提交");
             return commit;
         } finally {
-            run(List.of("-c","core.hooksPath="+disabledHooks(),"update-ref","-d",localRef),worktree,null,30);
+            run(
+                    List.of(
+                            "-c",
+                            "core.hooksPath=" + disabledHooks(),
+                            "update-ref",
+                            "-d",
+                            localRef),
+                    worktree,
+                    null,
+                    30);
         }
     }
-    private static String disabledHooks() { return System.getProperty("os.name","").toLowerCase().contains("win")?"NUL":"/dev/null"; }
+
+    private static String disabledHooks() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win")
+                ? "NUL"
+                : "/dev/null";
+    }
+
     public void validate(String url, ResolvedCredential credential) {
         run(List.of("ls-remote", "--exit-code", url, "HEAD"), null, credential, 45);
     }
@@ -126,8 +199,11 @@ public class GitCredentialExecutor {
             ArrayList<String> command = new ArrayList<>();
             command.add("git");
             command.addAll(arguments);
-            outputFile=Files.createTempFile("analyzer-git-output-",".log");
-            java.lang.ProcessBuilder builder = new java.lang.ProcessBuilder(command).redirectErrorStream(true).redirectOutput(outputFile.toFile());
+            outputFile = Files.createTempFile("analyzer-git-output-", ".log");
+            java.lang.ProcessBuilder builder =
+                    new java.lang.ProcessBuilder(command)
+                            .redirectErrorStream(true)
+                            .redirectOutput(outputFile.toFile());
             if (cwd != null) {
                 builder.directory(cwd.toFile());
             }
@@ -142,8 +218,9 @@ public class GitCredentialExecutor {
                 process.destroyForcibly();
                 throw new IllegalStateException("Git 操作超时");
             }
-            if(Files.size(outputFile)>2*1024*1024) throw new IllegalStateException("Git 输出超过限制，请缩小远程仓库范围");
-            String output=Files.readString(outputFile,StandardCharsets.UTF_8);
+            if (Files.size(outputFile) > 2 * 1024 * 1024)
+                throw new IllegalStateException("Git 输出超过限制，请缩小远程仓库范围");
+            String output = Files.readString(outputFile, StandardCharsets.UTF_8);
             if (process.exitValue() != 0) {
                 throw new IllegalStateException(failureMessage(output));
             }
@@ -154,8 +231,12 @@ public class GitCredentialExecutor {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Git 操作被中断", exception);
         } finally {
-            if(process!=null && process.isAlive()) process.destroyForcibly();
-            if(outputFile!=null) try { Files.deleteIfExists(outputFile); } catch(IOException ignored) {}
+            if (process != null && process.isAlive()) process.destroyForcibly();
+            if (outputFile != null)
+                try {
+                    Files.deleteIfExists(outputFile);
+                } catch (IOException ignored) {
+                }
             deleteTree(askPassRoot);
         }
     }

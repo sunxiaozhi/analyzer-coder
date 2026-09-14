@@ -200,7 +200,9 @@ onMounted(() => {
     <el-drawer v-model="branchesOpen" title="分支工作区" size="min(760px, 96vw)" destroy-on-close>
       <BranchWorkspace v-if="branchesOpen && repositoryStore.selectedRepositoryId" :key="repositoryStore.selectedRepositoryId"
         :repository-id="repositoryStore.selectedRepositoryId"
-        :can-maintain="repositoryStore.selectedRepository?.capabilities.canUpdate ?? false" />
+        :can-maintain="repositoryStore.selectedRepository?.capabilities.canUpdate ?? false"
+        :can-manage="repositoryStore.selectedRepository?.capabilities.canConfigure ?? false"
+        :remote-source="['REMOTE_GIT', 'GITLAB'].includes(repositoryStore.selectedRepository?.sourceType ?? '')" />
     </el-drawer>
   </main>
 </div></template>

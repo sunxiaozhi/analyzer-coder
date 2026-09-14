@@ -9,6 +9,7 @@ import com.analyzercoder.domain.repository.CodeRepositoryStore;
 import com.analyzercoder.domain.repository.GitRepositorySnapshot;
 import com.analyzercoder.domain.repository.ManagedRepositorySnapshot;
 import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.repository.GitBranchSnapshotFactory;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.ApiSecurityException;
@@ -29,10 +30,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** Branch publication is independent of repositories.current_snapshot_id and legacy index jobs. */
 @Service
 public class RepositoryBranchService {
-    @org.springframework.beans.factory.annotation.Autowired private BranchRemoteService remote;
     private final JdbcTemplate db;
     private final CodeRepositoryStore repositories;
     private final AccessControlService access;
+    private final BranchRemoteService remote;
     private final GitBranchSnapshotFactory snapshots;
     private final RepositoryScannerPort scanner;
     private final CodeSymbolExtractor symbols;
@@ -42,6 +43,7 @@ public class RepositoryBranchService {
             JdbcTemplate db,
             CodeRepositoryStore repositories,
             AccessControlService access,
+            BranchRemoteService remote,
             GitBranchSnapshotFactory snapshots,
             RepositoryScannerPort scanner,
             CodeSymbolExtractor symbols,
@@ -49,6 +51,7 @@ public class RepositoryBranchService {
         this.db = db;
         this.repositories = repositories;
         this.access = access;
+        this.remote = remote;
         this.snapshots = snapshots;
         this.scanner = scanner;
         this.symbols = symbols;
@@ -97,7 +100,13 @@ public class RepositoryBranchService {
                 .orElseThrow();
     }
 
-    public Branch prepare(AuthenticatedAccount actor, UUID repoId, UUID branchId) {
+    void executePreparation(
+            AuthenticatedAccount actor,
+            UUID repoId,
+            UUID branchId,
+            String pinnedCommit,
+            java.util.function.BiConsumer<String, String> progress,
+            Runnable complete) {
         require(actor, repoId, RepositoryPermission.MAINTAIN);
         Branch branch =
                 list(actor, repoId).stream()
@@ -109,7 +118,7 @@ public class RepositoryBranchService {
                 db.update(
                         """
             UPDATE repository_branches SET generation=generation+1,preparation_status='BUILDING',preparation_error=NULL,updated_at=CURRENT_TIMESTAMP
-            WHERE id=? AND repo_id=? AND generation=? AND (preparation_status<>'BUILDING' OR updated_at<CURRENT_TIMESTAMP-INTERVAL '15 minutes')
+            WHERE id=? AND repo_id=? AND generation=?
             """,
                         branchId,
                         repoId,
@@ -119,9 +128,16 @@ public class RepositoryBranchService {
         ManagedRepositorySnapshot unpublished = null;
         try {
             CodeRepository repository = repository(repoId);
-            String commit = repository.sourceType()==com.analyzercoder.domain.repository.RepositorySourceType.REMOTE_GIT
-                    ||repository.sourceType()==com.analyzercoder.domain.repository.RepositorySourceType.GITLAB
-                    ?remote.fetch(actor,repository,branch.name()):snapshots.resolve(repository.path(), branch.name());
+            boolean remoteRepository =
+                    repository.sourceType() == RepositorySourceType.REMOTE_GIT
+                            || repository.sourceType() == RepositorySourceType.GITLAB;
+            String commit =
+                    pinnedCommit != null
+                            ? pinnedCommit
+                            : remoteRepository
+                                    ? remote.fetch(actor, repository, branch.name())
+                                    : snapshots.resolve(repository.path(), branch.name());
+            progress.accept("SNAPSHOT", commit);
             ManagedRepositorySnapshot snapshot =
                     snapshots.create(repository.id(), repository.path(), commit);
             unpublished = snapshot;
@@ -131,6 +147,7 @@ public class RepositoryBranchService {
                                     branch.name(), commit, commit, false, Instant.now()),
                             snapshot);
             List<CodeChunk> chunks = new ArrayList<>();
+            progress.accept("INDEXING", commit);
             for (var file : scanner.scan(source)) {
                 String[] lines = file.content().split("\\R", -1);
                 for (int start = 0; start < lines.length; start += 100) {
@@ -174,8 +191,10 @@ public class RepositoryBranchService {
                     throw new IllegalArgumentException("分支片段数量超过限制，请缩小索引范围");
             }
             if (chunks.isEmpty()) throw new IllegalArgumentException("分支没有可索引的文本文件");
+            progress.accept("PUBLISHING", commit);
             transaction.executeWithoutResult(
                     status -> {
+                        complete.run();
                         db.update(
                                 "INSERT INTO branch_snapshots(id,repo_id,branch_id,commit_sha,content_path) VALUES(?,?,?,?,?)",
                                 snapshot.id().value(),
@@ -226,15 +245,11 @@ public class RepositoryBranchService {
             if (unpublished != null) snapshots.discardUnpublished(unpublished);
             db.update(
                     "UPDATE repository_branches SET preparation_status='FAILED',preparation_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND generation=?",
-                    "准备失败，请确认本地存在该分支及可读取的提交",
+                    "准备失败，请确认分支存在且仓库来源或凭据可用",
                     branchId,
                     generation);
             throw error;
         }
-        return list(actor, repoId).stream()
-                .filter(b -> b.id().equals(branchId))
-                .findFirst()
-                .orElseThrow();
     }
 
     public BranchReadContext resolve(

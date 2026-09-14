@@ -820,11 +820,44 @@ public class IntelligenceService {
     }
 
     private void ensureCodeEmbeddings(UUID repositoryId) {
+        prepareCodeEmbeddings(repositoryId, null, () -> {});
+    }
+
+    public void prepareBranchEmbeddings(UUID repositoryId, UUID snapshotId, Runnable checkpoint) {
+        if (snapshotId == null) throw new IllegalArgumentException("分支快照不能为空");
+        prepareCodeEmbeddings(repositoryId, snapshotId, checkpoint);
+    }
+
+    private void prepareCodeEmbeddings(UUID repositoryId, UUID snapshotId, Runnable checkpoint) {
         String model = llm.activeVectorModelName();
         int dimension = llm.activeVectorModelDimension();
         String capability = llm.activeRetrievalCapability();
         for (Map<String, Object> row :
-                mapper.missingEmbeddings(repositoryId, model, dimension, capability)) {
+                snapshotId == null
+                        ? mapper.missingEmbeddings(repositoryId, model, dimension, capability)
+                        : mapper.missingBranchEmbeddings(
+                                repositoryId, snapshotId, model, dimension, capability)) {
+            checkpoint.run();
+            String reused =
+                    snapshotId == null
+                            ? null
+                            : mapper.reusableCodeEmbedding(
+                                    repositoryId,
+                                    string(row, "content_hash"),
+                                    model,
+                                    dimension,
+                                    capability);
+            if (reused != null) {
+                mapper.upsertEmbedding(
+                        uuid(row, "id"),
+                        repositoryId,
+                        model,
+                        dimension,
+                        capability,
+                        reused,
+                        string(row, "content_hash"));
+                continue;
+            }
             LlmSettingsService.VectorEmbedding embedding = llm.vectorize(string(row, "content"));
             String vector =
                     embedding.vector() == null

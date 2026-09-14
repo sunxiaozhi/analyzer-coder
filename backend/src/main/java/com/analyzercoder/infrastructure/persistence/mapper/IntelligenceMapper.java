@@ -10,16 +10,42 @@ import org.apache.ibatis.annotations.Param;
 /** 定义智能分析数据访问操作的 MyBatis 映射接口，集中维护持久化层查询边界。 */
 @Mapper
 public interface IntelligenceMapper {
-    List<Map<String,Object>> searchBranchCodeKeyword(@Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId,
-        @Param("query") String query, @Param("terms") List<String> terms, @Param("termCount") int termCount, @Param("limit") int limit);
-    List<Map<String,Object>> searchBranchCodeVector(@Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId,
-        @Param("vector") String vector, @Param("model") String model, @Param("dimension") int dimension, @Param("limit") int limit);
-    List<Map<String,Object>> searchBranchKnowledgeKeyword(@Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId,
-        @Param("branchId") UUID branchId, @Param("contextId") UUID contextId,
-        @Param("query") String query, @Param("terms") List<String> terms, @Param("termCount") int termCount, @Param("limit") int limit);
-    List<Map<String,Object>> searchBranchKnowledgeVector(@Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId,
-        @Param("branchId") UUID branchId, @Param("contextId") UUID contextId,
-        @Param("vector") String vector, @Param("model") String model, @Param("dimension") int dimension, @Param("limit") int limit);
+    List<Map<String, Object>> searchBranchCodeKeyword(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("snapshotId") UUID snapshotId,
+            @Param("query") String query,
+            @Param("terms") List<String> terms,
+            @Param("termCount") int termCount,
+            @Param("limit") int limit);
+
+    List<Map<String, Object>> searchBranchCodeVector(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("snapshotId") UUID snapshotId,
+            @Param("vector") String vector,
+            @Param("model") String model,
+            @Param("dimension") int dimension,
+            @Param("limit") int limit);
+
+    List<Map<String, Object>> searchBranchKnowledgeKeyword(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("snapshotId") UUID snapshotId,
+            @Param("branchId") UUID branchId,
+            @Param("contextId") UUID contextId,
+            @Param("query") String query,
+            @Param("terms") List<String> terms,
+            @Param("termCount") int termCount,
+            @Param("limit") int limit);
+
+    List<Map<String, Object>> searchBranchKnowledgeVector(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("snapshotId") UUID snapshotId,
+            @Param("branchId") UUID branchId,
+            @Param("contextId") UUID contextId,
+            @Param("vector") String vector,
+            @Param("model") String model,
+            @Param("dimension") int dimension,
+            @Param("limit") int limit);
+
     /**
      * 按给定条件查询匹配数据。
      *
@@ -301,8 +327,7 @@ public interface IntelligenceMapper {
             @Param("scopePayload") String scopePayload,
             @Param("obligationsPayload") String obligationsPayload);
 
-    int refreshCardSourceVersion(
-            @Param("repositoryId") UUID repositoryId, @Param("id") UUID id);
+    int refreshCardSourceVersion(@Param("repositoryId") UUID repositoryId, @Param("id") UUID id);
 
     int reviewCard(
             @Param("repositoryId") UUID repositoryId,
@@ -395,6 +420,20 @@ public interface IntelligenceMapper {
      */
     List<Map<String, Object>> missingEmbeddings(
             @Param("repositoryId") UUID repositoryId,
+            @Param("model") String model,
+            @Param("dimension") int dimension,
+            @Param("capability") String capability);
+
+    List<Map<String, Object>> missingBranchEmbeddings(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("snapshotId") UUID snapshotId,
+            @Param("model") String model,
+            @Param("dimension") int dimension,
+            @Param("capability") String capability);
+
+    String reusableCodeEmbedding(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("contentHash") String contentHash,
             @Param("model") String model,
             @Param("dimension") int dimension,
             @Param("capability") String capability);

@@ -37,24 +37,27 @@ class IntelligenceServiceMultiTurnTest {
         mapper = mock(IntelligenceMapper.class);
         graphRetrievalMapper = mock(GraphRetrievalMapper.class);
         llm = mock(LlmSettingsService.class);
-        service = new IntelligenceService(
-                mapper,
-                graphRetrievalMapper,
-                mock(KnowledgeAttachmentService.class),
-                mock(MarkdownRenderingService.class),
-                llm,
-                new RetrievalQueryAnalyzer(),
-                new RetrievalRanker(),
-                new AnswerCitationValidator(),
-                new EngineeringKnowledgePolicy(),
-                new ObjectMapper().findAndRegisterModules());
+        service =
+                new IntelligenceService(
+                        mapper,
+                        graphRetrievalMapper,
+                        mock(KnowledgeAttachmentService.class),
+                        mock(MarkdownRenderingService.class),
+                        llm,
+                        new RetrievalQueryAnalyzer(),
+                        new RetrievalRanker(),
+                        new AnswerCitationValidator(),
+                        new EngineeringKnowledgePolicy(),
+                        new ObjectMapper().findAndRegisterModules());
     }
 
     @Test
     void queriesNeverBuildCorpusEmbeddingsOnTheRequestThread() {
         UUID repositoryId = UUID.randomUUID();
-        when(llm.vectorize(anyString())).thenReturn(
-                new LlmSettingsService.VectorEmbedding("local-hash-64", 64, null, "CHARACTER_HASH"));
+        when(llm.vectorize(anyString()))
+                .thenReturn(
+                        new LlmSettingsService.VectorEmbedding(
+                                "local-hash-64", 64, null, "CHARACTER_HASH"));
 
         service.unifiedSearchDetailed(repositoryId, "OrderCheckoutWorkflow", 10);
 
@@ -65,13 +68,63 @@ class IntelligenceServiceMultiTurnTest {
     }
 
     @Test
+    void reusesMatchingRepositoryVectorsWithoutCallingTheModel() {
+        UUID repo = UUID.randomUUID(), snapshot = UUID.randomUUID(), chunk = UUID.randomUUID();
+        when(llm.activeVectorModelName()).thenReturn("model");
+        when(llm.activeVectorModelDimension()).thenReturn(3);
+        when(llm.activeRetrievalCapability()).thenReturn("SEMANTIC_EMBEDDING");
+        when(mapper.missingBranchEmbeddings(repo, snapshot, "model", 3, "SEMANTIC_EMBEDDING"))
+                .thenReturn(
+                        List.of(Map.of("id", chunk, "content", "source", "content_hash", "hash")));
+        when(mapper.reusableCodeEmbedding(repo, "hash", "model", 3, "SEMANTIC_EMBEDDING"))
+                .thenReturn("[1,0,0]");
+        service.prepareBranchEmbeddings(repo, snapshot, () -> {});
+        verify(llm, never()).vectorize(anyString());
+        verify(mapper)
+                .upsertEmbedding(chunk, repo, "model", 3, "SEMANTIC_EMBEDDING", "[1,0,0]", "hash");
+    }
+
+    @Test
+    void branchEmbeddingsOnlyReadThePinnedSnapshotAndNeverDefaultChunks() {
+        UUID repo = UUID.randomUUID(), snapshot = UUID.randomUUID(), chunk = UUID.randomUUID();
+        when(llm.activeVectorModelName()).thenReturn("local-hash-64");
+        when(llm.activeVectorModelDimension()).thenReturn(64);
+        when(llm.activeRetrievalCapability()).thenReturn("CHARACTER_HASH");
+        when(mapper.missingBranchEmbeddings(repo, snapshot, "local-hash-64", 64, "CHARACTER_HASH"))
+                .thenReturn(
+                        List.of(Map.of("id", chunk, "content", "source", "content_hash", "hash")));
+        when(llm.vectorize("source"))
+                .thenReturn(
+                        new LlmSettingsService.VectorEmbedding(
+                                "local-hash-64", 64, null, "CHARACTER_HASH"));
+        Runnable checkpoint = mock(Runnable.class);
+        service.prepareBranchEmbeddings(repo, snapshot, checkpoint);
+        verify(checkpoint).run();
+        verify(mapper)
+                .upsertEmbedding(
+                        eq(chunk),
+                        eq(repo),
+                        eq("local-hash-64"),
+                        eq(64),
+                        eq("CHARACTER_HASH"),
+                        anyString(),
+                        eq("hash"));
+        verify(mapper, never()).missingEmbeddings(any(), any(), anyInt(), any());
+        verify(mapper, never()).missingKnowledgeEmbeddings(any(), any(), anyInt(), any());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.prepareBranchEmbeddings(repo, null, checkpoint));
+    }
+
+    @Test
     void rejectsFollowUpForThreadOutsideRepositoryAndAccount() {
         UUID repositoryId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
         UUID threadId = UUID.randomUUID();
         when(mapper.findThread(threadId, repositoryId, accountId)).thenReturn(null);
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () ->
                         service.ask(
                                 repositoryId,
@@ -94,15 +147,19 @@ class IntelligenceServiceMultiTurnTest {
         Map<String, Object> first = row(firstId, threadId, repositoryId, 1, "第一问");
         Map<String, Object> second = row(secondId, threadId, repositoryId, 2, "第二问");
         when(mapper.findThread(threadId, repositoryId, accountId)).thenReturn(first);
-        when(mapper.listThreadTurns(threadId, repositoryId, accountId)).thenReturn(List.of(first, second));
+        when(mapper.listThreadTurns(threadId, repositoryId, accountId))
+                .thenReturn(List.of(first, second));
 
-        IntelligenceService.ThreadDetail detail = service.historyDetail(repositoryId, accountId, threadId);
+        IntelligenceService.ThreadDetail detail =
+                service.historyDetail(repositoryId, accountId, threadId);
 
         assertEquals(threadId, detail.threadId());
-        assertEquals(List.of(firstId, secondId), detail.turns().stream()
-                .map(IntelligenceService.Answer::conversationId).toList());
-        assertEquals(List.of(1, 2), detail.turns().stream()
-                .map(IntelligenceService.Answer::turnNo).toList());
+        assertEquals(
+                List.of(firstId, secondId),
+                detail.turns().stream().map(IntelligenceService.Answer::conversationId).toList());
+        assertEquals(
+                List.of(1, 2),
+                detail.turns().stream().map(IntelligenceService.Answer::turnNo).toList());
         verify(mapper).listThreadTurns(eq(threadId), eq(repositoryId), eq(accountId));
     }
 
@@ -112,23 +169,26 @@ class IntelligenceServiceMultiTurnTest {
         UUID accountId = UUID.randomUUID();
         UUID threadId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
-        Map<String, Object> legacyRow = new HashMap<>(row(conversationId, threadId, repositoryId, 1, "旧问题"));
+        Map<String, Object> legacyRow =
+                new HashMap<>(row(conversationId, threadId, repositoryId, 1, "旧问题"));
         legacyRow.put(
                 "answer_payload",
                 new ObjectMapper()
-                        .writeValueAsString(Map.ofEntries(
-                                Map.entry("conversationId", conversationId),
-                                Map.entry("threadId", threadId),
-                                Map.entry("turnNo", 1),
-                                Map.entry("repositoryId", repositoryId),
-                                Map.entry("title", "旧会话"),
-                                Map.entry("question", "旧问题"),
-                                Map.entry("answer", "旧回答 [S1]"),
-                                Map.entry("citations", List.of()),
-                                Map.entry("provider", "legacy-provider"),
-                                Map.entry("evidenceStatus", "SUPPORTED"))));
+                        .writeValueAsString(
+                                Map.ofEntries(
+                                        Map.entry("conversationId", conversationId),
+                                        Map.entry("threadId", threadId),
+                                        Map.entry("turnNo", 1),
+                                        Map.entry("repositoryId", repositoryId),
+                                        Map.entry("title", "旧会话"),
+                                        Map.entry("question", "旧问题"),
+                                        Map.entry("answer", "旧回答 [S1]"),
+                                        Map.entry("citations", List.of()),
+                                        Map.entry("provider", "legacy-provider"),
+                                        Map.entry("evidenceStatus", "SUPPORTED"))));
         when(mapper.findThread(threadId, repositoryId, accountId)).thenReturn(legacyRow);
-        when(mapper.listThreadTurns(threadId, repositoryId, accountId)).thenReturn(List.of(legacyRow));
+        when(mapper.listThreadTurns(threadId, repositoryId, accountId))
+                .thenReturn(List.of(legacyRow));
 
         IntelligenceService.Answer restored =
                 service.historyDetail(repositoryId, accountId, threadId).turns().get(0);
@@ -143,16 +203,19 @@ class IntelligenceServiceMultiTurnTest {
         UUID modelConfigId = UUID.randomUUID();
         stubSingleEvidence(repositoryId);
         when(llm.generate(eq(modelConfigId), anyString()))
-                .thenReturn(Optional.of(new LlmSettingsService.GenerationResult(
-                        "第一段事实 [S1]。\n\n第二段事实 [S1]。", "test-model")));
+                .thenReturn(
+                        Optional.of(
+                                new LlmSettingsService.GenerationResult(
+                                        "第一段事实 [S1]。\n\n第二段事实 [S1]。", "test-model")));
 
-        IntelligenceService.Answer answer = service.ask(
-                repositoryId,
-                UUID.randomUUID(),
-                "问题",
-                UUID.randomUUID(),
-                null,
-                modelConfigId);
+        IntelligenceService.Answer answer =
+                service.ask(
+                        repositoryId,
+                        UUID.randomUUID(),
+                        "问题",
+                        UUID.randomUUID(),
+                        null,
+                        modelConfigId);
 
         assertEquals("CITATION_COMPLETE", answer.evidenceStatus());
         assertEquals(1.0d, answer.citationAssessment().coverageRate());
@@ -165,7 +228,9 @@ class IntelligenceServiceMultiTurnTest {
     void localEvidenceModeAnswersWithoutCallingAChatProvider() {
         UUID repositoryId = UUID.randomUUID();
         stubSingleEvidence(repositoryId);
-        var answer = service.ask(repositoryId, UUID.randomUUID(), "Example", UUID.randomUUID(), null, null);
+        var answer =
+                service.ask(
+                        repositoryId, UUID.randomUUID(), "Example", UUID.randomUUID(), null, null);
         assertEquals("LOCAL_EVIDENCE_MODE", answer.fallbackReason());
         assertEquals("deterministic-local", answer.provider());
         assertTrue(!answer.citations().isEmpty());
@@ -178,16 +243,19 @@ class IntelligenceServiceMultiTurnTest {
         UUID modelConfigId = UUID.randomUUID();
         stubSingleEvidence(repositoryId);
         when(llm.generate(eq(modelConfigId), anyString()))
-                .thenReturn(Optional.of(new LlmSettingsService.GenerationResult(
-                        "第一段事实没有引用。\n\n第二段事实 [S1]。", "test-model")));
+                .thenReturn(
+                        Optional.of(
+                                new LlmSettingsService.GenerationResult(
+                                        "第一段事实没有引用。\n\n第二段事实 [S1]。", "test-model")));
 
-        IntelligenceService.Answer answer = service.ask(
-                repositoryId,
-                UUID.randomUUID(),
-                "问题",
-                UUID.randomUUID(),
-                null,
-                modelConfigId);
+        IntelligenceService.Answer answer =
+                service.ask(
+                        repositoryId,
+                        UUID.randomUUID(),
+                        "问题",
+                        UUID.randomUUID(),
+                        null,
+                        modelConfigId);
 
         assertEquals("CITATION_INCOMPLETE", answer.evidenceStatus());
         assertEquals(0.5d, answer.citationAssessment().coverageRate());
@@ -215,7 +283,8 @@ class IntelligenceServiceMultiTurnTest {
         assertEquals("HEURISTIC_CALL_REFERENCE", result.relationSource());
         assertEquals(snapshotId, result.snapshotId());
         assertEquals("SYMBOL_TOKEN_FOLLOWED_BY_PARENTHESIS", result.algorithm());
-        assertTrue(result.limitations().stream().anyMatch(item -> item.contains("不是 CodeGraph CLI")));
+        assertTrue(
+                result.limitations().stream().anyMatch(item -> item.contains("不是 CodeGraph CLI")));
         verify(mapper, never()).deleteHeuristicCallEdges(repositoryId);
     }
 
@@ -228,8 +297,7 @@ class IntelligenceServiceMultiTurnTest {
                         eq(repositoryId), anyString(), eq("local-hash-64"), eq(64), anyInt()))
                 .thenReturn(List.of(evidence));
 
-        IntelligenceService.SearchHit hit =
-                service.hybridSearch(repositoryId, "Example", 5).get(0);
+        IntelligenceService.SearchHit hit = service.hybridSearch(repositoryId, "Example", 5).get(0);
 
         assertEquals("CHARACTER_HASH", hit.similarityKind());
         assertTrue(hit.channels().contains("CODE_CHARACTER_SIMILARITY"));
@@ -245,8 +313,7 @@ class IntelligenceServiceMultiTurnTest {
                         eq(repositoryId), anyString(), eq("text-embedding-test"), eq(3), anyInt()))
                 .thenReturn(List.of(evidence));
 
-        IntelligenceService.SearchHit hit =
-                service.hybridSearch(repositoryId, "Example", 5).get(0);
+        IntelligenceService.SearchHit hit = service.hybridSearch(repositoryId, "Example", 5).get(0);
 
         assertEquals("SEMANTIC_EMBEDDING", hit.similarityKind());
         assertTrue(hit.channels().contains("CODE_SEMANTIC"));
@@ -278,8 +345,7 @@ class IntelligenceServiceMultiTurnTest {
     @Test
     void exposesVectorFailureAsUnavailableInsteadOfClaimingFullCapability() {
         UUID repositoryId = UUID.randomUUID();
-        when(mapper.searchCodeKeyword(
-                        eq(repositoryId), anyString(), anyList(), anyInt(), anyInt()))
+        when(mapper.searchCodeKeyword(eq(repositoryId), anyString(), anyList(), anyInt(), anyInt()))
                 .thenReturn(List.of(vectorEvidence()));
         when(llm.vectorize(anyString())).thenThrow(new IllegalStateException("embedding timeout"));
         when(llm.activeVectorModelName()).thenReturn("unreachable-model");
@@ -290,23 +356,30 @@ class IntelligenceServiceMultiTurnTest {
 
         assertTrue(response.retrieval().degraded());
         assertTrue(response.retrieval().enabledChannels().contains("CODE_KEYWORD"));
-        assertTrue(response.retrieval().enabledChannels().stream()
-                .noneMatch(channel -> channel.contains("SEMANTIC")));
-        assertTrue(response.retrieval().unavailableChannels().stream()
-                .anyMatch(channel -> channel.channel().equals("CODE_VECTOR")
-                        && channel.reason().equals("VECTOR_RETRIEVAL_FAILED")));
-        assertTrue(response.retrieval().degradationReasons().contains(
-                "CODE_VECTOR:VECTOR_RETRIEVAL_FAILED"));
+        assertTrue(
+                response.retrieval().enabledChannels().stream()
+                        .noneMatch(channel -> channel.contains("SEMANTIC")));
+        assertTrue(
+                response.retrieval().unavailableChannels().stream()
+                        .anyMatch(
+                                channel ->
+                                        channel.channel().equals("CODE_VECTOR")
+                                                && channel.reason()
+                                                        .equals("VECTOR_RETRIEVAL_FAILED")));
+        assertTrue(
+                response.retrieval()
+                        .degradationReasons()
+                        .contains("CODE_VECTOR:VECTOR_RETRIEVAL_FAILED"));
     }
 
-    private void stubVectorModel(
-            String model, int dimension, String capability, String vector) {
+    private void stubVectorModel(String model, int dimension, String capability, String vector) {
         when(llm.activeVectorModelName()).thenReturn(model);
         when(llm.activeVectorModelDimension()).thenReturn(dimension);
         when(llm.activeRetrievalCapability()).thenReturn(capability);
         when(llm.vectorize(anyString()))
-                .thenReturn(new LlmSettingsService.VectorEmbedding(
-                        model, dimension, vector, capability));
+                .thenReturn(
+                        new LlmSettingsService.VectorEmbedding(
+                                model, dimension, vector, capability));
     }
 
     private static Map<String, Object> vectorEvidence() {
@@ -324,22 +397,21 @@ class IntelligenceServiceMultiTurnTest {
     }
 
     private void stubSingleEvidence(UUID repositoryId) {
-        Map<String, Object> evidence = Map.ofEntries(
-                Map.entry("id", UUID.randomUUID()),
-                Map.entry("snapshot_id", UUID.randomUUID()),
-                Map.entry("file_path", "src/Example.java"),
-                Map.entry("symbol_name", "Example"),
-                Map.entry("symbol_kind", "CLASS"),
-                Map.entry("start_line", 1),
-                Map.entry("end_line", 3),
-                Map.entry("content", "class Example {}"),
-                Map.entry("content_hash", "hash"),
-                Map.entry("lexical_score", 1.0d));
-        when(mapper.searchCodeKeyword(
-                        eq(repositoryId), anyString(), anyList(), anyInt(), anyInt()))
+        Map<String, Object> evidence =
+                Map.ofEntries(
+                        Map.entry("id", UUID.randomUUID()),
+                        Map.entry("snapshot_id", UUID.randomUUID()),
+                        Map.entry("file_path", "src/Example.java"),
+                        Map.entry("symbol_name", "Example"),
+                        Map.entry("symbol_kind", "CLASS"),
+                        Map.entry("start_line", 1),
+                        Map.entry("end_line", 3),
+                        Map.entry("content", "class Example {}"),
+                        Map.entry("content_hash", "hash"),
+                        Map.entry("lexical_score", 1.0d));
+        when(mapper.searchCodeKeyword(eq(repositoryId), anyString(), anyList(), anyInt(), anyInt()))
                 .thenReturn(List.of(evidence));
-        when(graphRetrievalMapper.relatedCodeChunks(
-                        eq(repositoryId), anyList(), anyInt()))
+        when(graphRetrievalMapper.relatedCodeChunks(eq(repositoryId), anyList(), anyInt()))
                 .thenReturn(List.of(evidence));
         when(mapper.searchKnowledgeKeyword(
                         eq(repositoryId), anyString(), anyList(), anyInt(), anyInt()))

@@ -50,6 +50,57 @@ class GitCredentialExecutorTest {
                 .isEqualTo("review head\n");
     }
 
+    @Test
+    void discoversAndFetchesRemoteBranchesWithoutChangingTheCheckedOutBranch() throws IOException {
+        Path origin = workspace.resolve("branch-origin.git");
+        Path seed = workspace.resolve("branch-seed");
+        Path checkout = workspace.resolve("branch-checkout");
+        Files.createDirectories(seed);
+        git(workspace, "init", "--bare", origin.toString());
+        git(seed, "init");
+        git(seed, "config", "user.name", "Analyzer Test");
+        git(seed, "config", "user.email", "analyzer@example.com");
+        Files.writeString(seed.resolve("app.txt"), "main\n", StandardCharsets.UTF_8);
+        git(seed, "add", "app.txt");
+        git(seed, "commit", "-m", "main");
+        git(seed, "branch", "-M", "main");
+        git(seed, "remote", "add", "origin", origin.toString());
+        git(seed, "push", "origin", "main");
+        String mainCommit = git(seed, "rev-parse", "HEAD").trim();
+        git(workspace, "clone", "--branch", "main", origin.toString(), checkout.toString());
+
+        git(seed, "checkout", "-b", "release/1.0");
+        Files.writeString(seed.resolve("app.txt"), "release\n", StandardCharsets.UTF_8);
+        git(seed, "commit", "-am", "release");
+        git(seed, "push", "origin", "release/1.0");
+        String releaseCommit = git(seed, "rev-parse", "HEAD").trim();
+
+        GitCredentialExecutor executor = new GitCredentialExecutor();
+        assertThat(executor.discoverBranches(origin.toString(), null))
+                .containsExactly(
+                        new GitCredentialExecutor.RemoteBranch("main", mainCommit),
+                        new GitCredentialExecutor.RemoteBranch("release/1.0", releaseCommit));
+
+        String fetched = executor.fetchBranch(checkout, origin.toString(), "release/1.0", null);
+
+        assertThat(fetched).isEqualTo(releaseCommit);
+        assertThat(git(checkout, "rev-parse", "HEAD").trim()).isEqualTo(mainCommit);
+        assertThat(
+                        Files.readString(checkout.resolve("app.txt"), StandardCharsets.UTF_8)
+                                .replace("\r\n", "\n"))
+                .isEqualTo("main\n");
+        assertThat(git(checkout, "show", fetched + ":app.txt").replace("\r\n", "\n"))
+                .isEqualTo("release\n");
+        assertThat(
+                        git(
+                                        checkout,
+                                        "for-each-ref",
+                                        "--format=%(refname)",
+                                        "refs/analyzer/branches")
+                                .trim())
+                .isEmpty();
+    }
+
     private static String git(Path directory, String... arguments) throws IOException {
         ArrayList<String> command = new ArrayList<>(List.of("git"));
         command.addAll(List.of(arguments));

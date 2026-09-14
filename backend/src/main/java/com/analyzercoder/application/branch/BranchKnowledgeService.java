@@ -26,6 +26,37 @@ public class BranchKnowledgeService {
 
     public record Scope(UUID cardId, int revision, String mode, List<UUID> branchIds) {}
 
+    public record ValidationCard(
+            UUID cardId, int revision, String title, String content, String state, String note) {}
+
+    public List<ValidationCard> validations(AuthenticatedAccount actor, BranchReadContext context) {
+        access.require(
+                actor, CodeRepositoryId.of(context.repositoryId()), RepositoryPermission.READ);
+        return db.query(
+                """
+                SELECT k.id,k.revision,k.title,k.content,COALESCE(v.state,'UNVERIFIED') state,
+                       COALESCE(v.note,'') note
+                FROM knowledge_cards k JOIN knowledge_branch_scopes s ON s.card_id=k.id
+                LEFT JOIN knowledge_branch_validations v ON v.card_id=k.id AND v.revision=k.revision
+                    AND v.branch_id=? AND v.snapshot_id=?
+                WHERE k.repo_id=? AND k.publication_status<>'ARCHIVED'
+                    AND (s.mode='ALL_BRANCHES' OR ?=ANY(s.branch_ids))
+                ORDER BY k.title,k.id
+                """,
+                (row, number) ->
+                        new ValidationCard(
+                                row.getObject("id", UUID.class),
+                                row.getInt("revision"),
+                                row.getString("title"),
+                                row.getString("content"),
+                                row.getString("state"),
+                                row.getString("note")),
+                context.branchId(),
+                context.snapshotId(),
+                context.repositoryId(),
+                context.branchId());
+    }
+
     public List<Scope> scopes(AuthenticatedAccount actor, UUID repoId) {
         access.require(actor, CodeRepositoryId.of(repoId), RepositoryPermission.READ);
         return db.query(

@@ -1,8 +1,11 @@
 package com.analyzercoder.interfaces.rest;
 
 import com.analyzercoder.application.branch.BranchKnowledgeService;
+import com.analyzercoder.application.branch.BranchPreparationJobs;
 import com.analyzercoder.application.branch.BranchReadContext;
+import com.analyzercoder.application.branch.BranchRemoteService;
 import com.analyzercoder.application.branch.RepositoryBranchService;
+import com.analyzercoder.application.repository.GitCredentialExecutor;
 import com.analyzercoder.security.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -13,24 +16,33 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/repositories/{repositoryId}")
 public class RepositoryBranchController {
-    @org.springframework.beans.factory.annotation.Autowired private com.analyzercoder.application.branch.BranchRemoteService remote;
-    @GetMapping("/branches/discover")
-    public List<com.analyzercoder.application.repository.GitCredentialExecutor.RemoteBranch> discover(@PathVariable UUID repositoryId,HttpServletRequest request) {
-        return remote.discover(SecurityContext.account(request),repositoryId);
-    }
     private final RepositoryBranchService branches;
+    private final BranchRemoteService remote;
+    private final BranchKnowledgeService knowledge;
+    private final BranchPreparationJobs preparation;
 
-    @org.springframework.beans.factory.annotation.Autowired
-    private BranchKnowledgeService knowledge;
-
-    public RepositoryBranchController(RepositoryBranchService branches) {
+    public RepositoryBranchController(
+            RepositoryBranchService branches,
+            BranchRemoteService remote,
+            BranchKnowledgeService knowledge,
+            BranchPreparationJobs preparation) {
         this.branches = branches;
+        this.remote = remote;
+        this.knowledge = knowledge;
+        this.preparation = preparation;
+    }
+
+    @GetMapping("/branches/discover")
+    public List<GitCredentialExecutor.RemoteBranch> discover(
+            @PathVariable UUID repositoryId, HttpServletRequest request) {
+        return remote.discover(SecurityContext.account(request), repositoryId);
     }
 
     @GetMapping("/branches")
@@ -46,11 +58,30 @@ public class RepositoryBranchController {
     }
 
     @PostMapping("/branches/{branchId}/prepare")
-    public RepositoryBranchService.Branch prepare(
+    @ResponseStatus(org.springframework.http.HttpStatus.ACCEPTED)
+    public BranchPreparationJobs.Job prepare(
             @PathVariable UUID repositoryId,
             @PathVariable UUID branchId,
             HttpServletRequest request) {
-        return branches.prepare(SecurityContext.account(request), repositoryId, branchId);
+        return preparation.submit(SecurityContext.account(request), repositoryId, branchId);
+    }
+
+    @GetMapping("/branch-preparation-jobs")
+    public List<BranchPreparationJobs.Job> preparationJobs(
+            @PathVariable UUID repositoryId, HttpServletRequest request) {
+        return preparation.list(SecurityContext.account(request), repositoryId);
+    }
+
+    @PostMapping("/branch-vector-jobs")
+    @ResponseStatus(org.springframework.http.HttpStatus.ACCEPTED)
+    public BranchPreparationJobs.Job vectors(
+            @PathVariable UUID repositoryId,
+            @RequestBody Context body,
+            HttpServletRequest request) {
+        var actor = SecurityContext.account(request);
+        if (body.contextId() == null) throw new IllegalArgumentException("请选择已准备的分支阅读版本");
+        return preparation.submitVectors(
+                actor, branches.resolve(actor, repositoryId, body.branchId(), body.contextId()));
     }
 
     @PostMapping("/contexts")
@@ -108,4 +139,13 @@ public class RepositoryBranchController {
     public record Scope(int revision, String mode, List<UUID> branchIds) {}
 
     public record Validation(int revision, UUID contextId, String state, String note) {}
+
+    @GetMapping("/knowledge/branch-validations")
+    public List<BranchKnowledgeService.ValidationCard> validations(
+            @PathVariable UUID repositoryId,
+            @RequestParam UUID contextId,
+            HttpServletRequest request) {
+        var actor = SecurityContext.account(request);
+        return knowledge.validations(actor, branches.resolve(actor, repositoryId, null, contextId));
+    }
 }

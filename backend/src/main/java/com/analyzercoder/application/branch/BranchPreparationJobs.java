@@ -1,0 +1,271 @@
+package com.analyzercoder.application.branch;
+
+import com.analyzercoder.application.intelligence.IntelligenceService;
+import com.analyzercoder.domain.repository.CodeRepositoryId;
+import com.analyzercoder.security.AccessControlService;
+import com.analyzercoder.security.AccountRole;
+import com.analyzercoder.security.ApiSecurityException;
+import com.analyzercoder.security.AuthenticatedAccount;
+import com.analyzercoder.security.RepositoryPermission;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.UUID;
+import javax.sql.DataSource;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+@Service
+public class BranchPreparationJobs {
+    private final JdbcTemplate db;
+    private final DataSource dataSource;
+    private final RepositoryBranchService branches;
+    private final AccessControlService access;
+    private final TransactionTemplate transaction;
+    private final IntelligenceService intelligence;
+
+    public BranchPreparationJobs(
+            JdbcTemplate db,
+            DataSource dataSource,
+            RepositoryBranchService branches,
+            AccessControlService access,
+            PlatformTransactionManager manager,
+            IntelligenceService intelligence) {
+        this.db = db;
+        this.dataSource = dataSource;
+        this.branches = branches;
+        this.access = access;
+        this.transaction = new TransactionTemplate(manager);
+        this.intelligence = intelligence;
+    }
+
+    public record Job(
+            UUID id,
+            UUID branchId,
+            String status,
+            String stage,
+            String error,
+            String kind,
+            UUID snapshotId) {}
+
+    public List<Job> list(AuthenticatedAccount actor, UUID repoId) {
+        access.require(actor, CodeRepositoryId.of(repoId), RepositoryPermission.READ);
+        return db.query(
+                """
+                SELECT DISTINCT ON (branch_id,kind) id,branch_id,status,stage,error,kind,target_snapshot
+                FROM branch_preparation_jobs WHERE repo_id=?
+                ORDER BY branch_id,kind,created_at DESC,id DESC
+                """,
+                (r, n) ->
+                        new Job(
+                                r.getObject("id", UUID.class),
+                                r.getObject("branch_id", UUID.class),
+                                r.getString("status"),
+                                r.getString("stage"),
+                                r.getString("error"),
+                                r.getString("kind"),
+                                r.getObject("target_snapshot", UUID.class)),
+                repoId);
+    }
+
+    public Job submit(AuthenticatedAccount actor, UUID repoId, UUID branchId) {
+        return enqueue(actor, repoId, branchId, "SNAPSHOT", null);
+    }
+
+    public Job submitVectors(AuthenticatedAccount actor, BranchReadContext context) {
+        return enqueue(
+                actor, context.repositoryId(), context.branchId(), "VECTORS", context.snapshotId());
+    }
+
+    private Job enqueue(
+            AuthenticatedAccount actor, UUID repoId, UUID branchId, String kind, UUID snapshotId) {
+        access.require(actor, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
+        return transaction.execute(
+                status -> {
+                    var ids =
+                            db.queryForList(
+                                    """
+                    SELECT b.id FROM repository_branches b JOIN repositories r ON r.id=b.repo_id
+                    WHERE b.repo_id=? AND b.id=? AND r.deleted_at IS NULL FOR UPDATE OF b
+                    """,
+                                    UUID.class,
+                                    repoId,
+                                    branchId);
+                    if (ids.isEmpty())
+                        throw new ApiSecurityException(404, "BRANCH_NOT_FOUND", "分支不存在");
+                    var active =
+                            db.queryForList(
+                                    """
+                    SELECT id FROM branch_preparation_jobs
+                    WHERE branch_id=? AND kind=? AND status IN ('QUEUED','RUNNING')
+                    """,
+                                    UUID.class,
+                                    branchId,
+                                    kind);
+                    if (active.isEmpty()) {
+                        db.update(
+                                """
+                        INSERT INTO branch_preparation_jobs(id,repo_id,branch_id,account_id,status,kind,target_snapshot)
+                        VALUES(?,?,?,?,'QUEUED',?,?)
+                        """,
+                                UUID.randomUUID(),
+                                repoId,
+                                branchId,
+                                actor.id(),
+                                kind,
+                                snapshotId);
+                    }
+                    Job job =
+                            list(actor, repoId).stream()
+                                    .filter(
+                                            j ->
+                                                    j.branchId().equals(branchId)
+                                                            && j.kind().equals(kind))
+                                    .findFirst()
+                                    .orElseThrow();
+                    if (!java.util.Objects.equals(snapshotId, job.snapshotId()))
+                        throw new ApiSecurityException(
+                                409, "BRANCH_VECTOR_BUSY", "该分支已有其他快照的向量任务，请等待其完成");
+                    return job;
+                });
+    }
+
+    // A session lock spans Git/filesystem work without holding a database transaction open.
+    // When a process exits, PostgreSQL releases the lock and the next worker resumes RUNNING rows.
+    public synchronized void processNext() throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            try (var statement = connection.createStatement();
+                    var rows = statement.executeQuery("SELECT pg_try_advisory_lock(184732,5)")) {
+                rows.next();
+                if (!rows.getBoolean(1)) return;
+            }
+            try {
+                var pending =
+                        db.queryForList(
+                                """
+                        SELECT id,repo_id,branch_id,account_id,target_commit,kind,target_snapshot FROM branch_preparation_jobs
+                        WHERE status IN ('QUEUED','RUNNING') ORDER BY created_at,id LIMIT 1
+                        """);
+                if (pending.isEmpty()) return;
+                var row = pending.get(0);
+                UUID id = (UUID) row.get("id"),
+                        repoId = (UUID) row.get("repo_id"),
+                        branchId = (UUID) row.get("branch_id"),
+                        token = UUID.randomUUID();
+                db.update(
+                        """
+                        UPDATE branch_preparation_jobs SET status='RUNNING',stage='RESOLVING',
+                        attempt_token=?,updated_at=CURRENT_TIMESTAMP WHERE id=?
+                        """,
+                        token,
+                        id);
+                try {
+                    AuthenticatedAccount actor = actor((UUID) row.get("account_id"));
+                    if ("VECTORS".equals(row.get("kind"))) {
+                        access.require(
+                                actor, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
+                        intelligence.prepareBranchEmbeddings(
+                                repoId,
+                                (UUID) row.get("target_snapshot"),
+                                () -> {
+                                    access.require(
+                                            actor(actor.id()),
+                                            CodeRepositoryId.of(repoId),
+                                            RepositoryPermission.MAINTAIN);
+                                    if (db.update(
+                                                    "UPDATE branch_preparation_jobs SET stage='EMBEDDING',updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'",
+                                                    id,
+                                                    token)
+                                            != 1) throw superseded();
+                                });
+                        access.require(
+                                actor(actor.id()),
+                                CodeRepositoryId.of(repoId),
+                                RepositoryPermission.MAINTAIN);
+                        if (db.update(
+                                        "UPDATE branch_preparation_jobs SET status='SUCCEEDED',stage='COMPLETED',updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'",
+                                        id,
+                                        token)
+                                != 1) throw superseded();
+                        return;
+                    }
+                    branches.executePreparation(
+                            actor,
+                            repoId,
+                            branchId,
+                            (String) row.get("target_commit"),
+                            (stage, commit) -> {
+                                if (db.update(
+                                                """
+                                        UPDATE branch_preparation_jobs SET stage=?,
+                                        target_commit=COALESCE(target_commit,?),updated_at=CURRENT_TIMESTAMP
+                                        WHERE id=? AND attempt_token=? AND status='RUNNING'
+                                        """,
+                                                stage,
+                                                commit,
+                                                id,
+                                                token)
+                                        != 1) throw superseded();
+                            },
+                            () -> {
+                                // Runs in the snapshot publication transaction; token fences a lost
+                                // worker.
+                                access.require(
+                                        actor(actor.id()),
+                                        CodeRepositoryId.of(repoId),
+                                        RepositoryPermission.MAINTAIN);
+                                if (db.update(
+                                                """
+                                        UPDATE branch_preparation_jobs SET status='SUCCEEDED',stage='COMPLETED',
+                                        updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'
+                                        """,
+                                                id,
+                                                token)
+                                        != 1) throw superseded();
+                            });
+                } catch (RuntimeException failure) {
+                    db.update(
+                            """
+                            UPDATE branch_preparation_jobs SET status='FAILED',stage='FAILED',
+                            error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'
+                            """,
+                            "任务失败，请检查分支、仓库权限、凭据或向量模型配置后重试",
+                            id,
+                            token);
+                }
+            } finally {
+                try (var statement = connection.createStatement()) {
+                    statement.execute("SELECT pg_advisory_unlock(184732,5)");
+                }
+            }
+        }
+    }
+
+    private AuthenticatedAccount actor(UUID id) {
+        return db
+                .query(
+                        """
+                SELECT id,username,display_name,account_role FROM accounts
+                WHERE id=? AND enabled=TRUE AND must_change_password=FALSE
+                """,
+                        (r, n) ->
+                                new AuthenticatedAccount(
+                                        r.getObject("id", UUID.class),
+                                        r.getString("username"),
+                                        r.getString("display_name"),
+                                        AccountRole.valueOf(r.getString("account_role")),
+                                        false,
+                                        null),
+                        id)
+                .stream()
+                .findFirst()
+                .orElseThrow(
+                        () -> new ApiSecurityException(403, "ACCOUNT_UNAVAILABLE", "任务提交账号不可用"));
+    }
+
+    private static ApiSecurityException superseded() {
+        return new ApiSecurityException(409, "BRANCH_BUILD_SUPERSEDED", "准备任务已被接管");
+    }
+}

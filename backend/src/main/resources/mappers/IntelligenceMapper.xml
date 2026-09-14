@@ -379,6 +379,15 @@
         AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash OR e.model&lt;&gt;#{model}
         OR e.dimension&lt;&gt;#{dimension} OR e.retrieval_capability&lt;&gt;#{capability})
     </select>
+    <select id="missingBranchEmbeddings" resultType="map">
+        SELECT c.id,c.content,c.content_hash FROM code_chunks c
+        LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id
+        WHERE c.repo_id=#{repositoryId} AND c.snapshot_id=#{snapshotId}
+        AND EXISTS(SELECT 1 FROM branch_snapshots s WHERE s.id=c.snapshot_id AND s.repo_id=c.repo_id)
+        AND(e.chunk_id IS NULL OR e.content_hash&lt;&gt;c.content_hash OR e.model&lt;&gt;#{model}
+        OR e.dimension&lt;&gt;#{dimension} OR e.retrieval_capability&lt;&gt;#{capability})
+        ORDER BY c.id
+    </select>
     <insert id="upsertEmbedding">
         INSERT INTO chunk_embeddings(chunk_id,repo_id,model,dimension,retrieval_capability,embedding,content_hash)
         VALUES(#{chunkId},#{repositoryId},#{model},#{dimension},#{capability},CAST(#{vector} AS vector),#{contentHash})
@@ -386,6 +395,12 @@
         dimension=EXCLUDED.dimension,retrieval_capability=EXCLUDED.retrieval_capability,
         content_hash=EXCLUDED.content_hash,created_at=CURRENT_TIMESTAMP
     </insert>
+    <select id="reusableCodeEmbedding" resultType="string">
+        SELECT embedding::text FROM chunk_embeddings
+        WHERE repo_id=#{repositoryId} AND content_hash=#{contentHash}
+          AND model=#{model} AND dimension=#{dimension} AND retrieval_capability=#{capability}
+        LIMIT 1
+    </select>
     <sql id="validBranchKnowledge">
         c.repo_id=#{repositoryId} AND live.publication_status='PUBLISHED' AND live.review_status='APPROVED'
         AND EXISTS(SELECT 1 FROM knowledge_branch_scopes scope WHERE scope.card_id=c.id
