@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import RepositoriesM0View from './RepositoriesM0View.vue';
 import ProjectSelectionList from '@/features/repositories/ProjectSelectionList.vue';
 import BranchWorkspace from '@/features/branches/BranchWorkspace.vue';
+import SingleVersionOperations from '@/features/repositories/SingleVersionOperations.vue';
 import { listRepositoryPage } from '@/api/repositories';
 import { projectDraftsApi } from '@/api/projectDrafts';
 import type { Repository } from '@/types/api';
@@ -11,8 +12,9 @@ import type { Repository } from '@/types/api';
 const project = (id: string, sourceType = 'LOCAL_GIT') => ({ id, name: id, sourceType, capabilities: { canUpdate: true, canConfigure: false } } as Repository);
 let store: any;
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => store }));
+vi.mock('@/stores/branchContextStore', () => ({ useBranchContextStore: () => ({ refresh: vi.fn(), select: vi.fn(), context: null }) }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn() }) }));
-vi.mock('@/api/repositories', () => ({ listRepositoryPage: vi.fn(), syncRemoteRepository: vi.fn(), updateRepository: vi.fn() }));
+vi.mock('@/api/repositories', () => ({ listRepositoryPage: vi.fn(), updateRepository: vi.fn() }));
 vi.mock('@/api/projectDrafts', () => ({ projectDraftsApi: { list: vi.fn() } }));
 beforeEach(() => {
   vi.resetAllMocks();
@@ -49,6 +51,6 @@ it('does not offer Git branch operations for ZIP projects', async () => {
   const wrapper = mountView();
   await flushPromises();
   expect(wrapper.findComponent(BranchWorkspace).exists()).toBe(false);
-  expect(wrapper.find('[description*="非 Git"]').exists()).toBe(true);
+  expect(wrapper.findComponent(SingleVersionOperations).exists()).toBe(true);
   wrapper.unmount();
 });

@@ -8,6 +8,7 @@ defineProps<{
   canManage: boolean;
   canMaintain: boolean;
   scopeLabel: string;
+  validationLabel?: string;
 }>();
 
 const emit = defineEmits<{
@@ -80,6 +81,7 @@ const enforcementLabels: Record<string, string> = {
         <dt>来源版本</dt>
         <dd>{{ statusLabel(card.sourceVersionStatus) }}</dd>
       </div>
+      <div v-if="validationLabel"><dt>分支验证</dt><dd>{{ validationLabel }}</dd></div>
     </dl>
 
     <footer class="card-actions">

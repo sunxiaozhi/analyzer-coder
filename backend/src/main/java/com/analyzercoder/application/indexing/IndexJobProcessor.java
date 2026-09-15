@@ -41,6 +41,9 @@ public class IndexJobProcessor {
     private final CodeGraphArtifactMapper graphArtifacts;
     private final CodeGraphTaskService codeGraphTasks;
 
+    @Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate branchIndexState;
+
     @Autowired
     public IndexJobProcessor(
             IndexJobStore indexJobStore,
@@ -169,6 +172,14 @@ public class IndexJobProcessor {
             if (markdownKnowledgeSourceService != null) {
                 markdownKnowledgeSourceService.synchronize(
                         repository, allFiles, incremental, affectedPaths);
+            }
+
+            // Compatibility: publish content readiness for a legacy default-version index too.
+            if (branchIndexState != null && repository.currentSnapshotId() != null) {
+                branchIndexState.update(
+                        "UPDATE branch_snapshots SET content_indexed_at=CURRENT_TIMESTAMP WHERE repo_id=? AND id=?",
+                        repository.id().value(),
+                        repository.currentSnapshotId().value());
             }
 
             boolean vectorsReady = true;

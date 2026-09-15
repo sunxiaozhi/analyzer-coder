@@ -2,7 +2,6 @@ package com.analyzercoder.interfaces.rest;
 
 import com.analyzercoder.application.intelligence.CodeGraphException;
 import com.analyzercoder.application.knowledge.KnowledgeDriftException;
-import com.analyzercoder.application.project.EngineeringProjectException;
 import com.analyzercoder.security.ApiSecurityException;
 import java.time.Instant;
 import org.slf4j.Logger;
@@ -38,19 +37,6 @@ public class ApiExceptionHandler {
                         .map(x -> x.getField() + " " + x.getDefaultMessage())
                         .orElse("Validation failed");
         return ResponseEntity.badRequest().body(ApiErrorResponse.of("VALIDATION_FAILED", m));
-    }
-
-    @ExceptionHandler(EngineeringProjectException.class)
-    public ResponseEntity<ApiErrorResponse> engineeringProject(EngineeringProjectException e) {
-        HttpStatus status =
-                switch (e.code()) {
-                    case "ENGINEERING_PROJECT_NOT_FOUND", "REPOSITORY_NOT_FOUND" ->
-                            HttpStatus.NOT_FOUND;
-                    case "ENGINEERING_PROJECT_VERSION_CONFLICT", "ENGINEERING_PROJECT_IN_USE" ->
-                            HttpStatus.CONFLICT;
-                    default -> HttpStatus.BAD_REQUEST;
-                };
-        return ResponseEntity.status(status).body(ApiErrorResponse.of(e.code(), e.getMessage()));
     }
 
     @ExceptionHandler(KnowledgeDriftException.class)

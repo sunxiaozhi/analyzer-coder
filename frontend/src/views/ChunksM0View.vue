@@ -17,6 +17,7 @@ import {
 } from '@/api/repositories';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
+import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
 import type { RepositoryFileContent, RepositorySnapshotFiles } from '@/types/api';
 
 type MobilePane = 'tree' | 'code' | 'results';
@@ -24,6 +25,7 @@ type RightPane = 'results' | 'context' | null;
 
 const repositories = useRepositoryStore();
 const branchContext = useBranchContextStore();
+const readScope = useBranchReadScope();
 const route = useRoute();
 const router = useRouter();
 const snapshot = shallowRef<RepositorySnapshotFiles | null>(null);
@@ -60,6 +62,12 @@ const gateCopy = computed(() => {
     title: '先选择一个项目',
     detail: '代码检索、源码预览和关系证据都需要明确的仓库范围。',
     action: '前往项目管理',
+    path: '/repositories',
+  };
+  if (readScope.blocked.value) return {
+    title: '当前分支快照未就绪',
+    detail: readScope.reason.value,
+    action: '管理当前分支',
     path: '/repositories',
   };
   if (snapshotError.value) return {
@@ -115,12 +123,16 @@ async function loadSnapshot(repositoryId: string | null) {
   query.value = '';
   fileCache.clear();
   if (!repositoryId) return;
+  if (readScope.blocked.value) { snapshotError.value = readScope.reason.value; return; }
   filesLoading.value = true;
   try {
     const result = branchContext.context?.contextId
       ? await listRepositoryFiles(repositoryId, branchContext.context.contextId)
       : await listRepositoryFiles(repositoryId);
     if (requestId !== snapshotRequest) return;
+    if (branchContext.context && result.snapshotId !== branchContext.context.snapshotId) {
+      throw new Error('返回的文件列表与当前分支快照不一致，请刷新阅读上下文');
+    }
     snapshot.value = result;
     if (typeof route.query.snapshotId === 'string' && route.query.snapshotId !== result.snapshotId) {
       selectedPath.value = typeof route.query.path === 'string' ? route.query.path : null;
@@ -175,7 +187,7 @@ async function openFile(
   symbolName?: string | null,
 ) {
   const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId) return;
+  if (!repositoryId || readScope.blocked.value || !snapshot.value) return;
   const requestId = ++fileRequest;
   fileLoading.value = false;
   const changedFile = selectedPath.value !== path;
@@ -221,6 +233,7 @@ async function search() {
   const repositoryId = repositories.selectedRepositoryId;
   const keyword = query.value.trim();
   if (!repositoryId) return ElMessage.warning('请先选择仓库');
+  if (readScope.blocked.value || !snapshot.value) return ElMessage.warning(readScope.reason.value);
   if (!keyword) {
     clearSearch();
     return;

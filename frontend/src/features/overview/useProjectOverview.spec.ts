@@ -6,6 +6,7 @@ import { useProjectOverview } from './useProjectOverview';
 
 let repositoryStore: { selectedRepositoryId: string | null };
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => repositoryStore }));
+vi.mock('@/stores/branchContextStore', () => ({ useBranchContextStore: () => ({ identity: 'zip-version', context: null }) }));
 vi.mock('element-plus', () => ({ ElMessage: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 vi.mock('@/api/repositories', () => ({
   getIndexJob: vi.fn(), getProjectCodeFacts: vi.fn(), getProjectHealthOverview: vi.fn(),

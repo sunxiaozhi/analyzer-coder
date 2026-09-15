@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/authStore';
+import BranchTasksPanel from '@/features/indexing/BranchTasksPanel.vue';
 import { ElMessage } from 'element-plus';
 import AppPagination from '@/components/AppPagination.vue';
 import CurrentVectorIndexPanel from '@/features/indexing/CurrentVectorIndexPanel.vue';
@@ -11,7 +13,9 @@ import { useRepositoryStore } from '@/stores/repositoryStore';
 
 const repositoryStore = useRepositoryStore();
 const router = useRouter();
-const section = shallowRef<'jobs' | 'vectors'>('jobs');
+const auth = useAuthStore();
+const route = useRoute();
+const section = shallowRef<'jobs' | 'vectors' | 'branches'>(!auth.isAdmin || route.query.section === 'branches' ? 'branches' : 'jobs');
 const actionPending = shallowRef(false);
 const {
   jobs,
@@ -57,8 +61,8 @@ async function retryJob(taskId: string) {
 }
 
 onMounted(async () => {
-  await Promise.all([repositoryStore.loadRepositories(), refresh()]);
-  startPolling();
+  await repositoryStore.loadRepositories();
+  if (auth.isAdmin) { await refresh(); startPolling(); }
 });
 </script>
 
@@ -66,11 +70,12 @@ onMounted(async () => {
   <section class="page index-jobs-design">
     <div class="surface index-view-shell">
       <nav class="index-view-tabs" aria-label="索引页面">
-        <button :class="{ active: section === 'jobs' }" @click="section = 'jobs'">索引任务</button>
-        <button :class="{ active: section === 'vectors' }" @click="section = 'vectors'">当前向量索引</button>
+        <button v-if="auth.isAdmin" :class="{ active: section === 'jobs' }" @click="section = 'jobs'">索引任务</button>
+        <button v-if="auth.isAdmin" :class="{ active: section === 'vectors' }" @click="section = 'vectors'">当前向量索引</button>
+        <button :class="{ active: section === 'branches' }" @click="section = 'branches'">分支任务</button>
       </nav>
 
-      <div v-if="section === 'jobs'" class="index-view-body index-jobs-content">
+      <div v-if="section === 'jobs' && auth.isAdmin" class="index-view-body index-jobs-content">
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
       <div class="split detail-split index-jobs-split">
         <div class="surface index-jobs-list">
@@ -109,7 +114,10 @@ onMounted(async () => {
         />
       </div>
       </div>
-      <CurrentVectorIndexPanel v-else class="index-view-body" />
+      <CurrentVectorIndexPanel v-else-if="section === 'vectors' && auth.isAdmin" class="index-view-body" />
+      <BranchTasksPanel v-else class="index-view-body" :repositories="repositoryStore.repositories"
+        :initial-repository-id="typeof route.query.repositoryId === 'string' ? route.query.repositoryId : repositoryStore.selectedRepositoryId ?? undefined"
+        :initial-branch-id="typeof route.query.branchId === 'string' ? route.query.branchId : undefined" />
     </div>
   </section>
 </template>

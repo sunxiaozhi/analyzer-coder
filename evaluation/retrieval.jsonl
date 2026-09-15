@@ -26,7 +26,6 @@
 {"id":"RET-026","repositoryType":"JAVA_SPRING","question":"CodeGraph CLI 构建和发布产物在哪里实现？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphService.java"],"tags":["graph","build"]}
 {"id":"RET-027","repositoryType":"JAVA_SPRING","question":"CodeGraph 构建任务如何入队？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphTaskService.java"],"tags":["graph","job"]}
 {"id":"RET-028","repositoryType":"JAVA_SPRING","question":"已发布 CodeGraph 产物如何执行图查询？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java"],"tags":["graph","query"]}
-{"id":"RET-029","repositoryType":"JAVA_SPRING","question":"自然语言修改任务如何解析成变更意图？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/change/ChangeIntentParser.java"],"tags":["change","intent"]}
 {"id":"RET-031","repositoryType":"JAVA_SPRING","question":"项目模块架构图如何从当前快照推导？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/architecture/ProjectArchitectureMapService.java"],"tags":["architecture","map"]}
 {"id":"RET-032","repositoryType":"JAVA_SPRING","question":"运行时依赖配置如何识别？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/architecture/RuntimeDependencyDetector.java"],"tags":["architecture","dependency"]}
 {"id":"RET-033","repositoryType":"JAVA_SPRING","question":"Markdown 知识源同步在哪里实现？","expectedPaths":["backend/src/main/java/com/analyzercoder/application/intelligence/MarkdownKnowledgeSourceService.java"],"tags":["knowledge","markdown"]}
@@ -39,7 +38,7 @@
 {"id":"RET-040","repositoryType":"VUE_TYPESCRIPT","question":"向量模型配置卡片和编辑弹窗在哪里？","expectedPaths":["frontend/src/views/SystemSettingsView.vue"],"tags":["frontend","settings"]}
 {"id":"RET-041","repositoryType":"VUE_TYPESCRIPT","question":"调用图谱页面如何加载并展示来源限制？","expectedPaths":["frontend/src/features/code/CodeEvidencePanel.vue"],"tags":["frontend","graph"]}
 {"id":"RET-043","repositoryType":"VUE_TYPESCRIPT","question":"项目总览页如何组合准备流程、知识健康和代码统计？","expectedPaths":["frontend/src/views/ProjectOverviewView.vue"],"tags":["frontend","overview"]}
-{"id":"RET-044","repositoryType":"VUE_TYPESCRIPT","question":"仓库列表的主要表格组件在哪里？","expectedPaths":["frontend/src/features/repositories/RepositoryTable.vue"],"tags":["frontend","repository"]}
+{"id":"RET-044","repositoryType":"VUE_TYPESCRIPT","question":"项目管理的项目选择列表组件在哪里？","expectedPaths":["frontend/src/features/repositories/ProjectSelectionList.vue"],"tags":["frontend","repository"]}
 {"id":"RET-045","repositoryType":"VUE_TYPESCRIPT","question":"仓库导入任务 API 在哪里定义？","expectedPaths":["frontend/src/api/sourceImports.ts"],"tags":["frontend","import"]}
 {"id":"RET-046","repositoryType":"VUE_TYPESCRIPT","question":"前端路由和权限进入规则在哪里？","expectedPaths":["frontend/src/router/index.ts"],"tags":["frontend","router"]}
 {"id":"RET-047","repositoryType":"VUE_TYPESCRIPT","question":"工作区导航和标签页外壳在哪里实现？","expectedPaths":["frontend/src/components/WorkspaceShell.vue"],"tags":["frontend","shell"]}

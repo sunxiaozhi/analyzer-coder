@@ -181,6 +181,16 @@ public class RepositoryBranchController {
 
     public record Validation(int revision, UUID contextId, String state, String note) {}
 
+    @GetMapping("/branch-preparation-jobs/history")
+    public com.analyzercoder.application.common.PageResult<BranchPreparationJobs.Job> taskHistory(
+            @PathVariable UUID repositoryId,
+            @RequestParam(required = false) UUID branchId,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "15") int pageSize,
+            HttpServletRequest request) {
+        return preparation.history(SecurityContext.account(request), repositoryId, branchId, pageNum, pageSize);
+    }
+
     @GetMapping("/knowledge/branch-validations")
     public List<BranchKnowledgeService.ValidationCard> validations(
             @PathVariable UUID repositoryId,

@@ -25,6 +25,28 @@ class BranchContextInterceptorTest {
     }
 
     @Test
+    void allowsPinnedBranchOverviewWithoutOpeningLegacyOverviewEndpoints() {
+        var interceptor = new BranchContextInterceptor();
+        var request = new MockHttpServletRequest("GET", base + "/branch-overview");
+        request.addHeader("X-Branch-Context", "pinned");
+        assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), null)).isTrue();
+
+        for (var path : new String[] {"/profile", "/code-facts", "/health-overview"}) {
+            request.setRequestURI(base + path);
+            assertThatThrownBy(
+                            () ->
+                                    interceptor.preHandle(
+                                            request, new MockHttpServletResponse(), null))
+                    .isInstanceOf(ApiSecurityException.class);
+        }
+        request.setRequestURI(base + "/branch-overview");
+        request.setMethod("POST");
+        assertThatThrownBy(
+                        () -> interceptor.preHandle(request, new MockHttpServletResponse(), null))
+                .isInstanceOf(ApiSecurityException.class);
+    }
+
+    @Test
     void doesNotBroadenBearerTokenPermissionsToBranchWrites() {
         assertThat(AccessTokenInterceptor.allowed("POST", base + "/contexts")).isTrue();
         assertThat(AccessTokenInterceptor.allowed("POST", base + "/branches")).isFalse();

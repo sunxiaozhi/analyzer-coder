@@ -24,7 +24,7 @@ export const useBranchContextStore = defineStore('branch-context', () => {
   const ready = computed(() => Boolean(context.value && selectedBranch.value?.status === 'READY'));
   const identity = computed(() => context.value
     ? `${context.value.branchId}:${context.value.snapshotId}:${context.value.commitSha}`
-    : 'no-branch-context');
+    : `${repositoryId.value ?? 'no-project'}:${selectedBranchId.value ?? 'no-branch'}:${loading.value ? 'loading' : 'pending'}:${error.value ?? ''}`);
 
   function clear() {
     requestVersion++;
@@ -36,13 +36,14 @@ export const useBranchContextStore = defineStore('branch-context', () => {
     error.value = null;
   }
 
-  async function load(nextRepositoryId: string | null, preferredBranchId?: string | null) {
+  async function load(nextRepositoryId: string | null, preferredBranchId?: string | null, defaultBranch?: string | null) {
     const version = ++requestVersion;
     repositoryId.value = nextRepositoryId;
     branches.value = [];
     selectedBranchId.value = null;
     context.value = null;
     error.value = null;
+    loading.value = false;
     if (!nextRepositoryId) return;
     loading.value = true;
     try {
@@ -53,6 +54,7 @@ export const useBranchContextStore = defineStore('branch-context', () => {
       const persisted = localStorage.getItem(storageKey(nextRepositoryId));
       const target = active.find(item => item.id === preferredBranchId)
         ?? active.find(item => item.id === persisted)
+        ?? active.find(item => item.name === defaultBranch)
         ?? active.find(item => item.status === 'READY')
         ?? active[0]
         ?? null;
@@ -75,6 +77,7 @@ export const useBranchContextStore = defineStore('branch-context', () => {
     selectedBranchId.value = branchId;
     context.value = null;
     error.value = null;
+    loading.value = false;
     localStorage.setItem(storageKey(currentRepositoryId), branchId);
     if (branch.status !== 'READY') return;
     loading.value = true;

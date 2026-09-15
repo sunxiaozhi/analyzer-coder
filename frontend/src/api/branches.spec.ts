@@ -4,6 +4,19 @@ import { branchesApi, type BranchContext } from './branches';
 vi.mock('./http', () => ({ request: vi.fn() }));
 describe('branch API boundaries', () => {
   beforeEach(() => vi.mocked(request).mockReset());
+  it('submits independent sync and pinned content tasks', async () => {
+    await branchesApi.codeOperation('repo', 'release', 'SYNC');
+    expect(request).toHaveBeenLastCalledWith('/api/repositories/repo/branches/release/code-jobs',
+      { method: 'POST', body: JSON.stringify({ kind: 'SYNC' }) });
+    await branchesApi.codeOperation('repo', 'release', 'CONTENT', 'ctx');
+    expect(request).toHaveBeenLastCalledWith('/api/repositories/repo/branches/release/code-jobs',
+      { method: 'POST', body: JSON.stringify({ kind: 'CONTENT', contextId: 'ctx' }) });
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+  it('reads readiness for the exact historical context', async () => {
+    await branchesApi.snapshotIndexStatus({ repositoryId:'repo', branchId:'release', contextId:'ctx' } as BranchContext);
+    expect(request).toHaveBeenCalledWith('/api/repositories/repo/branches/release/index-status?contextId=ctx');
+  });
   it('pins searches to the explicitly provided context', async () => {
     const context: BranchContext = { contextId: 'context-a', repositoryId: 'repo-a', branchId: 'branch-a', branchName: 'main', snapshotId: 'snapshot-a', commitSha: 'abc', expiresAt: '' };
     await branchesApi.search(context, '退款');

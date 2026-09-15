@@ -284,9 +284,6 @@ export interface KnowledgeScope {
   pathPatterns: string[];
   symbols: string[];
   modules: string[];
-  repositoryIds: string[];
-  serviceNames: string[];
-  contractIds: string[];
 }
 export interface KnowledgeObligations {
   requiredTests: string[];
@@ -443,11 +440,6 @@ export const intelligenceApi = {
       `/api/repositories/${repositoryId}/evidence-search?query=${encodeURIComponent(query)}&limit=${limit}`,
       branchContextOptions(contextId),
     ),
-  search: (repositoryId: string, query: string, limit = 50, contextId?: string | null) =>
-    request<HybridSearchResponse>(
-      `/api/repositories/${repositoryId}/hybrid-search?query=${encodeURIComponent(query)}&limit=${limit}`,
-      branchContextOptions(contextId),
-    ),
   codeEvidenceContext: (repositoryId: string, filePath: string, symbol: string | null, contextId?: string | null) => {
     const query = new URLSearchParams({ filePath });
     if (symbol) query.set('symbol', symbol);
@@ -570,10 +562,4 @@ export const intelligenceApi = {
       `/api/repositories/${repositoryId}/knowledge/${id}/history/${revision}/restore`,
       { method: 'POST' }
     ),
-  settings: () => request<Record<string, string>>('/api/settings'),
-  saveSettings: (input: Record<string, string>) =>
-    request<Record<string, string>>('/api/settings', {
-      method: 'PUT',
-      body: JSON.stringify(input),
-    }),
 };

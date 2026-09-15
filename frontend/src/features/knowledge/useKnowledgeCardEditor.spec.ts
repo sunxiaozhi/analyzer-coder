@@ -19,9 +19,6 @@ function legacyCard(): KnowledgeCard {
       pathPatterns: ['old/**'],
       symbols: ['OldService'],
       modules: ['legacy-module'],
-      repositoryIds: ['repo-2'],
-      serviceNames: ['legacy-service'],
-      contractIds: ['contract-1'],
     },
     obligations: {
       requiredTests: ['npm test'],
@@ -65,7 +62,6 @@ describe('useKnowledgeCardEditor', () => {
     expect(payload.scope.pathPatterns).toEqual(['backend/refund/**']);
     expect(payload.scope.symbols).toEqual(['RefundService']);
     expect(payload.scope.modules).toEqual([]);
-    expect(payload.scope.repositoryIds).toEqual([]);
     expect(payload.obligations.requiredTests).toEqual([]);
     expect(payload.cardType).toBe('知识卡片');
     expect(payload.severity).toBe('INFO');
@@ -86,9 +82,6 @@ describe('useKnowledgeCardEditor', () => {
     expect(payload.scope.pathPatterns).toEqual(['new/**']);
     expect(payload.scope.symbols).toEqual(['NewService']);
     expect(payload.scope.modules).toEqual(['legacy-module']);
-    expect(payload.scope.repositoryIds).toEqual(['repo-2']);
-    expect(payload.scope.serviceNames).toEqual(['legacy-service']);
-    expect(payload.scope.contractIds).toEqual(['contract-1']);
     expect(payload.obligations.requiredTests).toEqual(['npm test']);
     expect(payload.obligations.knowledgeUpdateRequired).toBe(true);
   });

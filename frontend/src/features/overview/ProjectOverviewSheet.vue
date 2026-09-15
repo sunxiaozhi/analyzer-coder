@@ -68,6 +68,7 @@ const codeTypes = computed(() => (
   props.codeFacts?.codeTypes?.filter(item => item.count > 0) ?? []
 ));
 const prepareLabel = computed(() => {
+  if (['LOCAL_GIT', 'REMOTE_GIT', 'GITLAB'].includes(props.repository.sourceType)) return '一键准备此分支';
   if (props.preparation?.state === 'NOT_READY') return '准备项目';
   if (props.preparation?.state === 'PROCESSING') return '继续准备';
   if (props.preparation?.state === 'READY') return '同步并检查更新';

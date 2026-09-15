@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Connection, Plus, Search } from '@element-plus/icons-vue';
+import { Plus, Search } from '@element-plus/icons-vue';
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -7,18 +7,19 @@ import AppPagination from '@/components/AppPagination.vue';
 import RepositoryFormDialog from '@/features/repositories/RepositoryFormDialog.vue';
 import RepositoryEditDialog from '@/features/repositories/RepositoryEditDialog.vue';
 import RepositoryGovernanceDialog from '@/features/repositories/RepositoryGovernanceDialog.vue';
-import RepositoryTable from '@/features/repositories/RepositoryTable.vue';
+import ProjectSettingsPanel from '@/features/repositories/ProjectSettingsPanel.vue';
+import SingleVersionOperations from '@/features/repositories/SingleVersionOperations.vue';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 import ProjectSelectionList from '@/features/repositories/ProjectSelectionList.vue';
 import BranchWorkspace from '@/features/branches/BranchWorkspace.vue';
-import EngineeringProjectsDialog from '@/features/repositories/EngineeringProjectsDialog.vue';
 import { sourceImportsApi } from '@/api/sourceImports';
 import { projectDraftsApi, type ProjectDraft } from '@/api/projectDrafts';
-import { listRepositoryPage, syncRemoteRepository, updateRepository } from '@/api/repositories';
-import { intelligenceApi } from '@/api/intelligence';
+import { listRepositoryPage, updateRepository } from '@/api/repositories';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import type { Repository } from '@/types/api';
 
 const store = useRepositoryStore();
+const branchContext = useBranchContextStore();
 const router = useRouter();
 const route = useRoute();
 const rows = shallowRef<Repository[]>([]);
@@ -33,13 +34,10 @@ const pageError = shallowRef<string | null>(null);
 const dialogOpen = shallowRef(false);
 const governanceOpen = shallowRef(false);
 const governedRepository = shallowRef<Repository | null>(null);
-const rescanningId = shallowRef<string | null>(null);
-const buildingId = shallowRef<string | null>(null);
 const importing = shallowRef(false);
 const editOpen = shallowRef(false);
 const editing = shallowRef<Repository | null>(null);
 const editBusy = shallowRef(false);
-const engineeringProjectsOpen = shallowRef(false);
 const managementOpen = shallowRef(false);
 const selectingProject = shallowRef(false);
 const selectedProject = computed(() => store.selectedRepository);
@@ -138,46 +136,14 @@ async function saveEdit(input: { name: string; description: string; defaultBranc
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存失败'); }
   finally { editBusy.value = false; }
 }
-async function rescan(id: string) {
-  rescanningId.value = id;
-  try {
-    const repository = rows.value.find(item => item.id === id);
-    const result = repository && ['REMOTE_GIT', 'GITLAB'].includes(repository.sourceType)
-      ? await syncRemoteRepository(id)
-      : await store.rescanRepository(id);
-    await reloadAll();
-    ElMessage.success(result.changed ? '已同步更新；增量索引正在后台执行' : '代码版本无变化');
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '仓库同步失败，请检查代码源和凭据');
-  } finally {
-    rescanningId.value = null;
-  }
+async function branchesChanged() {
+  await reloadAll();
+  await branchContext.refresh();
 }
-async function startIndex(id: string) {
-  try {
-    await store.createIndexJob(id, 'FULL');
-    await store.selectRepository(id);
-    ElMessage.success('全量内容索引已进入队列；可在项目总览查看准备进度');
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '内容索引创建失败');
-  }
-}
-async function buildCodeGraph(repository: Repository) {
-  buildingId.value = repository.id;
-  try {
-    const task = await intelligenceApi.buildGraph(repository.id);
-    await reloadAll();
-    if (task.status === 'FAILED') ElMessage.error(task.errorMessage ?? '代码图谱构建失败');
-    else ElMessage.success('代码图谱构建任务已提交；完成后会自动发布到当前快照');
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '代码图谱构建任务提交失败');
-  } finally {
-    buildingId.value = null;
-  }
-}
-async function openOverview(repository: Repository) {
-  await store.selectRepository(repository.id);
-  await router.push({ name: 'overview' });
+async function readBranch(branchId: string, target: 'search' | 'atlas' = 'search') {
+  await branchContext.select(branchId);
+  if (!branchContext.context) return;
+  await router.push({ name: target, query: { branchId, contextId: branchContext.context.contextId } });
 }
 function govern(repository: Repository) { governedRepository.value = repository; governanceOpen.value = true; }
 async function governanceChanged() { await reloadAll(); governedRepository.value = store.repositories.find(item => item.id === governedRepository.value?.id) ?? null; }
@@ -189,6 +155,8 @@ watch(query, () => {
 });
 onMounted(async () => {
   await reloadAll();
+  const requestedProject = typeof route.query.repositoryId === 'string' ? store.repositories.find(item => item.id === route.query.repositoryId) : undefined;
+  if (requestedProject) await selectProject(requestedProject);
   const requestedId = typeof route.query.edit === 'string' ? route.query.edit : null;
   if (!requestedId) return;
   const requested = rows.value.find(item => item.id === requestedId)
@@ -223,26 +191,27 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
       <template v-if="selectedProject">
         <header class="project-branch-header">
           <div><span class="project-eyebrow">当前项目</span><h2 class="project-title">{{ selectedProject.name }}</h2><p class="project-description">{{ selectedProject.description || '选择下方分支，准备并查看该分支的代码与适用知识。' }}</p></div>
-          <el-button @click="managementOpen=true">项目管理操作</el-button>
+          <div class="project-actions">
+            <el-button v-if="selectedProject.capabilities.canEditRepository ?? selectedProject.capabilities.canConfigure" @click="managementOpen=true">项目设置</el-button>
+            <el-button v-if="selectedProject.capabilities.canGrant || selectedProject.capabilities.canTransferOwnership" @click="govern(selectedProject)">成员与权限</el-button>
+          </div>
         </header>
         <BranchWorkspace v-if="gitProject" :key="selectedProject.id" :repository-id="selectedProject.id"
           :can-maintain="selectedProject.capabilities.canUpdate" :can-manage="selectedProject.capabilities.canConfigure"
-          :remote-source="['REMOTE_GIT', 'GITLAB'].includes(selectedProject.sourceType)" show-branch-list />
-        <el-empty v-else description="此项目为非 Git 来源，使用单版本管理，不提供 Git 分支切换。">
-          <el-button type="primary" @click="openOverview(selectedProject)">查看项目版本</el-button>
-        </el-empty>
+          :remote-source="['REMOTE_GIT', 'GITLAB'].includes(selectedProject.sourceType)" :reading-branch-id="branchContext.selectedBranchId" :initial-branch-id="typeof route.query.branchId === 'string' ? route.query.branchId : undefined" show-branch-list @changed="branchesChanged" @read="readBranch" />
+        <SingleVersionOperations v-else :repository="selectedProject" @changed="reloadAll" />
       </template>
       <el-empty v-else description="从左侧选择项目，或先接入一个项目" />
     </section>
-    <el-dialog v-model="managementOpen" title="项目管理操作（当前默认版本）" width="min(1200px, 96vw)">
-      <p>这些操作维护项目资料或原默认版本；分支准备请使用右侧分支列表。</p>
-      <RepositoryTable :rows="selectedProject ? [selectedProject] : []" :loading="pageLoading" :rescanning-id="rescanningId" :building-id="buildingId" @overview="openOverview" @edit="openEdit" @index="startIndex" @rescan="rescan" @codegraph="buildCodeGraph" @govern="govern" @remove="remove" />
-      <template #footer><el-button :icon="Connection" @click="engineeringProjectsOpen=true">跨仓工程项目</el-button><el-button @click="managementOpen=false">关闭</el-button></template>
+    <el-dialog v-model="managementOpen" title="项目设置" width="min(680px, 96vw)">
+      <ProjectSettingsPanel v-if="selectedProject" :repository="selectedProject"
+        @edit="managementOpen=false; openEdit(selectedProject)"
+        @remove="remove(selectedProject.id,selectedProject.name)" />
+      <template #footer><el-button @click="managementOpen=false">关闭</el-button></template>
     </el-dialog>
     <RepositoryFormDialog v-model="dialogOpen" :busy="importing" :initial-draft="retryingDraft" @submit="create" />
     <RepositoryEditDialog v-model="editOpen" :repository="editing" :busy="editBusy" @submit="saveEdit" />
     <RepositoryGovernanceDialog v-model="governanceOpen" :repository="governedRepository" @changed="governanceChanged" />
-    <EngineeringProjectsDialog v-model="engineeringProjectsOpen" :repositories="store.repositories" />
   </section>
 </template>
 <style scoped>
@@ -252,6 +221,7 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
+.project-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .project-list-title { margin: 14px 14px 8px; font-size: 16px; }
 .project-list-toolbar { padding: 0 12px 10px; flex-wrap: wrap; }
 .project-list-toolbar .el-input { flex: 1 1 150px; min-width: 100px; }

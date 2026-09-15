@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ApiError } from '@/api/http';
-import { branchesApi, type BranchScope } from '@/api/branches';
+import { branchesApi, type BranchValidationCard, type BranchValidationState, type BranchScope } from '@/api/branches';
 import {
   intelligenceApi,
   type CardInput,
@@ -25,16 +25,26 @@ import MarkdownKnowledgeSourceList from '@/features/knowledge/MarkdownKnowledgeS
 import { renderMarkdown } from '@/features/knowledge/markdown';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
+import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
 import { enforcementLabel, knowledgeKindLabel, statusLabel } from '@/utils/displayLabels';
 
 const repositories = useRepositoryStore();
 const branchContext = useBranchContextStore();
+const readScope = useBranchReadScope();
+let cardsVersion=0;
+let sourcesVersion=0;
 const router = useRouter();
 const route = useRoute();
 type KnowledgeMode = 'cards' | 'markdown';
 const activeMode = shallowRef<KnowledgeMode>('cards');
 const cards = shallowRef<KnowledgeCard[]>([]);
 const branchScopes = shallowRef<BranchScope[]>([]);
+const branchValidations = shallowRef<BranchValidationCard[]>([]);
+const validationFilter = shallowRef<BranchValidationState | 'ALL'>('ALL');
+const validationLabels: Record<BranchValidationState, string> = { CURRENT: '已验证', UNVERIFIED: '未验证', REVIEW_REQUIRED: '待复核', INVALID: '不适用' };
+function validationState(card: KnowledgeCard): BranchValidationState {
+  return branchValidations.value.find(item => item.cardId === card.id && item.revision === card.revision)?.state ?? 'UNVERIFIED';
+}
 const markdownSources = shallowRef<MarkdownKnowledgeSourceOverview | null>(null);
 const cardQuery = shallowRef('');
 const sourceQuery = shallowRef('');
@@ -76,7 +86,7 @@ const cardRows = computed(() => cards.value.filter(card => {
   const matchesTitle = !value || card.title.toLowerCase().includes(value);
   const matchesType = selectedKnowledgeKind.value === allKnowledgeKinds
     || card.knowledgeKind === selectedKnowledgeKind.value;
-  return matchesTitle && matchesType;
+  return matchesTitle && matchesType && (!readScope.requiresContext.value || validationFilter.value === 'ALL' || validationState(card) === validationFilter.value);
 }));
 const sourceRows = computed(() => (markdownSources.value?.items ?? []).filter(source => {
   const value = sourceQuery.value.trim().toLowerCase();
@@ -99,54 +109,57 @@ const sourceEmptyDescription = computed(() => {
   return '没有符合筛选条件的 Markdown';
 });
 
+async function branchValidationSaved() {
+  const previous = branchContext.context;
+  if (!previous) return;
+  await branchContext.select(previous.branchId);
+  if (repositories.selectedRepositoryId !== previous.repositoryId) return;
+  await loadCards();
+  if (viewing.value) viewing.value = cards.value.find(card => card.id === viewing.value?.id) ?? null;
+}
+
 async function loadCards() {
-  const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId) {
-    cards.value = [];
-    branchScopes.value = [];
-    return;
-  }
-  cardsLoading.value = true;
+  const version=++cardsVersion;
+  const identity=branchContext.identity;
+  const repositoryId=repositories.selectedRepositoryId;
+  cards.value=[]; branchScopes.value=[]; branchValidations.value=[]; cardsLoading.value=false;
+  if(!repositoryId || readScope.blocked.value) return;
+  const isCurrent=()=>version===cardsVersion && repositoryId===repositories.selectedRepositoryId && identity===branchContext.identity;
+  cardsLoading.value=true;
   try {
-    const contextId = branchContext.context?.contextId;
-    const [loadedCards, loadedScopes] = await Promise.all([
-      contextId ? intelligenceApi.cards(repositoryId, contextId) : intelligenceApi.cards(repositoryId),
+    const contextId=branchContext.context?.contextId;
+    const [loadedCards,loadedScopes,loadedValidations]=await Promise.all([
+      contextId?intelligenceApi.cards(repositoryId,contextId):intelligenceApi.cards(repositoryId),
       branchesApi.scopes(repositoryId),
+      branchContext.context ? branchesApi.validations(branchContext.context) : Promise.resolve([]),
     ]);
-    cards.value = loadedCards;
-    branchScopes.value = loadedScopes;
-    syncRequestedCard();
-    syncRequestedCreate();
-  } catch (error) {
-    cards.value = [];
-    ElMessage.error(error instanceof Error ? error.message : '知识卡片加载失败');
-  } finally {
-    cardsLoading.value = false;
-  }
+    if(!isCurrent())return;
+    cards.value=loadedCards; branchScopes.value=loadedScopes; branchValidations.value=loadedValidations;
+    syncRequestedCard(); syncRequestedCreate();
+  }catch(error){
+    if(isCurrent())ElMessage.error(error instanceof Error?error.message:'知识卡片加载失败');
+  }finally{if(isCurrent())cardsLoading.value=false;}
 }
 
 async function loadMarkdownSources() {
-  const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId) {
-    activeMode.value = 'cards';
-    markdownSources.value = null;
-    sourceLoadError.value = null;
-    return;
-  }
-  sourcesLoading.value = true;
-  sourceLoadError.value = null;
-  try {
-    markdownSources.value = branchContext.context?.contextId
-      ? await intelligenceApi.markdownSources(repositoryId, branchContext.context.contextId)
-      : await intelligenceApi.markdownSources(repositoryId);
-  } catch (error) {
-    markdownSources.value = null;
-    sourceLoadError.value = error instanceof ApiError && error.status === 409
-      ? '仓库尚无可用快照，请先完成仓库扫描'
-      : error instanceof Error ? error.message : 'Markdown 预备知识加载失败';
-  } finally {
-    sourcesLoading.value = false;
-  }
+  const version=++sourcesVersion;
+  const identity=branchContext.identity;
+  const repositoryId=repositories.selectedRepositoryId;
+  markdownSources.value=null; sourceLoadError.value=null; sourcesLoading.value=false;
+  if(!repositoryId){activeMode.value='cards';return;}
+  if(readScope.blocked.value){sourceLoadError.value=readScope.reason.value;return;}
+  const isCurrent=()=>version===sourcesVersion && repositoryId===repositories.selectedRepositoryId && identity===branchContext.identity;
+  sourcesLoading.value=true;
+  try{
+    const loaded=branchContext.context?.contextId
+      ?await intelligenceApi.markdownSources(repositoryId,branchContext.context.contextId)
+      :await intelligenceApi.markdownSources(repositoryId);
+    if(isCurrent())markdownSources.value=loaded;
+  }catch(error){
+    if(isCurrent())sourceLoadError.value=error instanceof ApiError && error.status===409
+      ?'当前分支尚无可用内容索引，请在项目管理中构建'
+      :error instanceof Error?error.message:'Markdown 预备知识加载失败';
+  }finally{if(isCurrent())sourcesLoading.value=false;}
 }
 
 async function load() {
@@ -525,6 +538,10 @@ onMounted(() => void load());
           </button>
         </div>
 
+        <el-select v-if="activeMode === 'cards' && readScope.requiresContext.value" v-model="validationFilter" aria-label="分支验证筛选" placeholder="分支验证">
+          <el-option value="ALL" label="全部验证状态" />
+          <el-option v-for="(label, state) in validationLabels" :key="state" :value="state" :label="label" />
+        </el-select>
         <el-input
           v-if="activeMode === 'cards'"
           v-model="cardQuery"
@@ -608,6 +625,7 @@ onMounted(() => void load());
             :can-manage="canManage"
             :can-maintain="canMaintain"
             :scope-label="scopeLabel(card)"
+            :validation-label="readScope.requiresContext.value ? validationLabels[validationState(card)] : undefined"
             @view="openDetail"
             @edit="openEdit"
             @scope="card => { scopeCard = card; scopeDialog = true; }"
@@ -645,6 +663,9 @@ onMounted(() => void load());
       :drift-loading="driftLoading"
       :can-maintain="canMaintain"
       :source-review-loading="sourceReviewLoading"
+      :branch-context="readScope.requiresContext.value ? branchContext.context : null"
+      :can-manage="canManage"
+      @branch-validated="branchValidationSaved"
       @open-code="openCode"
       @open-graph="openGraph"
       @open-drift="openDrift"

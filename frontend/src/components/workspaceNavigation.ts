@@ -31,9 +31,9 @@ export interface WorkspaceNavigationContext {
 
 const developerItems: WorkspaceNavItem[] = [
   { to: '/overview', label: '项目总览', icon: 'overview' },
-  { to: '/search', label: '代码与知识', icon: 'code' },
+  { to: '/search', label: '联合检索', icon: 'code' },
   { to: '/atlas', label: '代码图谱', icon: 'atlas' },
-  { to: '/ask', label: '问项目', icon: 'ask' },
+  { to: '/ask', label: '项目问答', icon: 'ask' },
 ];
 
 export function workspaceNavigation(
@@ -41,7 +41,8 @@ export function workspaceNavigation(
 ): WorkspaceNavGroup[] {
   const maintenanceItems: WorkspaceNavItem[] = [];
   if (context.canReadSelectedRepository) {
-    maintenanceItems.push({ to: '/knowledge', label: '知识库', icon: 'knowledge' });
+    maintenanceItems.push({ to: '/knowledge', label: '知识管理', icon: 'knowledge' });
+    if (!context.isAdmin) maintenanceItems.push({ to: '/indexing?section=branches', label: '分支任务', icon: 'tasks' });
   }
   if (context.canManageProjects) {
     maintenanceItems.push({ to: '/repositories', label: '项目管理', icon: 'projects' });
@@ -64,7 +65,7 @@ export function workspaceNavigation(
       label: '系统管理',
       collapsible: true,
       items: [
-        { to: '/indexing', label: '索引任务', icon: 'tasks' },
+        { to: '/indexing', label: '任务中心', icon: 'tasks' },
         { to: '/settings', label: '模型配置', icon: 'models' },
         { to: '/accounts', label: '账号权限', icon: 'accounts' },
         { to: '/audit', label: '审计日志', icon: 'audit' },

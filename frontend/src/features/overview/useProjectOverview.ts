@@ -1,14 +1,19 @@
 import { onScopeDispose, shallowReadonly, shallowRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
-  getIndexJob, getProjectCodeFacts, getProjectHealthOverview, getRepositoryProfile,
+  getBranchOverview, getIndexJob, getProjectCodeFacts, getProjectHealthOverview, getRepositoryProfile,
   prepareRepository, retryPreparationStage,
   type PreparationStage, type ProjectCodeFacts, type ProjectHealthOverview, type RepositoryPreparation,
 } from '@/api/repositories';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
+import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
+import { branchesApi } from '@/api/branches';
 
 export function useProjectOverview() {
   const repositories = useRepositoryStore();
+  const branches = useBranchContextStore();
+  const readScope = useBranchReadScope();
   const preparation = shallowRef<RepositoryPreparation | null>(null);
   const codeFacts = shallowRef<ProjectCodeFacts | null>(null);
   const health = shallowRef<ProjectHealthOverview | null>(null);
@@ -34,8 +39,22 @@ export function useProjectOverview() {
     error.value = null;
     loading.value = false;
     if (!repositoryId) return;
+    if (readScope.blocked.value) { error.value = readScope.reason.value; return; }
     loading.value = true;
     try {
+      if (readScope.requiresContext.value && branches.context) {
+        const pinned = branches.context;
+        const result = await getBranchOverview(repositoryId, pinned.contextId);
+        if (version !== loadVersion || !isCurrent(repositoryId, context)) return;
+        if ([result.preparation, result.codeFacts, result.health].some(value =>
+          value.snapshotId !== pinned.snapshotId || value.commitSha !== pinned.commitSha)) {
+          throw new Error('分支总览版本不一致，请刷新阅读上下文');
+        }
+        preparation.value = result.preparation;
+        codeFacts.value = result.codeFacts;
+        health.value = result.health;
+        return;
+      }
       const [profile, facts, projectHealth] = await Promise.all([
         getRepositoryProfile(repositoryId),
         getProjectCodeFacts(repositoryId).catch(() => null),
@@ -66,6 +85,31 @@ export function useProjectOverview() {
   async function runPreparation(stage?: PreparationStage['key']) {
     const repositoryId = repositories.selectedRepositoryId;
     if (!repositoryId || preparing.value) return;
+    if (readScope.requiresContext.value) {
+      const branchId = branches.selectedBranchId;
+      if (!branchId) { ElMessage.warning('请在项目管理中选择分支'); return; }
+      preparing.value = true;
+      const version = contextVersion;
+      try {
+        // Preparation is a durable branch job, not a default-pointer mutation.
+        if (stage === 'knowledge_drift') { ElMessage.warning('请在知识页验证当前分支的知识'); return; }
+        const kind = stage === 'content' ? 'CONTENT' : stage === 'graph' ? 'GRAPH' : stage === 'vectors' ? 'VECTORS' : 'PREPARE';
+        if (kind === 'VECTORS' && branches.context) {
+          await branchesApi.prepareVectors(branches.context);
+        } else if (kind === 'VECTORS') {
+          throw new Error(readScope.reason.value);
+        } else if (kind === 'CONTENT' || kind === 'GRAPH') {
+          if (!branches.context || readScope.blocked.value) throw new Error(readScope.reason.value);
+          await branchesApi.codeOperation(repositoryId, branchId, kind, branches.context.contextId);
+        } else {
+          await branchesApi.codeOperation(repositoryId, branchId, 'PREPARE');
+        }
+        if (isCurrent(repositoryId, version)) ElMessage.success('已提交当前分支任务，可在项目管理中查看进度');
+      } catch (cause) {
+        if (isCurrent(repositoryId, version)) ElMessage.error(cause instanceof Error ? cause.message : '分支任务提交失败');
+      } finally { if (isCurrent(repositoryId, version)) preparing.value = false; }
+      return;
+    }
     const version = contextVersion;
     preparing.value = true;
     try {
@@ -123,7 +167,7 @@ export function useProjectOverview() {
     throw new Error('项目仍在后台准备，请稍后刷新项目总览');
   }
 
-  watch(() => repositories.selectedRepositoryId, (repositoryId) => {
+  watch(() => [repositories.selectedRepositoryId, branches.identity] as const, ([repositoryId]) => {
     contextVersion++;
     preparing.value = false;
     void load(repositoryId);

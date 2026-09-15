@@ -44,9 +44,10 @@ class BranchPreparationJobsTest {
                     "CREATE TABLE accounts(id UUID PRIMARY KEY,username TEXT,display_name TEXT,account_role TEXT,enabled BOOLEAN,must_change_password BOOLEAN)");
             db.execute("CREATE TABLE repositories(id UUID PRIMARY KEY,deleted_at TIMESTAMPTZ)");
             db.execute(
-                    "CREATE TABLE repository_branches(id UUID PRIMARY KEY,repo_id UUID,UNIQUE(repo_id,id))");
+                    "CREATE TABLE repository_branches(id UUID PRIMARY KEY,repo_id UUID,tracking_status TEXT DEFAULT 'ACTIVE',UNIQUE(repo_id,id))");
             db.execute(
-                    "CREATE TABLE branch_snapshots(id UUID PRIMARY KEY,branch_id UUID,UNIQUE(branch_id,id))");
+                    "CREATE TABLE branch_snapshots(id UUID PRIMARY KEY,branch_id UUID,repo_id UUID,content_indexed_at TIMESTAMPTZ,UNIQUE(branch_id,id))");
+            db.execute("CREATE TABLE code_chunks(repo_id UUID,snapshot_id UUID)");
             try (var input =
                     getClass()
                             .getClassLoader()
@@ -58,7 +59,7 @@ class BranchPreparationJobsTest {
                     "INSERT INTO accounts VALUES(?,'owner','Owner','SUPER_ADMIN',TRUE,FALSE)",
                     account);
             db.update("INSERT INTO repositories VALUES(?,NULL)", repo);
-            db.update("INSERT INTO repository_branches VALUES(?,?)", branch, repo);
+            db.update("INSERT INTO repository_branches(id,repo_id) VALUES(?,?)", branch, repo);
             var actor =
                     new AuthenticatedAccount(
                             account, "owner", "Owner", AccountRole.SUPER_ADMIN, false, null);
@@ -78,7 +79,7 @@ class BranchPreparationJobsTest {
             // A stopped process leaves RUNNING and a fixed commit in storage.
             String commit = "a".repeat(40);
             db.update(
-                    "UPDATE branch_preparation_jobs SET status='RUNNING',target_commit=? WHERE id=?",
+                    "UPDATE branch_preparation_jobs SET status='RUNNING',target_commit=?,updated_at=CURRENT_TIMESTAMP-INTERVAL '2 hours' WHERE id=?",
                     commit,
                     first.id());
             doAnswer(
@@ -153,7 +154,22 @@ class BranchPreparationJobsTest {
             assertThat(knowledge.validations(actor, context)).isEmpty();
 
             db.update("UPDATE branch_preparation_jobs SET status='FAILED' WHERE status='QUEUED'");
-            db.update("INSERT INTO branch_snapshots VALUES(?,?)", snapshot, branch);
+            db.update(
+                    "INSERT INTO branch_snapshots VALUES(?,?,?,CURRENT_TIMESTAMP)",
+                    snapshot,
+                    branch,
+                    repo);
+            db.update(
+                    "INSERT INTO code_chunks VALUES(?,?),(?,?)",
+                    repo,
+                    snapshot,
+                    repo,
+                    next.snapshotId());
+            db.update(
+                    "INSERT INTO branch_snapshots VALUES(?,?,?,CURRENT_TIMESTAMP)",
+                    next.snapshotId(),
+                    branch,
+                    repo);
             var vectorJob = service.submitVectors(actor, context);
             assertThat(service.submitVectors(actor, context).id()).isEqualTo(vectorJob.id());
             assertThatThrownBy(() -> service.submitVectors(actor, next))

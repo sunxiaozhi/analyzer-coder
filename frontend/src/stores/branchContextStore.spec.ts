@@ -26,6 +26,15 @@ describe('branch context store', () => {
     vi.resetAllMocks();
   });
 
+  it('uses default branch only as an initial preference, without falling back from an unready choice', async () => {
+    vi.mocked(branchesApi.list).mockResolvedValue([branch('main'), branch('release', 'PENDING')]);
+    const store = useBranchContextStore();
+    await store.load('repo-1', null, 'release');
+    expect(store.selectedBranchId).toBe('release');
+    expect(store.context).toBeNull();
+    expect(branchesApi.context).not.toHaveBeenCalled();
+  });
+
   it('locks a ready branch and clears the previous context before switching', async () => {
     vi.mocked(branchesApi.list).mockResolvedValue([branch('main'), branch('release')]);
     vi.mocked(branchesApi.context).mockImplementation(async (repositoryId, branchId) => ({
@@ -56,5 +65,15 @@ describe('branch context store', () => {
     expect(store.selectedBranchId).toBe('feature');
     expect(store.context).toBeNull();
     expect(branchesApi.context).not.toHaveBeenCalled();
+  });
+
+  it('clears a previous loading state when selecting an unready branch', async () => {
+    const store = useBranchContextStore();
+    store.repositoryId = 'repo-1';
+    store.branches = [branch('feature', 'PENDING')];
+    store.loading = true;
+    await store.select('feature');
+    expect(store.loading).toBe(false);
+    expect(store.context).toBeNull();
   });
 });

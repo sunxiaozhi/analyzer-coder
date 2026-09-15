@@ -60,11 +60,10 @@ jobs:
           bash -n scripts/start.sh
           node scripts/check-runtime.mjs --help
 
-      - name: Validate quality and deterministic CI clients
+      - name: Validate retrieval quality
         run: |
           node scripts/evaluate-quality.mjs --validate
           node --test scripts/evaluate-quality.test.mjs
-          node --test scripts/ci-task-review.test.mjs
 
       - name: Test MCP thin adapter
         working-directory: mcp-server

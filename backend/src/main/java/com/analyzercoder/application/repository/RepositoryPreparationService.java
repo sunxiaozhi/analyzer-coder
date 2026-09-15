@@ -332,7 +332,7 @@ public class RepositoryPreparationService {
         return indexJobStore.findLatestByRepositoryId(repositoryId).orElse(null);
     }
 
-    static ProjectProfile profile(
+    public static ProjectProfile profile(
             List<RepositoryCodeBrowserService.FileEntry> files,
             VectorIndexQueryService.Summary summary,
             CodeGraphArtifactRow graph) {

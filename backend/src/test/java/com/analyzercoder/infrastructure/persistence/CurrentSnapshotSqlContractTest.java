@@ -26,7 +26,6 @@ class CurrentSnapshotSqlContractTest {
         parseMapper(configuration, "mappers/IndexJobMapper.xml");
         parseMapper(configuration, "mappers/KnowledgeDriftMapper.xml");
         parseMapper(configuration, "mappers/ProjectHealthMapper.xml");
-        parseMapper(configuration, "mappers/EngineeringProjectMapper.xml");
         parseMapper(configuration, "mappers/AccessTokenMapper.xml");
         parseMapper(configuration, "mappers/AuthMapper.xml");
     }
@@ -167,29 +166,6 @@ class CurrentSnapshotSqlContractTest {
                 .contains("knowledgeUpdateRequired")
                 .contains("jsonb_typeof(obligations_payload->'knowledgeUpdateRequired')='boolean'")
                 .contains("chk_knowledge_revision_obligations_payload");
-    }
-
-    @Test
-    void engineeringProjectsKeepCrossRepositoryScopeAndContractEvidenceVersioned()
-            throws Exception {
-        String migration = resource(BASELINE_MIGRATION);
-        String mapper = resource("mappers/EngineeringProjectMapper.xml");
-
-        assertThat(migration)
-                .contains("CREATE TABLE engineering_projects")
-                .contains("CREATE TABLE engineering_project_repositories")
-                .contains("CREATE TABLE engineering_project_contracts")
-                .contains("provider_content_fingerprint", "consumer_content_fingerprint")
-                .contains("UPDATE knowledge_cards")
-                .contains("UPDATE knowledge_card_revisions")
-                .contains("repositoryIds", "serviceNames", "contractIds")
-                .contains("chk_knowledge_revision_scope_payload");
-        assertThat(mapper)
-                .contains("source_repository.owner_account_id=#{actorId}")
-                .contains("chunk.snapshot_id=repository.current_snapshot_id")
-                .contains("target.normalized_service_name target_service_name")
-                .contains("provider_content_fingerprint")
-                .contains("consumer_content_fingerprint");
     }
 
     @Test

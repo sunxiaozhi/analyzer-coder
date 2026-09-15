@@ -1,6 +1,5 @@
 package com.analyzercoder.application.repository;
 
-import com.analyzercoder.application.project.EngineeringProjectService;
 import com.analyzercoder.domain.indexing.IndexJobStore;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryGovernanceMapper;
@@ -27,17 +26,14 @@ public class RepositoryGovernanceService {
     private final RepositoryGovernanceMapper mapper;
     private final AccessControlService access;
     private final IndexJobStore indexJobs;
-    private final EngineeringProjectService engineeringProjects;
 
     public RepositoryGovernanceService(
             RepositoryGovernanceMapper mapper,
             AccessControlService access,
-            IndexJobStore indexJobs,
-            EngineeringProjectService engineeringProjects) {
+            IndexJobStore indexJobs) {
         this.mapper = mapper;
         this.access = access;
         this.indexJobs = indexJobs;
-        this.engineeringProjects = engineeringProjects;
     }
 
     public List<RepositoryMemberRow> members(AuthenticatedAccount actor, UUID repositoryId) {
@@ -149,7 +145,6 @@ public class RepositoryGovernanceService {
         if (indexJobs.hasActiveJob(CodeRepositoryId.of(repositoryId))) {
             throw new IllegalStateException("仓库存在运行中的写任务，暂不能删除");
         }
-        engineeringProjects.requireRepositoryNotLinked(repositoryId);
 
         Instant now = Instant.now();
         if (mapper.markDeleting(repositoryId, repository.ownershipVersion()) != 1) {

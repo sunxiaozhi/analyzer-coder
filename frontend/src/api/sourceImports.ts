@@ -19,10 +19,8 @@ type RemoteInput = {
   projectDraftId?: string;
 };
 export const sourceImportsApi = {
-  remote: (input: RemoteInput) => request<Repository>('/api/repository-imports/remote', { method: 'POST', body: JSON.stringify(input) }),
   remoteJob: (input: RemoteInput) => request<RepositoryImportJob>('/api/repository-imports/remote-jobs', { method: 'POST', body: JSON.stringify(input) }),
   job: (id: string) => request<RepositoryImportJob>(`/api/repository-imports/jobs/${id}`),
-  cancel: (id: string) => request<RepositoryImportJob>(`/api/repository-imports/jobs/${id}/cancel`, { method: 'POST' }),
   zip: (name: string, file: File) => {
     const body = new FormData();
     body.set('name', name);

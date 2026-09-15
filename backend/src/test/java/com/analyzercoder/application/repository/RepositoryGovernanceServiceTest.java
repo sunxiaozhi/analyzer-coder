@@ -3,7 +3,6 @@ package com.analyzercoder.application.repository;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.analyzercoder.application.project.EngineeringProjectService;
 import com.analyzercoder.domain.indexing.IndexJobStore;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryGovernanceMapper;
@@ -25,7 +24,6 @@ class RepositoryGovernanceServiceTest {
     @Mock private RepositoryGovernanceMapper mapper;
     @Mock private AccessControlService access;
     @Mock private IndexJobStore indexJobs;
-    @Mock private EngineeringProjectService engineeringProjects;
     @InjectMocks private RepositoryGovernanceService service;
 
     @Test

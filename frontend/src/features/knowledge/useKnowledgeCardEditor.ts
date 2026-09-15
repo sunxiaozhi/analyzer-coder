@@ -17,7 +17,7 @@ function emptyForm(ownerAccountId: string | null): CardInput {
     enforcement: 'REFERENCE',
     ownerAccountId,
     scope: {
-      pathPatterns: [], symbols: [], modules: [], repositoryIds: [], serviceNames: [], contractIds: [],
+      pathPatterns: [], symbols: [], modules: [],
     },
     obligations: {
       requiredTests: [], requiredApproverAccountIds: [], instructions: [],
@@ -42,9 +42,6 @@ function cardForm(card: KnowledgeCard): CardInput {
       pathPatterns: [...card.scope.pathPatterns],
       symbols: [...card.scope.symbols],
       modules: [...card.scope.modules],
-      repositoryIds: [...(card.scope.repositoryIds ?? [])],
-      serviceNames: [...(card.scope.serviceNames ?? [])],
-      contractIds: [...(card.scope.contractIds ?? [])],
     },
     obligations: {
       requiredTests: [...card.obligations.requiredTests],
@@ -87,9 +84,6 @@ export function useKnowledgeCardEditor(currentAccountId: () => string | null) {
         pathPatterns: lines(scopeText.paths),
         symbols: lines(scopeText.symbols),
         modules: [...form.scope.modules],
-        repositoryIds: [...form.scope.repositoryIds],
-        serviceNames: [...form.scope.serviceNames],
-        contractIds: [...form.scope.contractIds],
       },
       obligations: {
         requiredTests: [...form.obligations.requiredTests],

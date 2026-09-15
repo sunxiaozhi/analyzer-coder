@@ -141,13 +141,6 @@ public class CodeEvidenceContextService {
                                             new ApplicabilityReason(
                                                     "SYMBOL_SCOPE", rule, "当前符号与知识卡片的适用符号精确一致")));
         }
-        if (card.scope().repositoryIds().contains(repository.id().value())) {
-            applicability.add(
-                    new ApplicabilityReason(
-                            "REPOSITORY_SCOPE",
-                            repository.id().value().toString(),
-                            "当前仓库位于知识卡片的显式仓库范围内"));
-        }
         if (applicability.isEmpty()) {
             return null;
         }

@@ -12,6 +12,7 @@ public class BranchContextInterceptor implements HandlerInterceptor {
             Pattern.compile("^/api/repositories/[0-9a-fA-F-]{36}(/.*)$");
     private static final List<Pattern> GET =
             patterns(
+                    "/branch-overview",
                     "/hybrid-search",
                     "/evidence-search",
                     "/code-evidence-context",

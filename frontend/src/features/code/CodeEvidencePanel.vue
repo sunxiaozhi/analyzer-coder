@@ -278,7 +278,7 @@ async function copyEvidence() {
 }
 
 watch(
-  () => [props.repositoryId, props.filePath, props.initialSymbol, props.snapshotId, props.autoAnalyze, props.initialDepth] as const,
+  () => [props.repositoryId, props.filePath, props.initialSymbol, props.snapshotId, props.contextId, props.autoAnalyze, props.initialDepth] as const,
   () => void load(true),
   { immediate: true },
 );

@@ -2,7 +2,8 @@
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue';
 import { branchesApi, type BranchContext, type BranchValidationCard, type BranchValidationState } from '@/api/branches';
 
-const props = defineProps<{ context: BranchContext; canManage: boolean }>();
+const props = defineProps<{ context: BranchContext; canManage: boolean; cardId?: string; cardRevision?: number }>();
+const emit = defineEmits<{ saved: [] }>();
 const cards = shallowRef<BranchValidationCard[]>([]);
 const selectedId = shallowRef('');
 const filter = shallowRef('');
@@ -22,7 +23,10 @@ async function load() {
   cards.value = []; selectedId.value = '';
   try {
     const rows = await branchesApi.validations(props.context);
-    if (version === sequence) cards.value = rows;
+    if (version === sequence) {
+      cards.value = props.cardId ? rows.filter(card => card.cardId === props.cardId && card.revision === props.cardRevision) : rows;
+      if (props.cardId) selectedId.value = cards.value[0]?.cardId ?? '';
+    }
   } catch (cause) { if (version === sequence) error.value = cause instanceof Error ? cause.message : '加载验证记录失败'; }
   finally { if (version === sequence) busy.value = false; }
 }
@@ -39,10 +43,11 @@ async function save() {
     cards.value = cards.value.map(row => row.cardId === card.cardId ? { ...row, state: nextState, note: nextNote } : row);
     // Updating the selected row resets its editor; announce success after that watcher.
     saved.value = true;
+    emit('saved');
   } catch (cause) { if (version === sequence) error.value = cause instanceof Error ? cause.message : '保存验证结果失败，请刷新知识后重试'; }
   finally { if (version === sequence) busy.value = false; }
 }
-watch(() => props.context.contextId, load, { immediate: true });
+watch(() => [props.context.contextId, props.cardId, props.cardRevision], load, { immediate: true });
 onBeforeUnmount(() => { ++sequence; });
 </script>
 
@@ -54,12 +59,12 @@ onBeforeUnmount(() => { ++sequence; });
       <p class="validation-hint">对照当前快照检查知识内容后记录结论。更新知识或代码快照后需要重新验证；检索仍使用当前阅读版本，请刷新阅读版本以采用新结论。</p>
       <el-alert v-if="error" :title="error" type="error" :closable="false" />
       <el-alert v-if="saved" title="验证结果已保存" type="success" :closable="false" />
-      <el-input v-model="filter" placeholder="筛选知识标题" aria-label="筛选待验证知识" clearable />
-      <el-select v-model="selectedId" placeholder="选择要验证的知识" aria-label="待验证知识" :disabled="busy" style="width: 100%">
+      <el-input v-if="!cardId" v-model="filter" placeholder="筛选知识标题" aria-label="筛选待验证知识" clearable />
+      <el-select v-if="!cardId" v-model="selectedId" placeholder="选择要验证的知识" aria-label="待验证知识" :disabled="busy" style="width: 100%">
         <el-option v-for="card in filtered" :key="card.cardId" :value="card.cardId" :label="`${card.title} · r${card.revision} · ${labels[card.state]}`" />
       </el-select>
       <el-button link :disabled="busy" @click="load">刷新知识与验证记录</el-button>
-      <p v-if="!busy && !cards.length" class="validation-hint">当前分支没有适用知识。请先创建知识或配置适用分支。</p>
+      <p v-if="!busy && !cards.length" class="validation-hint">当前分支没有匹配的适用知识修订。请刷新知识或检查适用分支。</p>
       <template v-if="selected">
         <pre class="validation-content">{{ selected.content }}</pre>
         <el-form label-position="top" :disabled="busy || !canManage" @submit.prevent="save">

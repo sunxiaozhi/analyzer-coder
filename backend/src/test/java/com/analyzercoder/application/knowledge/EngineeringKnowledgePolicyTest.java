@@ -30,8 +30,6 @@ class EngineeringKnowledgePolicyTest {
 
     @Test
     void normalizesRepositoryRelativeScopeWithoutLosingMeaning() {
-        UUID repositoryId = UUID.randomUUID();
-        UUID contractId = UUID.randomUUID();
         EngineeringKnowledgePolicy.ValidatedKnowledge result =
                 policy.validate(
                         "business_rule",
@@ -43,19 +41,14 @@ class EngineeringKnowledgePolicyTest {
                                         " backend\\src\\**\\refund\\** ",
                                         "backend/src/**/refund/**"),
                                 List.of(" RefundService "),
-                                List.of(" backend "),
-                                List.of(repositoryId),
-                                List.of(" ", "Order-Service"),
-                                List.of(contractId)),
+                                List.of(" backend ")),
                         new KnowledgeObligations(
                                 List.of(" ./mvnw test "), List.of(), List.of("检查退款边界")));
 
         assertThat(result.kind()).isEqualTo(KnowledgeKind.BUSINESS_RULE);
         assertThat(result.scope().pathPatterns()).containsExactly("backend/src/**/refund/**");
         assertThat(result.scope().symbols()).containsExactly("RefundService");
-        assertThat(result.scope().repositoryIds()).containsExactly(repositoryId);
-        assertThat(result.scope().serviceNames()).containsExactly("order-service");
-        assertThat(result.scope().contractIds()).containsExactly(contractId);
+        assertThat(result.scope().modules()).containsExactly("backend");
         assertThat(result.obligations().requiredTests()).containsExactly("./mvnw test");
     }
 

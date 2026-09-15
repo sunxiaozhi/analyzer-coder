@@ -50,7 +50,7 @@ async function bind(credential: RepositoryCredential) {
 }
 
 async function unbind() {
-  await ElMessageBox.confirm('解绑后，远程同步和拉取请求 / 合并请求审查将不可用。', '解绑访问凭据', { type: 'warning' });
+  await ElMessageBox.confirm('解绑后，远程同步和远程分支发现将不可用。', '解绑访问凭据', { type: 'warning' });
   saving.value = true;
   try {
     await repositoryCredentialsApi.unbindRepository(props.repositoryId);
@@ -69,7 +69,7 @@ async function unbind() {
     <header>
       <div>
         <strong>远程访问凭据</strong>
-        <p>用于远程同步以及拉取请求 / 合并请求的读取和评论；变更后立即生效。</p>
+        <p>用于远程同步和远程分支发现；变更后立即生效。</p>
       </div>
       <el-tag v-if="status?.credential" type="success">已绑定</el-tag>
       <el-tag v-else type="warning">未绑定</el-tag>

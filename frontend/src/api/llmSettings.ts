@@ -124,13 +124,6 @@ export const llmSettingsApi = {
       method: 'PUT',
       body: JSON.stringify(input),
     }),
-  provider: () => request<LlmProvider>('/api/settings/llm/provider'),
-  versions: () => request<LlmProvider[]>('/api/settings/llm/provider/versions'),
-  save: (input: LlmProviderInput) =>
-    request<LlmProvider>('/api/settings/llm/provider', {
-      method: 'PUT',
-      body: JSON.stringify(input),
-    }),
   startCheck: (configId: string) =>
     request<LlmConnectivityCheck>('/api/settings/llm/connectivity-checks', {
       method: 'POST',
@@ -138,10 +131,6 @@ export const llmSettingsApi = {
     }),
   check: (checkId: string) =>
     request<LlmConnectivityCheck>(`/api/settings/llm/connectivity-checks/${checkId}`),
-  cancelCheck: (checkId: string) =>
-    request<LlmConnectivityCheck>(`/api/settings/llm/connectivity-checks/${checkId}/cancel`, {
-      method: 'POST',
-    }),
   vectorModels: () => request<VectorModel[]>('/api/settings/llm/vector-models'),
   createVectorModel: (input: VectorModelInput) =>
     request<VectorModel>('/api/settings/llm/vector-models', {

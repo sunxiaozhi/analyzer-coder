@@ -6,6 +6,7 @@ import { getCodeAtlas, type AtlasView, type AtlasNode } from '@/api/codeAtlas';
 import { getRepositoryFile } from '@/api/repositories';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
+import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
 import { layoutAtlas } from '@/features/graph/atlasLayout';
 import { atlasFileType, fileIconUrl } from '@/features/graph/atlasFileType';
 
@@ -41,6 +42,7 @@ function chooseMode(value: '3d' | '2d') {
 }
 const repositories = useRepositoryStore();
 const branchContext = useBranchContextStore();
+const readScope = useBranchReadScope();
 const router = useRouter();
 const data = ref<AtlasView | null>(null);
 const loading = ref(false), error = ref(''), query = ref(''), module = ref('');
@@ -108,12 +110,16 @@ async function load() {
   const version = ++revision;
   clearSelection(); data.value = null; error.value = ''; resetCamera();
   if (!id) { loading.value = false; return; }
+  if (readScope.blocked.value) { loading.value = false; error.value = readScope.reason.value; return; }
   loading.value = true;
   try {
     const result = branchContext.context?.contextId
       ? await getCodeAtlas(id, module.value, query.value.trim(), branchContext.context.contextId)
       : await getCodeAtlas(id, module.value, query.value.trim());
-    if (version === revision && id === repositories.selectedRepositoryId) { data.value = result; resetCamera(); }
+    if (version === revision && id === repositories.selectedRepositoryId) {
+      if (branchContext.context && result.snapshotId !== branchContext.context.snapshotId) throw new Error('图谱与当前分支快照不一致，请重新构建该分支图谱。');
+      data.value = result; resetCamera();
+    }
   } catch (e) { if (version === revision) error.value = e instanceof Error ? e.message : '图谱加载失败'; }
   finally { if (version === revision) loading.value = false; }
 }
@@ -138,7 +144,7 @@ async function select(node: AtlasNode) {
 function expand(node: AtlasNode) { if (node.kind === 'MODULE') { module.value = node.module; query.value = ''; void load(); } }
 function openSource() {
   if (!selected.value || !data.value) return;
-  void router.push({ name: 'search', query: { path: selected.value.filePath, snapshotId: data.value.snapshotId, startLine: String(selected.value.startLine || 1) } });
+  void router.push({ name: 'search', query: { path: selected.value.filePath, snapshotId: data.value.snapshotId, startLine: String(selected.value.startLine || 1), branchId: branchContext.context?.branchId, contextId: branchContext.context?.contextId } });
 }
 function pointerDown(event: PointerEvent) {
   if (event.button !== 0 || (event.target as Element).closest('[data-node]')) return;

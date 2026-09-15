@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, expect, it, vi } from 'vitest';
 import ElementPlus from 'element-plus';
 import { branchesApi, type BranchContext, type BranchValidationCard } from '@/api/branches';
-import BranchKnowledgeValidationPanel from './BranchKnowledgeValidationPanel.vue';
+import KnowledgeBranchValidationPanel from './KnowledgeBranchValidationPanel.vue';
 
 vi.mock('@/api/branches', () => ({ branchesApi: { validations: vi.fn(), validate: vi.fn() } }));
 afterEach(() => vi.resetAllMocks());
@@ -12,7 +12,7 @@ const card: BranchValidationCard = { cardId: 'card', revision: 3, title: '退款
 it('requires a note and saves the selected revision against the pinned context', async () => {
   vi.mocked(branchesApi.validations).mockResolvedValue([card]);
   vi.mocked(branchesApi.validate).mockResolvedValue(undefined);
-  const wrapper = mount(BranchKnowledgeValidationPanel, { props: { context, canManage: true }, global: { plugins: [ElementPlus] } });
+  const wrapper = mount(KnowledgeBranchValidationPanel, { props: { context, canManage: true }, global: { plugins: [ElementPlus] } });
   await flushPromises();
   await wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'card');
   await flushPromises();
@@ -31,7 +31,7 @@ it('ignores a late response after the branch context changes', async () => {
   let resolveOld!: (rows: BranchValidationCard[]) => void;
   vi.mocked(branchesApi.validations).mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }))
     .mockResolvedValueOnce([]);
-  const wrapper = mount(BranchKnowledgeValidationPanel, { props: { context, canManage: false }, global: { plugins: [ElementPlus] } });
+  const wrapper = mount(KnowledgeBranchValidationPanel, { props: { context, canManage: false }, global: { plugins: [ElementPlus] } });
   await wrapper.setProps({ context: { ...context, contextId: 'new-context', branchName: 'main' } });
   await flushPromises();
   resolveOld([card]);
@@ -39,5 +39,24 @@ it('ignores a late response after the branch context changes', async () => {
   expect(wrapper.text()).toContain('0 条适用知识');
   expect(wrapper.text()).not.toContain('保存验证结果');
   expect(branchesApi.validate).not.toHaveBeenCalled();
+  wrapper.unmount();
+});
+
+
+it('auto-selects the detail revision and emits saved with the pinned branch identity', async () => {
+  vi.mocked(branchesApi.validations).mockResolvedValue([card, { ...card, cardId: 'other', title: '其他知识' }]);
+  vi.mocked(branchesApi.validate).mockResolvedValue(undefined);
+  const wrapper = mount(KnowledgeBranchValidationPanel, { props: { context, canManage: true, cardId: card.cardId, cardRevision: card.revision }, global: { plugins: [ElementPlus] } });
+  await flushPromises();
+  expect(wrapper.text()).toContain(card.content);
+  expect(wrapper.text()).not.toContain('其他知识');
+  await wrapper.get('textarea').setValue('已对照当前分支快照');
+  await wrapper.get('form').trigger('submit');
+  await flushPromises();
+  expect(wrapper.emitted('saved')).toHaveLength(1);
+  expect(branchesApi.validate).toHaveBeenCalledWith(context, card, 'UNVERIFIED', '已对照当前分支快照');
+  await wrapper.setProps({ cardRevision: card.revision + 1 });
+  await flushPromises();
+  expect(wrapper.find('form').exists()).toBe(false);
   wrapper.unmount();
 });

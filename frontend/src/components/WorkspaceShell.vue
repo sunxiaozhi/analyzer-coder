@@ -27,7 +27,6 @@ import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useWorkspaceTabsStore, type WorkspaceTab } from '@/stores/workspaceTabs';
 import WorkspaceTabs from '@/components/WorkspaceTabs.vue';
 import ProductLogo from '@/components/ProductLogo.vue';
-import BranchWorkspace from '@/features/branches/BranchWorkspace.vue';
 import {
   workspaceNavigation,
   type WorkspaceNavIcon,
@@ -38,7 +37,6 @@ const branchContext = useBranchContextStore();
 const workspaceTabs = useWorkspaceTabsStore();
 const refreshVersions = reactive<Record<string, number>>({});
 const systemOpen = shallowRef(true);
-const branchesOpen = shallowRef(false);
 const iconComponents: Record<WorkspaceNavIcon, object> = {
   overview: LayoutDashboard,
   atlas: Orbit,
@@ -64,7 +62,7 @@ const branchAwareRepository = computed(() => {
   const sourceType = repositoryStore.selectedRepository?.sourceType;
   return sourceType === 'LOCAL_GIT' || sourceType === 'REMOTE_GIT' || sourceType === 'GITLAB';
 });
-const titles: Record<string, string> = { help: '功能导航', mcp: 'MCP 接入', overview: '项目总览', repositories: '项目管理', indexing: '索引任务', search: '代码与知识', ask: '问项目', graph: '代码与知识', knowledge: '知识库', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
+const titles: Record<string, string> = { help: '功能导航', mcp: 'MCP 接入', overview: '项目总览', repositories: '项目管理', indexing: '任务中心', search: '联合检索', ask: '项目问答', graph: '联合检索', knowledge: '知识管理', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
 const pageTitle = computed(() => route.name === 'atlas' ? '代码图谱' : titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
 async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }
@@ -186,7 +184,6 @@ watch(
   ([repositoryId]) => {
     if (!branchAwareRepository.value) {
       branchContext.clear();
-      branchesOpen.value = false;
       if (route.query.branchId || route.query.contextId) {
         const query = { ...route.query };
         delete query.branchId;
@@ -196,7 +193,7 @@ watch(
       return;
     }
     const preferred = typeof route.query.branchId === 'string' ? route.query.branchId : null;
-    void branchContext.load(repositoryId, preferred).then(async () => {
+    void branchContext.load(repositoryId, preferred, repositoryStore.selectedRepository?.branch).then(async () => {
       if (!branchContext.context || route.query.branchId === branchContext.context.branchId) return;
       await router.replace({
         query: {
@@ -286,7 +283,6 @@ onMounted(() => {
         @close-all="closeAllTabs"
         @copy-link="copyTabLink"
       />
-      <el-button v-if="repositoryStore.selectedRepositoryId && branchAwareRepository" class="branch-entry" link type="primary" @click="branchesOpen = true">分支工作区</el-button>
       </div>
 
       <div class="route-view">
@@ -300,15 +296,6 @@ onMounted(() => {
         </RouterView>
       </div>
     </div>
-    <el-drawer v-model="branchesOpen" title="分支工作区" size="min(760px, 96vw)" destroy-on-close>
-      <BranchWorkspace v-if="branchesOpen && repositoryStore.selectedRepositoryId && branchAwareRepository" :key="repositoryStore.selectedRepositoryId"
-        :repository-id="repositoryStore.selectedRepositoryId"
-        :can-maintain="repositoryStore.selectedRepository?.capabilities.canUpdate ?? false"
-        :can-manage="repositoryStore.selectedRepository?.capabilities.canConfigure ?? false"
-        :remote-source="['REMOTE_GIT', 'GITLAB'].includes(repositoryStore.selectedRepository?.sourceType ?? '')"
-        show-branch-list
-        @changed="refreshBranchContext" />
-    </el-drawer>
   </main>
 </div></template>
 
@@ -316,7 +303,6 @@ onMounted(() => {
 .page-frame { grid-template-rows: 44px minmax(0, 1fr); }
 .workspace-tab-row { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .workspace-tab-row > :first-child { flex: 1; min-width: 0; }
-.branch-entry { flex: none; margin-right: 12px; }
 .branch-lock { display: flex; min-width: 0; align-items: center; gap: 6px; margin-left: 8px; padding: 3px 5px 3px 8px; color: #8a5a20; border: 1px solid #e3d0b5; border-radius: 6px; background: #fff9ef; }
 .branch-lock[data-ready='true'] { color: #275f4a; border-color: #bad8ca; background: #f1f8f5; }
 .global-branch-switcher { width: 176px; }

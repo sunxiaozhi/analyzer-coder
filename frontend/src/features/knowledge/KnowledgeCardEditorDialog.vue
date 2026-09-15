@@ -50,9 +50,6 @@ const scopeReady = computed(() => Boolean(
   scopeText.paths.trim()
   || scopeText.symbols.trim()
   || form.scope.modules.length
-  || form.scope.repositoryIds.length
-  || form.scope.serviceNames.length
-  || form.scope.contractIds.length,
 ));
 
 watch(

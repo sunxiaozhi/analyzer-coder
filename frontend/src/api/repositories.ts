@@ -202,14 +202,6 @@ export function startIndex(repositoryId: string, type: IndexJobType): Promise<In
   });
 }
 
-export function listIndexJobs(): Promise<IndexJob[]> {
-  return request<IndexJob[]>('/api/index-jobs');
-}
-
-export function getLatestIndexStatus(repositoryId: string): Promise<IndexJob> {
-  return request<IndexJob>(`/api/repositories/${repositoryId}/index/status`);
-}
-
 export function getIndexJob(indexJobId: string): Promise<IndexJob> {
   return request<IndexJob>(`/api/index-jobs/${indexJobId}`);
 }
@@ -225,12 +217,16 @@ export function listChunks(
   const suffix = search.toString() ? `?${search}` : '';
   return request<CodeChunkListResponse>(`/api/repositories/${repositoryId}/chunks${suffix}`);
 }
-export function syncRemoteRepository(repositoryId: string): Promise<RescanRepositoryResponse & { indexJobId: string | null }> {
-  return request(`/api/repositories/${repositoryId}/sync`, { method: 'POST' });
-}
-
 export function getRepositoryProfile(repositoryId: string): Promise<RepositoryPreparation> {
   return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/profile`);
+}
+export interface BranchOverview {
+  preparation: RepositoryPreparation;
+  codeFacts: ProjectCodeFacts;
+  health: ProjectHealthOverview;
+}
+export function getBranchOverview(repositoryId: string, contextId: string): Promise<BranchOverview> {
+  return request<BranchOverview>(`/api/repositories/${repositoryId}/branch-overview`, branchContextOptions(contextId));
 }
 export function getProjectHealthOverview(repositoryId: string): Promise<ProjectHealthOverview> {
   return request<ProjectHealthOverview>(`/api/repositories/${repositoryId}/health-overview`);
@@ -262,13 +258,4 @@ export function getRepositoryFile(repositoryId: string, path: string, contextId?
     `/api/repositories/${repositoryId}/files/content?path=${encodeURIComponent(path)}`,
     branchContextOptions(contextId),
   );
-}
-
-export interface ProjectArchitectureRisk {
-  id: string;
-  severity: 'HIGH' | 'MEDIUM' | 'LOW';
-  type: 'CYCLE' | 'BOUNDARY' | 'INSECURE_TRANSPORT';
-  title: string;
-  detail: string;
-  modules: string[];
 }

@@ -12,9 +12,9 @@ describe('workspaceNavigation', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].items.map(item => item.label)).toEqual([
       '项目总览',
-      '代码与知识',
+      '联合检索',
       '代码图谱',
-      '问项目',
+      '项目问答',
     ]);
   });
 
@@ -26,7 +26,7 @@ describe('workspaceNavigation', () => {
     });
 
     expect(groups.map(group => group.label)).toEqual(['研发工作', '项目维护']);
-    expect(groups[1].items.map(item => item.label)).toEqual(['知识库', '项目管理']);
+    expect(groups[1].items.map(item => item.label)).toEqual(['知识管理', '分支任务', '项目管理']);
   });
 
   it('nests all four administrator operations in one system group', () => {
@@ -39,7 +39,7 @@ describe('workspaceNavigation', () => {
 
     expect(system?.collapsible).toBe(true);
     expect(system?.items.map(item => item.label)).toEqual([
-      '索引任务',
+      '任务中心',
       '模型配置',
       '账号权限',
       '审计日志',

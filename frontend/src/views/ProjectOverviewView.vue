@@ -43,6 +43,7 @@ function openSearch() {
 
     <el-alert v-else-if="error" :title="error" type="error" :closable="false">
       <el-button size="small" @click="reload">重新加载</el-button>
+      <el-button size="small" @click="router.push('/repositories')">管理当前分支</el-button>
     </el-alert>
 
     <ProjectOverviewSheet

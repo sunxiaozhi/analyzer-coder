@@ -1,0 +1,31 @@
+import { effectScope, reactive } from 'vue';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { useBranchContextStore } from '@/stores/branchContextStore';
+import { useBranchReadScope } from './useBranchReadScope';
+const repositories=reactive({ selectedRepositoryId:'p', selectedRepository:{sourceType:'LOCAL_GIT'} });
+vi.mock('@/stores/repositoryStore',()=>({useRepositoryStore:()=>repositories}));
+beforeEach(()=>{setActivePinia(createPinia());repositories.selectedRepository.sourceType='LOCAL_GIT';});
+it('blocks Git reads until repository and selected branch match the pinned context',()=>{
+  const branches=useBranchContextStore();
+  const scope=effectScope();
+  const reads=scope.run(useBranchReadScope)!;
+  expect(reads.blocked.value).toBe(true);
+  branches.selectedBranchId='b';
+  branches.context={contextId:'ctx',repositoryId:'p',branchId:'b',branchName:'main',snapshotId:'s',commitSha:'a',expiresAt:''};
+  expect(reads.blocked.value).toBe(false);
+  branches.selectedBranchId='other';
+  expect(reads.blocked.value).toBe(true);
+  branches.context=null;
+  branches.error='上下文失效';
+  expect(reads.reason.value).toBe('上下文失效');
+  scope.stop();
+});
+it('keeps ZIP single-version reads available',()=>{
+  repositories.selectedRepository.sourceType='ZIP';
+  const scope=effectScope();
+  const reads=scope.run(useBranchReadScope)!;
+  expect(reads.requiresContext.value).toBe(false);
+  expect(reads.blocked.value).toBe(false);
+  scope.stop();
+});

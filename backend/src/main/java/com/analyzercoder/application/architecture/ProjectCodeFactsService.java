@@ -74,6 +74,17 @@ public class ProjectCodeFactsService {
                 Instant.now());
     }
 
+    public CodeFacts analyze(com.analyzercoder.domain.repository.CodeRepository repository) {
+        return analyze(
+                browser.list(repository),
+                path -> browser.read(repository, path).content(),
+                architecture.map(repository),
+                codeGraph.latestSnapshot(
+                        repository.id().value(), repository.currentSnapshotId().value()),
+                json,
+                Instant.now());
+    }
+
     static CodeFacts analyze(
             RepositoryCodeBrowserService.SnapshotFiles snapshot,
             Function<String, String> contentReader,

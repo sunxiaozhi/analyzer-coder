@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import type { BranchContext } from '@/api/branches';
+import KnowledgeBranchValidationPanel from './KnowledgeBranchValidationPanel.vue';
 import type { CodeReference, KnowledgeCard, KnowledgeDriftEvent } from '@/api/intelligence';
 import { statusLabel as localizeStatus } from '@/utils/displayLabels';
 import KnowledgeAttachmentList from './KnowledgeAttachmentList.vue';
@@ -11,8 +13,11 @@ const props = defineProps<{
   driftLoading: boolean;
   canMaintain: boolean;
   sourceReviewLoading: boolean;
+  branchContext?: BranchContext | null;
+  canManage?: boolean;
 }>();
 const emit = defineEmits<{
+  branchValidated: [];
   openCode: [reference: CodeReference];
   openGraph: [reference: CodeReference];
   openDrift: [event: KnowledgeDriftEvent];
@@ -71,6 +76,9 @@ const hasScope = computed(() => Boolean(props.card && (
         @open-diff="emit('openDrift', $event)"
         @review="emit('sourceReview', $event)"
       />
+      <KnowledgeBranchValidationPanel v-if="visible && branchContext && branchContext.repositoryId === card.repositoryId"
+        :context="branchContext" :card-id="card.id" :card-revision="card.revision" :can-manage="canManage ?? false"
+        @saved="emit('branchValidated')" />
       <div class="detail-content" v-html="card.renderedContent" />
       <div v-if="card.tags.length" class="detail-tags">
         <span v-for="tag in card.tags" :key="tag"># {{ tag }}</span>

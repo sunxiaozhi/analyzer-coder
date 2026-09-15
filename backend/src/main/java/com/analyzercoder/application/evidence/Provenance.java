@@ -30,64 +30,14 @@ public record Provenance(
         List<String> relationPath,
         String retrievalChannel,
         String findingId,
-        String detail,
-        UUID engineeringProjectId,
-        String serviceName,
-        UUID contractId) {
-
-    /** 兼容跨仓库平台事实加入前的构造调用。 */
-    public Provenance(
-            UUID id,
-            TruthSource sourceType,
-            UUID repositoryId,
-            UUID snapshotId,
-            String commitSha,
-            String worktreeDigest,
-            String filePath,
-            String symbolName,
-            String symbolKind,
-            Integer startLine,
-            Integer endLine,
-            String contentHash,
-            UUID knowledgeCardId,
-            Integer knowledgeRevision,
-            String knowledgeReviewStatus,
-            String graphArtifactId,
-            List<String> relationPath,
-            String retrievalChannel,
-            String findingId,
-            String detail) {
-        this(
-                id,
-                sourceType,
-                repositoryId,
-                snapshotId,
-                commitSha,
-                worktreeDigest,
-                filePath,
-                symbolName,
-                symbolKind,
-                startLine,
-                endLine,
-                contentHash,
-                knowledgeCardId,
-                knowledgeRevision,
-                knowledgeReviewStatus,
-                graphArtifactId,
-                relationPath,
-                retrievalChannel,
-                findingId,
-                detail,
-                null,
-                null,
-                null);
-    }
+        String detail) {
 
     public Provenance {
         Objects.requireNonNull(sourceType, "sourceType must not be null");
         relationPath = relationPath == null ? List.of() : List.copyOf(relationPath);
         detail = safe(detail, "未提供来源说明");
         if (id == null) {
+            // 保持已有通用来源的稳定 ID，兼容旧格式的三个空扩展位。
             id =
                     stableId(
                             sourceType,
@@ -104,18 +54,12 @@ public record Provenance(
                             retrievalChannel,
                             findingId,
                             detail,
-                            engineeringProjectId,
-                            serviceName,
-                            contractId);
+                            null,
+                            null,
+                            null);
         }
         switch (sourceType) {
             case GIT_FACT, CODE_FACT -> requireVersion(snapshotId, commitSha, worktreeDigest);
-            case PLATFORM_FACT -> {
-                requireVersion(snapshotId, commitSha, worktreeDigest);
-                if (repositoryId == null) {
-                    throw new IllegalArgumentException("平台关系事实必须包含目标仓库");
-                }
-            }
             case VERIFIED_KNOWLEDGE ->
                     requireKnowledge(knowledgeCardId, knowledgeRevision, knowledgeReviewStatus);
             case GRAPH_INFERENCE -> {
@@ -229,41 +173,6 @@ public record Provenance(
                 null,
                 null,
                 detail);
-    }
-
-    public static Provenance platformFact(
-            UUID repositoryId,
-            UUID snapshotId,
-            String commitSha,
-            String filePath,
-            UUID engineeringProjectId,
-            String serviceName,
-            UUID contractId,
-            String detail) {
-        return new Provenance(
-                null,
-                TruthSource.PLATFORM_FACT,
-                repositoryId,
-                snapshotId,
-                commitSha,
-                null,
-                filePath,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                List.of(),
-                null,
-                null,
-                detail,
-                engineeringProjectId,
-                serviceName,
-                contractId);
     }
 
     public static Provenance graphInference(

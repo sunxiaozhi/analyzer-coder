@@ -32,12 +32,13 @@ describe('workspace critical routes', () => {
     expect(new Set(namedRoutes.map(route => route.path)).size).toBe(namedRoutes.length);
   });
 
-  it('keeps maintenance and system operations behind explicit route metadata', () => {
+  it('allows project branch tasks while restricting system operations', () => {
     const routes = new Map(router.getRoutes().map(route => [String(route.name), route]));
 
     expect(routes.get('knowledge')?.meta.repositoryRead).toBe(true);
     expect(routes.get('repositories')?.meta.projectManage).toBe(true);
-    for (const name of ['indexing', 'settings', 'accounts', 'audit']) {
+    expect(routes.get('indexing')?.meta.admin).not.toBe(true);
+    for (const name of ['settings', 'accounts', 'audit']) {
       expect(routes.get(name)?.meta.admin).toBe(true);
     }
   });

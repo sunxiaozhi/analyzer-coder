@@ -130,7 +130,7 @@ const workflowCards = computed<GuideCard[]>(() => {
     {
       key: 'knowledge',
       number: '03',
-      title: '知识库',
+      title: '知识管理',
       description: '查看项目 Markdown 与知识卡片；有维护权限时可补充项目约束。',
       source: 'knowledge_cards、Markdown 来源与漂移记录',
       status: knowledge.status,
@@ -143,7 +143,7 @@ const workflowCards = computed<GuideCard[]>(() => {
     {
       key: 'code',
       number: '04',
-      title: '代码与知识',
+      title: '联合检索',
       description: '用一个查询同时检索源码片段与项目知识，并回到原始文件和行号核对。',
       source: '当前快照、code_chunks 与已发布知识',
       status: code.status,
@@ -156,7 +156,7 @@ const workflowCards = computed<GuideCard[]>(() => {
     {
       key: 'ask',
       number: '05',
-      title: '问项目',
+      title: '项目问答',
       description: '需要自然语言总结时再使用问答，并从引用返回代码或知识证据。',
       source: '联合检索结果与可选问答模型',
       status: ask.status,
@@ -173,9 +173,9 @@ const administrationCards: GuideCard[] = [
   {
     key: 'jobs',
     number: 'A1',
-    title: '索引任务',
-    description: '查看后台准备任务、当前步骤、失败原因和重试结果。',
-    source: 'index_jobs 与可见仓库信息',
+    title: '任务中心',
+    description: '查看普通索引和分支准备任务的阶段、失败原因及历史详情。',
+    source: 'index_jobs、branch_preparation_jobs 与可见仓库信息',
     status: '管理员功能',
     statusTone: 'neutral',
     action: '查看任务',

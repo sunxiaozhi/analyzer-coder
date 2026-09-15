@@ -89,6 +89,16 @@ public class ProjectArchitectureMapService {
                                 Instant.now()));
     }
 
+    /** Analyze an immutable branch repository without consulting the default pointer. */
+    public ArchitectureMap map(com.analyzercoder.domain.repository.CodeRepository repository) {
+        var snapshot = browser.list(repository);
+        return analyze(
+                repository.id(),
+                snapshot,
+                path -> browser.read(repository, path).content(),
+                Instant.now());
+    }
+
     private String readSnapshotContent(
             CodeRepositoryId repositoryId,
             RepositoryCodeBrowserService.SnapshotFiles snapshot,
