@@ -66,3 +66,25 @@ it('rejects mixed branch overview measurements',async()=>{
     expect(result.preparation.value).toBeNull();
   } finally {scope.stop();}
 });
+
+it('shows loading while the branch snapshot is being pinned and loads the overview when ready', async () => {
+  branches.loading = true;
+  branches.identity = 'loading';
+  const scope = effectScope();
+  const result = scope.run(useProjectOverview)!;
+  try {
+    await flushPromises();
+    expect(result.loading.value).toBe(true);
+    expect(result.error.value).toBeNull();
+    expect(api.getBranchOverview).not.toHaveBeenCalled();
+    expect(api.getRepositoryProfile).not.toHaveBeenCalled();
+
+    pin();
+    branches.loading = false;
+    await flushPromises();
+    expect(api.getBranchOverview).toHaveBeenCalledWith('p', 'ctx-s');
+    expect(result.preparation.value?.snapshotId).toBe('s');
+    expect(result.loading.value).toBe(false);
+    expect(result.error.value).toBeNull();
+  } finally { scope.stop(); }
+});

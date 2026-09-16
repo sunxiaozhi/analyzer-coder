@@ -195,7 +195,7 @@ describe('ProjectOverviewSheet', () => {
     expect(wrapper.emitted('openKnowledge')).toHaveLength(1);
   });
 
-  it('offers a retry action on the exact degraded preparation stage', async () => {
+  it('routes degraded preparation stages to project management', async () => {
     const degraded = {
       ...preparation,
       state: 'DEGRADED',
@@ -207,7 +207,7 @@ describe('ProjectOverviewSheet', () => {
 
     await wrapper.get('.stage-title button').trigger('click');
 
-    expect(wrapper.emitted('retryStage')).toEqual([['vectors']]);
+    expect(wrapper.emitted('openManagement')).toHaveLength(1);
   });
 });
 

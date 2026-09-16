@@ -26,6 +26,7 @@
 ## 启动
 
 - Linux 源码启动：`bash scripts/start.sh`
+- Linux 预构建宿主机启动（已有前端 dist、后端 JAR、本机 PostgreSQL 和 Nginx）：`bash scripts/start-prebuilt-host.sh`
 - 后端：准备 PostgreSQL/pgvector 后运行 Spring Boot，详见 [后端说明](backend/README.md)
 - 前端：`npm --prefix frontend ci`，然后 `npm --prefix frontend run dev`
 - 环境诊断：`node scripts/check-runtime.mjs`

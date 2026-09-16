@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
   codeEvidenceContext: vi.fn(),
@@ -13,6 +13,10 @@ vi.mock('@/api/intelligence', async importOriginal => {
   return { ...original, intelligenceApi: { ...original.intelligenceApi, ...api } };
 });
 
+const push = vi.hoisted(() => vi.fn());
+vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }));
+vi.mock('@/stores/branchContextStore', () => ({ useBranchContextStore: () => ({ context: { branchId: 'release' } }) }));
+beforeEach(() => vi.clearAllMocks());
 import CodeEvidencePanel from './CodeEvidencePanel.vue';
 
 describe('CodeEvidencePanel', () => {
@@ -70,87 +74,13 @@ describe('CodeEvidencePanel', () => {
 
     expect(api.codeEvidenceContext)
       .toHaveBeenCalledWith('repo-1', 'src/RefundService.java', 'approveRefund');
+    expect(wrapper.text()).not.toContain('代码关系');
+    expect(api.latestGraph).not.toHaveBeenCalled();
+    expect(api.graph).not.toHaveBeenCalled();
+    await wrapper.get('.context-actions button').trigger('click');
+    expect(push).toHaveBeenCalledWith({ name: 'atlas', query: { path: 'src/RefundService.java', symbol: 'approveRefund', snapshotId: 'snapshot-1', contextId: undefined, branchId: 'release' } });
     expect(wrapper.text()).toContain('退款审批规则');
     expect(wrapper.text()).toContain('可信知识');
     expect(wrapper.text()).toContain('不把关键词相似结果冒充适用规则');
-  });
-});
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>(done => { resolve = done; });
-  return { promise, resolve };
-}
-
-function graphFixture(snapshotId = 'snapshot-1') {
-  return {
-    snapshotId, nodes: [
-      { id: 'a', symbol: 'caller', filePath: 'a.ts', startLine: 1, endLine: 2 },
-      { id: 'b', symbol: 'callee', filePath: 'b.ts', startLine: 4, endLine: 5 },
-    ],
-    edges: [{ id: 'edge', source: 'a', target: 'b', relation: 'CALLS' }],
-    paths: [{ targetNodeId: 'b', nodeIds: ['a', 'b'], edgeIds: ['edge'], depth: 1 }],
-    coverage: { complete: true, representedAffectedRecordCount: 1, affectedRecordCount: 1 },
-    limitations: [], affectedNodeCount: 1, maxDepthReached: 1,
-  };
-}
-
-function mountRelations() {
-  api.codeEvidenceContext.mockResolvedValue({ knowledgeReferences: [], limitations: [] });
-  api.latestGraph.mockResolvedValue({ snapshotId: 'snapshot-1', cliVersion: 'test', nodeCount: 2 });
-  return mount(CodeEvidencePanel, {
-    props: { repositoryId: 'repo-1', filePath: 'a.ts', initialSymbol: 'caller', snapshotId: 'snapshot-1', autoAnalyze: true },
-    global: { stubs: { 'el-input': true, 'el-input-number': true, 'el-button': true } },
-  });
-}
-
-describe('graph context integrity', () => {
-  it('does not display a slow relation response after switching files', async () => {
-    const old = deferred<ReturnType<typeof graphFixture>>();
-    api.graph.mockReturnValueOnce(old.promise);
-    const wrapper = mountRelations();
-    await flushPromises();
-    await wrapper.setProps({ filePath: 'c.ts', initialSymbol: null, autoAnalyze: false });
-    await flushPromises();
-    old.resolve(graphFixture());
-    await flushPromises();
-    expect(wrapper.find('.relation-summary').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('renders the real edge direction and describes mapping coverage accurately', async () => {
-    api.graph.mockResolvedValue(graphFixture());
-    const wrapper = mountRelations();
-    await flushPromises();
-    await wrapper.findAll('.context-tabs button')[0].trigger('click');
-    expect(wrapper.find('.path-chain small').text()).toBe('→ CALLS');
-    expect(wrapper.find('.coverage').text()).toContain('返回记录已完整映射');
-    expect(wrapper.text()).not.toContain('路径覆盖完整');
-    await wrapper.find('.path-chain button').trigger('click');
-    expect(wrapper.emitted('openFile')?.[0]).toEqual(['a.ts', 1, 2]);
-    wrapper.unmount();
-  });
-
-  it('rejects a response from a different snapshot', async () => {
-    api.graph.mockResolvedValue(graphFixture('new-snapshot'));
-    const wrapper = mountRelations();
-    await flushPromises();
-    await wrapper.findAll('.context-tabs button')[0].trigger('click');
-    expect(wrapper.text()).toContain('代码快照已更新');
-    expect(wrapper.find('.relation-summary').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('refreshes a completed graph query instead of clearing it without reloading', async () => {
-    api.graph.mockResolvedValue(graphFixture());
-    const wrapper = mountRelations();
-    await flushPromises();
-    await wrapper.findAll('.context-tabs button')[0].trigger('click');
-    const calls = api.graph.mock.calls.length;
-    await wrapper.find('[title="刷新文件证据和图谱状态"]').trigger('click');
-    await flushPromises();
-    expect(api.graph).toHaveBeenCalledTimes(calls + 1);
-    expect(wrapper.find('.relation-summary').exists()).toBe(true);
-    wrapper.unmount();
   });
 });

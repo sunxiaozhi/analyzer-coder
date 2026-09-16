@@ -17,7 +17,6 @@ const {
   error,
   reload,
   prepare,
-  retryStage,
 } = useProjectOverview();
 
 const repository = computed(() => repositories.selectedRepository);
@@ -29,6 +28,10 @@ function openKnowledge() {
 
 function openSearch() {
   void router.push('/search');
+}
+
+function openManagement() {
+  void router.push('/repositories');
 }
 </script>
 
@@ -58,7 +61,7 @@ function openSearch() {
       :preparing="preparing"
       @refresh="reload"
       @prepare="prepare"
-      @retry-stage="retryStage"
+      @open-management="openManagement"
       @open-search="openSearch"
       @open-knowledge="openKnowledge"
     />

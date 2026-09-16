@@ -1,6 +1,6 @@
 # 发布部署文件
 
-当前 Linux 部署只有一个应用启动入口：
+需要从源码构建并使用 Docker 组件时，使用以下启动入口：
 
 ```bash
 bash scripts/start.sh
@@ -44,3 +44,15 @@ bash install.sh
 - `analyzer-coder-components.env.example`：组件模式 systemd 环境模板。
 
 所有占位密码、域名和证书路径必须在使用前替换。
+
+## 预构建宿主机启动（无 Docker）
+
+前端和后端已经构建完成，并且 PostgreSQL/pgvector 与 Nginx 已安装在宿主机时：
+
+```bash
+cp deploy/analyzer-coder.env.example .env.application
+# 修改密码、目录和密钥，并让 Nginx root 指向 frontend/dist。
+bash scripts/start-prebuilt-host.sh --reload-nginx
+```
+
+该脚本不会执行 npm、Maven 或 Docker。它会验证 `frontend/dist/index.html`、定位 `backend/target` 中唯一的应用 JAR、检查或启动本机 PostgreSQL 和 Nginx，然后启动后端并等待健康检查。服务名不同时可设置 `APP_POSTGRES_SERVICE`、`APP_NGINX_SERVICE`；产物不在默认位置时可使用 `--jar` 和 `--frontend-root`。

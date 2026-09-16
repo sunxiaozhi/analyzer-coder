@@ -42,7 +42,6 @@ export function workspaceNavigation(
   const maintenanceItems: WorkspaceNavItem[] = [];
   if (context.canReadSelectedRepository) {
     maintenanceItems.push({ to: '/knowledge', label: '知识管理', icon: 'knowledge' });
-    if (!context.isAdmin) maintenanceItems.push({ to: '/indexing?section=branches', label: '分支任务', icon: 'tasks' });
   }
   if (context.canManageProjects) {
     maintenanceItems.push({ to: '/repositories', label: '项目管理', icon: 'projects' });

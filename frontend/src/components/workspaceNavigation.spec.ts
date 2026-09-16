@@ -26,7 +26,7 @@ describe('workspaceNavigation', () => {
     });
 
     expect(groups.map(group => group.label)).toEqual(['研发工作', '项目维护']);
-    expect(groups[1].items.map(item => item.label)).toEqual(['知识管理', '分支任务', '项目管理']);
+    expect(groups[1].items.map(item => item.label)).toEqual(['知识管理', '项目管理']);
   });
 
   it('nests all four administrator operations in one system group', () => {

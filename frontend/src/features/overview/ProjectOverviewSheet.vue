@@ -40,7 +40,7 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   refresh: [];
   prepare: [];
-  retryStage: [stage: 'snapshot' | 'content' | 'vectors' | 'graph' | 'knowledge_drift'];
+  openManagement: [];
   openSearch: [];
   openKnowledge: [];
 }>();
@@ -279,8 +279,8 @@ function canResolveIssue(issue: ProjectHealthIssue) {
                     v-if="repository.capabilities?.canIndex && (stage.state === 'FAILED' || stage.state === 'DEGRADED')"
                     type="button"
                     :disabled="preparing"
-                    @click="emit('retryStage', stage.key)"
-                  >重试此阶段</button>
+                    @click="emit('openManagement')"
+                  >前往项目管理</button>
                 </span>
                 <small>{{ stage.detail }}</small>
               </div>

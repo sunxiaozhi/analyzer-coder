@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { branchesApi, type BranchPreparationJob, type RepositoryBranch } from '@/api/branches';
 import AppPagination from '@/components/AppPagination.vue';
+import BranchTaskDetailDialog from './BranchTaskDetailDialog.vue';
 import type { Repository } from '@/types/api';
 
 const props = defineProps<{ repositories: Repository[]; initialRepositoryId?: string; initialBranchId?: string }>();
@@ -22,7 +23,8 @@ let stopped = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const projects = computed(() => props.repositories.filter(project => ['LOCAL_GIT', 'REMOTE_GIT', 'GITLAB'].includes(project.sourceType)));
 const rows = computed(() => jobs.value.filter(job => !branchId.value || job.branchId === branchId.value));
-const selected = computed(() => rows.value.find(job => job.id === selectedId.value) ?? rows.value[0]);
+const selected = computed(() => rows.value.find(job => job.id === selectedId.value));
+const detailOpen = computed({ get: () => Boolean(selected.value), set: (value: boolean) => { if (!value) selectedId.value = ''; } });
 const kinds: Record<string, string> = { SYNC: '同步代码', CONTENT: '内容索引', GRAPH: '代码图谱', PREPARE: '一键准备', VECTORS: '向量索引', SNAPSHOT: '旧版准备' };
 const states: Record<string, string> = { QUEUED: '排队中', RUNNING: '执行中', SUCCEEDED: '已完成', FAILED: '失败' };
 const stages: Record<string, string> = { QUEUED: '等待执行', RESOLVING: '确认目标版本', SNAPSHOT: '导出代码', PUBLISHING: '发布快照', INDEXING: '构建内容索引', GRAPH: '构建图谱', EMBEDDING: '构建向量', COMPLETED: '已完成', FAILED: '失败' };
@@ -78,7 +80,7 @@ onBeforeUnmount(() => { stopped = true; ++version; clearTimeout(timer); });
     <el-empty v-if="!projects.length" description="没有可读取的 Git 项目" />
     <template v-else>
       <div class="branch-task-table">
-        <table><thead><tr><th>分支</th><th>任务</th><th>状态</th><th>阶段</th><th>快照</th><th>详情</th></tr></thead>
+        <table><thead><tr><th>分支</th><th>任务</th><th>状态</th><th>阶段</th><th>快照</th><th>操作</th></tr></thead>
           <tbody><tr v-for="job in rows" :key="job.id" :class="{ selected: selected?.id === job.id }">
             <td>{{ branchName(job.branchId) }}</td><td>{{ kinds[job.kind] }}</td><td>{{ states[job.status] }}</td><td>{{ stages[job.stage] ?? job.stage }}</td><td><code>{{ job.snapshotId?.slice(0, 8) ?? '等待锁定' }}</code></td>
             <td><button type="button" @click="selectedId = job.id">查看</button></td>
@@ -86,24 +88,23 @@ onBeforeUnmount(() => { stopped = true; ++version; clearTimeout(timer); });
         </table>
       </div>
       <AppPagination :page-num="pageNum" :page-size="pageSize" :total="total" :disabled="loading" @page-change="value => pageNum = value" @size-change="value => pageSize = value" />
-      <article v-if="selected" class="branch-task-detail">
-        <h3>{{ branchName(selected.branchId) }} · {{ kinds[selected.kind] }} · {{ states[selected.status] }}</h3>
-        <p>任务：<code>{{ selected.id }}</code></p><p>快照：<code>{{ selected.snapshotId ?? '尚未锁定' }}</code></p>
-        <el-alert v-if="selected.error" :title="selected.error" type="error" :closable="false" />
-        <p>任务属于创建时锁定的版本；历史任务不代表当前分支的索引状态。</p>
-        <el-button link type="primary" @click="router.push({ path: '/repositories', query: { repositoryId, branchId: selected.branchId } })">前往分支管理</el-button>
-      </article>
+      <BranchTaskDetailDialog v-if="selected" v-model="detailOpen" :job="selected"
+        :project-name="projects.find(project => project.id === repositoryId)?.name ?? repositoryId"
+        :branch-name="branchName(selected.branchId)" :kind-label="kinds[selected.kind] ?? selected.kind"
+        :status-label="states[selected.status] ?? selected.status" :stage-label="stages[selected.stage] ?? selected.stage"
+        @manage="router.push({ path: '/repositories', query: { repositoryId, branchId: selected.branchId } })" />
     </template>
   </section>
 </template>
 
 <style scoped>
-.branch-tasks { display: grid; gap: 16px; padding: 20px; overflow: auto; }
+.branch-tasks { display: flex; flex-direction: column; gap: 20px; padding: 20px; overflow: auto; }
 .task-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .task-filters label { display: grid; gap: 6px; min-width: 180px; font-size: 13px; color: #68778a; }
 .task-filters select { padding: 8px; border: 1px solid #dbe3ec; border-radius: 4px; color: #334155; background: #fff; }
-.branch-task-table { overflow-x: auto; } table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; color: #334155; }
-th, td { padding: 12px; border-bottom: 1px solid #dbe3ec; } thead { background: #f5f7fa; } .selected { background: #eff6ff; }
+.branch-task-table { flex: 1; min-height: 0; overflow: auto; } table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; color: #334155; }
+th, td { padding: 16px 14px; border-bottom: 1px solid #dbe3ec; } thead { background: #f5f7fa; } .selected { background: #eff6ff; }
 td button { background: none; border: 0; color: #2563eb; cursor: pointer; }
-.branch-task-detail { border-top: 1px solid #dbe3ec; color: #334155; font-size: 13px; } code { overflow-wrap: anywhere; }
+code { overflow-wrap: anywhere; }
+@media (max-width: 760px) { .branch-task-table { flex: none; min-height: 160px; } table { min-width: 660px; } .task-filters label { min-width: 0; flex: 1 1 160px; } }
 </style>

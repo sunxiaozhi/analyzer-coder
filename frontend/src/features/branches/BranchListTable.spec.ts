@@ -1,31 +1,52 @@
-import { mount } from '@vue/test-utils';
+import { mount as baseMount } from '@vue/test-utils';
 import { expect, it } from 'vitest';
+import { ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus';
 import BranchListTable from './BranchListTable.vue';
-
-it('shows separate branch commits and lets users select an unprepared branch', async () => {
-  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: 'main', branches: [
-    { id: 'main', name: 'main', snapshotId: 's1', commitSha: 'abcdef123456789', status: 'READY', error: null, generation: 1, trackingStatus: 'ACTIVE', archivedAt: null },
-    { id: 'release', name: 'release', snapshotId: null, commitSha: null, status: 'PENDING', error: null, generation: 0, trackingStatus: 'ACTIVE', archivedAt: null },
-  ] } });
+import type { RepositoryBranch } from '@/api/branches';
+const mount = (component: any, options: any) => baseMount(component, { ...options, global: { components: { ElDropdown, ElDropdownMenu, ElDropdownItem } } });
+const branch = (id: string, ready = true): RepositoryBranch => ({ id, name: id, snapshotId: ready ? 's-' + id : null, commitSha: ready ? 'abcdef123456789' : null, status: ready ? 'READY' : 'PENDING', error: null, generation: 1, trackingStatus: 'ACTIVE', archivedAt: null });
+const indexes = [{ branchId: 'main', snapshotId: 's-main', contentReady: true, graphReady: true, vectorsReady: false, syncedAt: null }];
+it('uses row operations for reading and preparation, and opens details for an unprepared branch', async () => {
+  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: 'main', canMaintain: true, branches: [branch('main'), branch('release', false)], indexes } });
   expect(wrapper.text()).toContain('abcdef123456');
-  expect(wrapper.text()).toContain('未准备');
-  await wrapper.findAll('.branch-select')[1].trigger('click');
-  expect(wrapper.emitted('select')).toEqual([['release']]);
+  expect(wrapper.text()).toContain('未同步');
+  await wrapper.findAll('.branch-read')[0].trigger('click');
+  expect(wrapper.emitted('read')).toEqual([['main']]);
+  expect(wrapper.findAll('.branch-read')[1].attributes('disabled')).toBeDefined();
+  await wrapper.findAll('.branch-prepare')[1].trigger('click');
+  expect(wrapper.emitted('operate')).toEqual([['release', 'PREPARE']]);
+  await wrapper.findAll('.branch-detail-link')[1].trigger('click');
+  expect(wrapper.emitted('select')).toEqual([['release', 'status']]);
   await wrapper.setProps({ disabled: true });
   expect(wrapper.findAll('button').every(button => button.attributes('disabled') !== undefined)).toBe(true);
+  wrapper.unmount();
 });
-
-
-it('hides archived branches by default and keeps recovery accessible', async () => {
-  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: 'main', canManage: true, readingBranchId: 'main', branches: [
-    { id: 'main', name: 'main', snapshotId: 's1', commitSha: 'abcdef', status: 'READY', error: null, generation: 1, trackingStatus: 'ACTIVE', archivedAt: null },
-    { id: 'old', name: 'old-release', snapshotId: 's0', commitSha: '012345', status: 'READY', error: null, generation: 1, trackingStatus: 'ARCHIVED', archivedAt: '' },
-  ] } });
-  expect(wrapper.text()).toContain('阅读中');
-  expect(wrapper.text()).not.toContain('old-release');
+it('marks default and reading branches independently and keeps restoration in the more menu', async () => {
+  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: 'release', canManage: true, readingBranchId: 'release', defaultBranch: 'main', branches: [branch('main'), branch('release'), { ...branch('old'), trackingStatus: 'ARCHIVED' }] } });
+  expect(wrapper.findAll('tbody tr')[0].text()).toContain('默认');
+  expect(wrapper.findAll('tbody tr')[0].text()).not.toContain('当前阅读');
+  expect(wrapper.findAll('tbody tr')[1].text()).toContain('当前阅读');
+  expect(wrapper.text()).not.toContain('old');
   await wrapper.get('input[type="checkbox"]').setValue(true);
-  expect(wrapper.text()).toContain('old-release');
-  await wrapper.findAll('.branch-lifecycle')[1].trigger('click');
+  expect(wrapper.text()).toContain('old');
+  wrapper.findAllComponents(ElDropdown)[2].vm.$emit('command', 'restore');
   expect(wrapper.emitted('restore')).toEqual([['old']]);
+  wrapper.unmount();
+});
+it('blocks maintenance while a branch task runs and hides it for read-only users', async () => {
+  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: '', canMaintain: true, branches: [branch('main')], indexes, jobs: [{ id: 'j', branchId: 'main', kind: 'GRAPH', status: 'RUNNING', stage: 'GRAPH', snapshotId: 's-main', error: null }] } });
+  expect(wrapper.get('.branch-prepare').attributes('disabled')).toBeDefined();
+  wrapper.getComponent(ElDropdown).vm.$emit('command', 'GRAPH');
+  expect(wrapper.emitted('operate')).toBeUndefined();
+  await wrapper.setProps({ canMaintain: false, jobs: [] });
+  expect(wrapper.find('.branch-prepare').exists()).toBe(false);
+  wrapper.getComponent(ElDropdown).vm.$emit('command', 'CONTENT');
+  expect(wrapper.emitted('operate')).toBeUndefined();
+  wrapper.unmount();
+});
+it('does not present another snapshot index status as readable', () => {
+  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: '', branches: [branch('main')], indexes: [{ ...indexes[0], snapshotId: 'old' }] } });
+  expect(wrapper.get('.branch-read').attributes('disabled')).toBeDefined();
+  expect(wrapper.findAll('.state-link')[1].text()).toBe('待构建');
   wrapper.unmount();
 });

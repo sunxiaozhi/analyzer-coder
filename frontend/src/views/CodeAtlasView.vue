@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { Search, Orbit, ArrowLeft, Plus, Minus, Maximize, RefreshCw, X, ArrowUpRight, Crosshair } from 'lucide-vue-next';
 import { getCodeAtlas, type AtlasView, type AtlasNode } from '@/api/codeAtlas';
 import { getRepositoryFile } from '@/api/repositories';
@@ -10,6 +10,9 @@ import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
 import { layoutAtlas } from '@/features/graph/atlasLayout';
 import { atlasFileType, fileIconUrl } from '@/features/graph/atlasFileType';
 
+const GraphImpactPanel = defineAsyncComponent(() => import('@/features/graph/GraphImpactPanel.vue'));
+const impactOpen = ref(false);
+const route = useRoute();
 const CodeAtlas3D = defineAsyncComponent(() => import('@/features/graph/CodeAtlas3D.vue'));
 const threeView = ref<{ home: () => void; zoomBy: (factor: number) => void }>();
 const mode = ref<'3d' | '2d'>('3d'), autoRotate = ref(false), threeError = ref('');
@@ -104,21 +107,37 @@ function changeZoom(delta: number) {
   if (mode.value === '3d') { threeView.value?.zoomBy(delta > 0 ? .85 : 1.15); return; }
   zoom.value = Math.min(3.5, Math.max(.08, zoom.value + delta));
 }
-function clearSelection() { sourceRevision++; selected.value = null; source.value = ''; sourceError.value = ''; sourceLoading.value = false; }
+function clearSelection() { impactOpen.value = false; sourceRevision++; selected.value = null; source.value = ''; sourceError.value = ''; sourceLoading.value = false; }
 async function load() {
   const id = repositories.selectedRepositoryId;
   const version = ++revision;
-  clearSelection(); data.value = null; error.value = ''; resetCamera();
+  impactOpen.value = false; clearSelection(); data.value = null; error.value = ''; resetCamera();
   if (!id) { loading.value = false; return; }
-  if (readScope.blocked.value) { loading.value = false; error.value = readScope.reason.value; return; }
+  if (readScope.blocked.value) { loading.value = branchContext.loading; if (!branchContext.loading) error.value = readScope.reason.value; return; }
+  if (typeof route.query.snapshotId === 'string' && branchContext.context && route.query.snapshotId !== branchContext.context.snapshotId) { loading.value = false; error.value = '目标文件与当前分支快照不一致，请重新从联合检索打开。'; return; }
   loading.value = true;
   try {
-    const result = branchContext.context?.contextId
+    let result = branchContext.context?.contextId
       ? await getCodeAtlas(id, module.value, query.value.trim(), branchContext.context.contextId)
       : await getCodeAtlas(id, module.value, query.value.trim());
+    const targetPath = typeof route.query.path === 'string' ? route.query.path : '';
+    if (targetPath && query.value === route.query.symbol && !result.nodes.some(node => node.filePath === targetPath)) {
+      if (version !== revision) return;
+      result = branchContext.context?.contextId
+        ? await getCodeAtlas(id, module.value, targetPath, branchContext.context.contextId)
+        : await getCodeAtlas(id, module.value, targetPath);
+    }
     if (version === revision && id === repositories.selectedRepositoryId) {
       if (branchContext.context && result.snapshotId !== branchContext.context.snapshotId) throw new Error('图谱与当前分支快照不一致，请重新构建该分支图谱。');
+      if (typeof route.query.snapshotId === 'string' && result.snapshotId !== route.query.snapshotId) throw new Error('目标文件快照已更新，请重新从联合检索打开。');
       data.value = result; resetCamera();
+      const path = typeof route.query.path === 'string' ? route.query.path : '';
+      const symbol = typeof route.query.symbol === 'string' ? route.query.symbol : '';
+      if (path) {
+        const target = result.nodes.find(node => node.filePath === path && node.label === symbol)
+          ?? result.nodes.find(node => node.filePath === path);
+        if (target) void select(target);
+      }
     }
   } catch (e) { if (version === revision) error.value = e instanceof Error ? e.message : '图谱加载失败'; }
   finally { if (version === revision) loading.value = false; }
@@ -142,6 +161,10 @@ async function select(node: AtlasNode) {
   finally { if (version === sourceRevision) sourceLoading.value = false; }
 }
 function expand(node: AtlasNode) { if (node.kind === 'MODULE') { module.value = node.module; query.value = ''; void load(); } }
+function openImpactFile(path: string, startLine: number | null, endLine: number | null) {
+  if (!data.value) return;
+  void router.push({ name: 'search', query: { path, snapshotId: data.value.snapshotId, startLine: String(startLine || 1), endLine: endLine ? String(endLine) : undefined, branchId: branchContext.context?.branchId, contextId: branchContext.context?.contextId } });
+}
 function openSource() {
   if (!selected.value || !data.value) return;
   void router.push({ name: 'search', query: { path: selected.value.filePath, snapshotId: data.value.snapshotId, startLine: String(selected.value.startLine || 1), branchId: branchContext.context?.branchId, contextId: branchContext.context?.contextId } });
@@ -158,7 +181,7 @@ function pointerMove(event: PointerEvent) {
   const factor = Math.max(1200 / rect.width, 800 / rect.height);
   pan.value = { x: dragging.px + (event.clientX - dragging.x) * factor, y: dragging.py + (event.clientY - dragging.y) * factor };
 }
-watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const, () => { module.value = ''; query.value = ''; void load(); }, { immediate: true });
+watch(() => [repositories.selectedRepositoryId, branchContext.identity, route.query.path, route.query.symbol, route.query.snapshotId] as const, () => { module.value = ''; query.value = typeof route.query.symbol === 'string' ? route.query.symbol : typeof route.query.path === 'string' ? route.query.path : ''; void load(); }, { immediate: true });
 onMounted(() => { if (!repositories.repositories.length) void repositories.loadRepositories(); });
 onBeforeUnmount(() => { revision++; sourceRevision++; });
 </script>
@@ -211,10 +234,14 @@ onBeforeUnmount(() => { revision++; sourceRevision++; });
     </div>
       <aside v-if="selected" class="atlas-detail" aria-label="节点详情" @keydown.esc="clearSelection"><header><span>{{ selected.kind === 'MODULE' ? '模块' : selected.kind }}</span><button title="关闭详情" aria-label="关闭详情" @click="clearSelection"><X :size="17" /></button></header><h2>{{ selected.label }}</h2><p class="source-path">{{ selected.filePath || selected.module }}</p>
         <button v-if="selected.kind === 'MODULE'" class="expand-button" @click="expand(selected)">展开 {{ selected.count }} 个符号 <ArrowUpRight :size="16" /></button>
+        <button v-if="selected.filePath" class="expand-button" @click="impactOpen = true">分析此符号的影响范围 <ArrowUpRight :size="16" /></button>
         <div class="direction"><button :class="{ chosen: direction === 'both' }" @click="direction = 'both'">全部</button><button :class="{ chosen: direction === 'in' }" @click="direction = 'in'">入向关系</button><button :class="{ chosen: direction === 'out' }" @click="direction = 'out'">出向关系</button></div>
         <details class="relations" :class="{ 'relations-fill': !selected.filePath }" :open="!selected.filePath"><summary>关联节点 · {{ related.length }}</summary><div class="related-list"><button v-for="(edge, index) in related.slice(0, 40)" :key="index" @click="select(edge.source === selected.id ? edge.b : edge.a)"><span>{{ edge.source === selected.id ? '↗' : '↙' }} {{ edge.source === selected.id ? edge.b.label : edge.a.label }}</span><small>{{ edge.kind }}{{ edge.count > 1 ? ` ×${edge.count}` : '' }}</small></button><p v-if="!related.length">当前视图内没有匹配关系。</p><p v-if="related.length > 40">仅列出前 40 条关系。</p></div></details>
         <section v-if="selected.filePath" class="source-section"><div class="source-heading"><b>源码摘录</b><button @click="openSource">打开文件 <ArrowUpRight :size="13" /></button></div><p v-if="sourceLoading">正在加载源码…</p><p v-else-if="sourceError" role="alert">{{ sourceError }}</p><pre v-else class="atlas-source" aria-label="源码摘录，长行自动换行"><span v-for="line in excerpt" :key="line.line" :class="{ marked: line.line >= selected.startLine && line.line <= selected.endLine }"><i aria-hidden="true">{{ line.line }}</i><code>{{ line.text || ' ' }}</code></span></pre></section>
       </aside>
+    <el-drawer v-model="impactOpen" title="影响分析" size="860px" :with-header="false" destroy-on-close>
+      <GraphImpactPanel v-if="impactOpen && selected && data" :repository-id="data.repositoryId" :file-path="selected.filePath" :initial-symbol="selected.label" :snapshot-id="data.snapshotId" :context-id="branchContext.context?.contextId" :auto-analyze="true" :can-build-graph="repositories.selectedRepository?.capabilities?.canBuildCodeGraph ?? false" @close="impactOpen = false" @open-file="openImpactFile" />
+    </el-drawer>
     <footer class="atlas-status"><span v-if="data" :title="`快照 ${data.snapshotId} · 仅统计当前展示范围`">{{ data.nodes.length }} / {{ data.totalNodes }} 节点 · {{ visibleLinks.length }} 条连线</span><span v-if="data?.level === 'SYMBOL' && !selected && !showAllLinks">选中节点查看关联</span><span v-if="data?.partial" class="partial">当前为部分图谱，请缩小模块或搜索范围</span></footer>
   </section>
 </template>

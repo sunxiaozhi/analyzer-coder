@@ -39,7 +39,11 @@ export function useProjectOverview() {
     error.value = null;
     loading.value = false;
     if (!repositoryId) return;
-    if (readScope.blocked.value) { error.value = readScope.reason.value; return; }
+    if (readScope.blocked.value) {
+      if (branches.loading) loading.value = true;
+      else error.value = readScope.reason.value;
+      return;
+    }
     loading.value = true;
     try {
       if (readScope.requiresContext.value && branches.context) {

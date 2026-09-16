@@ -60,7 +60,7 @@ const workbenchReady = computed(() => Boolean(
 const gateCopy = computed(() => {
   if (!repository.value) return {
     title: '先选择一个项目',
-    detail: '代码检索、源码预览和关系证据都需要明确的仓库范围。',
+    detail: '代码检索、源码预览和适用知识都需要明确的仓库范围。',
     action: '前往项目管理',
     path: '/repositories',
   };
@@ -154,9 +154,6 @@ async function loadSnapshot(repositoryId: string | null) {
     const routeSymbol = typeof route.query.symbol === 'string' ? route.query.symbol : null;
     if (preferred) await openFile(preferred.path, startLine, endLine, Boolean(routePath), routeSymbol);
     if (requestId !== snapshotRequest) return;
-    if (routeSymbol && (route.query.relation === '1' || route.query.analyze === '1')) {
-      rightPane.value = 'context';
-    }
     const routeQuery = typeof route.query.q === 'string' ? route.query.q : null;
     if (routeQuery) {
       query.value = routeQuery;
@@ -339,7 +336,7 @@ function createKnowledgeForFile() {
 }
 
 watch(
-  () => [route.query.path, route.query.startLine, route.query.endLine, route.query.q, route.query.symbol, route.query.relation, route.query.analyze, route.query.snapshotId] as const,
+  () => [route.query.path, route.query.startLine, route.query.endLine, route.query.q, route.query.symbol, route.query.snapshotId] as const,
   ([path, startLine, endLine, routeQuery, routeSymbol]) => {
     if (typeof routeQuery === 'string' && routeQuery !== query.value) {
       query.value = routeQuery;
@@ -519,11 +516,8 @@ watch(
         :repository-id="repositories.selectedRepositoryId"
         :file-path="selectedPath"
         :initial-symbol="selectedSymbol"
-        :can-build-graph="repository?.capabilities.canBuildCodeGraph ?? false"
         :snapshot-id="snapshot?.snapshotId ?? null"
         :context-id="branchContext.context?.contextId ?? null"
-        :initial-depth="routeNumber(route.query.depth) ?? 3"
-        :auto-analyze="route.query.relation === '1' || route.query.analyze === '1'"
         :can-maintain-knowledge="repository?.capabilities.canUpdate ?? false"
         @close="evidenceDrawerOpen = false"
         @open-file="openFile"

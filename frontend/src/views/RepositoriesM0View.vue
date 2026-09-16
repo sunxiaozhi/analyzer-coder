@@ -8,6 +8,7 @@ import RepositoryFormDialog from '@/features/repositories/RepositoryFormDialog.v
 import RepositoryEditDialog from '@/features/repositories/RepositoryEditDialog.vue';
 import RepositoryGovernanceDialog from '@/features/repositories/RepositoryGovernanceDialog.vue';
 import ProjectSettingsPanel from '@/features/repositories/ProjectSettingsPanel.vue';
+import ProjectManagementHeader from '@/features/repositories/ProjectManagementHeader.vue';
 import SingleVersionOperations from '@/features/repositories/SingleVersionOperations.vue';
 import { useBranchContextStore } from '@/stores/branchContextStore';
 import ProjectSelectionList from '@/features/repositories/ProjectSelectionList.vue';
@@ -39,6 +40,9 @@ const editOpen = shallowRef(false);
 const editing = shallowRef<Repository | null>(null);
 const editBusy = shallowRef(false);
 const managementOpen = shallowRef(false);
+const managedRepository = shallowRef<Repository | null>(null);
+const readingBusy = shallowRef(false);
+const readingBranchName = computed(() => branchContext.context?.branchName ?? branchContext.selectedBranch?.name ?? null);
 const selectingProject = shallowRef(false);
 const selectedProject = computed(() => store.selectedRepository);
 const gitProject = computed(() => selectedProject.value && ['LOCAL_GIT', 'REMOTE_GIT', 'GITLAB'].includes(selectedProject.value.sourceType));
@@ -140,14 +144,26 @@ async function branchesChanged() {
   await reloadAll();
   await branchContext.refresh();
 }
-async function readBranch(branchId: string, target: 'search' | 'atlas' = 'search') {
-  await branchContext.select(branchId);
-  if (!branchContext.context) return;
-  await router.push({ name: target, query: { branchId, contextId: branchContext.context.contextId } });
+async function readBranch(branchId: string, target?: 'search' | 'atlas') {
+  if (readingBusy.value) return;
+  const repositoryId = store.selectedRepositoryId;
+  readingBusy.value = true;
+  try {
+    await branchContext.select(branchId);
+    if (!alive || repositoryId !== store.selectedRepositoryId) return;
+    if (!branchContext.context || branchContext.context.branchId !== branchId) throw new Error('当前分支尚未准备完成');
+    if (target) await router.push({ name: target, query: { branchId, contextId: branchContext.context.contextId } });
+    else {
+      await router.replace({ query: { ...route.query, branchId, contextId: branchContext.context.contextId } });
+      ElMessage.success('已切换阅读分支：' + branchContext.context.branchName);
+    }
+  } catch (cause) { ElMessage.error(cause instanceof Error ? cause.message : '切换阅读分支失败'); }
+  finally { if (alive) readingBusy.value = false; }
 }
+function openSettings(repository: Repository) { managedRepository.value = repository; managementOpen.value = true; }
 function govern(repository: Repository) { governedRepository.value = repository; governanceOpen.value = true; }
 async function governanceChanged() { await reloadAll(); governedRepository.value = store.repositories.find(item => item.id === governedRepository.value?.id) ?? null; }
-async function remove(id: string, name: string) { await ElMessageBox.confirm(`删除平台中的“${name}”及其派生数据；本地原目录不会被修改。`, '删除仓库', { type: 'warning' }); await store.removeRepository(id); await loadPage(); }
+async function remove(id: string, name: string) { await ElMessageBox.confirm(`删除平台中的“${name}”及其派生数据；本地原目录不会被修改。`, '删除仓库', { type: 'warning' }); await store.removeRepository(id); if (managedRepository.value?.id === id) managementOpen.value = false; await loadPage(); }
 
 watch(query, () => {
   window.clearTimeout(searchTimer);
@@ -172,8 +188,8 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
   <section class="page repository-design">
     <aside class="surface repository-list-surface" aria-label="项目管理">
       <div class="repository-list-header">
-        <h2 class="project-list-title">项目</h2>
-        <div class="toolbar project-list-toolbar"><el-input v-model="query" :prefix-icon="Search" placeholder="搜索项目" aria-label="搜索项目" clearable /><el-button type="primary" :icon="Plus" :loading="importing" @click="retryingDraft=null; dialogOpen=true">接入项目</el-button></div>
+        <div class="project-list-heading"><div><h2 class="project-list-title">项目</h2><span class="project-list-count">{{ total }} 个项目</span></div><el-button type="primary" :icon="Plus" :loading="importing" @click="retryingDraft=null; dialogOpen=true">导入项目</el-button></div>
+        <div class="project-list-toolbar"><el-input v-model="query" :prefix-icon="Search" placeholder="搜索项目名称" aria-label="搜索项目" clearable /></div>
         <el-alert v-if="pageError || store.error" :title="pageError ?? store.error ?? ''" type="error" :closable="false" />
         <div v-if="unfinishedDrafts.length" class="draft-stack">
           <div v-for="draft in unfinishedDrafts.slice(0, 3)" :key="draft.id" class="draft-row">
@@ -183,30 +199,24 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
         </div>
       </div>
       <div class="repository-table-region">
-        <ProjectSelectionList :rows="rows" :selected-id="store.selectedRepositoryId" :loading="pageLoading" :disabled="selectingProject" @select="selectProject" />
+        <ProjectSelectionList :rows="rows" :selected-id="store.selectedRepositoryId" :loading="pageLoading" :disabled="selectingProject || readingBusy" :reading-branch-name="readingBranchName" @select="selectProject" @settings="openSettings" @govern="govern" @remove="project => remove(project.id, project.name)" />
       </div>
       <AppPagination :page-num="pageNum" :page-size="pageSize" :total="total" :disabled="pageLoading" compact @page-change="changePage" @size-change="changePageSize" />
     </aside>
     <section class="surface project-branches" aria-label="当前项目分支">
       <template v-if="selectedProject">
-        <header class="project-branch-header">
-          <div><span class="project-eyebrow">当前项目</span><h2 class="project-title">{{ selectedProject.name }}</h2><p class="project-description">{{ selectedProject.description || '选择下方分支，准备并查看该分支的代码与适用知识。' }}</p></div>
-          <div class="project-actions">
-            <el-button v-if="selectedProject.capabilities.canEditRepository ?? selectedProject.capabilities.canConfigure" @click="managementOpen=true">项目设置</el-button>
-            <el-button v-if="selectedProject.capabilities.canGrant || selectedProject.capabilities.canTransferOwnership" @click="govern(selectedProject)">成员与权限</el-button>
-          </div>
-        </header>
+        <ProjectManagementHeader :repository="selectedProject" :reading-branch-name="readingBranchName" @settings="openSettings(selectedProject)" @govern="govern(selectedProject)" @remove="remove(selectedProject.id, selectedProject.name)" />
         <BranchWorkspace v-if="gitProject" :key="selectedProject.id" :repository-id="selectedProject.id"
           :can-maintain="selectedProject.capabilities.canUpdate" :can-manage="selectedProject.capabilities.canConfigure"
-          :remote-source="['REMOTE_GIT', 'GITLAB'].includes(selectedProject.sourceType)" :reading-branch-id="branchContext.selectedBranchId" :initial-branch-id="typeof route.query.branchId === 'string' ? route.query.branchId : undefined" show-branch-list @changed="branchesChanged" @read="readBranch" />
+          :default-branch="selectedProject.branch" :reading-busy="readingBusy" :remote-source="['REMOTE_GIT', 'GITLAB'].includes(selectedProject.sourceType)" :reading-branch-id="branchContext.selectedBranchId" :initial-branch-id="typeof route.query.branchId === 'string' ? route.query.branchId : undefined" show-branch-list @changed="branchesChanged" @read="readBranch" />
         <SingleVersionOperations v-else :repository="selectedProject" @changed="reloadAll" />
       </template>
       <el-empty v-else description="从左侧选择项目，或先接入一个项目" />
     </section>
     <el-dialog v-model="managementOpen" title="项目设置" width="min(680px, 96vw)">
-      <ProjectSettingsPanel v-if="selectedProject" :repository="selectedProject"
-        @edit="managementOpen=false; openEdit(selectedProject)"
-        @remove="remove(selectedProject.id,selectedProject.name)" />
+      <ProjectSettingsPanel v-if="managedRepository" :repository="managedRepository"
+        @edit="managementOpen=false; openEdit(managedRepository)"
+        @remove="remove(managedRepository.id,managedRepository.name)" />
       <template #footer><el-button @click="managementOpen=false">关闭</el-button></template>
     </el-dialog>
     <RepositoryFormDialog v-model="dialogOpen" :busy="importing" :initial-draft="retryingDraft" @submit="create" />
@@ -215,55 +225,24 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
   </section>
 </template>
 <style scoped>
-.repository-design {
-  display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
-}
-.project-actions { display:flex; flex-wrap:wrap; gap:8px; }
-.project-list-title { margin: 14px 14px 8px; font-size: 16px; }
-.project-list-toolbar { padding: 0 12px 10px; flex-wrap: wrap; }
-.project-list-toolbar .el-input { flex: 1 1 150px; min-width: 100px; }
-.draft-stack { display: grid; gap: 6px; margin: 0 12px 10px; }
-.draft-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; color: #566577; border: 1px solid #ead7b8; border-radius: 5px; background: #fffaf0; font-size: 12px; }
-.draft-row span { display: grid; min-width: 0; gap: 2px; }
-.draft-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-branches { min-width: 0; min-height: 0; overflow: auto; padding: 20px; }
-.project-branch-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 20px; }
-.project-eyebrow, .project-description { color: #68778a; font-size: 12px; line-height: 1.7; }
-.project-title { margin: 4px 0; font-size: 22px; color: #334155; overflow-wrap: anywhere; }
-.project-description { margin: 0; }
-.repository-list-surface :deep(.app-pagination) { flex-wrap: wrap; }
-
-.repository-list-surface {
-  min-width: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  min-height: 0;
-}
-
-.repository-table-region {
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-@media (max-width: 760px) {
-  .repository-design {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto;
-    height: auto;
-    overflow: visible;
-  }
-
-  .repository-list-surface {
-    display: block;
-  }
-
-  .repository-table-region {
-    overflow: visible;
-  }
-}
+.repository-design { display: grid; grid-template-columns: clamp(280px, 25%, 350px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 22px; overflow: hidden; min-height: 0; }
+.repository-list-surface { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; background: var(--app-surface); border-radius: 10px; }
+.repository-list-header { padding: 22px 18px 0; border-bottom: 1px solid var(--app-border); }
+.project-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.project-list-heading > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 9px; }
+.project-list-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--app-text-primary); }
+.project-list-count { color: var(--app-text-muted); font-size: 12px; white-space: nowrap; }
+.project-list-toolbar { padding-bottom: 20px; }.project-list-toolbar .el-input { width: 100%; }
+.repository-table-region { min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.repository-list-surface :deep(.app-pagination) { flex-wrap: wrap; padding: 15px 16px; background: var(--app-surface); }
+.repository-list-surface :deep(.pagination-summary) { flex-wrap: wrap; gap: 8px 12px; font-size: 12px; }
+.repository-list-surface :deep(.pagination-summary > span:nth-child(2)) { display: none; }
+.repository-list-surface :deep(.pagination-controls) { width: 100%; }
+.project-branches { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: auto; padding: 0; border-radius: 10px; }
+.project-branches > :deep(.el-empty) { flex: 1; padding: 60px 20px; }
+.draft-stack { display: grid; gap: 8px; margin: 0 0 18px; }
+.draft-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px; color: var(--app-text-regular); border: 1px solid #ead7b8; border-radius: 6px; background: var(--app-color-warning-soft); font-size: 12px; }
+.draft-row span { display: grid; min-width: 0; gap: 4px; }.draft-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1100px) { .repository-design { grid-template-columns: 270px minmax(0, 1fr); gap: 16px; }.repository-list-header { padding: 20px 14px 0; } }
+@media (max-width: 760px) { .repository-design { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; height: auto; overflow: visible; gap: 18px; }.repository-list-surface { grid-template-rows: auto minmax(100px, 260px) auto; }.project-branches { overflow: visible; }.repository-table-region { overflow-y: auto; } }
 </style>

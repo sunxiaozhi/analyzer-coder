@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 import BranchTasksPanel from '@/features/indexing/BranchTasksPanel.vue';
 import { ElMessage } from 'element-plus';
@@ -12,10 +12,9 @@ import { useIndexJobs } from '@/features/indexing/useIndexJobs';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
 const repositoryStore = useRepositoryStore();
-const router = useRouter();
 const auth = useAuthStore();
 const route = useRoute();
-const section = shallowRef<'jobs' | 'vectors' | 'branches'>(!auth.isAdmin || route.query.section === 'branches' ? 'branches' : 'jobs');
+const section = shallowRef<'jobs' | 'vectors' | 'branches'>(auth.isAdmin && (route.query.section === 'jobs' || route.query.section === 'vectors') ? route.query.section : 'branches');
 const actionPending = shallowRef(false);
 const {
   jobs,
@@ -69,10 +68,10 @@ onMounted(async () => {
 <template>
   <section class="page index-jobs-design">
     <div class="surface index-view-shell">
-      <nav class="index-view-tabs" aria-label="索引页面">
-        <button v-if="auth.isAdmin" :class="{ active: section === 'jobs' }" @click="section = 'jobs'">索引任务</button>
-        <button v-if="auth.isAdmin" :class="{ active: section === 'vectors' }" @click="section = 'vectors'">当前向量索引</button>
+      <nav class="index-view-tabs" aria-label="任务页面">
         <button :class="{ active: section === 'branches' }" @click="section = 'branches'">分支任务</button>
+        <button v-if="auth.isAdmin" :class="{ active: section === 'jobs' }" @click="section = 'jobs'">其他任务</button>
+        <button v-if="auth.isAdmin" :class="{ active: section === 'vectors' }" @click="section = 'vectors'">当前向量索引</button>
       </nav>
 
       <div v-if="section === 'jobs' && auth.isAdmin" class="index-view-body index-jobs-content">
@@ -80,10 +79,9 @@ onMounted(async () => {
       <div class="split detail-split index-jobs-split">
         <div class="surface index-jobs-list">
           <div class="toolbar">
-            <span class="index-guidance">索引任务由项目管理或项目总览发起</span>
+            <span class="index-guidance">单版本索引、部分图谱构建和知识失效检查任务；由项目管理或项目总览发起</span>
             <span class="spacer" />
             <span class="muted">成功 {{ counts.SUCCEEDED }} · 已取消 {{ counts.CANCELED }}</span>
-            <el-button type="primary" plain @click="router.push('/repositories')">创建索引任务</el-button>
             <el-button :loading="loading" @click="refresh()">刷新</el-button>
           </div>
           <div class="index-jobs-table-region">
