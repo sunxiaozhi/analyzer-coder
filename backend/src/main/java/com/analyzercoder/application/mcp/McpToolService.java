@@ -20,6 +20,8 @@ public class McpToolService {
     @org.springframework.beans.factory.annotation.Autowired
     private com.analyzercoder.application.branch.RepositoryBranchService branches;
 
+    @org.springframework.beans.factory.annotation.Autowired private McpCodeGraphTools codeGraph;
+
     public McpToolService(
             AccessControlService access, IntelligenceService intelligence, ObjectMapper json) {
         this.access = access;
@@ -28,6 +30,9 @@ public class McpToolService {
     }
 
     public JsonNode call(String name, JsonNode input, AuthenticatedAccount actor, String ip) {
+        if ("list_codegraph_scopes".equals(name) || name.startsWith("codegraph_")) {
+            return codeGraph.call(name, input, actor);
+        }
         if (!"search_project".equals(name) && !"resolve_project_context".equals(name)) {
             throw new IllegalArgumentException("未知 MCP 工具");
         }

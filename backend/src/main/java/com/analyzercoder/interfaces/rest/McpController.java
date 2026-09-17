@@ -1,5 +1,6 @@
 package com.analyzercoder.interfaces.rest;
 
+import com.analyzercoder.application.intelligence.CodeGraphException;
 import com.analyzercoder.application.mcp.McpToolCatalog;
 import com.analyzercoder.application.mcp.McpToolService;
 import com.analyzercoder.security.ApiSecurityException;
@@ -70,7 +71,7 @@ public class McpController {
                                 "serverInfo",
                                 Map.of("name", "analyzer-coder", "version", "1.0.0"),
                                 "instructions",
-                                "Use search_project to retrieve current code and published project knowledge with versioned evidence. Every call uses the token account's current repository permissions.");
+                                "Use list_codegraph_scopes to choose a visible repository and branch, then reuse contextId from a CodeGraph tool. search_project remains available for code and knowledge retrieval.");
             }
             case "ping" -> result = Map.of();
             case "tools/list" -> result = Map.of("tools", catalog.tools());
@@ -107,6 +108,18 @@ public class McpController {
                                                     failure.getMessage() == null
                                                             ? "工具调用失败"
                                                             : failure.getMessage())),
+                                    "isError",
+                                    true);
+                } catch (CodeGraphException failure) {
+                    result =
+                            Map.of(
+                                    "content",
+                                    List.of(
+                                            Map.of(
+                                                    "type",
+                                                    "text",
+                                                    "text",
+                                                    failure.code() + ": " + failure.getMessage())),
                                     "isError",
                                     true);
                 } catch (RuntimeException failure) {

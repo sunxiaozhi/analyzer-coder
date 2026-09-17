@@ -52,9 +52,10 @@ node scripts/evaluate-quality.mjs --validate
 | --- | --- |
 | `backend` | 仓库接入、版本化索引、代码与知识联合检索 API |
 | `frontend` | 项目管理、知识维护和统一检索工作台 |
-| `mcp-server` | 向 AI 客户端暴露只读 `search_project` 工具 |
+| `mcp-server` | stdio 适配器；与后端 `/api/mcp` 一起提供只读代码、知识和分支图谱工具 |
 | `evaluation` | 检索召回和证据问答质量样本 |
 | `scripts` / `deploy` | 启动、诊断与部署脚本 |
 
-详细使用流程见 [功能与数据流](docs/13-system-usage-map.md)。
+详细使用流程见 [系统使用手册](docs/16-system-user-manual.md) 和 [功能与数据流](docs/13-system-usage-map.md)。
+MCP 配置、分支选择和工具参数见 [MCP 接入说明](mcp-server/README.md)。
 项目设置、权限与分支同步/索引的边界见 [项目与分支代码管理](docs/15-project-branch-code-management.md)。

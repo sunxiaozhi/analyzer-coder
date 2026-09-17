@@ -18,6 +18,7 @@ import {
 import { computed, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { getRepositoryProfile, type RepositoryPreparation } from '@/api/repositories';
+import OptionalCapabilitiesGuide from '@/features/help/OptionalCapabilitiesGuide.vue';
 import { useAuthStore } from '@/stores/authStore';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
@@ -118,7 +119,7 @@ const workflowCards = computed<GuideCard[]>(() => {
       key: 'prepare',
       number: '02',
       title: '准备证据',
-      description: '生成当前快照，并准备代码片段、向量、图谱和知识失效检查。',
+      description: 'Git 项目先准备目标分支快照；代码片段用于检索，向量和图谱按需构建。',
       source: '仓库 /profile、索引任务与当前快照',
       status: preparationStatus.value.label,
       statusTone: preparationStatus.value.tone,
@@ -327,6 +328,8 @@ watch(
         </article>
       </div>
     </section>
+
+    <OptionalCapabilitiesGuide />
 
     <section v-if="auth.isAdmin" class="guide-section administration" aria-labelledby="administration-title">
       <div class="section-heading">

@@ -191,6 +191,48 @@ public class ManagedCodeGraphService extends CodeGraphService {
         return result;
     }
 
+    /** Fixed read commands over a published managed snapshot. */
+    public String readSnapshot(
+            UUID repositoryId, UUID snapshotId, String operation, List<String> arguments) {
+        if (!List.of(
+                        "explore",
+                        "node",
+                        "query",
+                        "callers",
+                        "callees",
+                        "impact",
+                        "files",
+                        "status",
+                        "affected")
+                .contains(operation)) {
+            throw new IllegalArgumentException("不支持的 CodeGraph 只读操作");
+        }
+        Artifact artifact = published(repositoryId, snapshotId);
+        Path project = Path.of(artifact.artifactPath()).getParent();
+        List<String> command = new ArrayList<>();
+        command.add(operation);
+        if ("status".equals(operation)) {
+            command.add("-j");
+            command.add(project.toString());
+        } else {
+            command.add("-p");
+            command.add(project.toString());
+            command.addAll(arguments);
+        }
+        try {
+            String output = run(command, 30);
+            if (output.length() > 200_000)
+                throw new CodeGraphException(
+                        "CODEGRAPH_RESULT_TOO_LARGE", "CodeGraph 查询结果过大，请缩小范围");
+            return output.replace(project.toString(), ".");
+        } catch (CodeGraphException failure) {
+            throw failure;
+        } catch (IllegalStateException failure) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_QUERY_FAILED", "CodeGraph 查询失败，请检查查询条件", failure);
+        }
+    }
+
     @Override
     public CodeGraphExplorer.View explore(UUID repositoryId, String module, String query) {
         Version current = version(repositoryId);

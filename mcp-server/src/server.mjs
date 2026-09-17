@@ -10,7 +10,7 @@ const repositoryId = uuid.describe('已认证账户可读取的仓库 UUID');
 export function createAnalyzerMcpServer(api = clientFromEnvironment()) {
   const server = new McpServer(
     { name: 'analyzer-coder', version: '1.0.0' },
-    { instructions: 'Use resolve_project_context with a tracked branchId to pin a branch snapshot, then reuse contextId in search_project. Without contextId, search_project reads the legacy default snapshot.' },
+    { instructions: 'Use list_codegraph_scopes to select a visible repository and branch. Reuse contextId from a graph query for a pinned snapshot. search_project also remains available.' },
   );
 
   server.registerTool(
@@ -55,6 +55,39 @@ export function createAnalyzerMcpServer(api = clientFromEnvironment()) {
     });
     return response(context, `Pinned branch ${context.branchName} at ${context.commitSha}.`);
   }));
+  const graphScope = {
+    repositoryId,
+    branchId: uuid.optional(),
+    contextId: uuid.optional(),
+  };
+  const graphTools = [
+    ['list_codegraph_scopes', 'List CodeGraph projects and branches', { page: z.number().int().min(1).max(100000).default(1), pageSize: z.number().int().min(1).max(50).default(20) }],
+    ['codegraph_explore', 'Explore branch code graph', { ...graphScope, query: z.string().min(1).max(500), maxFiles: z.number().int().min(1).max(20).default(8) }],
+    ['codegraph_node', 'Read graph node', { ...graphScope, name: z.string().min(1).max(500).optional(), file: z.string().min(1).max(500).optional(), offset: z.number().int().min(0).max(10000).default(0), limit: z.number().int().min(1).max(100).default(50) }],
+    ['codegraph_search', 'Search graph symbols', { ...graphScope, query: z.string().min(1).max(500), limit: z.number().int().min(1).max(50).default(20) }],
+    ['codegraph_callers', 'Find callers', { ...graphScope, symbol: z.string().min(1).max(500), limit: z.number().int().min(1).max(50).default(20) }],
+    ['codegraph_callees', 'Find callees', { ...graphScope, symbol: z.string().min(1).max(500), limit: z.number().int().min(1).max(50).default(20) }],
+    ['codegraph_impact', 'Analyze symbol impact', { ...graphScope, symbol: z.string().min(1).max(500), depth: z.number().int().min(1).max(5).default(2) }],
+    ['codegraph_files', 'List graph files', { ...graphScope, filter: z.string().min(1).max(500).optional(), pattern: z.string().min(1).max(500).optional() }],
+    ['codegraph_status', 'Graph status', graphScope],
+    ['codegraph_affected', 'Analyze affected tests', { ...graphScope, files: z.array(z.string().min(1).max(500)).min(1).max(20), depth: z.number().int().min(1).max(5).default(2) }],
+  ];
+  for (const [name, title, schema] of graphTools) {
+    server.registerTool(name, {
+      title,
+      description: `${title} for the token account. Branch queries require branchId or contextId and never switch branches implicitly.`,
+      inputSchema: z.object(schema),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    }, async input => toolCall(async () => {
+      if (!api.accessToken) throw new AnalyzerApiError(401, 'ACCESS_TOKEN_REQUIRED', 'CodeGraph MCP tools require ANALYZER_ACCESS_TOKEN');
+      const reply = await api.request('/api/mcp', {
+        method: 'POST',
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: input } }),
+      });
+      if (reply.error) throw new AnalyzerApiError(400, 'MCP_BACKEND_ERROR', reply.error.message);
+      return reply.result;
+    }));
+  }
   return server;
 }
 

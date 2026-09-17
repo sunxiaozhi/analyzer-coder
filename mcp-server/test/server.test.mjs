@@ -19,7 +19,7 @@ test('exposes project search and branch context resolution', async () => {
     await initialize(session);
     session.send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
     const listed = await waitFor(session.messages, message => message.id === 2);
-    assert.deepEqual(listed.result.tools.map(tool => tool.name), ['search_project', 'resolve_project_context']);
+    assert.deepEqual(listed.result.tools.map(tool => tool.name), ['search_project', 'resolve_project_context', 'list_codegraph_scopes', 'codegraph_explore', 'codegraph_node', 'codegraph_search', 'codegraph_callers', 'codegraph_callees', 'codegraph_impact', 'codegraph_files', 'codegraph_status', 'codegraph_affected']);
   } finally {
     session.child.kill();
   }
@@ -103,6 +103,30 @@ test('resolves the branch and forwards its pinned context to search', async () =
   }
 });
 
+test('proxies graph discovery through the authenticated backend MCP endpoint', async () => {
+  const received = [];
+  const backend = createServer(async (request, response) => {
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    received.push({ path: request.url, token: request.headers.authorization, body: JSON.parse(body) });
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: '{}' }], structuredContent: { projects: [] }, isError: false } }));
+  });
+  await new Promise(resolve => backend.listen(0, '127.0.0.1', resolve));
+  const session = startMcp({ ANALYZER_API_BASE: `http://127.0.0.1:${backend.address().port}`, ANALYZER_ACCESS_TOKEN: 'graph-token' });
+  try {
+    await initialize(session);
+    session.send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_codegraph_scopes', arguments: { page: 1 } } });
+    const called = await waitFor(session.messages, message => message.id === 2);
+    assert.equal(called.result.structuredContent.projects.length, 0);
+    assert.equal(received[0].path, '/api/mcp');
+    assert.equal(received[0].token, 'Bearer graph-token');
+    assert.equal(received[0].body.params.name, 'list_codegraph_scopes');
+  } finally {
+    session.child.kill();
+    await new Promise(resolve => backend.close(resolve));
+  }
+});
 function startMcp(extraEnvironment) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const child = spawn(process.execPath, [path.join(root, 'src/server.mjs')], {

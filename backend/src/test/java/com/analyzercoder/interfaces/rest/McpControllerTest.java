@@ -91,8 +91,9 @@ class McpControllerTest {
                                 .contentType("application/json")
                                 .content(
                                         "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
-                .andExpect(jsonPath("$.result.tools.length()").value(2))
-                .andExpect(jsonPath("$.result.tools[1].name").value("resolve_project_context"));
+                .andExpect(jsonPath("$.result.tools.length()").value(12))
+                .andExpect(jsonPath("$.result.tools[1].name").value("resolve_project_context"))
+                .andExpect(jsonPath("$.result.tools[2].name").value("list_codegraph_scopes"));
         mvc.perform(
                         post("/api/mcp")
                                 .header("Authorization", "Bearer alice-token")
