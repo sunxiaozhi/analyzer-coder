@@ -8,7 +8,7 @@ bash scripts/start.sh
 
 脚本在 Git 源码根目录依次完成前端构建、后端构建、PostgreSQL/Nginx 启动、应用配置生成、后端启动和健康检查。
 
-完整首次部署、Git 更新、公网 IP 访问、日志、停止和 Volume 说明见 `../docs/08-linux-git-deployment.md`。
+完整首次部署、Git 更新、公网 IP 访问、日志、停止和 Volume 说明见 `../docs/15-deployment-runbook.md`。
 
 ## 组件离线包
 

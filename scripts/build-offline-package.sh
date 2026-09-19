@@ -65,7 +65,7 @@ mkdir -p "$PACKAGE_DIR"
 cp scripts/offline-install.sh "$PACKAGE_DIR/install.sh"
 cp scripts/offline-install.ps1 "$PACKAGE_DIR/install.ps1"
 cp deploy/OFFLINE-README.md "$PACKAGE_DIR/README.md"
-cp docs/08-linux-git-deployment.md "$PACKAGE_DIR/STARTUP-GUIDE.md"
+cp docs/15-deployment-runbook.md "$PACKAGE_DIR/STARTUP-GUIDE.md"
 
 cat > "$PACKAGE_DIR/MANIFEST.txt" <<EOF
 代码知识平台离线包

@@ -7,14 +7,14 @@ Java 17 + Spring Boot 3.5 后端，承载账号、仓库、索引、检索、问
 - Spring MVC、Bean Validation、Actuator
 - MyBatis Mapper/XML、PageHelper
 - PostgreSQL 17、pgvector（内置 64 维字符哈希，外部模型维度可配置）
-- Flyway（当前源码保留合并后的 `V1` 基线；旧库升级需单独核验，见 `docs/12-data-flow-audit.md`）
+- Flyway（当前源码保留合并后的 `V1` 基线；旧库升级需单独核验，见 `docs/11-data-model.md`）
 - Spring Scheduler + 数据库任务表
 - Git CLI、CodeGraph CLI
 - JDK `HttpClient` + OpenAI-compatible chat/embedding
 
 ## 一键启动
 
-Linux 在源码根目录执行 `bash scripts/start.sh`。脚本依次构建前端和后端、启动 PostgreSQL/pgvector 与 Nginx、生成安全配置、启动宿主机后端并等待健康检查。完整部署步骤见 `docs/08-linux-git-deployment.md`。
+Linux 在源码根目录执行 `bash scripts/start.sh`。脚本依次构建前端和后端、启动 PostgreSQL/pgvector 与 Nginx、生成安全配置、启动宿主机后端并等待健康检查。完整部署步骤见 `docs/15-deployment-runbook.md`。
 
 ## 本地启动
 
@@ -65,7 +65,7 @@ Linux CI 默认启动临时 pgvector 服务并执行这组集成测试；普通�
 - 生产 Compose：`compose.prod.yaml`
 - 后端容器：`backend/Dockerfile`
 - systemd/Nginx/环境模板：`deploy/`
-- 完整 Git 部署与升级步骤：`docs/08-linux-git-deployment.md`
+- 完整 Git 部署与升级步骤：`docs/15-deployment-runbook.md`
 
 ## 安全约束
 

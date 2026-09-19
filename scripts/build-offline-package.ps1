@@ -70,7 +70,7 @@ try {
     Copy-Item -LiteralPath 'scripts\offline-install.sh' -Destination (Join-Path $packageDir 'install.sh')
     Copy-Item -LiteralPath 'scripts\offline-install.ps1' -Destination (Join-Path $packageDir 'install.ps1')
     Copy-Item -LiteralPath 'deploy\OFFLINE-README.md' -Destination (Join-Path $packageDir 'README.md')
-    Copy-Item -LiteralPath 'docs\08-linux-git-deployment.md' -Destination (Join-Path $packageDir 'STARTUP-GUIDE.md')
+    Copy-Item -LiteralPath 'docs\15-deployment-runbook.md' -Destination (Join-Path $packageDir 'STARTUP-GUIDE.md')
 
     $manifest = @"
 代码知识平台离线包
