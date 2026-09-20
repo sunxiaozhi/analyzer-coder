@@ -3,14 +3,14 @@
 param(
     [ValidateSet('start', 'stop', 'restart', 'status', 'help')]
     [string]$Action = 'help',
-    [ValidateRange(1, 65535)][int]$Port = 18080,
+    [ValidateRange(1, 65535)][int]$Port = 18082,
     [ValidateRange(1, 3600)][int]$TimeoutSeconds = 180,
     [string]$JavaXms = '256m',
     [string]$JavaXmx = '768m'
 )
 $ErrorActionPreference = 'Stop'
 if ($Action -eq 'help') {
-    Write-Host 'Usage: pwsh -File backend.ps1 start|stop|restart|status [-Port 18080] [-TimeoutSeconds 180]'
+    Write-Host 'Usage: pwsh -File backend.ps1 start|stop|restart|status [-Port 18082] [-TimeoutSeconds 180]'
     Write-Host 'Port must match config/application.yml. JVM: -JavaXms 256m -JavaXmx 768m.'
     exit 0
 }

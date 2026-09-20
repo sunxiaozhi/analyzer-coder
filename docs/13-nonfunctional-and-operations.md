@@ -126,7 +126,7 @@
 
 ### 2.8 不得公网暴露的组件
 
-- PostgreSQL 只绑定宿主机 127.0.0.1；后端在宿主机运行，监听 0.0.0.0 供 Docker 网关访问，防火墙限制发布端口 18080 仅允许 Docker 来源。
+- PostgreSQL 只绑定宿主机 127.0.0.1；后端在宿主机运行，监听 0.0.0.0 供 Docker 网关访问，防火墙限制发布端口 18082 仅允许 Docker 来源。
 - Nginx 只转发 /api/，拒绝 /actuator；健康检查在主机访问 /actuator/health。
 - 后端运行账号只授予所需仓库和数据目录访问权限，不再依赖后端容器的 UID、挂载或 systemd 模板。
 
@@ -299,14 +299,16 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 - 模板：deploy/backend、deploy/components。
 - 打包入口：scripts/build-release.sh / .ps1，共用 build-release.mjs。
 - 镜像：PG/pgvector 与 Nginx 使用版本标签导出到 components/images/components.tar，MANIFEST 记录实际镜像 ID、摘要和架构。无镜像升级包省略 TAR。
-- PostgreSQL 默认使用固定命名卷；也可通过 `POSTGRES_STORAGE_TYPE=bind` 和绝对 `POSTGRES_DATA_SOURCE` 挂载宿主机目录。切换存储源不会自动迁移数据。
+- PostgreSQL 固定使用 bind；`POSTGRES_DATA_SOURCE` 是宿主机绝对目录，容器 target 固定为 `/var/lib/postgresql/data`。更换 source 不会自动迁移数据。
+- Nginx 将发布目录的 `frontend/dist` 只读挂载到 `/usr/share/nginx/html`；配置将 `/index.html` 精确匹配后再提供 SPA 回退，避免入口缺失或不可读时产生内部重定向循环。`/assets/` 缺失时固定返回 404，不回退 HTML，防止 JS/CSS MIME 类型错误。Compose 配置兼容 V1.29.2 与 V2。
 
 ### 5.4 健康检查
 
 | 检查 | 作用 |
 | --- | --- |
 | PostgreSQL pg_isready | Compose 组件就绪检查 |
-| /component-health | Nginx 自身健康，不验证后端 |
+| /component-health | Nginx 自身健康，不验证静态文件或后端 |
+| /index.html 与 / | 验证前端 dist 挂载、权限及 SPA 回退 |
 | 宿主机 /actuator/health | 后端脚本验证 UP，包含数据库健康 |
 | Nginx /api/health | 验证代理到宿主机后端的链路 |
 

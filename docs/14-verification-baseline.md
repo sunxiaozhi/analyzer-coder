@@ -360,9 +360,10 @@
 | `scripts/build-release.test.mjs` | 5 项通过；覆盖无镜像包、凭据排除、校验、镜像标签与架构、失败不交付；另已完成真实镜像导出验证 |
 | `scripts/backend-launch.test.mjs` | Windows 下 1 项通过，使用实际测试 JAR 验证工作目录、空格路径、健康、重复启动、PID 身份保护、停止及启动失败清理 |
 | 实际 Spring Boot 外部配置加载 | 使用构建 JAR 内 Spring Boot 依赖验证：`backend/config/application.yml` 自动加载，覆盖外部数据库/密钥/端口配置，同时继承 JAR 内默认属性；不连接数据库 |
-| Compose `config --quiet`、PowerShell 解析、Bash `-n` | 通过 |
+| Compose 配置、PowerShell 解析、Bash `-n` | 通过；同一配置已由 Compose V2 和官方 `docker/compose:1.29.2` 分别执行 `config` 验证 |
+| Nginx 静态入口、SPA 与资源 MIME | 通过；实际启动 Nginx 后 `/index.html`、`/` 和不存在的前端路由均返回 200，真实 JS 返回 `application/javascript`，缺失 asset 返回 404；精确 `/index.html` location 防止内部重定向循环 |
 | Windows PowerShell 和 Git Bash 打包入口 | 均实际生成无镜像目录和 `tar.gz`；Git Bash 验证不是 Linux 主机运行验收 |
-| 完整离线包与运行链路 | 通过；实际导出并重新加载 linux/amd64 PG/pgvector、Nginx 镜像，以自定义 Windows bind 目录启动 PostgreSQL；JAR 在 18080 完成 Flyway，前端 HTTP 200，Nginx `/api/health` 返回 `ok`，pgvector 版本为 0.8.6；临时进程、容器和目录已清理 |
+| 完整离线包与运行链路 | 通过；实际导出并重新加载 linux/amd64 PG/pgvector、Nginx 镜像，以自定义 Windows bind 目录在宿主机 18080 启动 PostgreSQL，Nginx 对外使用 18081；JAR 在 18082 完成 Flyway，前端 HTTP 200，Nginx `/api/health` 返回 `ok`，pgvector 版本为 0.8.6；临时进程、容器和目录已清理 |
 | 完整包校验 | 24 个载荷文件 SHA-256 全部通过，压缩包 34 个条目且不含实际 `.env`、运行数据或 `.incomplete` 标记 |
 
 CI 新增 `ubuntu-latest` / `windows-latest` 部署脚本测试矩阵。Windows Docker Desktop 下的完整 HTTP 部署链路已经通过；Linux 宿主机启动、HTTPS、开机自启和真实历史数据升级仍需目标环境验收。

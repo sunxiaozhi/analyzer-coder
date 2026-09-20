@@ -22,7 +22,9 @@ Java 17 + Spring Boot 3.5 后端，承载账号、仓库、索引、检索、问
 
 ```bash
 cp deploy/components/components.env.example deploy/components/.env
-# 修改 deploy/components/.env 中的数据库密码；以下命令在源码根目录执行。
+# 修改数据库密码和 POSTGRES_DATA_SOURCE 绝对目录，并先创建该目录。
+mkdir -p /opt/sunhuanshi/analyzer-coder/postgres
+# Compose V2；V1.29.2 将 `docker compose` 换成 `docker-compose`。
 docker compose --env-file deploy/components/.env -f deploy/components/compose.yaml up -d postgres
 ```
 
@@ -66,5 +68,5 @@ Linux CI 默认启动临时 pgvector 服务并执行这组集成测试；普通�
 
 - 管理员重置密码为只展示一次的随机临时密码，24 小时过期并强制改密。
 - 生产环境必须使用 HTTPS、`APP_SESSION_COOKIE_SECURE=true` 和受信反向代理。
-- PostgreSQL、部署后端 18080 和 Actuator 不得直接暴露公网。
+- PostgreSQL、部署后端 18082 和 Actuator 不得直接暴露公网。
 - `APP_LLM_MASTER_KEY` 必须稳定保管，不能在已有模型密钥后随意轮换。

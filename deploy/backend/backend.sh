@@ -3,7 +3,7 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ACTION="${1:-help}"
 [[ $# -eq 0 ]] || shift
-PORT=18080
+PORT=18082
 TIMEOUT=180
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -13,7 +13,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 if [[ "$ACTION" == help || "$ACTION" == --help || "$ACTION" == -h ]]; then
-  echo "Usage: bash backend.sh start|stop|restart|status [--port 18080] [--timeout 180]"
+  echo "Usage: bash backend.sh start|stop|restart|status [--port 18082] [--timeout 180]"
   echo "Port must match config/application.yml. JVM: APP_JAVA_XMS=256m APP_JAVA_XMX=768m."
   exit 0
 fi
