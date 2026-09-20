@@ -288,8 +288,7 @@
   （`backend/src/main/resources/application.yml:85-87`），未在本次审计环境中运行。
 - **远端 Git / GitLab**：远端导入、分支探测与同步依赖真实远端与凭据，
   未做端到端验收；相关策略只有单元级覆盖。
-- **生产部署**：`compose.prod.yaml`、`deploy/compose.images.yaml`、systemd 单元与
-  nginx 配置未在真实服务器上验收。
+- **生产部署**：当前发布包为 PG/Nginx 容器加宿主机 JAR（见部署手册）；真实目标服务器上线、HTTPS、开机自启仍需按环境验收。旧全容器和纯宿主机方案已移除。
 - **历史库升级**：未对包含跨仓库项目数据或跨仓库知识作用域的历史库执行 V9 升级演练
   （V9 的数据守卫见 `backend/src/main/resources/db/migration/V9__remove_cross_repository_projects.sql:6-24`）。
 
@@ -349,3 +348,21 @@
    动作：在具备真实外部模型、真实 CodeGraph CLI、真实远端 Git/GitLab 与生产级
    部署环境的前提下，逐项执行端到端验收；并为 V9 升级准备一份含跨仓库数据的
    历史库副本先做演练，确认守卫会按预期阻断或放行。
+
+## 8. 2026-09-20 部署流程改造验证
+
+本节补充部署改造后的结果；前文测试资产数量和审计结果保留其历史口径。
+
+| 检查 | 本机结果 |
+| --- | --- |
+| npm ci、前端类型检查和 Vite 生产构建 | 通过；有既有分包体积和导入方式提示 |
+| Maven clean package -DskipTests | 通过，生成 Spring Boot JAR；本次未重跑业务单测 |
+| `scripts/build-release.test.mjs` | 5 项通过；覆盖无镜像包、凭据排除、校验、镜像标签与架构、失败不交付；另已完成真实镜像导出验证 |
+| `scripts/backend-launch.test.mjs` | Windows 下 1 项通过，使用实际测试 JAR 验证工作目录、空格路径、健康、重复启动、PID 身份保护、停止及启动失败清理 |
+| 实际 Spring Boot 外部配置加载 | 使用构建 JAR 内 Spring Boot 依赖验证：`backend/config/application.yml` 自动加载，覆盖外部数据库/密钥/端口配置，同时继承 JAR 内默认属性；不连接数据库 |
+| Compose `config --quiet`、PowerShell 解析、Bash `-n` | 通过 |
+| Windows PowerShell 和 Git Bash 打包入口 | 均实际生成无镜像目录和 `tar.gz`；Git Bash 验证不是 Linux 主机运行验收 |
+| 完整离线包与运行链路 | 通过；实际拉取并导出 linux/amd64 PG/pgvector、Nginx 镜像，重新 `docker load` 后以独立 Compose 项目和临时卷启动；JAR 完成 Flyway，前端 HTTP 200，Nginx `/api/health` 返回 `ok`，pgvector 版本为 0.8.6；临时容器和卷已清理 |
+| 完整包校验 | 24 个载荷文件 SHA-256 全部通过，压缩包 34 个条目且不含实际 `.env`、运行数据或 `.incomplete` 标记 |
+
+CI 新增 `ubuntu-latest` / `windows-latest` 部署脚本测试矩阵。Windows Docker Desktop 下的完整 HTTP 部署链路已经通过；Linux 宿主机启动、HTTPS、开机自启和真实历史数据升级仍需目标环境验收。

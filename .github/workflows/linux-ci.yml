@@ -57,7 +57,9 @@ jobs:
 
       - name: Validate startup scripts
         run: |
-          bash -n scripts/start.sh
+          bash -n scripts/build-release.sh
+          bash -n deploy/backend/backend.sh
+          node --check scripts/build-release.mjs
           node scripts/check-runtime.mjs --help
 
       - name: Validate retrieval quality
@@ -96,21 +98,30 @@ jobs:
           node scripts/evaluate-quality.mjs --results evaluation/results/release.json
 
       - name: Assemble release artifact
-        run: |
-          mkdir -p release/backend release/frontend release/deploy
-          cp backend/target/codebase-knowledge-backend-1.0.0.jar release/backend/analyzer-coder.jar
-          cp -R frontend/dist/. release/frontend/
-          cp deploy/.env.production.example release/deploy/
-          cp deploy/analyzer-coder.service release/deploy/
-          cp deploy/analyzer-coder.env.example release/deploy/
-          cp deploy/README.md release/deploy/
-          cp deploy/nginx-host.conf release/deploy/
-          cp deploy/nginx-compose-edge.conf release/deploy/
+        run: bash scripts/build-release.sh --version ci-${{ github.sha }} --skip-build --without-images
 
       - name: Upload Linux release artifact
         uses: actions/upload-artifact@v7
         with:
           name: analyzer-coder-linux-${{ github.sha }}
-          path: release
+          path: release/*.tar.gz
           if-no-files-found: error
           retention-days: 14
+
+  deployment-scripts:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Test release layout and backend lifecycle
+        run: node --test scripts/build-release.test.mjs scripts/backend-launch.test.mjs

@@ -1,0 +1,39 @@
+# Start with backend as the working directory: java -jar app.jar
+# Replace every replace-with value. Preserve this file and both master keys on upgrade.
+server:
+  address: 0.0.0.0 # Docker Nginx must reach the host; restrict 8080 in the firewall.
+  port: 8080
+  forward-headers-strategy: framework
+
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/codebase_kb
+    username: codebase_kb
+    password: 'replace-with-database-password'
+  flyway:
+    enabled: true
+
+app:
+  security:
+    initial-admin-username: admin
+    initial-admin-password: 'replace-with-strong-admin-password'
+    cookie-secure: false # Set true when the public entry uses HTTPS.
+  credentials:
+    master-key: 'replace-with-independent-random-secret-at-least-32-characters'
+  llm:
+    master-key: 'replace-with-random-secret-at-least-32-characters'
+    allow-insecure-local: false
+  repository:
+    allowed-roots: ./repositories
+    managed-data-root: ./data
+  codegraph:
+    executable: codegraph # Optional; install separately for graph analysis.
+
+logging:
+  file:
+    name: ./logs/backend.log
+  logback:
+    rollingpolicy:
+      max-file-size: 20MB
+      max-history: 14
+      total-size-cap: 1GB

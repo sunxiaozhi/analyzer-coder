@@ -12,17 +12,18 @@ Java 17 + Spring Boot 3.5 后端，承载账号、仓库、索引、检索、问
 - Git CLI、CodeGraph CLI
 - JDK `HttpClient` + OpenAI-compatible chat/embedding
 
-## 一键启动
+## 发布运行
 
-Linux 在源码根目录执行 `bash scripts/start.sh`。脚本依次构建前端和后端、启动 PostgreSQL/pgvector 与 Nginx、生成安全配置、启动宿主机后端并等待健康检查。完整部署步骤见 `docs/15-deployment-runbook.md`。
+通过源码根目录 scripts/build-release.sh / .ps1 生成发布包。后端位于 backend/app.jar，外部配置位于 backend/config/application.yml；backend.sh / backend.ps1 固定工作目录后使用 Spring Boot 默认配置查找规则。部署机无需 Maven 或源码。完整流程见 [部署手册](../docs/15-deployment-runbook.md)。
 
 ## 本地启动
 
 敏感配置没有代码默认值。先复制并修改数据库环境文件：
 
 ```bash
-cp .env.example .env
-docker compose up -d postgres
+cp deploy/components/.env.example deploy/components/.env
+# 修改 deploy/components/.env 中的数据库密码；以下命令在源码根目录执行。
+docker compose --env-file deploy/components/.env -f deploy/components/compose.yaml up -d postgres
 ```
 
 至少设置以下后端变量：
@@ -60,12 +61,6 @@ mvn -pl backend -Dtest='*IT' test
 
 Linux CI 默认启动临时 pgvector 服务并执行这组集成测试；普通单元测试仍可在没有数据库时运行。前端执行 `npm test` 验证关键路由，`npm run build` 完成类型检查和生产构建。
 
-## Linux 发布
-
-- 生产 Compose：`compose.prod.yaml`
-- 后端容器：`backend/Dockerfile`
-- systemd/Nginx/环境模板：`deploy/`
-- 完整 Git 部署与升级步骤：`docs/15-deployment-runbook.md`
 
 ## 安全约束
 

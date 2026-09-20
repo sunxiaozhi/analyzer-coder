@@ -32,8 +32,8 @@
   （`backend/src/main/java/com/analyzercoder/interfaces/rest/AuthController.java:46-54`）。
 - 登出以 `Max-Age=0` 清空同名 Cookie（`.../AuthController.java:116`）。
 - `app.security.cookie-secure` 在 `application.yml` 默认 `false`
-  （`backend/src/main/resources/application.yml:65`），生产模板默认 `true`
-  （`compose.prod.yaml:45`；`deploy/analyzer-coder.env.example:5`）；HTTPS 部署必须设为 `true`。
+  （`backend/src/main/resources/application.yml:65`），发布模板按 HTTP 默认设为 `false`
+  （发布包 backend/config/application.yml 中 app.security.cookie-secure）；HTTP 模板为 false，HTTPS 部署必须设为 true。
 
 ### 2.3 密码与登录防护
 
@@ -117,10 +117,7 @@
   （`backend/src/main/java/com/analyzercoder/interfaces/rest/KnowledgeAttachmentController.java:55-64`）。
 - Java 侧：MCP 与令牌列表设置 `Cache-Control: no-store`
   （`.../McpController.java:149`；`.../AccountAccessTokenController.java:32,42`）。
-- Nginx 侧统一注入 `X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、
-  `Referrer-Policy: strict-origin-when-cross-origin`；HTTPS 模板额外注入 HSTS
-  `max-age=31536000`（`deploy/nginx-container.conf:13-15`；
-  `deploy/nginx-host.conf:19-21`）。
+- Nginx 模板统一注入 X-Content-Type-Options、X-Frame-Options、Referrer-Policy，配置见 deploy/components/nginx/nginx.conf。
 - 全站 `Content-Security-Policy` 头在任何 nginx 配置中都未设置；CSP 仅存在于上述 Java 单端点。
 - 后端不泄漏内部细节：未预期异常统一 500 `INTERNAL_ERROR` 固定文案，数据约束异常 409
   `CONFLICT` 固定文案（`backend/src/main/java/com/analyzercoder/interfaces/rest/ApiExceptionHandler.java:70-81`）；
@@ -129,41 +126,19 @@
 
 ### 2.8 不得公网暴露的组件
 
-- 开发 compose 中 PostgreSQL 只绑定 `127.0.0.1:${POSTGRES_PORT:-5432}`
-  （`compose.yaml:14-15`）；`compose.prod.yaml` 与 `deploy/compose.images.yaml` 不为数据库发布宿主端口。
-- 后端容器不发布宿主端口：prod compose 只为 frontend 声明端口映射
-  （`compose.prod.yaml:73-74`），后端经 compose 网络被 nginx 以 `http://backend:8080` 访问
-  （`deploy/nginx-container.conf:21`）。
-- Actuator 仅暴露 `health,info,metrics`（`backend/src/main/resources/application.yml:43-48`）；
-  其中只有 `/actuator/health` 属公开路径，`/actuator/info` 与 `/actuator/metrics` 仍需有效会话
-  （`.../SessionInterceptor.java:23-29`）。
-- 内置 nginx 只反代 `/api/`，不透传 `/actuator/**`
-  （`deploy/nginx-container.conf:21`；`deploy/nginx-components.conf:27`；`deploy/nginx-host.conf:27`）。
-- 后端容器以非 root（uid/gid 10001）运行（`backend/Dockerfile:14-15,20`；`compose.prod.yaml:21`）；
-  仓库目录在 prod 与 images 形态下只读挂载（`compose.prod.yaml:52`；`deploy/compose.images.yaml:45`）。
-- systemd 加固：`UMask=0077`、`NoNewPrivileges`、`PrivateTmp`、`ProtectHome`、`ProtectSystem=strict`、
-  `ReadWritePaths=/var/lib/analyzer-coder`、`ReadOnlyPaths=/srv/analyzer-repositories`
-  （`deploy/analyzer-coder.service:16-22`）。
+- PostgreSQL 只绑定宿主机 127.0.0.1；后端在宿主机运行，监听 0.0.0.0 供 Docker 网关访问，防火墙限制 8080 仅允许 Docker 来源。
+- Nginx 只转发 /api/，拒绝 /actuator；健康检查在主机访问 /actuator/health。
+- 后端运行账号只授予所需仓库和数据目录访问权限，不再依赖后端容器的 UID、挂载或 systemd 模板。
 
 ### 2.9 HTTPS 与反向代理要求
 
-- 后端默认 `server.forward-headers-strategy: none`，配置注释要求"仅在受信任反向代理后按部署方式
-  设置 framework/native；直连部署保持 none"
-  （`backend/src/main/resources/application.yml:40-41`）；生产模板设为 `framework`
-  （`compose.prod.yaml:46`；`deploy/analyzer-coder.env.example:4`；`scripts/start.sh:195`）。
-- 后端无 `server.ssl.*`，TLS 只在 nginx 终止（`application.yml:38-41`）。
-- `deploy/nginx-host.conf` 提供 80→443 跳转与 TLS 服务块，证书路径
-  `/etc/ssl/analyzer-coder/fullchain.pem` 与 `privkey.pem`，`server_name` 为占位域名
-  `analyzer.example.com`，部署前必须替换（`deploy/nginx-host.conf:1-13`）；
-  `deploy/nginx-compose-edge.conf` 以 TLS 边缘代理 `127.0.0.1:8088`（`...:1-28`）。
-- 反向代理需转发 `X-Forwarded-Proto`（容器模板取 `$http_x_forwarded_proto`，回退 `$scheme`）与
-  `X-Forwarded-For`，并设置 `proxy_read_timeout 300s`
-  （`deploy/nginx-container.conf:1-4,27-28`；`deploy/nginx-host.conf:30-34`）；
-  上传体积上限 `client_max_body_size 60m`（`deploy/nginx-container.conf:11`；`deploy/nginx-host.conf:17`）。
+- 外部 YAML 将 server.forward-headers-strategy 设为 framework。默认 Nginx 模板提供 HTTP；公网发布按部署手册在同一配置中接入 HTTPS 并启用 app.security.cookie-secure。
+- Nginx 使用实际连接信息覆盖转发头。前置 HTTPS 网关需按受信代理链调整配置，不信任公网客户端任意传入的转发头。
+- API 读取超时 300 秒、上传限制 60m、关闭流式响应缓冲；见 deploy/components/nginx/nginx.conf。
 
 ## 3. 配置需求
 
-配置文件只有 `backend/src/main/resources/application.yml`（103 行），无 `application-*.yml` profile。
+JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包的 backend/config/application.yml 按 Spring Boot 标准加载并覆盖同名属性，无需配置 APP_ 环境变量。下表保留源码默认属性及其环境变量映射。
 下表中"必填"指无默认值、缺失会导致启动失败或功能不可用。
 
 | 领域 | 配置键 | 环境变量 | 默认值 | 必填 | 来源 |
@@ -226,7 +201,7 @@
 | --- | --- | --- | --- |
 | `app.repository.branch-concurrency` | 2 | 分支准备并发度 | backend/src/main/java/com/analyzercoder/worker/BranchPreparationWorker.java:22 |
 | `app.knowledge.drift-task-timeout-minutes` | 5 | 知识漂移任务时限 | .../application/knowledge/KnowledgeDriftJobProcessor.java:26 |
-| `SERVER_ADDRESS`（绑定 `server.address`） | 部署模板给出 | 后端监听地址 | deploy/analyzer-coder.env.example:3；scripts/start.sh:194 |
+| `SERVER_ADDRESS`（绑定 `server.address`） | 部署模板给出 | 后端监听地址 | deploy/backend/config/application.yml |
 
 - 不存在 `spring.datasource.hikari.*`，未配置连接池大小；也不存在 `server.tomcat.*`、
   `server.servlet.*`、`logging.*`、`info.*`、`management.endpoint.*` 与
@@ -234,24 +209,9 @@
 - 若库中无任何账号且未提供初始管理员凭据，启动后仅记一条 WARN，不创建账号
   （`backend/src/main/java/com/analyzercoder/security/AuthService.java:150-161`）。
 
-### 3.1 仅在全容器编排下使用的宿主机路径变量
+### 3.1 发布包的目录与组件配置
 
-`compose.prod.yaml` 额外要求两个"宿主机路径"变量，它们**只在该 compose 形态下使用**，
-不出现在 `application.yml` 中，也不应与会话内的容器路径变量混淆：
-
-| 变量 | 必填 | 作用 | 容器内对应变量 | 来源 |
-| --- | --- | --- | --- | --- |
-| `APP_REPOSITORY_HOST_ROOT` | **是**（`:?` 语法） | 作为 bind mount 源挂载到容器 `/repositories`，且该挂载为只读 | `APP_REPOSITORY_ALLOWED_ROOTS=/repositories` | compose.prod.yaml:38,49-52 |
-| `APP_MANAGED_DATA_HOST_ROOT` | **是**（`:?` 语法） | 作为 bind mount 源挂载到容器 `/data/analyzer-coder`（读写），承接快照、索引产物、图谱产物与附件 | `APP_MANAGED_DATA_ROOT=/data/analyzer-coder` | compose.prod.yaml:39,53-55 |
-
-- 两者语义不同：`*_HOST_ROOT` 是宿主机上的目录，`APP_REPOSITORY_ALLOWED_ROOTS` 与
-  `APP_MANAGED_DATA_ROOT` 是容器内可见的路径（compose.prod.yaml:38-39,49-55）。
-  仓库挂载为 `read_only: true`，因此后端对源码目录只读、只向受管数据根写入
-  （compose.prod.yaml:52）。
-- 该 compose 形态下其他隐含默认值：`APP_INITIAL_ADMIN_USERNAME` 默认 `admin`
-  （compose.prod.yaml:36）、`APP_CREDENTIAL_MASTER_KEY` 回退到 `APP_LLM_MASTER_KEY`
-  （compose.prod.yaml:43）、`APP_SESSION_COOKIE_SECURE` 默认 `true`
-  （compose.prod.yaml:45）、`TZ` 默认 `Asia/Shanghai`（compose.prod.yaml:47）。
+后端 YAML 中的 ./data 和 ./repositories 相对 backend 工作目录。组件参数单独保存在 components/.env，数据库账号、密码、端口需与 YAML 一致。Nginx 的前端挂载使用 ../frontend/dist；无需 APP_REPOSITORY_HOST_ROOT 或 APP_MANAGED_DATA_HOST_ROOT。
 
 ## 4. 容量与性能边界
 
@@ -286,7 +246,7 @@
 ### 4.3 请求超时与任务超时
 
 - HTTP 服务端未配置请求超时；实际生效的是 nginx `proxy_read_timeout 300s`
-  （`deploy/nginx-container.conf:28`；`deploy/nginx-host.conf:34`）。
+  （deploy/components/nginx/nginx.conf）。
 - CodeGraph CLI 单次构建超时 10 分钟（`application.yml:89`；
   `.../application/intelligence/CodeGraphService.java:30,34,62`）；Worker 任务整体时限 12 分钟，
   写入 `timeout_at`（`application.yml:91`；
@@ -334,137 +294,27 @@
 
 ## 5. 部署形态
 
-### 5.1 Compose 文件
+唯一支持的发布形态为 PG/pgvector、Nginx 容器加宿主机 JAR。前端为静态 dist，只读挂载到 Nginx。构建机生成完整目录和压缩包，服务器无需源码、Node.js 或 Maven。详细步骤以 [部署手册](15-deployment-runbook.md) 为准。
 
-| 文件 | 用途与差异 |
+- 模板：deploy/backend、deploy/components。
+- 打包入口：scripts/build-release.sh / .ps1，共用 build-release.mjs。
+- 镜像：PG/pgvector 与 Nginx 使用版本标签导出到 components/images/components.tar，MANIFEST 记录实际镜像 ID、摘要和架构。无镜像升级包省略 TAR。
+- PostgreSQL 使用固定命名卷，停止组件不删除卷。旧实例必须确认已有卷名后再迁移。
+
+### 5.4 健康检查
+
+| 检查 | 作用 |
 | --- | --- |
-| `compose.yaml` | 开发依赖，只起 PostgreSQL：`pgvector/pgvector:pg17`，容器 `analyzer-coder-postgres`，绑定 `127.0.0.1:${POSTGRES_PORT:-5432}:5432`，卷 `postgres-data`，`pg_isready` 健康检查，要求 `POSTGRES_PASSWORD`（compose.yaml:2-22） |
-| `compose.prod.yaml` | 生产形态，postgres + backend + frontend：项目名 `analyzer-coder`；后端由 `backend/Dockerfile` 构建并传 `CODEGRAPH_VERSION`；以 `${APP_RUNTIME_UID:-10001}:${APP_RUNTIME_GID:-10001}` 运行；`APP_FORWARD_HEADERS_STRATEGY=framework`、`APP_SESSION_COOKIE_SECURE` 默认 `true`；仓库目录只读绑定；`/tmp` 为 256m tmpfs；仅 frontend 发布端口（compose.prod.yaml:21-74） |
-| `compose.offline.yaml` | 离线部署，使用已导入镜像：项目名 `analyzer-coder-components`；镜像 `analyzer-coder/postgres:offline`、`analyzer-coder/nginx:offline`，均 `pull_policy: never`；nginx 只读挂载 `${APP_FRONTEND_DIST_HOST_ROOT}` 与 `deploy/nginx-components.conf`；健康检查 `/component-health`；`extra_hosts: host.docker.internal:host-gateway`（compose.offline.yaml:1-47） |
-| `compose.components.yaml` | 组件形态，拓扑同离线但用上游镜像 `pgvector/pgvector:pg17`、`nginx:1.27-alpine`（compose.components.yaml:5,24） |
-| `deploy/compose.images.yaml` | 预构建镜像部署：只用 `analyzer-coder/backend:${APP_IMAGE_TAG:-release-1}` 与 `analyzer-coder/frontend:${APP_IMAGE_TAG:-release-1}`（`pull_policy: never`）；要求显式 `APP_CREDENTIAL_MASTER_KEY`；默认绑定 `0.0.0.0:80`；数据目录来自必填 `APP_POSTGRES_DATA_HOST_ROOT`（deploy/compose.images.yaml:14,22-24,40,57-58,64） |
-
-### 5.2 镜像构建
-
-- `backend/Dockerfile`：构建阶段 `maven:3.9-eclipse-temurin-17`（:1-7）；运行阶段
-  `node:20-bookworm-slim`，`ARG CODEGRAPH_VERSION=1.5.0`，安装
-  `openjdk-17-jre-headless git ca-certificates curl` 与全局 npm 包
-  `@colbymchenry/codegraph@${CODEGRAPH_VERSION}`；创建非 root 用户 `analyzer`(10001)；
-  JAR 位于 `/app/app.jar`；`EXPOSE 8080`；HEALTHCHECK 每 30 秒请求
-  `http://127.0.0.1:8080/actuator/health`（3 次重试）；入口 `java -jar /app/app.jar`
-  （backend/Dockerfile:9-24）。
-- `frontend/Dockerfile`：`node:20-alpine` 执行 `npm ci` + `npm run build`（:1-6）；
-  运行阶段 `nginx:1.27-alpine`，配置来自 `deploy/nginx-container.conf`；`EXPOSE 8080`；
-  HEALTHCHECK 用 wget 请求 `/`（frontend/Dockerfile:8-13）。
-- `.dockerignore` 排除 `.git`、`.github`、`.idea`、`.vscode`、`**/target`、
-  `frontend/node_modules`、`frontend/dist`、`runtime-logs`、`*.log`、`.env`、`.env.production`
-  （.dockerignore:1-11）；`scripts/start.sh` 运行期生成的 `.env.components` 与
-  `.env.application` **不在**排除列表内。
-
-### 5.3 `deploy/` 目录
-
-- systemd 单元 `deploy/analyzer-coder.service`：`User/Group=analyzer`，
-  `WorkingDirectory=/opt/analyzer-coder`，`EnvironmentFile=/etc/analyzer-coder/analyzer-coder.env`，
-  `ExecStart=/usr/bin/java -Xms512m -Xmx2g -jar /opt/analyzer-coder/app/analyzer-coder.jar`，
-  `Restart=on-failure`、`RestartSec=5`、`TimeoutStopSec=30`，以及第 2.8 节的加固项
-  （deploy/analyzer-coder.service:6-25）。
-- Nginx 四份：`nginx-container.conf`（容器内监听 8080，`/api/` → `http://backend:8080`）、
-  `nginx-components.conf`（额外 `location = /component-health` 返回 200 `ok` 并关闭访问日志，
-  `/api/` → `http://host.docker.internal:8080`）、
-  `nginx-host.conf`（80→443 + TLS + HSTS，root `/opt/analyzer-coder/web`，
-  `/api/` → `http://127.0.0.1:8080`）、
-  `nginx-compose-edge.conf`（TLS 边缘，代理 `127.0.0.1:8088`）
-  （deploy/nginx-container.conf:1-30；deploy/nginx-components.conf:13-35；
-  deploy/nginx-host.conf:1-35；deploy/nginx-compose-edge.conf:1-28）。
-- 环境模板四份：`deploy/.env.production.example`（prod compose 全量模板，含
-  `APP_CREDENTIAL_MASTER_KEY`、`APP_RUNTIME_UID/GID=10001`、`APP_HTTP_BIND_ADDRESS=127.0.0.1`、
-  `APP_HTTP_PORT=8088`、`APP_SESSION_COOKIE_SECURE=true`、`CODEGRAPH_VERSION=1.5.0`）；
-  `deploy/analyzer-coder.env.example`（systemd：`SERVER_ADDRESS=127.0.0.1`、
-  `APP_FORWARD_HEADERS_STRATEGY=framework`、`APP_POSTGRES_SERVICE=postgresql`、
-  `APP_NGINX_SERVICE=nginx`、`APP_JAVA_XMS=256m`、`APP_JAVA_XMX=768m`）；
-  `deploy/analyzer-coder-components.env.example`（`SERVER_ADDRESS=0.0.0.0`、
-  `APP_SESSION_COOKIE_SECURE=false`）；`deploy/analyzer-coder-images.env.example`
-  （`APP_IMAGE_TAG`、`APP_POSTGRES_DATA_HOST_ROOT`、绑定 `0.0.0.0:80`）
-  （deploy/.env.production.example:1-20；deploy/analyzer-coder.env.example:1-25；
-  deploy/analyzer-coder-components.env.example:2-7；deploy/analyzer-coder-images.env.example:1-15）。
-- 说明文档：`deploy/README.md` 与 `deploy/OFFLINE-README.md`（deploy/README.md:1-58；
-  deploy/OFFLINE-README.md:1-49）。
-- 仓库根的 `.env.production` 含明文 `POSTGRES_PASSWORD`、`APP_INITIAL_ADMIN_PASSWORD`、
-  `APP_LLM_MASTER_KEY`，且 `APP_SESSION_COOKIE_SECURE=false`
-  （.env.production:3,5,6,13）；该文件被 `.gitignore` 忽略且未被 Git 跟踪（.gitignore:18）。
-  部署前必须确认其取值与目标环境一致。
-
-### 5.4 健康检查端点与其公开性
-
-| 端点 | 消费者 | 公开性 |
-| --- | --- | --- |
-| `/actuator/health` | 两个 Dockerfile 的 HEALTHCHECK、compose 健康检查、`check-runtime.mjs` | 公开（`SessionInterceptor` 显式放行 `path.startsWith("/actuator/health")`）（backend/Dockerfile:22-23；compose.prod.yaml:58-63；SessionInterceptor.java:27） |
-| `/api/health` | 自定义探针与脚本 | 公开，返回 `{status,timestamp}`（HealthController.java:13-16；SessionInterceptor.java:24） |
-| `/component-health` | nginx-components 健康检查 | 由 nginx 直接返回 200 `ok`，不经过后端（deploy/nginx-components.conf:17-21；compose.offline.yaml:42-47） |
-| `/actuator/info`、`/actuator/metrics` | 无内置消费者 | 已暴露但**不公开**：不在公开路径列表内，需有效会话（application.yml:43-48；SessionInterceptor.java:23-29） |
+| PostgreSQL pg_isready | Compose 组件就绪检查 |
+| /component-health | Nginx 自身健康，不验证后端 |
+| 宿主机 /actuator/health | 后端脚本验证 UP，包含数据库健康 |
+| Nginx /api/health | 验证代理到宿主机后端的链路 |
 
 ## 6. 启动与诊断脚本
 
-- `scripts/start.sh`（源码构建启动）：`set -Eeuo pipefail`；参数 `--skip-npm-ci`、`--https`
-  （后者强制 `APP_SESSION_COOKIE_SECURE=true`）。依赖 `docker`、`od`、`npm`、`mvn`、`java`、
-  `git`、`codegraph`、`curl`、`nohup`、`ps`、`find`、`grep`、`seq`、`tail`、`tr`、`sed`、`basename`
-  及可用的 `docker compose` v2 与运行中的守护进程。构建前端（`NODE_OPTIONS` 默认
-  `--max-old-space-size=1536`）与后端（`MAVEN_OPTS` 默认 `-Xmx1024m`，
-  `mvn -pl backend -am clean package -DskipTests`），要求恰好一个后端 JAR；
-  存在两个离线镜像时用 `compose.offline.yaml`，否则用 `compose.components.yaml`；
-  自动生成 `.env.components` 与 `.env.application`（`chmod 600`，密钥取自 `/dev/urandom`）。
-  失败处理：拒绝杀掉非本源码树启动的进程、拒绝 8080 端口上的非受管后端；
-  生成的 env 文件仍含 `replace-with` 即中止；等待 postgres/nginx 最多 60×2 秒、
-  等待 `/actuator/health` 最多 90×2 秒，超时则打印日志尾部 120 行、杀进程、删 PID 文件、退出 1。
-  产物为 `runtime/backend.pid` 与 `runtime/logs/backend.log`
-  （scripts/start.sh:2,9-10,14-26,32-34,36-46,61-143,149-165,187-261）。
-- `scripts/start-prebuilt-host.sh`（预构建主机启动，不依赖 Docker/npm/Maven）：
-  参数 `--env-file`、`--jar`、`--frontend-root`、`--skip-service-start`、`--reload-nginx`。
-  依赖 `java`、`curl`、`pg_isready`、`systemctl`、`ps`、`find`、`xargs`；特权经 root 或
-  `sudo -n` 获取，否则退出 1。校验 9 个环境变量非空（含 `APP_DATASOURCE_*`、
-  `APP_INITIAL_ADMIN_*`、`APP_REPOSITORY_ALLOWED_ROOTS`、`APP_MANAGED_DATA_ROOT`、
-  `APP_LLM_MASTER_KEY`、`APP_CREDENTIAL_MASTER_KEY`）、占位符守卫、
-  `frontend/dist/index.html` 存在性、唯一后端 JAR、每个允许根存在且可读、`pg_isready` 门禁；
-  `nginx -t` 在无 sudo 时跳过并告警，nginx 仅在 `--reload-nginx` 时重载。
-  健康等待 90×2 秒，失败则输出日志尾部 120 行、杀进程、删 PID 文件、退出 1
-  （scripts/start-prebuilt-host.sh:2,20-37,50-110）。
-- `scripts/check-runtime.mjs`（只读诊断）：读取 `APP_DATASOURCE_URL`、`APP_SERVER_PORT`、
-  `APP_CODEGRAPH_EXECUTABLE`、`APP_REPOSITORY_ALLOWED_ROOTS`、`APP_MANAGED_DATA_ROOT`；
-  检查 Node ≥ 20、`java`/`mvn`/`git` 必须具备、CodeGraph 缺失仅记 WARN、
-  PostgreSQL 端口 2.5 秒 TCP 可达、后端 `/actuator/health` 必须返回 `UP`（3 秒超时）、
-  仓库根存在且为目录、`APP_MANAGED_DATA_ROOT` 已设置。
-  默认逐行打印 `[PASS|WARN|FAIL]`，`--json` 输出结构化结果，`--help` 打印用法并退出 0；
-  存在任一 FAIL 时退出 1（scripts/check-runtime.mjs:5-13,32,38-69）。
-- `scripts/verify-core.mjs`（端到端核心验证）：依赖 Docker；启动一次性
-  `pgvector/pgvector:pg17` 容器（`--port` 默认 15439，校验 1024–65535），随机生成数据库密码、
-  管理员密码与主密钥，数据根 `.runtime/verification/<uuid>`；每条命令超时 600 秒；
-  依次运行 vitest、`vue-tsc`、`vite build`、
-  `mvn -pl backend -am -Dtest='*Test,*Tests,*IT' test`、mcp-server `node --test` 与脚本测试。
-  任一失败即打印信息并置退出码 1；无论如何都在 `finally` 删除容器，删除失败同样置退出码 1
-  （scripts/verify-core.mjs:12-31,35,61-80）。
-- `scripts/evaluate-quality.mjs`（评测门槛）：读取 `evaluation/manifest.json` 与
-  `evaluation/thresholds.json`，支持 `--root`。数据集校验包括条目数与 `expectedCount` 一致、
-  用例 ID 唯一、仓库类型在 `repositoryTypes` 内、`expectedPaths`/`evidence` 引用文件存在、
-  QA 用例须有人工审阅信息（`curation.method = HUMAN` 且有 `reviewedAt`）。
-  `--validate` 打印 `{valid,scoreable,datasetVersion,counts}` 并退出 0；
-  `--results <文件>` 计算 `retrievalRecallAt10`、`citationCoverageRate`、
-  `statementSupportRate`、`p95LatencyMs` 并与阈值比较，未通过退出 2；
-  任何异常打印 `评测失败：<message>` 并退出 1
-  （scripts/evaluate-quality.mjs:6-14,42-67,124-136,142-153）。
-- 离线打包与安装：`scripts/build-offline-package.sh` 按 `--platform`（默认 `linux/amd64`）
-  拉取 `pgvector/pgvector:pg17` 与 `nginx:1.27-alpine` 并重标记为
-  `analyzer-coder/postgres:offline`、`analyzer-coder/nginx:offline`（版本号须匹配
-  `^[A-Za-z0-9._-]+$`），打包内容含两个安装脚本、`deploy/OFFLINE-README.md` 以及由
-  `docs/15-deployment-runbook.md` 复制而来的 `STARTUP-GUIDE.md`，生成 `MANIFEST.txt`，
-  `docker save` 为 `images.tar`，`sha256sum`/`shasum` 均不可用时退出 1，最后 `chmod +x install.sh`
-  并 `tar -czf`（scripts/build-offline-package.sh:7,18,25-28,57-97）；
-  `build-offline-package.ps1` 为等价实现并额外等待 Docker Desktop 最多 120 秒
-  （scripts/build-offline-package.ps1:36-54,59-113）；
-  `scripts/offline-install.sh` 校验 `SHA256SUMS` 后 `docker load --input images.tar`，
-  要求 docker、compose v2 与运行中的守护进程，否则退出 1，未知参数退出 2
-  （scripts/offline-install.sh:2,12,20-41）；`offline-install.ps1` 为 Windows 等价实现，
-  正则校验 `SHA256SUMS` 格式并用 `Get-FileHash` 比对，不匹配即抛错
-  （scripts/offline-install.ps1:12-35）。
+发布包 backend/backend.sh 和 backend/backend.ps1 提供 start、stop、restart、status。启动检查配置占位符、端口与进程身份，并等待健康；固定 backend 工作目录，不手工注入业务配置。Linux 停机发送 SIGTERM，Windows 使用 Stop-Process；详细限制见部署手册。
+
+源码的 scripts/check-runtime.mjs 继续作为开发环境诊断入口，依赖 Node/Maven 和终端环境变量；它不读取发布包 YAML，也不作为部署机必需工具。scripts/verify-core.mjs 与评测脚本保留用于开发验证。
 
 ## 7. 可观测性
 
@@ -478,7 +328,7 @@
   `errorMessage`、`heartbeatAt`、`timeoutAt`
   （`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:64-99,123-137`；
   `.../RepositoryBranchController.java:90-94,184-192`）。
-- 日志：启动脚本把后端输出重定向到 `runtime/logs/backend.log`（scripts/start.sh:9-10）。
+- 日志：发布包 backend/logs/backend.log 使用 Spring Boot 滚动策略；console.log（Windows 另有 stderr.log）记录启动输出，见 deploy/backend/config/application.yml 和两平台启停脚本。
 - 审计日志的范围与事件类型见账号与权限文档；唯一读取端点为 `GET /api/accounts/audit`，
   要求超级管理员（`.../AccountController.java:110-117`）。
 
@@ -494,7 +344,7 @@
 - V1 执行 `CREATE EXTENSION IF NOT EXISTS vector`
   （`backend/src/main/resources/db/migration/V1__init_schema.sql:6`），
   因此数据库角色需有权创建扩展；`pgvector/pgvector:pg17` 镜像已提供该扩展
-  （`compose.yaml:18`）。
+  （deploy/components/.env.example）。
 - `V9` 的数据守卫（升级前置条件，来自
   `backend/src/main/resources/db/migration/V9__remove_cross_repository_projects.sql`）：
   - 迁移全程对 `engineering_projects`、`engineering_project_repositories`、

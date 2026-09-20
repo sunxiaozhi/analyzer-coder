@@ -4,6 +4,7 @@ import net from 'node:net';
 
 if (process.argv.includes('--help')) {
   console.log(`Usage: node scripts/check-runtime.mjs [--json]
+Development/source environment only; does not load release YAML.
 Read-only runtime checks; no credentials are printed and no services are started.
 Uses APP_DATASOURCE_URL, APP_SERVER_PORT, APP_CODEGRAPH_EXECUTABLE,
 APP_REPOSITORY_ALLOWED_ROOTS and APP_MANAGED_DATA_ROOT from the current environment.

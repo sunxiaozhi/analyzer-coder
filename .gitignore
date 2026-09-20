@@ -26,3 +26,11 @@ deploy/.env.production
 /.runtime
 /release/*.gz
 /.local-data
+
+# Deployment templates must not accumulate runtime files or secrets.
+/deploy/backend/logs/
+/deploy/backend/run/
+/deploy/backend/data/
+/deploy/backend/repositories/
+/deploy/backend/app.jar
+/release-full/

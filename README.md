@@ -23,15 +23,17 @@
 
 没有配置外部模型时，系统仍可使用关键词与字符相似度检索；这不等同于完整语义理解。向量模型和 CodeGraph 都是可选增强，不影响最小路径成立。
 
-## 启动
+## 打包与部署
 
-- Linux 源码启动：`bash scripts/start.sh`
-- Linux 预构建宿主机启动（已有前端 dist、后端 JAR、本机 PostgreSQL 和 Nginx）：`bash scripts/start-prebuilt-host.sh`
-- 后端：准备 PostgreSQL/pgvector 后运行 Spring Boot，详见 [后端说明](backend/README.md)
-- 前端：`npm --prefix frontend ci`，然后 `npm --prefix frontend run dev`
-- 环境诊断：`node scripts/check-runtime.mjs`
+PG/pgvector、Nginx 使用 Docker，后端运行 JAR，前端发布 dist。服务器只接收完整发布包，不需要下载源码。
 
-后端不能只靠前端开发服务器启动；数据库、仓库目录配置和 Java 服务都必须可用。
+Windows：pwsh -File scripts/build-release.ps1 -Version 1.0.0。
+
+Linux：bash scripts/build-release.sh --version 1.0.0。
+
+输出 release/analyzer-coder-1.0.0/ 和同名 tar.gz。应用升级可加 --without-images（PowerShell：-WithoutImages）。后端通过 backend/config/application.yml 配置，启停脚本固定以 backend 为工作目录。
+
+首次部署、镜像导入、两平台启动和升级见 [部署手册](docs/15-deployment-runbook.md)。本地开发见 [后端说明](backend/README.md)，前端使用 npm --prefix frontend run dev。源码环境诊断可用 node scripts/check-runtime.mjs。
 
 ## 验证
 

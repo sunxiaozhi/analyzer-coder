@@ -2,6 +2,8 @@
 
 > 本目录文档于 2026-09-19 重建。旧文档已整体删除，仍可从 Git 历史找回：查看单个文件用 `git show HEAD:docs/<旧文件名>`；恢复整批旧文档用 `git checkout HEAD -- docs/`（注意这会把旧文件与当前新文档并列恢复到同一目录，恢复后需自行清理）。
 >
+> 2026-09-20：部署流程已收敛为完整发布包，运维相关章节随实现更新。
+>
 > 当前文档集**从现有实现反推生成**：依据源码、SQL 迁移、配置与测试，描述系统"已实现的需求"，不是新设计提案。每条非显然的规则都附有来源证据（`路径:行号`）。
 
 ## 阅读路径
@@ -32,13 +34,13 @@
 | [12 接口目录](12-api-catalog.md) | 全部 HTTP 端点、方法、权限与用途，含无调用方端点清单 | 前后端、集成方 |
 | [13 非功能与部署运维](13-nonfunctional-and-operations.md) | 安全约束、配置项清单、容量边界、部署形态、脚本、升级与备份 | 运维、后端 |
 | [14 验证基线](14-verification-baseline.md) | 测试资产、验证命令、实测结果、已知缺口与未验收项 | 全部 |
-| [15 部署与启动操作手册](15-deployment-runbook.md) | 四种部署形态的操作步骤、诊断、停止、升级与故障对照 | 运维 |
+| [15 部署与启动操作手册](15-deployment-runbook.md) | 完整发布包与两平台部署的操作步骤、诊断、停止、升级与故障对照 | 运维 |
 
 `mcp-server/README.md`、`backend/README.md`、`deploy/README.md` 是各自模块的操作说明，与本目录互补。
 
 ## 文档集的生成方式与边界
 
-1. **来源**：`backend/src/main/java`、`backend/src/main/resources`（含 `db/migration` 与 MyBatis XML）、`frontend/src`、`mcp-server/src`、`scripts`、`deploy`、`compose*.yaml`、`.github/workflows`、`evaluation`、`backend/src/test` 与 `frontend/src/**/*.spec.ts`。
+1. **来源**：`backend/src/main/java`、`backend/src/main/resources`（含 `db/migration` 与 MyBatis XML）、`frontend/src`、`mcp-server/src`、`scripts`、`deploy`、`.github/workflows`、`evaluation`、`backend/src/test` 与 `frontend/src/**/*.spec.ts`。
 2. **不含设计提案**：文中只描述已实现的行为。已在实现中移除的能力（变更审查、跨仓工程项目、PR/MR Webhook、审查型 CI、任务结果回报等）不写成需求，只在"边界与非目标"中列出。
 3. **证据可核对**：文中的 `路径:行号` 指向反推时的实现位置；代码变动后行号可能偏移，请以符号名与文件为准。
 4. **"已知缺口"**：每一份领域文档末尾的缺口清单只记录能从代码判断的真实问题（例如接口无调用方、上下文未传递、测试未接入自动化）。无法确认的一律标注"需人工确认"，不做推测。
