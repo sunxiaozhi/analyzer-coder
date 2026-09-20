@@ -65,7 +65,7 @@ analyzer-coder-1.0.0/
 ├─ SHA256SUMS                         # 发布文件校验清单，不含清单自身
 ├─ components/
 │  ├─ compose.yaml
-│  ├─ .env.example                    # 首次部署复制为 .env
+│  ├─ components.env.example          # 首次部署复制为 .env
 │  ├─ nginx/nginx.conf
 │  └─ images/components.tar           # --without-images 时省略
 ├─ backend/
@@ -108,20 +108,23 @@ SHA256SUMS 用于确认传输完整性；填写配置后，配置文件的校验
 
 ### 4.2 填写配置
 
-Linux：cp components/.env.example components/.env。
-Windows：Copy-Item components/.env.example components/.env。
+Linux：cp components/components.env.example components/.env。
+Windows：Copy-Item components/components.env.example components/.env。
 
 修改两处：
 
-1. components/.env：填写数据库密码、入口端口；镜像名称保留包中生成的值。
+1. components/.env：填写数据库密码、存储方式、入口端口；镜像名称保留包中生成的值。
 2. backend/config/application.yml：填写数据库连接、管理员初始密码、两个独立加密主密钥；替换全部 replace-with 值。
 
 - 数据库名、账号、密码、宿主映射端口在两处必须一致。后端数据库地址使用 127.0.0.1，不是 Compose 服务名 postgres。
+- 默认存储使用 `POSTGRES_STORAGE_TYPE=volume`、`POSTGRES_DATA_SOURCE=postgres-data`，实际 Docker 卷名由 `POSTGRES_VOLUME` 指定。
+- 指定宿主机目录时，将 `POSTGRES_STORAGE_TYPE` 改为 `bind`，并把 `POSTGRES_DATA_SOURCE` 改为已创建的绝对路径，例如 Linux `/data/analyzer-coder/postgres` 或 Windows `D:/apps/analyzer-coder/postgres`。Linux 目录必须允许容器内 PostgreSQL 用户读写。
+- 命名卷与宿主机目录之间切换只会改变数据源，不会复制已有数据库；有数据的实例必须先备份、迁移并验证，再切换配置。
 - YAML 中按 spring.datasource、server、app 等标准属性配置；无需 APP_ 环境变量或 dotenv 加载器。
 - 两个主密钥分别保存模型 Key 和 Git 凭据的加密能力，使用至少 32 字符的独立随机值，升级时必须保留。
 - 默认数据路径相对 backend；自定义仓库白名单目录必须预先存在且可读。Windows 的 YAML 路径建议使用 D:/data/repositories 形式。
-- HTTP 默认端口 8088，后端 8080，PG 宿主端口 5432。更改后端端口时，同时修改 YAML 的 server.port、Nginx 的 proxy_pass 和后端脚本的 --port / -Port 参数。
-- 初始管理员仅在数据库没有账号时创建，第一次登录要求改密。修改配置里的初始密码不会重置已有账号。
+- HTTP 默认端口 8088，后端固定使用 18080，PG 宿主端口默认 5432。若再次更改后端端口，必须同步修改 YAML 的 `server.port`、Nginx 的 `proxy_pass` 和后端脚本的 `--port` / `-Port` 默认值。
+- 初始管理员密码必须同时包含大写字母、小写字母、数字和特殊字符。管理员仅在数据库没有账号时创建，第一次登录要求改密；修改配置里的初始密码不会重置已有账号。
 - Linux 建议 chmod 600 components/.env backend/config/application.yml；Windows 将这些文件访问权限限制为部署账号。
 
 ### 4.3 加载镜像并启动组件
@@ -199,7 +202,7 @@ backend/logs/backend.log 按 20MB 滚动，保留 14 天且总量限制为 1GB�
 ## 6. 网络与 HTTPS
 
 - Nginx 通过 host.docker.internal 访问后端；Compose 的 host-gateway 映射兼容 Linux Engine 和 Windows Desktop。
-- 后端监听 0.0.0.0 才能被容器网关访问；防火墙仅允许 Docker 来源访问后端端口，不直接向公网开放 8080。PG 端口仅绑定 127.0.0.1。
+- 后端监听 0.0.0.0 才能被容器网关访问；防火墙仅允许 Docker 来源访问后端端口，不直接向公网开放 18080。PG 端口仅绑定 127.0.0.1。
 - Nginx 对外默认 0.0.0.0:8088。需要仅本机访问时，将 components/.env 中 APP_HTTP_BIND_ADDRESS 改为 127.0.0.1。
 - /actuator 不经 Nginx 暴露；本机健康检查使用 /actuator/health，前端代理检查使用 /api/health。
 - 默认模板提供 HTTP。公网发布时在同一 Nginx 配置中增加 TLS 监听、证书路径，并在 Compose 增加 443 映射及证书只读挂载；backend/config/application.yml 中 app.security.cookie-secure 设为 true。
@@ -210,7 +213,7 @@ backend/logs/backend.log 按 20MB 滚动，保留 14 天且总量限制为 1GB�
 
 应用升级：在新目录解压升级包并校验，停止旧后端，将新的 app.jar 和完整 frontend/dist 替换到原来的固定部署目录，再启动后端。前端目录整体替换，避免混用新旧资源；后端配置、日志、data、repositories 和组件 .env 保留，其他配置变更人工对照合并。不要直接用新发布目录覆盖所有运行文件。
 
-数据库命名卷默认 analyzer-coder-components_postgres-data，保持旧组件方案的卷名。若旧库来自其他 Compose 项目，应先用 docker volume ls 核对，在 .env 的 POSTGRES_VOLUME 中填写已有卷名，不能凭目录名猜测。一个主机部署多个实例时，要同时区分项目名、数据库卷和端口。
+数据库默认使用命名卷 `analyzer-coder-components_postgres-data`。若旧库来自其他 Compose 项目，应先用 `docker volume ls` 核对，并在 `.env` 的 `POSTGRES_VOLUME` 中填写已有卷名。bind 模式则必须保留原 `POSTGRES_DATA_SOURCE` 绝对路径及其目录数据。一个主机部署多个实例时，要同时区分项目名、数据库存储源和端口。
 
 - 镜像 TAR 是程序镜像，不是数据库备份。升级前联合备份数据库、backend/data、需要保留的仓库文件和两个配置文件。
 - 可以用容器内 pg_dump 生成备份，完成后 docker cp 到主机；恢复需按 PostgreSQL 流程演练。不要直接复制正在写入的 PG 卷目录。

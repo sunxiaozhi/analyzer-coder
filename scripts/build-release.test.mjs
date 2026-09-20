@@ -76,9 +76,16 @@ test('full package pins exported image names into the environment template and r
   const f = fixture(t);
   const result = f.launch([]);
   assert.equal(result.status, 0, result.stderr);
-  const env = fs.readFileSync(path.join(f.output, 'components/.env.example'), 'utf8');
+  const env = fs.readFileSync(path.join(f.output, 'components/components.env.example'), 'utf8');
   assert.match(env, /POSTGRES_IMAGE=analyzer-coder\/postgres:test-1-amd64/);
   assert.match(env, /NGINX_IMAGE=analyzer-coder\/nginx:test-1-amd64/);
+  assert.match(env, /POSTGRES_STORAGE_TYPE=volume/);
+  assert.match(env, /POSTGRES_DATA_SOURCE=postgres-data/);
+  const compose = fs.readFileSync(path.join(f.output, 'components/compose.yaml'), 'utf8');
+  assert.match(compose, /type: \$\{POSTGRES_STORAGE_TYPE:-volume\}/);
+  assert.match(compose, /source: \$\{POSTGRES_DATA_SOURCE:-postgres-data\}/);
+  const backendConfig = fs.readFileSync(path.join(f.output, 'backend/config/application.yml'), 'utf8');
+  assert.match(backendConfig, /port: 18080/);
   const calls = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(calls.filter(args => args[0] === 'pull' && args[2] === 'linux/amd64').length, 2);
   const save = calls.find(args => args[0] === 'save');

@@ -21,7 +21,7 @@ Java 17 + Spring Boot 3.5 后端，承载账号、仓库、索引、检索、问
 敏感配置没有代码默认值。先复制并修改数据库环境文件：
 
 ```bash
-cp deploy/components/.env.example deploy/components/.env
+cp deploy/components/components.env.example deploy/components/.env
 # 修改 deploy/components/.env 中的数据库密码；以下命令在源码根目录执行。
 docker compose --env-file deploy/components/.env -f deploy/components/compose.yaml up -d postgres
 ```
@@ -66,5 +66,5 @@ Linux CI 默认启动临时 pgvector 服务并执行这组集成测试；普通�
 
 - 管理员重置密码为只展示一次的随机临时密码，24 小时过期并强制改密。
 - 生产环境必须使用 HTTPS、`APP_SESSION_COOKIE_SECURE=true` 和受信反向代理。
-- PostgreSQL、后端 8080 和 Actuator 不得直接暴露公网。
+- PostgreSQL、部署后端 18080 和 Actuator 不得直接暴露公网。
 - `APP_LLM_MASTER_KEY` 必须稳定保管，不能在已有模型密钥后随意轮换。

@@ -13,7 +13,9 @@ services:
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - type: ${POSTGRES_STORAGE_TYPE:-volume}
+        source: ${POSTGRES_DATA_SOURCE:-postgres-data}
+        target: /var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -47,8 +49,8 @@ services:
       timeout: 5s
       retries: 6
 
-# Preserve the original component volume name when the deployment directory changes.
-# Set POSTGRES_VOLUME to the exact existing volume name when migrating an older setup.
+# The postgres-data key is used when POSTGRES_STORAGE_TYPE=volume.
+# POSTGRES_VOLUME controls the Docker engine volume name; bind mode leaves it unused.
 volumes:
   postgres-data:
     name: ${POSTGRES_VOLUME:-analyzer-coder-components_postgres-data}

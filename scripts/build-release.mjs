@@ -97,12 +97,12 @@ async function main() {
   copy(path.join(root, 'frontend/dist'), path.join(packageRoot, 'frontend/dist'));
   for (const file of [
     'backend/config/application.yml', 'backend/backend.sh', 'backend/backend.ps1',
-    'components/compose.yaml', 'components/.env.example', 'components/nginx/nginx.conf',
+    'components/compose.yaml', 'components/components.env.example', 'components/nginx/nginx.conf',
   ]) copy(path.join(root, 'deploy', file), path.join(packageRoot, file));
   copy(path.join(root, 'docs/15-deployment-runbook.md'), path.join(packageRoot, 'README.md'));
   if (process.platform !== 'win32') fs.chmodSync(path.join(packageRoot, 'backend/backend.sh'), 0o755);
 
-  const envPath = path.join(packageRoot, 'components/.env.example');
+  const envPath = path.join(packageRoot, 'components/components.env.example');
   let componentEnv = fs.readFileSync(envPath, 'utf8');
   const imageRecords = [];
   if (!options.withoutImages) {

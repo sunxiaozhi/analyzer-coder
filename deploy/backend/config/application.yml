@@ -1,8 +1,8 @@
 # Start with backend as the working directory: java -jar app.jar
 # Replace every replace-with value. Preserve this file and both master keys on upgrade.
 server:
-  address: 0.0.0.0 # Docker Nginx must reach the host; restrict 8080 in the firewall.
-  port: 8080
+  address: 0.0.0.0 # Docker Nginx must reach the host; restrict 18080 in the firewall.
+  port: 18080
   forward-headers-strategy: framework
 
 spring:
@@ -16,6 +16,7 @@ spring:
 app:
   security:
     initial-admin-username: admin
+    # Must include uppercase, lowercase, a digit and a special character.
     initial-admin-password: 'replace-with-strong-admin-password'
     cookie-secure: false # Set true when the public entry uses HTTPS.
   credentials:

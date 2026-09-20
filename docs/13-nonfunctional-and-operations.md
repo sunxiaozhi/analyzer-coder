@@ -126,7 +126,7 @@
 
 ### 2.8 不得公网暴露的组件
 
-- PostgreSQL 只绑定宿主机 127.0.0.1；后端在宿主机运行，监听 0.0.0.0 供 Docker 网关访问，防火墙限制 8080 仅允许 Docker 来源。
+- PostgreSQL 只绑定宿主机 127.0.0.1；后端在宿主机运行，监听 0.0.0.0 供 Docker 网关访问，防火墙限制发布端口 18080 仅允许 Docker 来源。
 - Nginx 只转发 /api/，拒绝 /actuator；健康检查在主机访问 /actuator/health。
 - 后端运行账号只授予所需仓库和数据目录访问权限，不再依赖后端容器的 UID、挂载或 systemd 模板。
 
@@ -299,7 +299,7 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 - 模板：deploy/backend、deploy/components。
 - 打包入口：scripts/build-release.sh / .ps1，共用 build-release.mjs。
 - 镜像：PG/pgvector 与 Nginx 使用版本标签导出到 components/images/components.tar，MANIFEST 记录实际镜像 ID、摘要和架构。无镜像升级包省略 TAR。
-- PostgreSQL 使用固定命名卷，停止组件不删除卷。旧实例必须确认已有卷名后再迁移。
+- PostgreSQL 默认使用固定命名卷；也可通过 `POSTGRES_STORAGE_TYPE=bind` 和绝对 `POSTGRES_DATA_SOURCE` 挂载宿主机目录。切换存储源不会自动迁移数据。
 
 ### 5.4 健康检查
 
@@ -344,7 +344,7 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 - V1 执行 `CREATE EXTENSION IF NOT EXISTS vector`
   （`backend/src/main/resources/db/migration/V1__init_schema.sql:6`），
   因此数据库角色需有权创建扩展；`pgvector/pgvector:pg17` 镜像已提供该扩展
-  （deploy/components/.env.example）。
+  （deploy/components/components.env.example）。
 - `V9` 的数据守卫（升级前置条件，来自
   `backend/src/main/resources/db/migration/V9__remove_cross_repository_projects.sql`）：
   - 迁移全程对 `engineering_projects`、`engineering_project_repositories`、
