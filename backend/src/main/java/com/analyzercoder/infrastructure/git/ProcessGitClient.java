@@ -1,5 +1,6 @@
 package com.analyzercoder.infrastructure.git;
 
+import com.analyzercoder.infrastructure.repository.GitRuntimePolicy;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,7 +15,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
@@ -55,10 +55,7 @@ public class ProcessGitClient {
         command.addAll(safeArguments);
 
         java.lang.ProcessBuilder builder = new java.lang.ProcessBuilder(command);
-        builder.environment().keySet().removeIf(ProcessGitClient::isGitEnvironmentVariable);
-        builder.environment().put("GIT_TERMINAL_PROMPT", "0");
-        builder.environment().put("GIT_OPTIONAL_LOCKS", "0");
-        builder.environment().put("GIT_LFS_SKIP_SMUDGE", "1");
+        GitRuntimePolicy.sanitizeEnvironment(builder.environment());
         try {
             Process process = builder.start();
             CompletableFuture<OutputCapture> stdout =
@@ -236,14 +233,8 @@ public class ProcessGitClient {
         return value < 32 || value == 127;
     }
 
-    private static boolean isGitEnvironmentVariable(String name) {
-        return name.toUpperCase(Locale.ROOT).startsWith("GIT_");
-    }
-
     private static String disabledHooksPath() {
-        return System.getProperty("os.name", "").toLowerCase().contains("win")
-                ? "NUL"
-                : "/dev/null";
+        return GitRuntimePolicy.disabledHooksPath();
     }
 
     private static OutputCapture readBounded(InputStream input, int maximumBytes) {

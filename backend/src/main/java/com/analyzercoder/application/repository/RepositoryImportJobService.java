@@ -11,8 +11,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 管理远程仓库导入任务的提交、查询和后台执行。
@@ -21,22 +22,26 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class RepositoryImportJobService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryImportJobService.class);
     private static final int MAX_ERROR_MESSAGE_LENGTH = 500;
 
     private final RepositoryImportJobMapper mapper;
     private final RepositoryCredentialService credentials;
     private final RepositorySourceImportService imports;
     private final RepositoryProjectDraftService drafts;
+    private final RepositoryImportJobStateService jobState;
 
     public RepositoryImportJobService(
             RepositoryImportJobMapper mapper,
             RepositoryCredentialService credentials,
             RepositorySourceImportService imports,
-            RepositoryProjectDraftService drafts) {
+            RepositoryProjectDraftService drafts,
+            RepositoryImportJobStateService jobState) {
         this.mapper = mapper;
         this.credentials = credentials;
         this.imports = imports;
         this.drafts = drafts;
+        this.jobState = jobState;
     }
 
     public JobView submit(
@@ -97,25 +102,26 @@ public class RepositoryImportJobService {
     }
 
     /**
-     * 原子认领并处理一个待执行任务。
+     * 认领并处理一个待执行任务。Git 网络与文件操作不得包在数据库事务中；任务状态由独立短事务持久化。
      *
      * @return 成功处理或取消任务时返回 {@code true}；无任务或处理失败时返回 {@code false}
      */
-    @Transactional
     public boolean processNext() {
-        Map<String, Object> row = mapper.claim();
+        Map<String, Object> row = jobState.claim();
         if (row == null) {
             return false;
         }
 
         UUID id = uuid(row, "id");
+        UUID projectDraftId = uuid(row, "project_draft_id");
+        if (bool(row, "cancel_requested")) {
+            jobState.cancel(id);
+            failDraft(id, projectDraftId, "导入已取消，可重新配置代码来源后重试");
+            return true;
+        }
+
         try {
-            if (bool(row, "cancel_requested")) {
-                mapper.cancel(id);
-                drafts.fail(uuid(row, "project_draft_id"), "导入已取消，可重新配置代码来源后重试");
-                return true;
-            }
-            mapper.step(id, "cloning");
+            jobState.step(id, "cloning");
             CodeRepository repository =
                     imports.importRemoteQueued(
                             string(row, "repository_name"),
@@ -124,14 +130,27 @@ public class RepositoryImportJobService {
                             RepositorySourceType.valueOf(string(row, "source_type")),
                             uuid(row, "credential_id"),
                             uuid(row, "account_id"));
-            mapper.succeed(id, repository.id().value());
-            drafts.complete(uuid(row, "project_draft_id"), repository.id().value());
+            jobState.succeed(id, projectDraftId, repository.id().value());
             return true;
         } catch (RuntimeException exception) {
             String message = safeMessage(exception);
-            mapper.fail(id, message);
-            drafts.fail(uuid(row, "project_draft_id"), message);
+            LOGGER.warn("远程仓库导入失败，任务已记录为 FAILED：jobId={}", id, exception);
+            try {
+                jobState.fail(id, message);
+            } catch (RuntimeException persistenceFailure) {
+                persistenceFailure.addSuppressed(exception);
+                throw persistenceFailure;
+            }
+            failDraft(id, projectDraftId, message);
             return false;
+        }
+    }
+
+    private void failDraft(UUID jobId, UUID projectDraftId, String message) {
+        try {
+            jobState.failDraft(projectDraftId, message);
+        } catch (RuntimeException exception) {
+            LOGGER.error("导入任务终态已保存，但项目草稿状态更新失败：jobId={}", jobId, exception);
         }
     }
 

@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Component;
@@ -28,23 +29,47 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
     @Override
     public GitRepositorySnapshot inspect(Path repositoryRoot) {
         Path root = repositoryRoot.toAbsolutePath().normalize();
-        String topLevel = text(run(root, false, "rev-parse", "--show-toplevel")).trim();
+        String topLevel =
+                text(run(
+                                root,
+                                InspectionStep.REPOSITORY_ROOT,
+                                false,
+                                "rev-parse",
+                                "--show-toplevel"))
+                        .trim();
         if (!samePath(root, Path.of(topLevel))) {
             throw new IllegalArgumentException("仓库路径必须指向 Git 工作区根目录");
         }
 
-        String commit = text(run(root, false, "rev-parse", "--verify", "HEAD")).trim();
-        CommandResult branchResult = run(root, true, "symbolic-ref", "--short", "-q", "HEAD");
+        String commit =
+                text(run(root, InspectionStep.HEAD, false, "rev-parse", "--verify", "HEAD")).trim();
+        CommandResult branchResult =
+                run(root, InspectionStep.BRANCH, true, "symbolic-ref", "--short", "-q", "HEAD");
         String branch = branchResult.exitCode() == 0 ? text(branchResult).trim() : null;
         boolean dirty =
-                run(root, false, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+                run(
+                                        root,
+                                        InspectionStep.STATUS,
+                                        false,
+                                        "status",
+                                        "--porcelain=v1",
+                                        "-z",
+                                        "--untracked-files=all")
                                 .stdout()
                                 .length
                         > 0;
         String digest =
                 digestWorktree(
                         root,
-                        run(root, false, "ls-files", "-co", "--exclude-standard", "-z").stdout());
+                        run(
+                                        root,
+                                        InspectionStep.FILES,
+                                        false,
+                                        "ls-files",
+                                        "-co",
+                                        "--exclude-standard",
+                                        "-z")
+                                .stdout());
         return new GitRepositorySnapshot(branch, commit, digest, dirty, Instant.now());
     }
 
@@ -101,7 +126,8 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
         return paths;
     }
 
-    private static CommandResult run(Path root, boolean allowExitOne, String... arguments) {
+    private static CommandResult run(
+            Path root, InspectionStep step, boolean allowExitOne, String... arguments) {
         List<String> command =
                 new ArrayList<>(
                         List.of(
@@ -116,9 +142,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
                                 root.toString()));
         command.addAll(List.of(arguments));
         ProcessBuilder builder = new ProcessBuilder(command);
-        builder.environment().put("GIT_TERMINAL_PROMPT", "0");
-        builder.environment().put("GIT_OPTIONAL_LOCKS", "0");
-        builder.environment().put("GIT_LFS_SKIP_SMUDGE", "1");
+        GitRuntimePolicy.sanitizeEnvironment(builder.environment());
         try {
             Process process = builder.start();
             CompletableFuture<byte[]> stdout =
@@ -132,7 +156,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
             CommandResult result =
                     new CommandResult(process.exitValue(), stdout.join(), stderr.join());
             if (result.exitCode() != 0 && !(allowExitOne && result.exitCode() == 1)) {
-                throw new IllegalArgumentException("该路径不是可读取的 Git 仓库");
+                throw inspectionFailure(step, result.stderr());
             }
             return result;
         } catch (IOException exception) {
@@ -141,6 +165,24 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("读取 Git 元数据的操作被中断", exception);
         }
+    }
+
+    private static IllegalArgumentException inspectionFailure(
+            InspectionStep step, byte[] standardError) {
+        String detail = new String(standardError, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT);
+        if (detail.contains("dubious ownership")) {
+            return new IllegalArgumentException("Git 仓库目录所有权与后端运行账号不一致，请调整目录归属后重试");
+        }
+        if (detail.contains("permission denied") || detail.contains("access is denied")) {
+            return new IllegalArgumentException("后端运行账号无权读取 Git 仓库目录");
+        }
+        return switch (step) {
+            case REPOSITORY_ROOT -> new IllegalArgumentException("该路径不是可读取的 Git 仓库");
+            case HEAD -> new IllegalArgumentException("Git 仓库没有可读取的 HEAD 提交，请先推送至少一个提交，或选择实际存在的分支");
+            case BRANCH -> new IllegalArgumentException("无法读取 Git 仓库当前分支");
+            case STATUS -> new IllegalArgumentException("无法读取 Git 工作区状态");
+            case FILES -> new IllegalArgumentException("无法读取 Git 工作区文件列表");
+        };
     }
 
     private static byte[] read(InputStream input) {
@@ -161,6 +203,14 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
         } catch (IOException exception) {
             return left.toAbsolutePath().normalize().equals(right.toAbsolutePath().normalize());
         }
+    }
+
+    private enum InspectionStep {
+        REPOSITORY_ROOT,
+        HEAD,
+        BRANCH,
+        STATUS,
+        FILES
     }
 
     private record CommandResult(int exitCode, byte[] stdout, byte[] stderr) {}

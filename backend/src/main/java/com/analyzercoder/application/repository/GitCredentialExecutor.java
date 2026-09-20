@@ -1,5 +1,6 @@
 package com.analyzercoder.application.repository;
 
+import com.analyzercoder.infrastructure.repository.GitRuntimePolicy;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -207,7 +208,7 @@ public class GitCredentialExecutor {
             if (cwd != null) {
                 builder.directory(cwd.toFile());
             }
-            builder.environment().put("GIT_TERMINAL_PROMPT", "0");
+            GitRuntimePolicy.sanitizeEnvironment(builder.environment());
             if (credential != null) {
                 builder.environment().put("GIT_ASKPASS", askPass.toString());
                 builder.environment().put("ANALYZER_GIT_USERNAME", credential.username());

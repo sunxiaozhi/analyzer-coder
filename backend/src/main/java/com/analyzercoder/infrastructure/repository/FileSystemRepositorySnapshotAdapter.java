@@ -180,8 +180,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
                                 "--exclude-standard",
                                 "-z"));
         ProcessBuilder builder = new ProcessBuilder(command);
-        builder.environment().put("GIT_TERMINAL_PROMPT", "0");
-        builder.environment().put("GIT_OPTIONAL_LOCKS", "0");
+        GitRuntimePolicy.sanitizeEnvironment(builder.environment());
         try {
             Process process = builder.start();
             CompletableFuture<byte[]> output =

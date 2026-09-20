@@ -190,8 +190,7 @@ public class GitBranchSnapshotFactory {
                     new ProcessBuilder(command)
                             .redirectOutput(output.toFile())
                             .redirectError(ProcessBuilder.Redirect.DISCARD);
-            builder.environment().put("GIT_TERMINAL_PROMPT", "0");
-            builder.environment().put("GIT_OPTIONAL_LOCKS", "0");
+            GitRuntimePolicy.sanitizeEnvironment(builder.environment());
             process = builder.start();
             if (!process.waitFor(120, TimeUnit.SECONDS))
                 throw new IllegalStateException("Git 导出超时");

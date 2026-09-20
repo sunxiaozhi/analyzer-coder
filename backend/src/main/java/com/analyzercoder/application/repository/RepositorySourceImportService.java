@@ -3,10 +3,12 @@ package com.analyzercoder.application.repository;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryMapper;
+import com.analyzercoder.infrastructure.repository.GitRuntimePolicy;
 import com.analyzercoder.security.AuthenticatedAccount;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -27,6 +29,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class RepositorySourceImportService {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(RepositorySourceImportService.class);
+    private static final long MAX_GIT_OUTPUT_BYTES = 2L * 1024 * 1024;
     private final RegisterRepositoryUseCase repositories;
     private final RepositoryMapper mapper;
     private final Path importRoot;
@@ -210,21 +213,30 @@ public class RepositorySourceImportService {
     }
 
     private static void runGit(List<String> args, Path cwd, int seconds) {
+        Path outputFile = null;
+        Process process = null;
         try {
             java.util.ArrayList<String> command = new java.util.ArrayList<>();
             command.add("git");
             command.addAll(args);
-            ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
+            outputFile = Files.createTempFile("analyzer-git-output-", ".log");
+            ProcessBuilder builder =
+                    new ProcessBuilder(command)
+                            .redirectErrorStream(true)
+                            .redirectOutput(outputFile.toFile());
             if (cwd != null) {
                 builder.directory(cwd.toFile());
             }
-            builder.environment().put("GIT_TERMINAL_PROMPT", "0");
-            Process process = builder.start();
-            String output = new String(process.getInputStream().readNBytes(8192));
+            GitRuntimePolicy.sanitizeEnvironment(builder.environment());
+            process = builder.start();
             if (!process.waitFor(seconds, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new IllegalStateException("Git 操作超时");
             }
+            if (Files.size(outputFile) > MAX_GIT_OUTPUT_BYTES) {
+                throw new IllegalStateException("Git 输出超过限制，请缩小远程仓库范围");
+            }
+            String output = Files.readString(outputFile, StandardCharsets.UTF_8);
             if (process.exitValue() != 0) {
                 String sanitized = output.replaceAll("https?://[^\\s]+", "[远程地址]");
                 LOGGER.warn("Git 命令执行失败：{}", sanitized.strip());
@@ -235,6 +247,17 @@ public class RepositorySourceImportService {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Git 操作被中断", exception);
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
+            if (outputFile != null) {
+                try {
+                    Files.deleteIfExists(outputFile);
+                } catch (IOException ignored) {
+                    // Temporary diagnostics are best-effort cleanup only.
+                }
+            }
         }
     }
 

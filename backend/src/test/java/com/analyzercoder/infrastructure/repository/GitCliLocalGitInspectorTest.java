@@ -1,6 +1,7 @@
 package com.analyzercoder.infrastructure.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -34,6 +35,16 @@ class GitCliLocalGitInspectorTest {
         var dirty = inspector.inspect(repository);
         assertThat(dirty.dirty()).isTrue();
         assertThat(dirty.worktreeDigest()).isNotEqualTo(clean.worktreeDigest());
+    }
+
+    @Test
+    void explainsThatRepositoryWithoutCommitsHasNoReadableHead()
+            throws IOException, InterruptedException {
+        run("init");
+
+        assertThatThrownBy(() -> new GitCliLocalGitInspector().inspect(repository))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Git 仓库没有可读取的 HEAD 提交，请先推送至少一个提交，或选择实际存在的分支");
     }
 
     private void run(String... arguments) throws IOException, InterruptedException {
