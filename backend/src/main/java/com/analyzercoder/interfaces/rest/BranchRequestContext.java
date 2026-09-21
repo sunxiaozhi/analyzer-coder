@@ -18,10 +18,14 @@ public class BranchRequestContext {
 
     public BranchReadContext resolve(HttpServletRequest request, UUID repositoryId) {
         String id = request.getHeader("X-Branch-Context");
-        return id == null
-                ? null
-                : branches.resolve(
-                        SecurityContext.account(request), repositoryId, null, UUID.fromString(id));
+        if (id == null || id.isBlank())
+            throw new IllegalArgumentException("请选择并固定当前阅读分支");
+        try {
+            return branches.resolve(
+                    SecurityContext.account(request), repositoryId, null, UUID.fromString(id));
+        } catch (IllegalArgumentException invalidId) {
+            throw new IllegalArgumentException("分支阅读上下文无效", invalidId);
+        }
     }
 
     public com.analyzercoder.domain.repository.CodeRepository repository(

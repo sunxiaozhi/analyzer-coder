@@ -10,7 +10,6 @@ import {
   type CodeReference,
   type QaHistoryRecord,
 } from '@/api/intelligence';
-import { getRepositoryProfile, type RepositoryPreparation } from '@/api/repositories';
 import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
 import AskHistorySidebar from '@/features/ask/AskHistorySidebar.vue';
 import { useAskConversation } from '@/features/ask/useAskConversation';
@@ -31,7 +30,6 @@ const router = useRouter();
 const conversation = useAskConversation();
 const history = shallowRef<QaHistoryRecord[]>([]);
 const historyLoading = shallowRef(false);
-const readiness = shallowRef<RepositoryPreparation | null>(null);
 const readinessLoading = shallowRef(false);
 const askModels = shallowRef<AskModel[]>([]);
 const selectedModelId = shallowRef('');
@@ -39,25 +37,13 @@ const modelsLoading = shallowRef(false);
 let contextVersion = 0;
 
 const repository = computed(() => repositories.selectedRepository);
-const canAsk = computed(() => Boolean(
-  repository.value && (readScope.requiresContext.value
-    ? !readScope.blocked.value && branchContentReady.value
-    : readiness.value?.profile.chunkCount),
-));
+const canAsk = computed(() => Boolean(repository.value && !readScope.blocked.value && branchContentReady.value));
 const selectedModel = computed(() =>
   askModels.value.find(item => item.id === selectedModelId.value) ?? null
 );
 const readinessCopy = computed(() => {
   if (!repository.value) return { label: '未选择仓库', type: 'info' as const };
-  if (readScope.requiresContext.value) return { label: readScope.blocked.value ? '分支快照未就绪' : branchContentReady.value ? '当前分支内容索引已就绪' : '当前分支待构建内容索引', type: branchContentReady.value ? 'success' as const : 'info' as const };
-  if (readinessLoading.value) return { label: '检查中', type: 'info' as const };
-  return ({
-    READY: { label: '问答已就绪', type: 'success' as const },
-    DEGRADED: { label: '关键词检索可用', type: 'warning' as const },
-    PROCESSING: { label: '正在准备', type: 'warning' as const },
-    ACTION_REQUIRED: { label: '准备失败', type: 'danger' as const },
-    NOT_READY: { label: '尚未准备', type: 'info' as const },
-  })[readiness.value?.state ?? 'NOT_READY'];
+  return { label: readScope.blocked.value ? '分支内容版本未就绪' : branchContentReady.value ? '当前分支内容索引已就绪' : '当前分支待构建内容索引', type: branchContentReady.value ? 'success' as const : 'info' as const };
 });
 
 async function loadContext(repositoryId: string | null) {
@@ -65,7 +51,6 @@ async function loadContext(repositoryId: string | null) {
   const branchIdentity = branchContext.identity;
   conversation.invalidate();
   history.value = [];
-  readiness.value = null;
   branchContentReady.value = false;
   askModels.value = [];
   readinessLoading.value = false;
@@ -79,13 +64,9 @@ async function loadContext(repositoryId: string | null) {
   const isCurrent = () => version === contextVersion
     && repositoryId === repositories.selectedRepositoryId
     && branchIdentity === branchContext.identity;
-  const profileTask = (readScope.requiresContext.value
-    ? branchesApi.snapshotIndexStatus(branchContext.context!).then(status => {
-      if (isCurrent()) branchContentReady.value = status.snapshotId === branchContext.context?.snapshotId && status.contentReady;
-      return null;
-    })
-    : getRepositoryProfile(repositoryId))
-    .then((result) => { if (isCurrent()) readiness.value = result; })
+  const profileTask = branchesApi.contentVersionIndexStatus(branchContext.context!).then(status => {
+    if (isCurrent()) branchContentReady.value = status.contentVersion === branchContext.context?.contentVersion && status.contentReady;
+  })
     .catch((error) => {
       if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法检查仓库状态');
     })
@@ -123,35 +104,19 @@ async function reloadHistory() {
 }
 
 async function refreshReadinessForAsk(repositoryId: string): Promise<boolean | null> {
-  if (readScope.requiresContext.value) {
-    if (readScope.blocked.value) return false;
-    const identity = branchContext.identity;
-    const status = await branchesApi.snapshotIndexStatus(branchContext.context!);
-    if (identity !== branchContext.identity || repositoryId !== repositories.selectedRepositoryId) return null;
-    branchContentReady.value = status.snapshotId === branchContext.context?.snapshotId && status.contentReady;
-    return branchContentReady.value;
-  }
-  readinessLoading.value = true;
-  try {
-    const latest = await getRepositoryProfile(repositoryId);
-    if (repositoryId !== repositories.selectedRepositoryId) return null;
-    readiness.value = latest;
-    return latest.profile.chunkCount > 0;
-  } catch (error) {
-    if (repositoryId === repositories.selectedRepositoryId) {
-      ElMessage.error(error instanceof Error ? error.message : '无法检查仓库状态');
-    }
-    return null;
-  } finally {
-    if (repositoryId === repositories.selectedRepositoryId) readinessLoading.value = false;
-  }
+  if (readScope.blocked.value) return false;
+  const identity = branchContext.identity;
+  const status = await branchesApi.contentVersionIndexStatus(branchContext.context!);
+  if (identity !== branchContext.identity || repositoryId !== repositories.selectedRepositoryId) return null;
+  branchContentReady.value = status.contentVersion === branchContext.context?.contentVersion && status.contentReady;
+  return branchContentReady.value;
 }
 
 async function send() {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return ElMessage.warning('请先选择仓库');
   if (readScope.blocked.value) {
-    return ElMessage.warning('当前分支快照尚未就绪，请先在分支工作区完成准备');
+    return ElMessage.warning('当前分支内容版本尚未就绪，请先在分支工作区完成准备');
   }
   const ready = canAsk.value || await refreshReadinessForAsk(repositoryId);
   if (ready === null || repositoryId !== repositories.selectedRepositoryId) return;
@@ -223,7 +188,7 @@ async function openCode(reference: CodeReference) {
   try {
     await selectTargetRepository(reference.repositoryId);
     await router.push({ name: 'search', query: {
-      snapshotId: reference.snapshotId ?? undefined,
+      contentVersion: reference.contentVersion ?? undefined,
       path: reference.filePath, startLine: String(reference.startLine ?? 1), endLine: String(reference.endLine ?? reference.startLine ?? 1),
     }});
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法打开源码'); }
@@ -246,7 +211,7 @@ async function openGraph(reference: CodeReference) {
     await router.push({ name: 'search', query: {
       path: ('filePath' in target ? target.filePath : null) || reference.filePath,
       startLine: String(('startLine' in target ? target.startLine : null) ?? reference.startLine ?? 1),
-      snapshotId: reference.snapshotId ?? undefined,
+      contentVersion: reference.contentVersion ?? undefined,
       symbol: target.symbol,
       depth: '3',
       relation: '1',
@@ -280,7 +245,7 @@ onMounted(async () => {
         <small>{{ branchContext.context?.branchName ?? repository?.branch ?? '无分支' }}<template v-if="branchContext.context?.commitSha ?? repository?.commit"> · {{ (branchContext.context?.commitSha ?? repository?.commit)?.slice(0, 8) }}</template></small>
       </div>
       <el-tag :type="readinessCopy?.type" effect="plain" round>{{ readinessCopy?.label }}</el-tag>
-      <div v-if="!repository || (readiness && !canAsk)" class="command-notice">
+      <div v-if="!repository || !canAsk" class="command-notice">
         <span>{{ repository ? '当前仓库还没有可检索的代码内容。' : '先选择项目才能开始问答。' }}</span>
         <el-button link type="primary" @click="openReadinessAction">{{ repository ? '去准备项目' : '选择项目' }}</el-button>
       </div>

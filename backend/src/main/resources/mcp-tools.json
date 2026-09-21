@@ -2,7 +2,7 @@
   {
     "name": "search_project",
     "title": "Search project code and knowledge",
-    "description": "Searches the current repository snapshot and published project knowledge in one ranked result set.",
+    "description": "Searches one explicit branch's current code and published knowledge in one ranked result set.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -40,6 +40,10 @@
       "required": [
         "repositoryId",
         "query"
+      ],
+      "anyOf": [
+        { "required": ["branchId"] },
+        { "required": ["contextId"] }
       ]
     },
     "annotations": {
@@ -51,7 +55,7 @@
   {
     "name": "resolve_project_context",
     "title": "Resolve branch context",
-    "description": "Pins an indexed branch snapshot and applicable knowledge revisions for this account.",
+    "description": "Pins an indexed branch contentVersion and applicable knowledge revisions for this account.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -112,7 +116,7 @@
   {
     "name": "codegraph_explore",
     "title": "Explore branch code graph",
-    "description": "Explore relevant source and call paths in a pinned branch snapshot.",
+    "description": "Explore relevant source and call paths in a pinned branch contentVersion.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -157,7 +161,7 @@
   {
     "name": "codegraph_node",
     "title": "Read graph node",
-    "description": "Read a symbol and its relations in a pinned branch snapshot.",
+    "description": "Read a symbol and its relations in a pinned branch contentVersion.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -212,7 +216,7 @@
   {
     "name": "codegraph_search",
     "title": "Search graph symbols",
-    "description": "Search indexed symbols in a pinned branch snapshot.",
+    "description": "Search indexed symbols in a pinned branch contentVersion.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -257,7 +261,7 @@
   {
     "name": "codegraph_callers",
     "title": "Find callers",
-    "description": "Find callers of a symbol in a pinned branch snapshot.",
+    "description": "Find callers of a symbol in a pinned branch contentVersion.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -302,7 +306,7 @@
   {
     "name": "codegraph_callees",
     "title": "Find callees",
-    "description": "Find callees of a symbol in a pinned branch snapshot.",
+    "description": "Find callees of a symbol in a pinned branch contentVersion.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -347,7 +351,7 @@
   {
     "name": "codegraph_impact",
     "title": "Analyze symbol impact",
-    "description": "Find downstream impact from a symbol in a pinned branch snapshot.",
+    "description": "Find downstream impact from a symbol in a pinned branch contentVersion.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -392,7 +396,7 @@
   {
     "name": "codegraph_files",
     "title": "List graph files",
-    "description": "List indexed files in a pinned branch snapshot.",
+    "description": "List indexed files in a pinned branch contentVersion.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -435,7 +439,7 @@
   {
     "name": "codegraph_status",
     "title": "Graph status",
-    "description": "Read CodeGraph status for a pinned branch snapshot.",
+    "description": "Read CodeGraph status for a pinned branch contentVersion.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -468,7 +472,7 @@
   {
     "name": "codegraph_affected",
     "title": "Analyze affected symbols",
-    "description": "Find symbols affected by changed files in a pinned branch snapshot.",
+    "description": "Find symbols affected by changed files in a pinned branch contentVersion.",
     "inputSchema": {
       "type": "object",
       "properties": {

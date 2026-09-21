@@ -18,7 +18,7 @@ public record KnowledgeRevisionRow(
         UUID ownerAccountId,
         String scopePayload,
         String obligationsPayload,
-        UUID lastVerifiedSnapshotId,
+        UUID lastVerifiedContentVersion,
         String verificationNote,
         String publicationStatus,
         UUID changedBy,

@@ -44,7 +44,7 @@ public class RepositorySourceImportService {
             GitCredentialExecutor credentialGit,
             @Value("${app.repository.import-root:${java.io.tmpdir}/analyzer-coder/staging/imports}")
                     String root,
-            @Value("${app.repository.snapshot-root:${java.io.tmpdir}/analyzer-coder/repositories}")
+            @Value("${app.repository.workspace-root:${java.io.tmpdir}/analyzer-coder/repositories}")
                     String repositoriesRoot) {
         this.repositories = repositories;
         this.mapper = mapper;
@@ -115,7 +115,7 @@ public class RepositorySourceImportService {
             runGit(List.of("config", "user.email", "platform@local"), target, 10);
             runGit(List.of("config", "user.name", "Code Knowledge Platform"), target, 10);
             runGit(List.of("add", "."), target, 60);
-            runGit(List.of("commit", "--allow-empty", "-m", "Imported ZIP snapshot"), target, 60);
+            runGit(List.of("commit", "--allow-empty", "-m", "Imported ZIP workspace"), target, 60);
             return registerImported(
                     name, target, RepositorySourceType.ZIP, true, null, ownerAccountId);
         } catch (IOException exception) {

@@ -56,7 +56,7 @@ onBeforeUnmount(() => { ++sequence; });
     <summary>知识分支验证 <span>{{ cards.length }} 条适用知识</span></summary>
     <div class="validation-body">
       <p class="validation-target">验证目标 <strong>{{ context.branchName }}</strong> <code>{{ context.commitSha.slice(0, 12) }}</code></p>
-      <p class="validation-hint">对照当前快照检查知识内容后记录结论。更新知识或代码快照后需要重新验证；检索仍使用当前阅读版本，请刷新阅读版本以采用新结论。</p>
+      <p class="validation-hint">对照当前版本检查知识内容后记录结论。更新知识或代码版本后需要重新验证；检索仍使用当前阅读版本，请刷新阅读版本以采用新结论。</p>
       <el-alert v-if="error" :title="error" type="error" :closable="false" />
       <el-alert v-if="saved" title="验证结果已保存" type="success" :closable="false" />
       <el-input v-if="!cardId" v-model="filter" placeholder="筛选知识标题" aria-label="筛选待验证知识" clearable />

@@ -17,7 +17,7 @@ import com.analyzercoder.domain.indexing.IndexJobStore;
 import com.analyzercoder.domain.indexing.IndexJobType;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper;
 import com.analyzercoder.infrastructure.persistence.model.CodeGraphArtifactRow;
@@ -47,7 +47,7 @@ class RepositoryPreparationServiceTest {
     }
 
     @Test
-    void startsFullIndexWhenPublishedSnapshotHasNoChunks() {
+    void startsFullIndexWhenPublishedContentVersionHasNoChunks() {
         RegisterRepositoryUseCase repositories = mock(RegisterRepositoryUseCase.class);
         RepositoryRemoteSyncService remoteSync = mock(RepositoryRemoteSyncService.class);
         RepositoryCodeBrowserService browser = mock(RepositoryCodeBrowserService.class);
@@ -73,7 +73,7 @@ class RepositoryPreparationServiceTest {
         VectorIndexQueryService.Summary empty =
                 new VectorIndexQueryService.Summary(
                         repository.id().value(),
-                        repository.currentSnapshotId().value(),
+                        repository.currentContentVersion().value(),
                         repository.currentCommit(),
                         0,
                         0,
@@ -94,8 +94,8 @@ class RepositoryPreparationServiceTest {
         when(indexJobs.start(any())).thenReturn(queued);
         when(browser.list(repository.id()))
                 .thenReturn(
-                        new RepositoryCodeBrowserService.SnapshotFiles(
-                                repository.currentSnapshotId().value().toString(),
+                        new RepositoryCodeBrowserService.ContentVersionFiles(
+                                repository.currentContentVersion().value().toString(),
                                 "main",
                                 repository.currentCommit(),
                                 List.of()));
@@ -145,8 +145,8 @@ class RepositoryPreparationServiceTest {
         when(indexJobs.start(any())).thenReturn(queued);
         when(browser.list(repository.id()))
                 .thenReturn(
-                        new RepositoryCodeBrowserService.SnapshotFiles(
-                                repository.currentSnapshotId().value().toString(),
+                        new RepositoryCodeBrowserService.ContentVersionFiles(
+                                repository.currentContentVersion().value().toString(),
                                 "main",
                                 repository.currentCommit(),
                                 List.of()));
@@ -164,11 +164,11 @@ class RepositoryPreparationServiceTest {
     @Test
     void buildsDeterministicProfileFromPublishedFiles() {
         UUID repositoryId = UUID.randomUUID();
-        UUID snapshotId = UUID.randomUUID();
+        UUID contentVersion = UUID.randomUUID();
         VectorIndexQueryService.Summary summary =
                 new VectorIndexQueryService.Summary(
                         repositoryId,
-                        snapshotId,
+                        contentVersion,
                         "abc",
                         12,
                         10,
@@ -223,9 +223,9 @@ class RepositoryPreparationServiceTest {
                 "abc",
                 "digest",
                 false,
-                RepositorySnapshotId.newId(),
-                Path.of("snapshot"),
-                Path.of("snapshot/.codegraph"),
+                RepositoryContentVersion.newId(),
+                Path.of("contentVersion"),
+                Path.of("contentVersion/.codegraph"),
                 now,
                 now,
                 now,
@@ -233,7 +233,7 @@ class RepositoryPreparationServiceTest {
     }
 
     @Test
-    void reportsReadyOnlyAfterCurrentSnapshotKnowledgeDriftCompleted() throws IOException {
+    void reportsReadyOnlyAfterCurrentContentVersionKnowledgeDriftCompleted() throws IOException {
         RegisterRepositoryUseCase repositories = mock(RegisterRepositoryUseCase.class);
         RepositoryCodeBrowserService browser = mock(RepositoryCodeBrowserService.class);
         VectorIndexQueryService vectors = mock(VectorIndexQueryService.class);
@@ -245,17 +245,17 @@ class RepositoryPreparationServiceTest {
                         .start("check_knowledge_drift")
                         .succeed(
                                 "knowledge_drift_completed:"
-                                        + repository.currentSnapshotId().value()
+                                        + repository.currentContentVersion().value()
                                         + ":ready");
         when(repositories.get(repository.id())).thenReturn(repository);
         when(vectors.summary(repository.id().value())).thenReturn(summary(repository, 8, 8, 0));
         when(graphArtifacts.findPublished(
-                        repository.id().value(), repository.currentSnapshotId().value()))
+                        repository.id().value(), repository.currentContentVersion().value()))
                 .thenReturn(
                         new CodeGraphArtifactRow(
                                 UUID.randomUUID(),
                                 repository.id().value(),
-                                repository.currentSnapshotId().value(),
+                                repository.currentContentVersion().value(),
                                 "test",
                                 "PUBLISHED",
                                 graphPath(),
@@ -266,8 +266,8 @@ class RepositoryPreparationServiceTest {
                 .thenReturn(java.util.Optional.of(drift));
         when(browser.list(repository.id()))
                 .thenReturn(
-                        new RepositoryCodeBrowserService.SnapshotFiles(
-                                repository.currentSnapshotId().value().toString(),
+                        new RepositoryCodeBrowserService.ContentVersionFiles(
+                                repository.currentContentVersion().value().toString(),
                                 "main",
                                 repository.currentCommit(),
                                 List.of()));
@@ -290,7 +290,7 @@ class RepositoryPreparationServiceTest {
         assertThat(result.stages())
                 .extracting(RepositoryPreparationService.PreparationStage::state)
                 .containsExactly("READY", "READY", "READY", "READY", "READY");
-        assertThat(result.snapshotId()).isEqualTo(repository.currentSnapshotId().value());
+        assertThat(result.contentVersion()).isEqualTo(repository.currentContentVersion().value());
         assertThat(result.commitSha()).isEqualTo(repository.currentCommit());
         Files.delete(workspace.resolve(".codegraph/codegraph.db"));
         var missingArtifact = service.view(repository.id());
@@ -306,7 +306,7 @@ class RepositoryPreparationServiceTest {
             CodeRepository repository, long chunks, long vectorized, long missing) {
         return new VectorIndexQueryService.Summary(
                 repository.id().value(),
-                repository.currentSnapshotId().value(),
+                repository.currentContentVersion().value(),
                 repository.currentCommit(),
                 chunks,
                 vectorized,
@@ -348,8 +348,8 @@ class RepositoryPreparationServiceTest {
         when(vectors.summary(repository.id().value())).thenReturn(summary(repository, 8, 0, 8));
         when(browser.list(repository.id()))
                 .thenReturn(
-                        new RepositoryCodeBrowserService.SnapshotFiles(
-                                repository.currentSnapshotId().value().toString(),
+                        new RepositoryCodeBrowserService.ContentVersionFiles(
+                                repository.currentContentVersion().value().toString(),
                                 "main",
                                 "abc",
                                 List.of()));
@@ -377,14 +377,14 @@ class RepositoryPreparationServiceTest {
 
         graph =
                 graph.start("build")
-                        .succeed("codegraph_published:" + repository.currentSnapshotId().value());
+                        .succeed("codegraph_published:" + repository.currentContentVersion().value());
         when(artifacts.findPublished(
-                        repository.id().value(), repository.currentSnapshotId().value()))
+                        repository.id().value(), repository.currentContentVersion().value()))
                 .thenReturn(
                         new CodeGraphArtifactRow(
                                 UUID.randomUUID(),
                                 repository.id().value(),
-                                repository.currentSnapshotId().value(),
+                                repository.currentContentVersion().value(),
                                 "test",
                                 "PUBLISHED",
                                 graphPath(),
@@ -404,7 +404,7 @@ class RepositoryPreparationServiceTest {
                 drift.start("check")
                         .succeed(
                                 "knowledge_drift_completed:"
-                                        + repository.currentSnapshotId().value()
+                                        + repository.currentContentVersion().value()
                                         + ":ready");
         when(store.findByRepositoryId(repository.id())).thenReturn(List.of(drift, graph, index));
         when(store.findLatestByRepositoryId(repository.id()))

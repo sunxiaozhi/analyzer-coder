@@ -14,9 +14,9 @@ import org.junit.jupiter.api.Test;
 class ProjectCodeFactsServiceTest {
     @Test
     void derivesStackResponsibilitiesGraphFactsAndSuggestionsWithoutMarkdown() {
-        RepositoryCodeBrowserService.SnapshotFiles snapshot =
-                new RepositoryCodeBrowserService.SnapshotFiles(
-                        "snapshot-1",
+        RepositoryCodeBrowserService.ContentVersionFiles contentVersion =
+                new RepositoryCodeBrowserService.ContentVersionFiles(
+                        "contentVersion-1",
                         "main",
                         "abc123",
                         List.of(
@@ -43,7 +43,7 @@ class ProjectCodeFactsServiceTest {
         ProjectArchitectureMapService.ArchitectureMap architecture =
                 new ProjectArchitectureMapService.ArchitectureMap(
                         UUID.randomUUID().toString(),
-                        "snapshot-1",
+                        "contentVersion-1",
                         "abc123",
                         Instant.parse("2026-01-01T00:00:00Z"),
                         List.of(node("backend", 3, "java"), node("frontend", 2, "vue")),
@@ -71,7 +71,7 @@ class ProjectCodeFactsServiceTest {
 
         ProjectCodeFactsService.CodeFacts facts =
                 ProjectCodeFactsService.analyze(
-                        snapshot,
+                        contentVersion,
                         contents::get,
                         architecture,
                         artifact,

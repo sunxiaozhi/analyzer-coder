@@ -6,12 +6,12 @@ import com.analyzercoder.domain.indexing.IndexJobStore;
 import com.analyzercoder.domain.indexing.IndexJobType;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-/** 在 CodeGraph 发布后检查知识来源是否受当前 Snapshot 影响。 */
+/** 在 CodeGraph 发布后检查知识来源是否受当前 ContentVersion 影响。 */
 @Service
 public class KnowledgeDriftJobProcessor {
     private final IndexJobStore jobs;
@@ -42,16 +42,16 @@ public class KnowledgeDriftJobProcessor {
     }
 
     private boolean process(IndexJob running) {
-        RepositorySnapshotId inspectedSnapshot = null;
+        RepositoryContentVersion inspectedContentVersion = null;
         try {
             if (running.isCancellationRequested()) {
                 jobs.save(running.cancel());
                 return true;
             }
             CodeRepository repository = repository(running);
-            inspectedSnapshot =
-                    Objects.requireNonNull(repository.currentSnapshotId(), "仓库尚未发布可用的代码版本");
-            jobs.heartbeat(running.id(), "check_knowledge_drift:" + inspectedSnapshot.value());
+            inspectedContentVersion =
+                    Objects.requireNonNull(repository.currentContentVersion(), "仓库尚未发布可用的代码版本");
+            jobs.heartbeat(running.id(), "check_knowledge_drift:" + inspectedContentVersion.value());
             KnowledgeDriftService.InspectionReport report = drift.inspect(repository);
 
             IndexJob latest = jobs.findById(running.id()).orElseThrow();
@@ -60,14 +60,14 @@ public class KnowledgeDriftJobProcessor {
                 return true;
             }
             CodeRepository current = repository(running);
-            if (!inspectedSnapshot.equals(current.currentSnapshotId())) {
-                throw new IllegalStateException("知识失效检查期间项目 Snapshot 已切换");
+            if (!inspectedContentVersion.equals(current.currentContentVersion())) {
+                throw new IllegalStateException("知识失效检查期间项目 ContentVersion 已切换");
             }
             String result = report.degraded() ? "degraded" : "ready";
             jobs.save(
                     latest.succeed(
                             "knowledge_drift_completed:"
-                                    + inspectedSnapshot.value()
+                                    + inspectedContentVersion.value()
                                     + ":"
                                     + result));
             return true;
@@ -76,11 +76,11 @@ public class KnowledgeDriftJobProcessor {
             if (latest.status() == IndexJobStatus.FAILED) {
                 return false;
             }
-            String snapshot =
-                    inspectedSnapshot == null ? "unknown" : inspectedSnapshot.value().toString();
+            String contentVersion =
+                    inspectedContentVersion == null ? "unknown" : inspectedContentVersion.value().toString();
             jobs.save(
                     latest.fail(
-                            "knowledge_drift_failed:" + snapshot,
+                            "knowledge_drift_failed:" + contentVersion,
                             "KNOWLEDGE_DRIFT_FAILED",
                             safeMessage(exception)));
             return false;

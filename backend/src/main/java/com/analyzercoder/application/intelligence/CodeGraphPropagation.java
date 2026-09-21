@@ -17,14 +17,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** 由同一 CodeGraph 产物的 impact 输出与真实节点/边快照重建完整最短路径。 */
+/** 由同一 CodeGraph 产物的 impact 输出与真实节点/边内容版本重建完整最短路径。 */
 public record CodeGraphPropagation(
         List<Node> nodes,
         List<Edge> edges,
         List<PropagationPath> paths,
         String relationSource,
         UUID graphArtifactId,
-        UUID snapshotId,
+        UUID contentVersion,
         String cliVersion,
         int affectedNodeCount,
         int maxDepthReached,
@@ -212,7 +212,7 @@ public record CodeGraphPropagation(
                 paths,
                 relationSource,
                 artifact.id(),
-                artifact.snapshotId(),
+                artifact.contentVersion(),
                 artifact.cliVersion(),
                 Math.max(0, nodes.size() - focusIds.size()),
                 traversal.depthByNode().values().stream()

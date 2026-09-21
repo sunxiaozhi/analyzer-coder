@@ -1,6 +1,5 @@
 package com.analyzercoder.interfaces.rest;
 
-import com.analyzercoder.application.branch.BranchArtifactRetentionService;
 import com.analyzercoder.application.branch.BranchKnowledgeService;
 import com.analyzercoder.application.branch.BranchPreparationJobs;
 import com.analyzercoder.application.branch.BranchReadContext;
@@ -11,11 +10,9 @@ import com.analyzercoder.security.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -29,9 +26,6 @@ public class RepositoryBranchController {
     private final BranchRemoteService remote;
     private final BranchKnowledgeService knowledge;
     private final BranchPreparationJobs preparation;
-
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private BranchArtifactRetentionService retention;
 
     public RepositoryBranchController(
             RepositoryBranchService branches,
@@ -118,48 +112,6 @@ public class RepositoryBranchController {
 
     public record Context(UUID branchId, UUID contextId) {}
 
-    @GetMapping("/branches/{branchId}/snapshots/{snapshotId}/retention")
-    public BranchArtifactRetentionService.Retention retention(
-            @PathVariable UUID repositoryId,
-            @PathVariable UUID branchId,
-            @PathVariable UUID snapshotId,
-            HttpServletRequest request) {
-        return retention.inspect(
-                SecurityContext.account(request), repositoryId, branchId, snapshotId);
-    }
-
-    @DeleteMapping("/branches/{branchId}/snapshots/{snapshotId}")
-    public BranchArtifactRetentionService.Retention removeSnapshot(
-            @PathVariable UUID repositoryId,
-            @PathVariable UUID branchId,
-            @PathVariable UUID snapshotId,
-            HttpServletRequest request) {
-        return retention.remove(
-                SecurityContext.account(request), repositoryId, branchId, snapshotId);
-    }
-
-    @GetMapping("/knowledge/branch-scopes")
-    public List<BranchKnowledgeService.Scope> scopes(
-            @PathVariable UUID repositoryId, HttpServletRequest request) {
-        return knowledge.scopes(SecurityContext.account(request), repositoryId);
-    }
-
-    @PutMapping("/knowledge/{cardId}/branch-scope")
-    @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
-    public void scope(
-            @PathVariable UUID repositoryId,
-            @PathVariable UUID cardId,
-            @RequestBody Scope body,
-            HttpServletRequest request) {
-        knowledge.apply(
-                SecurityContext.account(request),
-                repositoryId,
-                cardId,
-                body.revision(),
-                body.mode(),
-                body.branchIds());
-    }
-
     @PostMapping("/knowledge/{cardId}/branch-validation")
     @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public void verify(
@@ -176,8 +128,6 @@ public class RepositoryBranchController {
                 body.state(),
                 body.note());
     }
-
-    public record Scope(int revision, String mode, List<UUID> branchIds) {}
 
     public record Validation(int revision, UUID contextId, String state, String note) {}
 

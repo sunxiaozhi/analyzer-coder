@@ -12,7 +12,7 @@ it('blocks Git reads until repository and selected branch match the pinned conte
   const reads=scope.run(useBranchReadScope)!;
   expect(reads.blocked.value).toBe(true);
   branches.selectedBranchId='b';
-  branches.context={contextId:'ctx',repositoryId:'p',branchId:'b',branchName:'main',snapshotId:'s',commitSha:'a',expiresAt:''};
+  branches.context={contextId:'ctx',repositoryId:'p',branchId:'b',branchName:'main',contentVersion:'s',commitSha:'a',expiresAt:''};
   expect(reads.blocked.value).toBe(false);
   branches.selectedBranchId='other';
   expect(reads.blocked.value).toBe(true);
@@ -21,11 +21,15 @@ it('blocks Git reads until repository and selected branch match the pinned conte
   expect(reads.reason.value).toBe('上下文失效');
   scope.stop();
 });
-it('keeps ZIP single-version reads available',()=>{
+it('requires the WORKSPACE branch context for ZIP projects',()=>{
   repositories.selectedRepository.sourceType='ZIP';
   const scope=effectScope();
   const reads=scope.run(useBranchReadScope)!;
-  expect(reads.requiresContext.value).toBe(false);
+  expect(reads.requiresContext.value).toBe(true);
+  expect(reads.blocked.value).toBe(true);
+  const branches=useBranchContextStore();
+  branches.selectedBranchId='workspace';
+  branches.context={contextId:'ctx',repositoryId:'p',branchId:'workspace',branchName:'WORKSPACE',contentVersion:'v',commitSha:'c',expiresAt:''};
   expect(reads.blocked.value).toBe(false);
   scope.stop();
 });

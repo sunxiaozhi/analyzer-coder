@@ -2,8 +2,8 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import BranchIndexPanel from './BranchIndexPanel.vue';
 import type { BranchContext, RepositoryBranch } from '@/api/branches';
-const branch: RepositoryBranch = { id:'b', name:'release', snapshotId:'s', commitSha:'a'.repeat(40), status:'READY', error:null, generation:1, trackingStatus:'ACTIVE', archivedAt:null };
-const context: BranchContext = { contextId:'ctx', repositoryId:'p', branchId:'b', branchName:'release', snapshotId:'s', commitSha:'a'.repeat(40), expiresAt:'' };
+const branch: RepositoryBranch = { id:'b', name:'release', contentVersion:'s', commitSha:'a'.repeat(40), status:'READY', error:null, generation:1, trackingStatus:'ACTIVE', archivedAt:null };
+const context: BranchContext = { contextId:'ctx', repositoryId:'p', branchId:'b', branchName:'release', contentVersion:'s', commitSha:'a'.repeat(40), expiresAt:'' };
 const button = { props:['disabled'], template:'<button :disabled="disabled"><slot /></button>' };
 function panel(extra = {}) {
   return mount(BranchIndexPanel, { props:{ branch, context, jobs:[], disabled:false, canMaintain:true, ...extra }, global:{ stubs:{ ElButton:button } } });
@@ -21,8 +21,8 @@ describe('branch index actions', () => {
     expect(wrapper.find('details').attributes('open')).toBeUndefined();
     wrapper.unmount();
   });
-  it('does not treat another snapshot as ready', () => {
-    const wrapper=panel({ status:{branchId:'b',snapshotId:'old',syncedAt:null,contentReady:true,graphReady:true,vectorsReady:true} });
+  it('does not treat another contentVersion as ready', () => {
+    const wrapper=panel({ status:{branchId:'b',contentVersion:'old',syncedAt:null,contentReady:true,graphReady:true,vectorsReady:true} });
     expect(wrapper.findAll('[data-ready="true"]')).toHaveLength(0);
     expect(wrapper.text()).not.toContain('打开此分支代码图谱');
     wrapper.unmount();
@@ -33,7 +33,7 @@ describe('branch index actions', () => {
     wrapper.unmount();
   });
   it('blocks submissions while a task is running and labels historical tasks', () => {
-    const wrapper=panel({ jobs:[{id:'j',branchId:'b',kind:'GRAPH',status:'RUNNING',stage:'GRAPH',snapshotId:'old',error:null}] });
+    const wrapper=panel({ jobs:[{id:'j',branchId:'b',kind:'GRAPH',status:'RUNNING',stage:'GRAPH',contentVersion:'old',error:null}] });
     expect(wrapper.findAll('.index-actions button').filter(button => button.text() !== '打开代码').every(b=>b.attributes('disabled')!==undefined)).toBe(true);
     expect(wrapper.text()).toContain('历史版本任务');
     wrapper.unmount();

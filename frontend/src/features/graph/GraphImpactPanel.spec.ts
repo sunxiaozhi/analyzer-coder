@@ -22,9 +22,9 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function graphFixture(snapshotId = 'snapshot-1') {
+function graphFixture(contentVersion = 'contentVersion-1') {
   return {
-    snapshotId, nodes: [
+    contentVersion, nodes: [
       { id: 'a', symbol: 'caller', filePath: 'a.ts', startLine: 1, endLine: 2 },
       { id: 'b', symbol: 'callee', filePath: 'b.ts', startLine: 4, endLine: 5 },
     ],
@@ -37,9 +37,9 @@ function graphFixture(snapshotId = 'snapshot-1') {
 
 function mountRelations() {
   api.codeEvidenceContext.mockResolvedValue({ knowledgeReferences: [], limitations: [] });
-  api.latestGraph.mockResolvedValue({ snapshotId: 'snapshot-1', cliVersion: 'test', nodeCount: 2 });
+  api.latestGraph.mockResolvedValue({ contentVersion: 'contentVersion-1', cliVersion: 'test', nodeCount: 2 });
   return mount(CodeEvidencePanel, {
-    props: { repositoryId: 'repo-1', filePath: 'a.ts', initialSymbol: 'caller', snapshotId: 'snapshot-1', autoAnalyze: true },
+    props: { repositoryId: 'repo-1', filePath: 'a.ts', initialSymbol: 'caller', contentVersion: 'contentVersion-1', autoAnalyze: true },
     global: { stubs: { 'el-input': true, 'el-input-number': true, 'el-button': true } },
   });
 }
@@ -70,11 +70,11 @@ describe('graph context integrity', () => {
     wrapper.unmount();
   });
 
-  it('rejects a response from a different snapshot', async () => {
-    api.graph.mockResolvedValue(graphFixture('new-snapshot'));
+  it('rejects a response from a different contentVersion', async () => {
+    api.graph.mockResolvedValue(graphFixture('new-contentVersion'));
     const wrapper = mountRelations();
     await flushPromises();
-    expect(wrapper.text()).toContain('代码快照已更新');
+    expect(wrapper.text()).toContain('代码内容版本已更新');
     expect(wrapper.find('.relation-summary').exists()).toBe(false);
     wrapper.unmount();
   });

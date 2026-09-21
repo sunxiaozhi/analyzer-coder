@@ -11,7 +11,7 @@ import com.analyzercoder.application.repository.RepositorySourceImportService;
 import com.analyzercoder.domain.indexing.IndexJobStatus;
 import com.analyzercoder.domain.indexing.IndexJobType;
 import com.analyzercoder.domain.repository.CodeRepository;
-import com.analyzercoder.domain.repository.RepositorySnapshotPort;
+import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import com.analyzercoder.infrastructure.persistence.mapper.AuthMapper;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -36,13 +36,13 @@ class RepositoryImportToAskIT {
     @Autowired IndexJobProcessor processor;
     @Autowired IntelligenceService intelligence;
     @Autowired AuthMapper auth;
-    @Autowired RepositorySnapshotPort managedFiles;
+    @Autowired GitBranchContentVersionFactory managedFiles;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired com.analyzercoder.application.indexing.VectorIndexQueryService vectors;
 
     @Test
     @Transactional
-    void importsZipIndexesCurrentSnapshotAndAnswersFromPersistedEvidence() throws Exception {
+    void importsZipIndexesCurrentContentVersionAndAnswersFromPersistedEvidence() throws Exception {
         jdbc.update(
                 "UPDATE vector_model_activation SET active_config_id='00000000-0000-0000-0000-000000000064' WHERE singleton_id=1");
 
@@ -67,15 +67,15 @@ class RepositoryImportToAskIT {
                             null,
                             null);
 
-            assertThat(answer.snapshotId()).isEqualTo(repository.currentSnapshotId().value());
+            assertThat(answer.contentVersion()).isEqualTo(repository.currentContentVersion().value());
             assertThat(answer.evidenceStatus()).isEqualTo("DEGRADED");
             assertThat(answer.fallbackReason()).isEqualTo("LOCAL_EVIDENCE_MODE");
             assertThat(answer.citations()).isNotEmpty();
             assertThat(answer.citations().get(0).filePath())
                     .isEqualTo("src/OrderCheckoutWorkflow.java");
             assertThat(answer.retrieval().enabledChannels()).contains("CODE_KEYWORD");
-            assertThat(answer.retrieval().snapshotId())
-                    .isEqualTo(repository.currentSnapshotId().value());
+            assertThat(answer.retrieval().contentVersion())
+                    .isEqualTo(repository.currentContentVersion().value());
             assertThat(
                             intelligence
                                     .historyDetail(

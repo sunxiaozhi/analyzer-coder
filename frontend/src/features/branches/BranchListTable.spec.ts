@@ -4,8 +4,8 @@ import { ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus';
 import BranchListTable from './BranchListTable.vue';
 import type { RepositoryBranch } from '@/api/branches';
 const mount = (component: any, options: any) => baseMount(component, { ...options, global: { components: { ElDropdown, ElDropdownMenu, ElDropdownItem } } });
-const branch = (id: string, ready = true): RepositoryBranch => ({ id, name: id, snapshotId: ready ? 's-' + id : null, commitSha: ready ? 'abcdef123456789' : null, status: ready ? 'READY' : 'PENDING', error: null, generation: 1, trackingStatus: 'ACTIVE', archivedAt: null });
-const indexes = [{ branchId: 'main', snapshotId: 's-main', contentReady: true, graphReady: true, vectorsReady: false, syncedAt: null }];
+const branch = (id: string, ready = true): RepositoryBranch => ({ id, name: id, contentVersion: ready ? 's-' + id : null, commitSha: ready ? 'abcdef123456789' : null, status: ready ? 'READY' : 'PENDING', error: null, generation: 1, trackingStatus: 'ACTIVE', archivedAt: null });
+const indexes = [{ branchId: 'main', contentVersion: 's-main', contentReady: true, graphReady: true, vectorsReady: false, syncedAt: null }];
 it('uses row operations for reading and preparation, and opens details for an unprepared branch', async () => {
   const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: 'main', canMaintain: true, branches: [branch('main'), branch('release', false)], indexes } });
   expect(wrapper.text()).toContain('abcdef123456');
@@ -34,7 +34,7 @@ it('marks default and reading branches independently and keeps restoration in th
   wrapper.unmount();
 });
 it('blocks maintenance while a branch task runs and hides it for read-only users', async () => {
-  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: '', canMaintain: true, branches: [branch('main')], indexes, jobs: [{ id: 'j', branchId: 'main', kind: 'GRAPH', status: 'RUNNING', stage: 'GRAPH', snapshotId: 's-main', error: null }] } });
+  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: '', canMaintain: true, branches: [branch('main')], indexes, jobs: [{ id: 'j', branchId: 'main', kind: 'GRAPH', status: 'RUNNING', stage: 'GRAPH', contentVersion: 's-main', error: null }] } });
   expect(wrapper.get('.branch-prepare').attributes('disabled')).toBeDefined();
   wrapper.getComponent(ElDropdown).vm.$emit('command', 'GRAPH');
   expect(wrapper.emitted('operate')).toBeUndefined();
@@ -44,8 +44,8 @@ it('blocks maintenance while a branch task runs and hides it for read-only users
   expect(wrapper.emitted('operate')).toBeUndefined();
   wrapper.unmount();
 });
-it('does not present another snapshot index status as readable', () => {
-  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: '', branches: [branch('main')], indexes: [{ ...indexes[0], snapshotId: 'old' }] } });
+it('does not present another contentVersion index status as readable', () => {
+  const wrapper = mount(BranchListTable, { props: { disabled: false, selectedId: '', branches: [branch('main')], indexes: [{ ...indexes[0], contentVersion: 'old' }] } });
   expect(wrapper.get('.branch-read').attributes('disabled')).toBeDefined();
   expect(wrapper.findAll('.state-link')[1].text()).toBe('待构建');
   wrapper.unmount();

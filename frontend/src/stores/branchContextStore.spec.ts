@@ -10,7 +10,7 @@ vi.mock('@/api/branches', () => ({
 const branch = (id: string, status: RepositoryBranch['status'] = 'READY'): RepositoryBranch => ({
   id,
   name: id,
-  snapshotId: status === 'READY' ? `snapshot-${id}` : null,
+  contentVersion: status === 'READY' ? `contentVersion-${id}` : null,
   commitSha: status === 'READY' ? `commit-${id}` : null,
   status,
   error: null,
@@ -42,7 +42,7 @@ describe('branch context store', () => {
       repositoryId,
       branchId,
       branchName: branchId,
-      snapshotId: `snapshot-${branchId}`,
+      contentVersion: `contentVersion-${branchId}`,
       commitSha: `commit-${branchId}`,
       expiresAt: '2026-09-15T01:00:00Z',
     }));
@@ -53,7 +53,7 @@ describe('branch context store', () => {
     const switching = store.select('release');
     expect(store.context).toBeNull();
     await switching;
-    expect(store.context?.snapshotId).toBe('snapshot-release');
+    expect(store.context?.contentVersion).toBe('contentVersion-release');
   });
 
   it('never creates a fallback context for an unprepared branch', async () => {

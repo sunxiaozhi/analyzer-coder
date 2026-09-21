@@ -32,7 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 在索引或分析前准备仓库快照，统一处理本地路径、远程同步和版本确认。 */
+/** 在索引或分析前准备仓库内容版本，统一处理本地路径、远程同步和版本确认。 */
 @Service
 public class RepositoryPreparationService {
     private final RegisterRepositoryUseCase repositories;
@@ -133,7 +133,7 @@ public class RepositoryPreparationService {
         }
         String stage = stageKey == null ? "" : stageKey.trim().toLowerCase(Locale.ROOT);
         return switch (stage) {
-            case "snapshot" -> prepare(actor, repositoryId);
+            case "contentVersion" -> prepare(actor, repositoryId);
             case "content" ->
                     view(
                             repository,
@@ -150,7 +150,7 @@ public class RepositoryPreparationService {
             }
             case "knowledge_drift" -> {
                 if (currentGraph(repository) == null) {
-                    throw new IllegalStateException("当前 Snapshot 尚无可用 CodeGraph");
+                    throw new IllegalStateException("当前 ContentVersion 尚无可用 CodeGraph");
                 }
                 yield view(repository, driftTasks.start(repositoryId));
             }
@@ -161,12 +161,12 @@ public class RepositoryPreparationService {
     private PreparationView view(CodeRepository repository, IndexJob latestJob) {
         VectorIndexQueryService.Summary summary = vectors.summary(repository.id().value());
         CodeGraphArtifactRow graph = currentGraph(repository);
-        RepositoryCodeBrowserService.SnapshotFiles snapshot = browser.list(repository.id());
-        ProjectProfile profile = profile(snapshot.files(), summary, graph);
+        RepositoryCodeBrowserService.ContentVersionFiles contentVersion = browser.list(repository.id());
+        ProjectProfile profile = profile(contentVersion.files(), summary, graph);
         boolean jobActive = latestJob != null && isActive(latestJob.status());
         boolean jobFailed = latestJob != null && latestJob.status() == IndexJobStatus.FAILED;
-        boolean snapshotReady = repository.currentSnapshotId() != null;
-        boolean contentReady = snapshotReady && summary.totalChunks() > 0;
+        boolean contentVersionReady = repository.currentContentVersion() != null;
+        boolean contentReady = contentVersionReady && summary.totalChunks() > 0;
         boolean vectorsReady = contentReady && summary.missingChunks() == 0;
         boolean graphReady = graph != null;
         IndexJob drift = currentDrift(repository);
@@ -181,10 +181,10 @@ public class RepositoryPreparationService {
         List<PreparationStage> stages =
                 List.of(
                         new PreparationStage(
-                                "snapshot",
-                                "代码快照",
-                                snapshotReady ? "READY" : "PENDING",
-                                snapshotReady ? snapshot.files().size() + " 个文件已发布" : "等待发布代码快照"),
+                                "contentVersion",
+                                "代码内容版本",
+                                contentVersionReady ? "READY" : "PENDING",
+                                contentVersionReady ? contentVersion.files().size() + " 个文件已发布" : "等待发布代码内容版本"),
                         new PreparationStage(
                                 "content",
                                 "内容索引",
@@ -244,7 +244,7 @@ public class RepositoryPreparationService {
                                                 : graphReady ? "等待核对知识来源" : "等待 CodeGraph"));
 
         int progress =
-                (snapshotReady ? 20 : 0)
+                (contentVersionReady ? 20 : 0)
                         + (contentReady ? 20 : 0)
                         + (vectorsReady ? 20 : 0)
                         + (graphReady ? 20 : 0)
@@ -257,7 +257,7 @@ public class RepositoryPreparationService {
                                 : jobFailed ? "ACTION_REQUIRED" : "NOT_READY";
         String message =
                 switch (state) {
-                    case "READY" -> "当前快照的索引已准备，知识来源变更检查已执行";
+                    case "READY" -> "当前内容版本的索引已准备，知识来源变更检查已执行";
                     case "DEGRADED" -> "准备流程已完成，但存在向量或知识治理缺口";
                     case "PROCESSING" -> "正在准备项目，完成当前阶段后会自动继续";
                     case "ACTION_REQUIRED" -> jobDetail(latestJob, "项目准备失败，请重试");
@@ -273,9 +273,9 @@ public class RepositoryPreparationService {
                 latestJob == null ? null : latestJob.id().value(),
                 latestJob == null ? null : latestJob.type().name(),
                 latestJob == null ? null : latestJob.status().name(),
-                repository.currentSnapshotId() == null
+                repository.currentContentVersion() == null
                         ? null
-                        : repository.currentSnapshotId().value(),
+                        : repository.currentContentVersion().value(),
                 repository.currentCommit(),
                 repository.defaultBranch(),
                 repository.worktreeDirty(),
@@ -283,12 +283,12 @@ public class RepositoryPreparationService {
     }
 
     private CodeGraphArtifactRow currentGraph(CodeRepository repository) {
-        if (repository.currentSnapshotId() == null) {
+        if (repository.currentContentVersion() == null) {
             return null;
         }
         CodeGraphArtifactRow graph =
                 graphArtifacts.findPublished(
-                        repository.id().value(), repository.currentSnapshotId().value());
+                        repository.id().value(), repository.currentContentVersion().value());
         if (graph == null || graph.nodeCount() <= 0 || graph.artifactPath() == null) return null;
         try {
             Path database = Path.of(graph.artifactPath()).resolve("codegraph.db");
@@ -299,17 +299,17 @@ public class RepositoryPreparationService {
     }
 
     private IndexJob currentDrift(CodeRepository repository) {
-        if (repository.currentSnapshotId() == null) {
+        if (repository.currentContentVersion() == null) {
             return null;
         }
-        String snapshotId = repository.currentSnapshotId().value().toString();
+        String contentVersion = repository.currentContentVersion().value().toString();
         return indexJobStore.findByRepositoryId(repository.id()).stream()
                 .filter(job -> job.type() == IndexJobType.KNOWLEDGE_DRIFT)
                 .filter(
                         job ->
                                 isActive(job.status())
                                         || (job.currentStep() != null
-                                                && job.currentStep().contains(snapshotId)))
+                                                && job.currentStep().contains(contentVersion)))
                 .findFirst()
                 .orElse(null);
     }
@@ -483,9 +483,9 @@ public class RepositoryPreparationService {
                 .filter(
                         job ->
                                 job.startedAt() != null
-                                        && repository.snapshotCreatedAt() != null
+                                        && repository.contentVersionCreatedAt() != null
                                         && !job.startedAt()
-                                                .isBefore(repository.snapshotCreatedAt()))
+                                                .isBefore(repository.contentVersionCreatedAt()))
                 .max(Comparator.comparing(IndexJob::createdAt))
                 .map(RepositoryPreparationService::vectorRepairDegraded)
                 .orElse(false);
@@ -513,7 +513,7 @@ public class RepositoryPreparationService {
             UUID activeJobId,
             String activeJobType,
             String activeJobStatus,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String branch,
             boolean dirty,

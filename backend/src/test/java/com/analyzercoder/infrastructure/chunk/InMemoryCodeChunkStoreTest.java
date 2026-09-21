@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -60,7 +60,7 @@ class InMemoryCodeChunkStoreTest {
             CodeRepositoryId repositoryId, String filePath, String language, String content) {
         return CodeChunk.fileChunk(
                 repositoryId,
-                RepositorySnapshotId.newId(),
+                RepositoryContentVersion.newId(),
                 "test-commit",
                 filePath,
                 language,

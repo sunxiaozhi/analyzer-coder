@@ -13,9 +13,8 @@ const sources = { LOCAL_GIT: '本地 Git', REMOTE_GIT: '远程 Git', GITLAB: 'Gi
     <p v-if="repository.description" class="project-description">{{ repository.description }}</p>
     <p class="project-location" :title="repository.path">{{ repository.path }}</p>
     <div class="project-context">
-      <span v-if="repository.sourceType !== 'ZIP'" class="reading-context"><GitBranch :size="14" />当前阅读 <b>{{ readingBranchName || '尚未选择' }}</b></span>
-      <span v-if="repository.sourceType !== 'ZIP'" class="default-context">默认分支 <b>{{ repository.branch || '未设置' }}</b></span>
-      <span v-else class="default-context">单版本代码源</span>
+      <span class="reading-context"><GitBranch :size="14" />当前阅读 <b>{{ readingBranchName || '尚未选择' }}</b></span>
+      <span class="default-context">默认分支 <b>{{ repository.branch || 'WORKSPACE' }}</b></span>
     </div>
   </header>
 </template>

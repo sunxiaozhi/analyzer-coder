@@ -52,15 +52,15 @@ class ManagedCodeGraphCliContractTest {
                         PosixFilePermission.OWNER_READ,
                         PosixFilePermission.OWNER_WRITE,
                         PosixFilePermission.OWNER_EXECUTE));
-        Path snapshot = temporaryDirectory.resolve("snapshot");
-        Files.createDirectories(snapshot);
-        Files.writeString(snapshot.resolve("Example.java"), "class Example {}\n");
+        Path workspace = temporaryDirectory.resolve("workspace");
+        Files.createDirectories(workspace);
+        Files.writeString(workspace.resolve("Example.java"), "class Example {}\n");
 
         UUID repositoryId = UUID.randomUUID();
-        UUID snapshotId = UUID.randomUUID();
+        UUID contentVersion = UUID.randomUUID();
         CodeGraphArtifactMapper mapper = mock(CodeGraphArtifactMapper.class);
         when(mapper.findRepositoryVersion(repositoryId))
-                .thenReturn(new RepositoryVersionRow(snapshotId, snapshot.toString()));
+                .thenReturn(new RepositoryVersionRow(contentVersion, workspace.toString()));
         CodeGraphArtifactPublisher publisher = mock(CodeGraphArtifactPublisher.class);
         ManagedCodeGraphService service =
                 new ManagedCodeGraphService(
@@ -73,7 +73,7 @@ class ManagedCodeGraphCliContractTest {
 
         CodeGraphService.Artifact artifact = service.build(repositoryId);
 
-        assertThat(artifact.snapshotId()).isEqualTo(snapshotId);
+        assertThat(artifact.contentVersion()).isEqualTo(contentVersion);
         assertThat(artifact.cliVersion()).isEqualTo("codegraph-contract-1.0");
         assertThat(artifact.nodeCount()).isEqualTo(3);
         assertThat(artifact.edgeCount()).isEqualTo(2);
@@ -83,7 +83,7 @@ class ManagedCodeGraphCliContractTest {
         ArgumentCaptor<CodeGraphArtifactRow> row =
                 ArgumentCaptor.forClass(CodeGraphArtifactRow.class);
         verify(publisher).publish(row.capture());
-        assertThat(row.getValue().snapshotId()).isEqualTo(snapshotId);
+        assertThat(row.getValue().contentVersion()).isEqualTo(contentVersion);
         verify(mapper, org.mockito.Mockito.atLeast(2)).findRepositoryVersion(repositoryId);
     }
 
@@ -119,7 +119,7 @@ class ManagedCodeGraphCliContractTest {
         Files.writeString(branch.resolve("Example.java"), "class Example {}\n");
 
         UUID repositoryId = UUID.randomUUID();
-        UUID snapshotId = UUID.randomUUID();
+        UUID contentVersion = UUID.randomUUID();
         CodeGraphArtifactPublisher publisher = mock(CodeGraphArtifactPublisher.class);
         ManagedCodeGraphService service =
                 new ManagedCodeGraphService(
@@ -131,11 +131,11 @@ class ManagedCodeGraphCliContractTest {
                         publisher);
 
         CodeGraphService.Artifact first =
-                service.buildSnapshot(
-                        repositoryId, snapshotId, branch, CodeGraphService.BuildControl.none());
+                service.buildContentVersion(
+                        repositoryId, contentVersion, branch, CodeGraphService.BuildControl.none());
         CodeGraphService.Artifact second =
-                service.buildSnapshot(
-                        repositoryId, snapshotId, branch, CodeGraphService.BuildControl.none());
+                service.buildContentVersion(
+                        repositoryId, contentVersion, branch, CodeGraphService.BuildControl.none());
 
         assertThat(first.artifactPath()).isEqualTo(branch.resolve(".codegraph").toString());
         assertThat(second.artifactPath()).isEqualTo(branch.resolve(".codegraph").toString());
@@ -168,14 +168,14 @@ class ManagedCodeGraphCliContractTest {
                         PosixFilePermission.OWNER_EXECUTE));
 
         UUID repositoryId = UUID.randomUUID();
-        UUID snapshotId = UUID.randomUUID();
+        UUID contentVersion = UUID.randomUUID();
         UUID artifactId = UUID.randomUUID();
         Path artifactRoot = temporaryDirectory.resolve("query-artifacts").toAbsolutePath();
         Path marker =
                 artifactRoot
                         .resolve(repositoryId.toString())
                         .resolve("codegraph")
-                        .resolve(snapshotId.toString())
+                        .resolve(contentVersion.toString())
                         .resolve(artifactId.toString())
                         .resolve("project/.codegraph");
         Files.createDirectories(marker);
@@ -216,13 +216,13 @@ class ManagedCodeGraphCliContractTest {
         when(mapper.findRepositoryVersion(repositoryId))
                 .thenReturn(
                         new RepositoryVersionRow(
-                                snapshotId, temporaryDirectory.resolve("snapshot").toString()));
-        when(mapper.findPublished(repositoryId, snapshotId))
+                                contentVersion, temporaryDirectory.resolve("contentVersion").toString()));
+        when(mapper.findPublished(repositoryId, contentVersion))
                 .thenReturn(
                         new CodeGraphArtifactRow(
                                 artifactId,
                                 repositoryId,
-                                snapshotId,
+                                contentVersion,
                                 "codegraph-contract-1.0",
                                 "PUBLISHED",
                                 marker.toString(),

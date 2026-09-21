@@ -7,7 +7,7 @@ vi.mock('@/api/branches', () => ({ branchesApi: { list: vi.fn(), preparationHist
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 afterEach(() => vi.resetAllMocks());
 const projects = [{ id:'p1', name:'项目一', sourceType:'REMOTE_GIT' }, { id:'p2', name:'项目二', sourceType:'LOCAL_GIT' }] as Repository[];
-const job: BranchPreparationJob = { id:'j1',branchId:'b1',kind:'CONTENT',status:'FAILED',stage:'FAILED',error:'索引错误',snapshotId:'old' };
+const job: BranchPreparationJob = { id:'j1',branchId:'b1',kind:'CONTENT',status:'FAILED',stage:'FAILED',error:'索引错误',contentVersion:'old' };
 function panel() { return mount(BranchTasksPanel, { props:{repositories:projects,initialRepositoryId:'p1'},global:{stubs:{ElButton:{template:'<button><slot /></button>'},ElAlert:{props:['title'],template:'<p>{{ title }}</p>'},ElEmpty:true,AppPagination:true,ElDialog:{props:['modelValue'],template:'<div v-if="modelValue" role="dialog"><slot /><slot name="footer" /></div>'}}} }); }
 it('shows task history and requests server-side branch filtering', async () => {
   vi.mocked(branchesApi.list).mockResolvedValue([{id:'b1',name:'release'}] as never);

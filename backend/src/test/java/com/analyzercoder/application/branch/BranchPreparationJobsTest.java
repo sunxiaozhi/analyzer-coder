@@ -44,10 +44,8 @@ class BranchPreparationJobsTest {
                     "CREATE TABLE accounts(id UUID PRIMARY KEY,username TEXT,display_name TEXT,account_role TEXT,enabled BOOLEAN,must_change_password BOOLEAN)");
             db.execute("CREATE TABLE repositories(id UUID PRIMARY KEY,deleted_at TIMESTAMPTZ)");
             db.execute(
-                    "CREATE TABLE repository_branches(id UUID PRIMARY KEY,repo_id UUID,tracking_status TEXT DEFAULT 'ACTIVE',UNIQUE(repo_id,id))");
-            db.execute(
-                    "CREATE TABLE branch_snapshots(id UUID PRIMARY KEY,branch_id UUID,repo_id UUID,content_indexed_at TIMESTAMPTZ,UNIQUE(branch_id,id))");
-            db.execute("CREATE TABLE code_chunks(repo_id UUID,snapshot_id UUID)");
+                    "CREATE TABLE repository_branches(id UUID PRIMARY KEY,repo_id UUID,content_version UUID,content_indexed_at TIMESTAMPTZ,tracking_status TEXT DEFAULT 'ACTIVE',UNIQUE(repo_id,id))");
+            db.execute("CREATE TABLE code_chunks(repo_id UUID,branch_id UUID,content_version UUID)");
             try (var input =
                     getClass()
                             .getClassLoader()
@@ -107,19 +105,14 @@ class BranchPreparationJobsTest {
             assertThat(service.submit(actor, repo, branch).id()).isNotEqualTo(second.id());
 
             db.execute(
-                    "CREATE TABLE knowledge_cards(id UUID PRIMARY KEY,repo_id UUID,revision INTEGER,title TEXT,content TEXT,publication_status TEXT)");
+                    "CREATE TABLE knowledge_cards(id UUID PRIMARY KEY,repo_id UUID,branch_id UUID,revision INTEGER,title TEXT,content TEXT,publication_status TEXT)");
             db.execute(
-                    "CREATE TABLE knowledge_branch_scopes(card_id UUID,mode TEXT,branch_ids UUID[])");
-            db.execute(
-                    "CREATE TABLE knowledge_branch_validations(card_id UUID,revision INTEGER,branch_id UUID,snapshot_id UUID,state TEXT,note TEXT,checked_by UUID,checked_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(card_id,revision,branch_id,snapshot_id))");
-            UUID card = UUID.randomUUID(), snapshot = UUID.randomUUID();
+                    "CREATE TABLE knowledge_branch_validations(card_id UUID,revision INTEGER,branch_id UUID,content_version UUID,state TEXT,note TEXT,checked_by UUID,checked_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(card_id,revision,branch_id,content_version))");
+            UUID card = UUID.randomUUID(), contentVersion = UUID.randomUUID();
             db.update(
-                    "INSERT INTO knowledge_cards VALUES(?,?,1,'Knowledge','Content','PUBLISHED')",
+                    "INSERT INTO knowledge_cards VALUES(?,?,?,1,'Knowledge','Content','PUBLISHED')",
                     card,
-                    repo);
-            db.update(
-                    "INSERT INTO knowledge_branch_scopes VALUES(?,'SELECTED_BRANCHES',ARRAY[?]::uuid[])",
-                    card,
+                    repo,
                     branch);
             var knowledge = new BranchKnowledgeService(db, mock(AccessControlService.class));
             var context =
@@ -128,7 +121,7 @@ class BranchPreparationJobsTest {
                             repo,
                             branch,
                             "main",
-                            snapshot,
+                            contentVersion,
                             commit,
                             Path.of("."),
                             Instant.now().plusSeconds(60));
@@ -155,34 +148,30 @@ class BranchPreparationJobsTest {
 
             db.update("UPDATE branch_preparation_jobs SET status='FAILED' WHERE status='QUEUED'");
             db.update(
-                    "INSERT INTO branch_snapshots VALUES(?,?,?,CURRENT_TIMESTAMP)",
-                    snapshot,
-                    branch,
-                    repo);
+                    "UPDATE repository_branches SET content_version=?,content_indexed_at=CURRENT_TIMESTAMP WHERE id=?",
+                    contentVersion,
+                    branch);
             db.update(
-                    "INSERT INTO code_chunks VALUES(?,?),(?,?)",
+                    "INSERT INTO code_chunks VALUES(?,?,?),(?,?,?)",
                     repo,
-                    snapshot,
-                    repo,
-                    next.snapshotId());
-            db.update(
-                    "INSERT INTO branch_snapshots VALUES(?,?,?,CURRENT_TIMESTAMP)",
-                    next.snapshotId(),
                     branch,
-                    repo);
+                    contentVersion,
+                    repo,
+                    branch,
+                    next.contentVersion());
             var vectorJob = service.submitVectors(actor, context);
             assertThat(service.submitVectors(actor, context).id()).isEqualTo(vectorJob.id());
             assertThatThrownBy(() -> service.submitVectors(actor, next))
-                    .hasMessageContaining("其他快照");
+                    .hasMessageContaining("其他内容版本");
             doAnswer(
                             call -> {
                                 call.<Runnable>getArgument(2).run();
                                 return null;
                             })
                     .when(intelligence)
-                    .prepareBranchEmbeddings(eq(repo), eq(snapshot), any());
+                    .prepareBranchEmbeddings(eq(repo), eq(contentVersion), any());
             service.processNext();
-            verify(intelligence).prepareBranchEmbeddings(eq(repo), eq(snapshot), any());
+            verify(intelligence).prepareBranchEmbeddings(eq(repo), eq(contentVersion), any());
             assertThat(
                             service.list(actor, repo).stream()
                                     .filter(job -> job.kind().equals("VECTORS"))

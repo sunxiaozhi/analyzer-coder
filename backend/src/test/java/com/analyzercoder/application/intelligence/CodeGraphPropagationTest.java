@@ -13,13 +13,13 @@ class CodeGraphPropagationTest {
     @Test
     void preservesExportedEdgesAndBuildsCompletePathsWithoutStarShapingOrRisk() {
         UUID repositoryId = UUID.randomUUID();
-        UUID snapshotId = UUID.randomUUID();
+        UUID contentVersion = UUID.randomUUID();
         UUID artifactId = UUID.randomUUID();
         CodeGraphService.Artifact artifact =
                 new CodeGraphService.Artifact(
                         artifactId,
                         repositoryId,
-                        snapshotId,
+                        contentVersion,
                         "0.41.0",
                         "PUBLISHED",
                         "artifact/.codegraph",
@@ -60,7 +60,7 @@ class CodeGraphPropagationTest {
 
         assertThat(result.relationSource()).isEqualTo("CODEGRAPH_CLI");
         assertThat(result.graphArtifactId()).isEqualTo(artifactId);
-        assertThat(result.snapshotId()).isEqualTo(snapshotId);
+        assertThat(result.contentVersion()).isEqualTo(contentVersion);
         assertThat(result.nodes())
                 .extracting(CodeGraphPropagation.Node::id, CodeGraphPropagation.Node::depth)
                 .containsExactly(

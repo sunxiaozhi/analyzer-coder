@@ -16,7 +16,7 @@ public interface RegisterRepositoryUseCase {
     CodeRepository register(RegisterRepositoryCommand command);
 
     /**
-     * 登记由系统托管的仓库快照并返回仓库聚合。
+     * 登记由系统托管的仓库版本并返回仓库聚合。
      *
      * @param command 经过接口层校验的用例输入命令
      * @return 接口约定的操作结果

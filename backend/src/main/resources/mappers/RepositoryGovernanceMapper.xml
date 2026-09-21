@@ -116,8 +116,8 @@
     <delete id="deleteRepositoryCredentials">DELETE FROM repository_credentials WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteGovernanceLock">DELETE FROM repository_governance_locks WHERE repo_id=#{repositoryId}</delete>
     <update id="finalizeDeletion">
-        UPDATE repositories SET repository_status='DELETED',path=CONCAT('[deleted]/',id),current_snapshot_id=NULL,
-        current_snapshot_path=NULL,codegraph_path=NULL,worktree_digest=NULL,updated_at=CURRENT_TIMESTAMP WHERE
+        UPDATE repositories SET repository_status='DELETED',path=CONCAT('[deleted]/',id),current_content_version=NULL,
+        current_workspace_path=NULL,codegraph_path=NULL,worktree_digest=NULL,updated_at=CURRENT_TIMESTAMP WHERE
         id=#{repositoryId}
     </update>
     <update id="completeCleanup">

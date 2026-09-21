@@ -5,7 +5,7 @@ import { branchContextOptions, withBranchContext } from './branchContext';
 export interface CodeReference {
   repositoryId: string;
   chunkId: string | null;
-  snapshotId: string | null;
+  contentVersion: string | null;
   filePath: string;
   symbolName: string | null;
   startLine: number | null;
@@ -20,7 +20,7 @@ export interface Citation {
   sourceType: 'CODE' | 'KNOWLEDGE';
   chunkId: string | null;
   knowledgeCardId: string | null;
-  snapshotId: string | null;
+  contentVersion: string | null;
   title: string;
   filePath: string;
   symbolName: string | null;
@@ -47,7 +47,7 @@ export interface CitationAssessment {
 }
 
 export interface RetrievalDiagnostics {
-  snapshotId: string | null;
+  contentVersion: string | null;
   vectorModel: string | null;
   retrievalCapability: 'CHARACTER_HASH' | 'SEMANTIC_EMBEDDING' | 'UNKNOWN' | null;
   enabledChannels: string[];
@@ -61,7 +61,7 @@ export interface RetrievalDiagnostics {
 
 export interface HybridSearchHit {
   chunkId: string;
-  snapshotId: string;
+  contentVersion: string;
   filePath: string;
   symbolName: string | null;
   symbolKind: string | null;
@@ -86,7 +86,7 @@ export interface UnifiedSearchHit {
   sourceType: 'CODE' | 'KNOWLEDGE';
   chunkId: string | null;
   knowledgeCardId: string | null;
-  snapshotId: string | null;
+  contentVersion: string | null;
   title: string;
   filePath: string;
   symbolName: string | null;
@@ -123,13 +123,13 @@ export interface CodeEvidenceKnowledgeReference {
   trusted: boolean;
   bindings: {
     chunkId: string | null;
-    snapshotId: string | null;
+    contentVersion: string | null;
     symbolName: string | null;
     startLine: number | null;
     endLine: number | null;
     contentHash: string;
     stale: boolean;
-    currentSnapshot: boolean;
+    currentContentVersion: boolean;
   }[];
   applicability: {
     kind: 'DIRECT_BINDING' | 'PATH_SCOPE' | 'SYMBOL_SCOPE' | 'REPOSITORY_SCOPE' | string;
@@ -140,7 +140,7 @@ export interface CodeEvidenceKnowledgeReference {
 
 export interface CodeEvidenceContext {
   repositoryId: string;
-  snapshotId: string | null;
+  contentVersion: string | null;
   commitSha: string | null;
   filePath: string;
   symbol: string | null;
@@ -157,7 +157,7 @@ export interface Answer {
   title: string;
   question: string;
   answer: string;
-  snapshotId: string | null;
+  contentVersion: string | null;
   branchId: string | null;
   branchName: string | null;
   commitSha: string | null;
@@ -230,7 +230,7 @@ export interface GraphResult {
   paths: { targetNodeId: string; nodeIds: string[]; edgeIds: string[]; depth: number }[];
   relationSource: 'CODEGRAPH_SQLITE' | 'CODEGRAPH_CLI';
   graphArtifactId: string;
-  snapshotId: string;
+  contentVersion: string;
   cliVersion: string;
   affectedNodeCount: number;
   maxDepthReached: number;
@@ -250,7 +250,7 @@ export interface GraphTarget { symbol: string; filePath: string; startLine: numb
 export interface CodeGraphArtifact {
   id: string;
   repositoryId: string;
-  snapshotId: string;
+  contentVersion: string;
   cliVersion: string;
   status: string;
   artifactPath: string;
@@ -306,7 +306,7 @@ export interface KnowledgeCard {
   ownerAccountId: string | null;
   scope: KnowledgeScope;
   obligations: KnowledgeObligations;
-  lastVerifiedSnapshotId: string | null;
+  lastVerifiedContentVersion: string | null;
   verificationNote: string | null;
   publicationStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   revision: number;
@@ -341,8 +341,8 @@ export interface KnowledgeDriftEvent {
   repositoryId: string;
   cardId: string;
   cardRevision: number;
-  fromSnapshotId: string | null;
-  toSnapshotId: string;
+  fromContentVersion: string | null;
+  toContentVersion: string;
   fromCommit: string | null;
   toCommit: string | null;
   previousStatus: KnowledgeCard['sourceVersionStatus'];
@@ -368,7 +368,7 @@ export interface MarkdownKnowledgeSource {
   sourceId: string;
   branchId: string | null;
   sourcePath: string;
-  sourceSnapshotId: string;
+  sourceContentVersion: string;
   sourceContentHash: string;
   title: string;
   assetType: string;
@@ -381,17 +381,17 @@ export interface MarkdownKnowledgeSource {
   cardRevision: number | null;
   cardTitle?: string | null;
   cardStatus?: string | null;
-  generatedSnapshotId: string | null;
+  generatedContentVersion: string | null;
   generatedContentHash: string | null;
 }
 export interface MarkdownKnowledgeSourceList {
-  snapshotId: string;
+  contentVersion: string;
   counts: MarkdownKnowledgeSourceCounts;
   items: MarkdownKnowledgeSource[];
 }
 export interface GenerateMarkdownKnowledgeSourceInput {
   sourcePath: string;
-  expectedSnapshotId: string;
+  expectedContentVersion: string;
   expectedContentHash: string;
 }
 export interface MarkdownKnowledgeBatchGenerationResult {
@@ -427,7 +427,7 @@ export interface CardRevision {
   ownerAccountId: string | null;
   scope: KnowledgeScope;
   obligations: KnowledgeObligations;
-  lastVerifiedSnapshotId: string | null;
+  lastVerifiedContentVersion: string | null;
   verificationNote: string | null;
   publicationStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   changedBy: string | null;
@@ -509,10 +509,10 @@ export const intelligenceApi = {
       `/api/repositories/${repositoryId}/knowledge/markdown-sources/generate`,
       withBranchContext(contextId, { method: 'POST', body: JSON.stringify(input) }),
     ),
-  generatePendingMarkdownSources: (repositoryId: string, expectedSnapshotId: string, contextId?: string | null) =>
+  generatePendingMarkdownSources: (repositoryId: string, expectedContentVersion: string, contextId?: string | null) =>
     request<MarkdownKnowledgeBatchGenerationResult>(
       `/api/repositories/${repositoryId}/knowledge/markdown-sources/generate-pending`,
-      withBranchContext(contextId, { method: 'POST', body: JSON.stringify({ expectedSnapshotId }) }),
+      withBranchContext(contextId, { method: 'POST', body: JSON.stringify({ expectedContentVersion }) }),
     ),
   createCard: (repositoryId: string, input: CardInput, contextId?: string | null) =>
     request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge`, {

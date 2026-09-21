@@ -34,7 +34,7 @@ public class RepositoryCodeBrowserController {
     }
 
     @GetMapping
-    public RepositoryCodeBrowserService.SnapshotFiles list(
+    public RepositoryCodeBrowserService.ContentVersionFiles list(
             @PathVariable UUID repositoryId, HttpServletRequest request) {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);

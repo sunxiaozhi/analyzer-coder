@@ -22,16 +22,15 @@ const props = defineProps<{
   card: KnowledgeCard | null;
   busy: boolean;
   branchName?: string | null;
-  allowSharedScope?: boolean;
   initialReference?: {
     filePath: string;
     symbolName: string | null;
-    snapshotId: string | null;
+    contentVersion: string | null;
   } | null;
 }>();
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
-  submit: [value: CardInput, scope: 'CURRENT_BRANCH' | 'PROJECT_SHARED'];
+  submit: [value: CardInput];
   openCode: [reference: CodeReference];
 }>();
 
@@ -43,7 +42,6 @@ const codeReferences = shallowRef<CodeReference[]>([]);
 const members = shallowRef<RepositoryMember[]>([]);
 const membersLoading = shallowRef(false);
 const loadedMembersRepository = shallowRef<string | null>(null);
-const creationScope = shallowRef<'CURRENT_BRANCH' | 'PROJECT_SHARED'>('CURRENT_BRANCH');
 let referencePrimeVersion = 0;
 
 const scopeReady = computed(() => Boolean(
@@ -60,7 +58,6 @@ watch(
       return;
     }
     reset(props.card);
-    creationScope.value = 'CURRENT_BRANCH';
     const cardReferences = props.card?.codeReferences ?? [];
     attachments.value = props.card ? [...props.card.attachments] : [];
     codeReferences.value = [...cardReferences];
@@ -91,7 +88,7 @@ async function primeInitialReference(
     });
     if (version !== referencePrimeVersion || !props.modelValue || props.card) return;
     const candidates = response.chunks.filter(chunk => chunk.filePath === target.filePath
-      && (!target.snapshotId || chunk.snapshotId === target.snapshotId));
+      && (!target.contentVersion || chunk.contentVersion === target.contentVersion));
     const selected = candidates.find(chunk => target.symbolName && chunk.symbolName === target.symbolName)
       ?? candidates.find(chunk => chunk.chunkType === 'FILE')
       ?? candidates[0];
@@ -102,7 +99,7 @@ async function primeInitialReference(
     codeReferences.value = [{
       repositoryId: props.repositoryId,
       chunkId: selected.id,
-      snapshotId: selected.snapshotId,
+      contentVersion: selected.contentVersion,
       filePath: selected.filePath,
       symbolName: selected.symbolName,
       startLine: selected.startLine,
@@ -177,7 +174,7 @@ function save() {
   emit('submit', toPayload({
     attachmentIds: attachments.value.map(item => item.id),
     codeReferences: codeReferences.value,
-  }), creationScope.value);
+  }));
 }
 </script>
 
@@ -194,11 +191,8 @@ function save() {
 
     <el-form label-position="top" class="knowledge-card-form">
       <section v-if="!card && branchName" class="knowledge-ownership">
-        <div><b>知识归属</b><small>共享知识与分支专属知识拥有独立卡片、修订和发布记录。</small></div>
-        <el-radio-group v-model="creationScope">
-          <el-radio-button value="CURRENT_BRANCH">分支专属 · {{ branchName }}</el-radio-button>
-          <el-radio-button v-if="allowSharedScope" value="PROJECT_SHARED">项目共享</el-radio-button>
-        </el-radio-group>
+        <div><b>知识归属</b><small>知识与代码共同归属当前分支。</small></div>
+        <strong>分支 · {{ branchName }}</strong>
       </section>
       <KnowledgeCardContentSection
         v-model:title="form.title"

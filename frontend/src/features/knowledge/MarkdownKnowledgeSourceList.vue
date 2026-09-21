@@ -10,7 +10,7 @@ import type {
 defineProps<{
   items: MarkdownKnowledgeSource[];
   counts: MarkdownKnowledgeSourceCounts;
-  snapshotId: string | null;
+  contentVersion: string | null;
   busyPath: string | null;
   bulkBusy: boolean;
   canGenerate: boolean;
@@ -47,7 +47,7 @@ function formatBytes(value: number) {
     <header class="source-ledger-head">
       <div class="source-ledger-copy">
         <span class="source-eyebrow">自动提取</span>
-        <h2>当前快照中的 Markdown</h2>
+        <h2>当前内容版本中的 Markdown</h2>
         <p>仓库扫描时自动发现；生成后先进入草稿，由团队确认后再发布。</p>
       </div>
 
@@ -71,8 +71,8 @@ function formatBytes(value: number) {
       </dl>
     </header>
 
-    <div v-if="snapshotId" class="snapshot-note">
-      判断基准：当前快照 <span class="mono">{{ snapshotId.slice(0, 8) }}</span>
+    <div v-if="contentVersion" class="contentVersion-note">
+      判断基准：当前内容版本 <span class="mono">{{ contentVersion.slice(0, 8) }}</span>
     </div>
 
     <div v-if="items.length" class="source-rows">
@@ -209,12 +209,12 @@ function formatBytes(value: number) {
 .source-counts dd { margin: 0; color: #30363d; font-size: 14px; font-weight: 650; }
 .source-counts .attention dd { color: var(--app-color-warning); }
 
-.snapshot-note {
+.contentVersion-note {
   padding: 0 2px;
   color: var(--app-text-muted);
   font-size: 13px;
 }
-.snapshot-note span { color: #4f5b66; }
+.contentVersion-note span { color: #4f5b66; }
 
 .source-rows {
   overflow: hidden;

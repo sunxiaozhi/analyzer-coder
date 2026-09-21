@@ -259,7 +259,7 @@ backend/logs/backend.log 按 20MB 滚动，保留 14 天且总量限制为 1GB�
 - 不执行 `docker-compose down -v`、`docker compose down -v` 或 `docker volume rm`，除非明确要删除数据库。
 - 数据库升级由 Flyway 执行。V9 遇到历史跨仓项目或非空跨仓知识范围会主动阻止迁移，必须先导出/迁移旧数据；不要删除校验记录绕过。
 - 数据库已迁移后，不保证仅换回旧 JAR 可以回滚；需要对应版本的数据库和文件备份。
-- 相对路径使首次部署可选择目录，但数据库中可能保存绝对快照路径。已有数据的实例不要直接搬迁部署目录，跨机器/跨系统迁移需要单独核验路径。
+- 相对路径使首次部署可选择目录，但数据库中可能保存绝对内容版本路径。已有数据的实例不要直接搬迁部署目录，跨机器/跨系统迁移需要单独核验路径。
 
 ## 8. 常见故障
 
@@ -442,4 +442,4 @@ docker-compose --env-file components/.env -f components/compose.yaml logs --tail
 
 升级到固定分支工作区实现后，每个分支第一次同步会完整建立
 `<managed-data-root>/repositories/<repoId>/branches/<branchId>/content`；后续提交只更新 Git 变化文件，
-并在同一路径复用 `.codegraph` 执行增量索引。旧式 `branch-<snapshotId>` 目录不会自动迁移，确认新工作区稳定后可按保留策略清理。
+并在同一路径复用 `.codegraph` 执行增量索引。旧式 `branch-<contentVersion>` 目录不会自动迁移，确认新工作区稳定后可按保留策略清理。

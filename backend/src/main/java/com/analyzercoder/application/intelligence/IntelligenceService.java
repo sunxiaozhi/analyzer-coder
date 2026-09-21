@@ -161,8 +161,8 @@ public class IntelligenceService {
             Map<String, Object> existing =
                     mapper.findConversationByRequest(repositoryId, accountId, clientRequestId);
             if (existing != null && !existing.isEmpty()) {
-                Answer saved = answerSnapshot(existing);
-                if (context != null && !context.snapshotId().equals(saved.snapshotId()))
+                Answer saved = answerContentVersion(existing);
+                if (context != null && !context.contentVersion().equals(saved.contentVersion()))
                     throw new IllegalArgumentException("请求标识已用于其他分支版本，请发起新请求");
                 return saved;
             }
@@ -188,10 +188,10 @@ public class IntelligenceService {
                                     ? mapper.listThreadTurns(threadId, repositoryId, accountId)
                                     : mapper.listThreadTurnsByBranch(
                                             threadId, repositoryId, accountId, context.branchId()))
-                            .stream().map(this::answerSnapshot).toList();
+                            .stream().map(this::answerContentVersion).toList();
             if (context != null
                     && history.stream()
-                            .anyMatch(turn -> !context.snapshotId().equals(turn.snapshotId())))
+                            .anyMatch(turn -> !context.contentVersion().equals(turn.contentVersion())))
                 throw new IllegalArgumentException("会话属于其他代码版本，请在当前分支新建会话");
             Integer next = mapper.nextTurnNo(threadId);
             turnNo = next == null ? history.size() + 1 : next;
@@ -231,12 +231,12 @@ public class IntelligenceService {
             RetrievalDiagnostics retrieval,
             UUID modelConfigId,
             BranchReadContext context) {
-        UUID snapshotId =
+        UUID contentVersion =
                 evidence.stream()
-                        .map(Evidence::snapshotId)
+                        .map(Evidence::contentVersion)
                         .filter(Objects::nonNull)
                         .findFirst()
-                        .orElse(retrieval.snapshotId());
+                        .orElse(retrieval.contentVersion());
         String answer;
         String provider = "deterministic-local";
         String evidenceStatus;
@@ -306,7 +306,7 @@ public class IntelligenceService {
                         threadTitle,
                         question,
                         answer,
-                        snapshotId,
+                        contentVersion,
                         citations,
                         provider,
                         evidenceStatus,
@@ -324,7 +324,7 @@ public class IntelligenceService {
                 threadTitle,
                 question,
                 answer,
-                snapshotId,
+                contentVersion,
                 context == null ? null : context.branchId(),
                 context == null ? null : context.contextId(),
                 context == null ? null : context.branchName(),
@@ -375,7 +375,7 @@ public class IntelligenceService {
                                 ? mapper.listThreadTurns(threadId, repositoryId, accountId)
                                 : mapper.listThreadTurnsByBranch(
                                         threadId, repositoryId, accountId, context.branchId()))
-                        .stream().map(this::answerSnapshot).toList();
+                        .stream().map(this::answerContentVersion).toList();
         return new ThreadDetail(
                 threadId,
                 repositoryId,
@@ -468,15 +468,15 @@ public class IntelligenceService {
         List<RetrievalRanker.ChannelResult> channels = new ArrayList<>();
         List<ChannelMetric> metrics = new ArrayList<>();
         List<UnavailableChannel> unavailable = new ArrayList<>();
-        UUID snapshotId = null;
+        UUID contentVersion = null;
         String vectorModel = null;
         String retrievalCapability = null;
 
         try {
-            snapshotId =
-                    context == null ? mapper.currentSnapshotId(repositoryId) : context.snapshotId();
+            contentVersion =
+                    context == null ? mapper.currentContentVersion(repositoryId) : context.contentVersion();
         } catch (RuntimeException exception) {
-            unavailable.add(unavailable("CURRENT_SNAPSHOT", "SNAPSHOT_LOOKUP_FAILED", exception));
+            unavailable.add(unavailable("CURRENT_CONTENT_VERSION", "CONTENT_VERSION_LOOKUP_FAILED", exception));
         }
 
         List<Map<String, Object>> codeKeywordRows = List.of();
@@ -486,7 +486,7 @@ public class IntelligenceService {
                     context != null
                             ? mapper.searchBranchCodeKeyword(
                                     repositoryId,
-                                    context.snapshotId(),
+                                    context.contentVersion(),
                                     query.normalized(),
                                     query.terms(),
                                     termCount,
@@ -533,7 +533,7 @@ public class IntelligenceService {
                         context != null
                                 ? mapper.searchBranchKnowledgeKeyword(
                                         repositoryId,
-                                        context.snapshotId(),
+                                        context.contentVersion(),
                                         context.branchId(),
                                         context.contextId(),
                                         query.normalized(),
@@ -572,7 +572,7 @@ public class IntelligenceService {
                         context != null
                                 ? mapper.searchBranchCodeVector(
                                         repositoryId,
-                                        context.snapshotId(),
+                                        context.contentVersion(),
                                         vector,
                                         model,
                                         embedding.dimension(),
@@ -588,7 +588,7 @@ public class IntelligenceService {
                             new UnavailableChannel(
                                     codeVectorChannel,
                                     "BRANCH_VECTOR_NOT_READY",
-                                    "当前分支快照尚无匹配模型的向量索引，使用关键词检索"));
+                                    "当前分支内容版本尚无匹配模型的向量索引，使用关键词检索"));
                 } else channels.add(channel(codeVectorChannel, 1.0, "CODE", vectorRows, false));
                 metrics.add(metric(codeVectorChannel, vectorRows.size(), channelStarted));
             } catch (RuntimeException exception) {
@@ -604,7 +604,7 @@ public class IntelligenceService {
                             context != null
                                     ? mapper.searchBranchKnowledgeVector(
                                             repositoryId,
-                                            context.snapshotId(),
+                                            context.contentVersion(),
                                             context.branchId(),
                                             context.contextId(),
                                             vector,
@@ -647,7 +647,7 @@ public class IntelligenceService {
                 channels.stream().map(RetrievalRanker.ChannelResult::channel).toList();
         RetrievalDiagnostics diagnostics =
                 new RetrievalDiagnostics(
-                        snapshotId,
+                        contentVersion,
                         vectorModel,
                         retrievalCapability,
                         enabledChannels,
@@ -702,7 +702,7 @@ public class IntelligenceService {
         Map<String, Object> row = candidate.row();
         return new SearchHit(
                 uuid(row, "id"),
-                uuid(row, "snapshot_id"),
+                uuid(row, "content_version"),
                 string(row, "file_path"),
                 string(row, "symbol_name"),
                 string(row, "symbol_kind"),
@@ -749,7 +749,7 @@ public class IntelligenceService {
                 "CODE",
                 uuid(row, "id"),
                 null,
-                uuid(row, "snapshot_id"),
+                uuid(row, "content_version"),
                 string(row, "symbol_name") == null
                         ? string(row, "file_path")
                         : string(row, "symbol_name"),
@@ -781,7 +781,7 @@ public class IntelligenceService {
                             item.sourceType(),
                             item.chunkId(),
                             item.knowledgeCardId(),
-                            item.snapshotId(),
+                            item.contentVersion(),
                             item.title(),
                             item.filePath(),
                             item.symbolName(),
@@ -889,7 +889,7 @@ public class IntelligenceService {
                 remaining -= link.length();
             }
         }
-        return prompt.append("\n请用中文回答当前问题；每个仓库事实句末必须标注一个或多个 [S编号]；" + "区分团队知识和源码事实；冲突时以当前快照源码为准。")
+        return prompt.append("\n请用中文回答当前问题；每个仓库事实句末必须标注一个或多个 [S编号]；" + "区分团队知识和源码事实；冲突时以当前内容版本源码为准。")
                 .toString();
     }
 
@@ -902,23 +902,23 @@ public class IntelligenceService {
         prepareCodeEmbeddings(repositoryId, null, () -> {});
     }
 
-    public void prepareBranchEmbeddings(UUID repositoryId, UUID snapshotId, Runnable checkpoint) {
-        if (snapshotId == null) throw new IllegalArgumentException("分支快照不能为空");
-        prepareCodeEmbeddings(repositoryId, snapshotId, checkpoint);
+    public void prepareBranchEmbeddings(UUID repositoryId, UUID contentVersion, Runnable checkpoint) {
+        if (contentVersion == null) throw new IllegalArgumentException("分支内容版本不能为空");
+        prepareCodeEmbeddings(repositoryId, contentVersion, checkpoint);
     }
 
-    private void prepareCodeEmbeddings(UUID repositoryId, UUID snapshotId, Runnable checkpoint) {
+    private void prepareCodeEmbeddings(UUID repositoryId, UUID contentVersion, Runnable checkpoint) {
         String model = llm.activeVectorModelName();
         int dimension = llm.activeVectorModelDimension();
         String capability = llm.activeRetrievalCapability();
         for (Map<String, Object> row :
-                snapshotId == null
+                contentVersion == null
                         ? mapper.missingEmbeddings(repositoryId, model, dimension, capability)
                         : mapper.missingBranchEmbeddings(
-                                repositoryId, snapshotId, model, dimension, capability)) {
+                                repositoryId, contentVersion, model, dimension, capability)) {
             checkpoint.run();
             String reused =
-                    snapshotId == null
+                    contentVersion == null
                             ? null
                             : mapper.reusableCodeEmbedding(
                                     repositoryId,
@@ -976,9 +976,23 @@ public class IntelligenceService {
 
     @Transactional
     public GraphResult graph(UUID repositoryId, String symbol, int depth, String direction) {
+        return graph(repositoryId, symbol, depth, direction, null);
+    }
+
+    @Transactional
+    public GraphResult graph(
+            UUID repositoryId,
+            String symbol,
+            int depth,
+            String direction,
+            UUID contentVersion) {
         int maximumDepth = Math.max(1, Math.min(depth, 5));
         List<GraphEdge> all =
-                mapper.heuristicCallEdges(repositoryId).stream()
+                (contentVersion == null
+                                ? mapper.heuristicCallEdges(repositoryId)
+                                : mapper.heuristicCallEdgesAtContentVersion(
+                                        repositoryId, contentVersion))
+                        .stream()
                         .map(
                                 row ->
                                         new GraphEdge(
@@ -1018,20 +1032,20 @@ public class IntelligenceService {
                 uniqueEdges,
                 uniqueEdges.size() > 20 ? "HIGH" : uniqueEdges.size() > 5 ? "MEDIUM" : "LOW",
                 "HEURISTIC_CALL_REFERENCE",
-                mapper.currentSnapshotId(repositoryId),
+                contentVersion == null ? mapper.currentContentVersion(repositoryId) : contentVersion,
                 "SYMBOL_TOKEN_FOLLOWED_BY_PARENTHESIS",
                 List.of(
                         "关系来自索引阶段的符号名加左括号字符串匹配，不是 CodeGraph CLI 结果",
                         "无法可靠识别重载、动态分派、反射、别名和跨语言调用",
-                        "结果绑定当前已发布快照"));
+                        "结果绑定当前已发布内容版本"));
     }
 
     public GraphTarget graphTarget(UUID repositoryId, UUID chunkId) {
         return graphTarget(mapper.findChunk(repositoryId, chunkId));
     }
 
-    public GraphTarget graphTarget(UUID repositoryId, UUID chunkId, UUID snapshotId) {
-        return graphTarget(mapper.findChunkAtSnapshot(repositoryId, chunkId, snapshotId));
+    public GraphTarget graphTarget(UUID repositoryId, UUID chunkId, UUID contentVersion) {
+        return graphTarget(mapper.findChunkAtContentVersion(repositoryId, chunkId, contentVersion));
     }
 
     private GraphTarget graphTarget(Map<String, Object> row) {
@@ -1054,12 +1068,13 @@ public class IntelligenceService {
     }
 
     @Transactional
-    public KnowledgeCard createCard(UUID repositoryId, UUID actor, CardInput input) {
+    public KnowledgeCard createCard(UUID repositoryId, UUID branchId, UUID actor, CardInput input) {
         CardInput validated = validateCardInput(input);
         UUID id = UUID.randomUUID();
         mapper.insertCard(
                 id,
                 repositoryId,
+                branchId,
                 actor,
                 validated.title(),
                 validated.cardType(),
@@ -1235,7 +1250,7 @@ public class IntelligenceService {
                     revision,
                     position++,
                     repositoryId,
-                    uuid(row, "snapshot_id"),
+                    uuid(row, "content_version"),
                     chunkId,
                     string(row, "file_path"),
                     string(row, "symbol_name"),
@@ -1252,7 +1267,7 @@ public class IntelligenceService {
                                 new CodeReference(
                                         repositoryId,
                                         uuid(row, "chunk_id"),
-                                        uuid(row, "snapshot_id"),
+                                        uuid(row, "content_version"),
                                         string(row, "file_path"),
                                         string(row, "symbol_name"),
                                         integer(row, "start_line"),
@@ -1291,7 +1306,7 @@ public class IntelligenceService {
                 mapper.insertHeuristicCallEdge(
                         UUID.randomUUID(),
                         repositoryId,
-                        uuid(source, "snapshot_id"),
+                        uuid(source, "content_version"),
                         sourceId,
                         targetId,
                         string(source, "symbol_name"),
@@ -1342,7 +1357,7 @@ public class IntelligenceService {
                         row.obligationsPayload(),
                         KnowledgeObligations.class,
                         KnowledgeObligations.empty()),
-                row.lastVerifiedSnapshotId(),
+                row.lastVerifiedContentVersion(),
                 row.verificationNote(),
                 row.publicationStatus(),
                 row.revision(),
@@ -1407,7 +1422,7 @@ public class IntelligenceService {
                 : Boolean.parseBoolean(String.valueOf(result));
     }
 
-    private Answer answerSnapshot(Map<String, Object> row) {
+    private Answer answerContentVersion(Map<String, Object> row) {
         String payload = string(row, "answer_payload");
         if (payload == null || payload.isBlank()) {
             return new Answer(
@@ -1421,7 +1436,7 @@ public class IntelligenceService {
                     string(row, "title"),
                     string(row, "question"),
                     string(row, "answer"),
-                    uuid(row, "snapshot_id"),
+                    uuid(row, "content_version"),
                     List.of(),
                     string(row, "provider"),
                     string(row, "evidence_status"),
@@ -1452,7 +1467,7 @@ public class IntelligenceService {
                     restored.title(),
                     restored.question(),
                     restored.answer(),
-                    restored.snapshotId(),
+                    restored.contentVersion(),
                     restored.citations(),
                     restored.provider(),
                     restored.evidenceStatus(),
@@ -1583,7 +1598,7 @@ public class IntelligenceService {
     public record UnavailableChannel(String channel, String reason, String detail) {}
 
     public record RetrievalDiagnostics(
-            UUID snapshotId,
+            UUID contentVersion,
             String vectorModel,
             String retrievalCapability,
             List<String> enabledChannels,
@@ -1610,7 +1625,7 @@ public class IntelligenceService {
 
     public record SearchHit(
             UUID chunkId,
-            UUID snapshotId,
+            UUID contentVersion,
             String filePath,
             String symbolName,
             String symbolKind,
@@ -1629,7 +1644,7 @@ public class IntelligenceService {
             String sourceType,
             UUID chunkId,
             UUID knowledgeCardId,
-            UUID snapshotId,
+            UUID contentVersion,
             String title,
             String filePath,
             String symbolName,
@@ -1652,7 +1667,7 @@ public class IntelligenceService {
             String sourceType,
             UUID chunkId,
             UUID knowledgeCardId,
-            UUID snapshotId,
+            UUID contentVersion,
             String title,
             String filePath,
             String symbolName,
@@ -1679,7 +1694,7 @@ public class IntelligenceService {
             String title,
             String question,
             String answer,
-            UUID snapshotId,
+            UUID contentVersion,
             List<Citation> citations,
             String provider,
             String evidenceStatus,
@@ -1724,7 +1739,7 @@ public class IntelligenceService {
             List<GraphEdge> edges,
             String risk,
             String relationSource,
-            UUID snapshotId,
+            UUID contentVersion,
             String algorithm,
             List<String> limitations) {}
 
@@ -1733,7 +1748,7 @@ public class IntelligenceService {
     public record CodeReference(
             UUID repositoryId,
             UUID chunkId,
-            UUID snapshotId,
+            UUID contentVersion,
             String filePath,
             String symbolName,
             Integer startLine,
@@ -1787,7 +1802,7 @@ public class IntelligenceService {
             UUID ownerAccountId,
             KnowledgeScope scope,
             KnowledgeObligations obligations,
-            UUID lastVerifiedSnapshotId,
+            UUID lastVerifiedContentVersion,
             String verificationNote,
             String publicationStatus,
             int revision,

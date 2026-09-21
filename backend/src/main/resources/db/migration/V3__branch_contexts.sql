@@ -1,9 +1,14 @@
--- Additive branch storage. Legacy repository pointers remain legacy-only during rollout.
+-- Branch is the only code and knowledge scope. content_version is an opaque publication
+-- token used to reject stale work; it is not an addressable historical source object.
 CREATE TABLE repository_branches (
     id UUID PRIMARY KEY,
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    published_snapshot_id UUID,
+    content_version UUID,
+    previous_content_version UUID,
+    commit_sha TEXT,
+    content_path TEXT,
+    published_at TIMESTAMPTZ,
     generation BIGINT NOT NULL DEFAULT 0,
     preparation_status TEXT NOT NULL DEFAULT 'PENDING' CHECK(preparation_status IN ('PENDING','BUILDING','READY','FAILED')),
     preparation_error TEXT,
@@ -14,63 +19,107 @@ INSERT INTO repository_branches(id,repo_id,name)
 SELECT md5(id::text || ':branch:' || COALESCE(default_branch,'WORKSPACE'))::uuid,id,COALESCE(default_branch,'WORKSPACE')
 FROM repositories WHERE deleted_at IS NULL;
 
-CREATE TABLE branch_snapshots (
-    id UUID PRIMARY KEY,
-    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    branch_id UUID NOT NULL,
-    commit_sha TEXT NOT NULL,
-    content_path TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(repo_id,branch_id) REFERENCES repository_branches(repo_id,id) ON DELETE CASCADE,
-    UNIQUE(repo_id,branch_id,id), UNIQUE(branch_id,id)
-);
-ALTER TABLE repository_branches ADD CONSTRAINT fk_branch_published_snapshot
-FOREIGN KEY(repo_id,id,published_snapshot_id) REFERENCES branch_snapshots(repo_id,branch_id,id) DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE code_chunks ADD COLUMN branch_id UUID;
+UPDATE code_chunks c SET branch_id=b.id
+FROM repository_branches b JOIN repositories r ON r.id=b.repo_id
+WHERE c.repo_id=b.repo_id AND b.name=COALESCE(r.default_branch,'WORKSPACE');
+ALTER TABLE code_chunks ALTER COLUMN branch_id SET NOT NULL;
+ALTER TABLE code_chunks ADD CONSTRAINT fk_code_chunk_branch
+    FOREIGN KEY(repo_id,branch_id) REFERENCES repository_branches(repo_id,id) ON DELETE CASCADE;
+CREATE INDEX idx_code_chunks_branch_version
+    ON code_chunks(repo_id,branch_id,content_version);
+
+CREATE FUNCTION assign_code_chunk_branch() RETURNS trigger AS $$
+BEGIN
+    IF NEW.branch_id IS NULL THEN
+        SELECT b.id INTO NEW.branch_id FROM repository_branches b
+        JOIN repositories r ON r.id=b.repo_id
+        WHERE b.repo_id=NEW.repo_id
+          AND (b.content_version=NEW.content_version
+               OR b.previous_content_version=NEW.content_version
+               OR b.name=COALESCE(r.default_branch,'WORKSPACE'))
+        ORDER BY CASE WHEN b.content_version=NEW.content_version THEN 0
+                      WHEN b.previous_content_version=NEW.content_version THEN 1 ELSE 2 END
+        LIMIT 1;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER trg_assign_code_chunk_branch BEFORE INSERT ON code_chunks
+FOR EACH ROW EXECUTE FUNCTION assign_code_chunk_branch();
 
 CREATE TABLE branch_read_contexts (
     id UUID PRIMARY KEY,
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     repo_id UUID NOT NULL,
     branch_id UUID NOT NULL,
-    snapshot_id UUID NOT NULL,
+    content_version UUID NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
-    FOREIGN KEY(repo_id,branch_id,snapshot_id) REFERENCES branch_snapshots(repo_id,branch_id,id) ON DELETE CASCADE
+    FOREIGN KEY(repo_id,branch_id) REFERENCES repository_branches(repo_id,id) ON DELETE CASCADE
 );
 CREATE INDEX idx_branch_context_expiry ON branch_read_contexts(expires_at);
 
-CREATE TABLE knowledge_branch_scopes (
-    card_id UUID PRIMARY KEY REFERENCES knowledge_cards(id) ON DELETE CASCADE,
-    repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    mode TEXT NOT NULL DEFAULT 'SELECTED_BRANCHES' CHECK(mode IN ('ALL_BRANCHES','SELECTED_BRANCHES')),
-    branch_ids UUID[] NOT NULL DEFAULT '{}',
-    CHECK((mode='ALL_BRANCHES' AND cardinality(branch_ids)=0) OR (mode='SELECTED_BRANCHES' AND cardinality(branch_ids)>0))
-);
-INSERT INTO knowledge_branch_scopes(card_id,repo_id,branch_ids)
-SELECT k.id,k.repo_id,ARRAY[b.id] FROM knowledge_cards k JOIN repository_branches b
-ON b.repo_id=k.repo_id JOIN repositories r ON r.id=k.repo_id AND b.name=COALESCE(r.default_branch,'WORKSPACE');
+ALTER TABLE knowledge_cards ADD COLUMN branch_id UUID;
+UPDATE knowledge_cards k SET branch_id=b.id
+FROM repository_branches b JOIN repositories r ON r.id=b.repo_id
+WHERE k.repo_id=b.repo_id AND b.name=COALESCE(r.default_branch,'WORKSPACE');
+ALTER TABLE knowledge_cards ALTER COLUMN branch_id SET NOT NULL;
+ALTER TABLE knowledge_cards ADD CONSTRAINT fk_knowledge_card_branch
+    FOREIGN KEY(repo_id,branch_id) REFERENCES repository_branches(repo_id,id) ON DELETE CASCADE;
+CREATE INDEX idx_knowledge_cards_branch_status
+    ON knowledge_cards(repo_id,branch_id,publication_status,updated_at DESC);
 
-CREATE TABLE knowledge_branch_scope_history (
-    card_id UUID NOT NULL REFERENCES knowledge_cards(id) ON DELETE CASCADE,
-    revision INTEGER NOT NULL,
-    mode TEXT NOT NULL,
-    branch_ids UUID[] NOT NULL,
-    PRIMARY KEY(card_id,revision)
-);
-INSERT INTO knowledge_branch_scope_history SELECT s.card_id,k.revision,s.mode,s.branch_ids
-FROM knowledge_branch_scopes s JOIN knowledge_cards k ON k.id=s.card_id;
+ALTER TABLE knowledge_card_revisions ADD COLUMN branch_id UUID;
+UPDATE knowledge_card_revisions r SET branch_id=k.branch_id
+FROM knowledge_cards k WHERE k.id=r.card_id;
+ALTER TABLE knowledge_card_revisions ALTER COLUMN branch_id SET NOT NULL;
+ALTER TABLE knowledge_card_revisions ADD CONSTRAINT fk_knowledge_revision_branch
+    FOREIGN KEY(repo_id,branch_id) REFERENCES repository_branches(repo_id,id) ON DELETE CASCADE;
+
+-- V1 creates the revision trigger before branch ownership exists; replace it so every
+-- historical knowledge revision preserves the same branch identity as the live card.
+DROP TRIGGER trg_knowledge_card_revision ON knowledge_cards;
+CREATE OR REPLACE FUNCTION capture_knowledge_card_revision() RETURNS trigger AS $$
+BEGIN
+    INSERT INTO knowledge_card_revisions(
+        card_id,revision,repo_id,branch_id,title,card_type,content,tags,publication_status,
+        knowledge_kind,severity,enforcement,owner_account_id,scope_payload,obligations_payload,
+        last_verified_content_version,verification_note,changed_by,changed_at
+    ) VALUES(
+        NEW.id,NEW.revision,NEW.repo_id,NEW.branch_id,NEW.title,NEW.card_type,NEW.content,NEW.tags,
+        NEW.publication_status,NEW.knowledge_kind,NEW.severity,NEW.enforcement,NEW.owner_account_id,
+        NEW.scope_payload,NEW.obligations_payload,NEW.last_verified_content_version,
+        NEW.verification_note,NEW.updated_by,NEW.updated_at
+    )
+    ON CONFLICT(card_id,revision) DO UPDATE SET
+        branch_id=EXCLUDED.branch_id,title=EXCLUDED.title,card_type=EXCLUDED.card_type,
+        content=EXCLUDED.content,tags=EXCLUDED.tags,publication_status=EXCLUDED.publication_status,
+        knowledge_kind=EXCLUDED.knowledge_kind,severity=EXCLUDED.severity,
+        enforcement=EXCLUDED.enforcement,owner_account_id=EXCLUDED.owner_account_id,
+        scope_payload=EXCLUDED.scope_payload,obligations_payload=EXCLUDED.obligations_payload,
+        last_verified_content_version=EXCLUDED.last_verified_content_version,
+        verification_note=EXCLUDED.verification_note,changed_by=EXCLUDED.changed_by,
+        changed_at=EXCLUDED.changed_at;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER trg_knowledge_card_revision
+AFTER INSERT OR UPDATE OF title,card_type,content,tags,publication_status,knowledge_kind,
+    severity,enforcement,owner_account_id,scope_payload,obligations_payload,
+    last_verified_content_version,verification_note,revision ON knowledge_cards
+FOR EACH ROW EXECUTE FUNCTION capture_knowledge_card_revision();
 
 CREATE TABLE knowledge_branch_validations (
     card_id UUID NOT NULL REFERENCES knowledge_cards(id) ON DELETE CASCADE,
     revision INTEGER NOT NULL,
     branch_id UUID NOT NULL REFERENCES repository_branches(id) ON DELETE CASCADE,
-    snapshot_id UUID NOT NULL REFERENCES branch_snapshots(id) ON DELETE CASCADE,
+    content_version UUID NOT NULL,
     state TEXT NOT NULL CHECK(state IN ('CURRENT','UNVERIFIED','REVIEW_REQUIRED','INVALID')),
     note TEXT NOT NULL DEFAULT '',
     checked_by UUID REFERENCES accounts(id),
     checked_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(branch_id,snapshot_id) REFERENCES branch_snapshots(branch_id,id) ON DELETE CASCADE,
     FOREIGN KEY(card_id,revision) REFERENCES knowledge_card_revisions(card_id,revision) ON DELETE CASCADE,
-    PRIMARY KEY(card_id,revision,branch_id,snapshot_id)
+    PRIMARY KEY(card_id,revision,branch_id,content_version)
 );
 CREATE TABLE branch_context_knowledge (
     context_id UUID NOT NULL REFERENCES branch_read_contexts(id) ON DELETE CASCADE,
@@ -78,47 +127,6 @@ CREATE TABLE branch_context_knowledge (
     revision INTEGER NOT NULL,
     PRIMARY KEY(context_id,card_id)
 );
-
-CREATE FUNCTION capture_branch_scope() RETURNS trigger AS $$
-BEGIN
-    INSERT INTO knowledge_branch_scope_history(card_id,revision,mode,branch_ids)
-    SELECT NEW.id,NEW.revision,mode,branch_ids FROM knowledge_branch_scopes WHERE card_id=NEW.id
-    ON CONFLICT(card_id,revision) DO NOTHING;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-CREATE TRIGGER trg_capture_branch_scope AFTER UPDATE OF revision ON knowledge_cards
-FOR EACH ROW EXECUTE FUNCTION capture_branch_scope();
-
-CREATE FUNCTION initialize_branch_scope() RETURNS trigger AS $$
-DECLARE branch_uuid UUID;
-BEGIN
-    SELECT md5(id::text || ':branch:' || COALESCE(default_branch,'WORKSPACE'))::uuid INTO branch_uuid FROM repositories WHERE id=NEW.repo_id;
-    INSERT INTO repository_branches(id,repo_id,name)
-    SELECT branch_uuid,id,COALESCE(default_branch,'WORKSPACE') FROM repositories WHERE id=NEW.repo_id ON CONFLICT(repo_id,name) DO NOTHING;
-    SELECT b.id INTO branch_uuid FROM repository_branches b JOIN repositories r ON r.id=b.repo_id
-    WHERE r.id=NEW.repo_id AND b.name=COALESCE(r.default_branch,'WORKSPACE');
-    INSERT INTO knowledge_branch_scopes(card_id,repo_id,branch_ids) VALUES(NEW.id,NEW.repo_id,ARRAY[branch_uuid]);
-    INSERT INTO knowledge_branch_scope_history VALUES(NEW.id,NEW.revision,'SELECTED_BRANCHES',ARRAY[branch_uuid]);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-CREATE TRIGGER trg_initialize_branch_scope AFTER INSERT ON knowledge_cards FOR EACH ROW EXECUTE FUNCTION initialize_branch_scope();
-
--- Legacy jobs must never delete or rebase chunks belonging to immutable branch snapshots.
--- The existing cleanup worker deletes chunks after tombstoning the repository.
-CREATE FUNCTION protect_branch_chunk() RETURNS trigger AS $$
-BEGIN
-    IF EXISTS(SELECT 1 FROM branch_snapshots WHERE id=OLD.snapshot_id)
-       AND EXISTS(SELECT 1 FROM repositories WHERE id=OLD.repo_id AND deleted_at IS NULL) THEN
-        RAISE EXCEPTION 'Immutable branch snapshot chunks cannot be rewritten or deleted';
-    END IF;
-    IF TG_OP='DELETE' THEN RETURN OLD; END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-CREATE TRIGGER trg_protect_branch_chunk BEFORE DELETE OR UPDATE ON code_chunks
-FOR EACH ROW EXECUTE FUNCTION protect_branch_chunk();
 
 -- Existing repository cleanup ends by marking the tombstoned repository DELETED.
 CREATE FUNCTION cleanup_deleted_repository_branches() RETURNS trigger AS $$

@@ -6,7 +6,7 @@ import com.analyzercoder.domain.chunk.CodeChunkId;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.infrastructure.persistence.mapper.CodeChunkMapper;
 import com.analyzercoder.infrastructure.persistence.model.CodeChunkRow;
 import java.util.Collection;
@@ -42,12 +42,12 @@ public class PostgresCodeChunkStore implements CodeChunkStore {
             CodeRepositoryId repositoryId,
             Collection<String> paths,
             Collection<CodeChunk> chunks,
-            RepositorySnapshotId snapshotId,
+            RepositoryContentVersion contentVersion,
             String commitSha) {
         if (!paths.isEmpty()) {
             mapper.deleteByPaths(repositoryId.value(), paths);
         }
-        mapper.rebaseUnchanged(repositoryId.value(), paths, snapshotId.value(), commitSha);
+        mapper.rebaseUnchanged(repositoryId.value(), paths, contentVersion.value(), commitSha);
         List<CodeChunkRow> rows = chunks.stream().map(PostgresCodeChunkStore::row).toList();
         for (int start = 0; start < rows.size(); start += 250) {
             mapper.insertBatch(rows.subList(start, Math.min(start + 250, rows.size())));
@@ -61,21 +61,29 @@ public class PostgresCodeChunkStore implements CodeChunkStore {
 
     @Override
     public List<CodeChunk> findByRepositoryId(CodeRepositoryId id) {
-        return mapper.find(id.value(), null, null, null).stream()
+        return mapper.find(id.value(), null, null, null, null).stream()
                 .map(PostgresCodeChunkStore::domain)
                 .toList();
     }
 
     @Override
     public List<CodeChunk> findByRepositoryId(CodeRepositoryId id, int limit, int offset) {
-        return mapper.find(id.value(), null, limit, offset).stream()
+        return mapper.find(id.value(), null, null, limit, offset).stream()
+                .map(PostgresCodeChunkStore::domain)
+                .toList();
+    }
+
+    @Override
+    public List<CodeChunk> findByRepositoryVersion(
+            CodeRepositoryId id, RepositoryContentVersion contentVersion, int limit, int offset) {
+        return mapper.find(id.value(), contentVersion.value(), null, limit, offset).stream()
                 .map(PostgresCodeChunkStore::domain)
                 .toList();
     }
 
     @Override
     public List<CodeChunk> findByRepositoryPath(CodeRepositoryId id, String filePath) {
-        return mapper.findByPath(id.value(), filePath).stream()
+        return mapper.findByPath(id.value(), null, filePath).stream()
                 .map(PostgresCodeChunkStore::domain)
                 .toList();
     }
@@ -83,19 +91,43 @@ public class PostgresCodeChunkStore implements CodeChunkStore {
     @Override
     public List<CodeChunk> searchByRepositoryId(
             CodeRepositoryId id, String query, int limit, int offset) {
-        return mapper.find(id.value(), query, limit, offset).stream()
+        return mapper.find(id.value(), null, query, limit, offset).stream()
+                .map(PostgresCodeChunkStore::domain)
+                .toList();
+    }
+
+    @Override
+    public List<CodeChunk> searchByRepositoryVersion(
+            CodeRepositoryId id,
+            RepositoryContentVersion contentVersion,
+            String query,
+            int limit,
+            int offset) {
+        return mapper.find(id.value(), contentVersion.value(), query, limit, offset).stream()
                 .map(PostgresCodeChunkStore::domain)
                 .toList();
     }
 
     @Override
     public long countByRepositoryId(CodeRepositoryId id) {
-        return mapper.count(id.value(), null);
+        return mapper.count(id.value(), null, null);
+    }
+
+    @Override
+    public long countByRepositoryVersion(
+            CodeRepositoryId id, RepositoryContentVersion contentVersion) {
+        return mapper.count(id.value(), contentVersion.value(), null);
     }
 
     @Override
     public long countSearchByRepositoryId(CodeRepositoryId id, String query) {
-        return mapper.count(id.value(), query);
+        return mapper.count(id.value(), null, query);
+    }
+
+    @Override
+    public long countSearchByRepositoryVersion(
+            CodeRepositoryId id, RepositoryContentVersion contentVersion, String query) {
+        return mapper.count(id.value(), contentVersion.value(), query);
     }
 
     @Override
@@ -107,7 +139,7 @@ public class PostgresCodeChunkStore implements CodeChunkStore {
         return new CodeChunkRow(
                 chunk.id().value(),
                 chunk.repositoryId().value(),
-                chunk.snapshotId().value(),
+                chunk.contentVersion().value(),
                 chunk.commitSha(),
                 chunk.filePath(),
                 chunk.symbolId(),
@@ -124,13 +156,13 @@ public class PostgresCodeChunkStore implements CodeChunkStore {
     }
 
     private static CodeChunk domain(CodeChunkRow row) {
-        if (row.snapshotId() == null) {
+        if (row.contentVersion() == null) {
             throw new IllegalStateException("代码片段缺少内容版本标识");
         }
         return new CodeChunk(
                 CodeChunkId.of(row.id()),
                 CodeRepositoryId.of(row.repositoryId()),
-                RepositorySnapshotId.of(row.snapshotId()),
+                RepositoryContentVersion.of(row.contentVersion()),
                 row.commitSha(),
                 row.filePath(),
                 row.symbolId(),

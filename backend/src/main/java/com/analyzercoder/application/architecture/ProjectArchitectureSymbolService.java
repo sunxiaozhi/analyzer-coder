@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
-/** 查询当前快照中属于指定架构模块的真实代码符号。 */
+/** 查询当前内容版本中属于指定架构模块的真实代码符号。 */
 @Service
 public class ProjectArchitectureSymbolService {
     private static final int DEFAULT_LIMIT = 80;
@@ -30,7 +30,7 @@ public class ProjectArchitectureSymbolService {
                         .filter(candidate -> "MODULE".equals(candidate.kind()))
                         .filter(candidate -> candidate.id().equals(normalizedModule))
                         .findFirst()
-                        .orElseThrow(() -> new IllegalArgumentException("当前快照不存在该架构模块"));
+                        .orElseThrow(() -> new IllegalArgumentException("当前内容版本不存在该架构模块"));
 
         int requested = limit == null ? DEFAULT_LIMIT : Math.max(1, Math.min(limit, MAX_LIMIT));
         boolean rootOnly = "(root)".equals(node.id());
@@ -44,7 +44,7 @@ public class ProjectArchitectureSymbolService {
         List<ModuleSymbolRow> rows =
                 chunks.findModuleSymbols(
                         repositoryId.value(),
-                        UUID.fromString(map.snapshotId()),
+                        UUID.fromString(map.contentVersion()),
                         modulePrefix,
                         layerSegment,
                         rootOnly,
@@ -65,7 +65,7 @@ public class ProjectArchitectureSymbolService {
                         .toList();
         return new ModuleSymbols(
                 repositoryId.value().toString(),
-                map.snapshotId(),
+                map.contentVersion(),
                 normalizedModule,
                 symbols,
                 truncated);
@@ -87,7 +87,7 @@ public class ProjectArchitectureSymbolService {
 
     public record ModuleSymbols(
             String repositoryId,
-            String snapshotId,
+            String contentVersion,
             String module,
             List<ModuleSymbol> symbols,
             boolean truncated) {}

@@ -5,7 +5,6 @@ import RepositoriesM0View from './RepositoriesM0View.vue';
 import ProjectSelectionList from '@/features/repositories/ProjectSelectionList.vue';
 import BranchWorkspace from '@/features/branches/BranchWorkspace.vue';
 import ProjectSettingsPanel from '@/features/repositories/ProjectSettingsPanel.vue';
-import SingleVersionOperations from '@/features/repositories/SingleVersionOperations.vue';
 import { listRepositoryPage } from '@/api/repositories';
 import { projectDraftsApi } from '@/api/projectDrafts';
 import type { Repository } from '@/types/api';
@@ -49,13 +48,16 @@ it('links project selection to a freshly mounted, permission-scoped branch works
   wrapper.unmount();
 });
 
-it('does not offer Git branch operations for ZIP projects', async () => {
+it('maps ZIP projects to their fixed WORKSPACE branch', async () => {
   store.selectedRepository = project('archive', 'ZIP');
   store.selectedRepositoryId = 'archive';
   const wrapper = mountView();
   await flushPromises();
-  expect(wrapper.findComponent(BranchWorkspace).exists()).toBe(false);
-  expect(wrapper.findComponent(SingleVersionOperations).exists()).toBe(true);
+  const workspace = wrapper.getComponent(BranchWorkspace);
+  expect(workspace.props('repositoryId')).toBe('archive');
+  expect(workspace.props('defaultBranch')).toBe('WORKSPACE');
+  expect(workspace.props('canTrack')).toBe(false);
+  expect(workspace.props('remoteSource')).toBe(false);
   wrapper.unmount();
 });
 

@@ -57,7 +57,7 @@ public class BranchPreparationJobs {
             String stage,
             String error,
             String kind,
-            UUID snapshotId) {}
+            UUID contentVersion) {}
 
     /** Full task history; list() continues to return only the latest task per branch/kind. */
     public PageResult<Job> history(AuthenticatedAccount actor, UUID repoId, UUID branchId, int pageNum, int pageSize) {
@@ -72,11 +72,11 @@ public class BranchPreparationJobs {
         arguments.add(pageSize);
         arguments.add(((long) pageNum - 1) * pageSize);
         List<Job> rows = db.query(
-                "SELECT id,branch_id,status,stage,error,kind,target_snapshot FROM branch_preparation_jobs" + filter
+                "SELECT id,branch_id,status,stage,error,kind,target_content_version FROM branch_preparation_jobs" + filter
                         + " ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
                 (r, n) -> new Job(r.getObject("id", UUID.class), r.getObject("branch_id", UUID.class),
                         r.getString("status"), r.getString("stage"), r.getString("error"),
-                        r.getString("kind"), r.getObject("target_snapshot", UUID.class)), arguments.toArray());
+                        r.getString("kind"), r.getObject("target_content_version", UUID.class)), arguments.toArray());
         return new PageResult<>(rows, pageNum, pageSize, total, (int) Math.min(Integer.MAX_VALUE, (total + pageSize - 1) / pageSize));
     }
 
@@ -84,7 +84,7 @@ public class BranchPreparationJobs {
         access.require(actor, CodeRepositoryId.of(repoId), RepositoryPermission.READ);
         return db.query(
                 """
-                SELECT DISTINCT ON (branch_id,kind) id,branch_id,status,stage,error,kind,target_snapshot
+                SELECT DISTINCT ON (branch_id,kind) id,branch_id,status,stage,error,kind,target_content_version
                 FROM branch_preparation_jobs WHERE repo_id=?
                 ORDER BY branch_id,kind,created_at DESC,id DESC
                 """,
@@ -96,26 +96,26 @@ public class BranchPreparationJobs {
                                 r.getString("stage"),
                                 r.getString("error"),
                                 r.getString("kind"),
-                                r.getObject("target_snapshot", UUID.class)),
+                                r.getObject("target_content_version", UUID.class)),
                 repoId);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     private BranchCodeOperationsService codeOperations;
 
-    /** Explicit operations are either branch sync or pinned-snapshot index tasks. */
+    /** Explicit operations are either branch sync or pinned-contentVersion index tasks. */
     public Job submitOperation(
-            AuthenticatedAccount actor, UUID repoId, UUID branchId, String kind, UUID snapshotId) {
+            AuthenticatedAccount actor, UUID repoId, UUID branchId, String kind, UUID contentVersion) {
         if (!java.util.Set.of("SYNC", "CONTENT", "GRAPH", "PREPARE").contains(kind))
             throw new IllegalArgumentException("不支持的分支操作");
-        if (("CONTENT".equals(kind) || "GRAPH".equals(kind)) && snapshotId == null)
-            throw new IllegalArgumentException("索引任务必须指定分支快照");
-        if (snapshotId != null) codeOperations.snapshotContext(actor, repoId, branchId, snapshotId);
-        return enqueue(actor, repoId, branchId, kind, snapshotId);
+        if (("CONTENT".equals(kind) || "GRAPH".equals(kind)) && contentVersion == null)
+            throw new IllegalArgumentException("索引任务必须指定分支内容版本");
+        if (contentVersion != null) codeOperations.contentVersionContext(actor, repoId, branchId, contentVersion);
+        return enqueue(actor, repoId, branchId, kind, contentVersion);
     }
 
     public Job submit(AuthenticatedAccount actor, UUID repoId, UUID branchId) {
-        return enqueue(actor, repoId, branchId, "SNAPSHOT", null);
+        return enqueue(actor, repoId, branchId, "PREPARE", null);
     }
 
     public Job submitVectors(AuthenticatedAccount actor, BranchReadContext context) {
@@ -124,21 +124,21 @@ public class BranchPreparationJobs {
         if (!Boolean.TRUE.equals(
                 db.queryForObject(
                         """
-                SELECT EXISTS(SELECT 1 FROM branch_snapshots s WHERE s.repo_id=? AND s.branch_id=? AND s.id=?
-                    AND s.content_indexed_at IS NOT NULL
-                    AND EXISTS(SELECT 1 FROM code_chunks c WHERE c.repo_id=s.repo_id AND c.snapshot_id=s.id))
+                SELECT EXISTS(SELECT 1 FROM repository_branches b WHERE b.repo_id=? AND b.id=? AND b.content_version=?
+                    AND b.content_indexed_at IS NOT NULL
+                    AND EXISTS(SELECT 1 FROM code_chunks c WHERE c.repo_id=b.repo_id AND c.content_version=b.content_version))
                 """,
                         Boolean.class,
                         context.repositoryId(),
                         context.branchId(),
-                        context.snapshotId())))
-            throw new IllegalArgumentException("请先构建此分支快照的内容索引");
+                        context.contentVersion())))
+            throw new IllegalArgumentException("请先构建此分支内容版本的内容索引");
         return enqueue(
-                actor, context.repositoryId(), context.branchId(), "VECTORS", context.snapshotId());
+                actor, context.repositoryId(), context.branchId(), "VECTORS", context.contentVersion());
     }
 
     private Job enqueue(
-            AuthenticatedAccount actor, UUID repoId, UUID branchId, String kind, UUID snapshotId) {
+            AuthenticatedAccount actor, UUID repoId, UUID branchId, String kind, UUID contentVersion) {
         access.require(actor, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
         return transaction.execute(
                 status -> {
@@ -166,7 +166,7 @@ public class BranchPreparationJobs {
                     if (active.isEmpty()) {
                         db.update(
                                 """
-                        INSERT INTO branch_preparation_jobs(id,repo_id,branch_id,account_id,status,kind,target_snapshot)
+                        INSERT INTO branch_preparation_jobs(id,repo_id,branch_id,account_id,status,kind,target_content_version)
                         VALUES(?,?,?,?,'QUEUED',?,?)
                         """,
                                 UUID.randomUUID(),
@@ -174,7 +174,7 @@ public class BranchPreparationJobs {
                                 branchId,
                                 actor.id(),
                                 kind,
-                                snapshotId);
+                                contentVersion);
                     }
                     Job job =
                             list(actor, repoId).stream()
@@ -184,9 +184,9 @@ public class BranchPreparationJobs {
                                                             && j.kind().equals(kind))
                                     .findFirst()
                                     .orElseThrow();
-                    if (!java.util.Objects.equals(snapshotId, job.snapshotId()))
+                    if (!java.util.Objects.equals(contentVersion, job.contentVersion()))
                         throw new ApiSecurityException(
-                                409, "BRANCH_VECTOR_BUSY", "该分支已有其他快照的向量任务，请等待其完成");
+                                409, "BRANCH_VECTOR_BUSY", "该分支已有其他内容版本的向量任务，请等待其完成");
                     return job;
                 });
     }
@@ -198,7 +198,7 @@ public class BranchPreparationJobs {
             var pending =
                     db.queryForList(
                             """
-                            SELECT id,repo_id,branch_id,account_id,target_commit,kind,target_snapshot
+                            SELECT id,repo_id,branch_id,account_id,target_commit,kind,target_content_version
                             FROM branch_preparation_jobs
                             WHERE status='QUEUED'
                                OR (status='RUNNING' AND updated_at<CURRENT_TIMESTAMP-INTERVAL '1 hour')
@@ -245,7 +245,7 @@ public class BranchPreparationJobs {
                                 token,
                                 (String) row.get("kind"),
                                 (String) row.get("target_commit"),
-                                (UUID) row.get("target_snapshot"));
+                                (UUID) row.get("target_content_version"));
                         return true;
                     }
                     if ("VECTORS".equals(row.get("kind"))) {
@@ -253,7 +253,7 @@ public class BranchPreparationJobs {
                                 actor, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
                         intelligence.prepareBranchEmbeddings(
                                 repoId,
-                                (UUID) row.get("target_snapshot"),
+                                (UUID) row.get("target_content_version"),
                                 () -> {
                                     access.require(
                                             actor(actor.id()),
@@ -295,7 +295,7 @@ public class BranchPreparationJobs {
                                         != 1) throw superseded();
                             },
                             () -> {
-                                // Runs in the snapshot publication transaction; token fences a lost
+                                // Runs in the contentVersion publication transaction; token fences a lost
                                 // worker.
                                 access.require(
                                         actor(actor.id()),
@@ -312,12 +312,12 @@ public class BranchPreparationJobs {
                             });
                 } catch (RuntimeException failure) {
                     log.error(
-                            "分支任务失败: taskId={}, repoId={}, branchId={}, kind={}, snapshotId={}",
+                            "分支任务失败: taskId={}, repoId={}, branchId={}, kind={}, contentVersion={}",
                             id,
                             repoId,
                             branchId,
                             row.get("kind"),
-                            row.get("target_snapshot"),
+                            row.get("target_content_version"),
                             failure);
                     db.update(
                             """
@@ -347,7 +347,7 @@ public class BranchPreparationJobs {
                 || message.startsWith("无法准备 CodeGraph")
                 || message.startsWith("分支文件数超过")
                 || message.startsWith("分支内容超过")
-                || message.startsWith("无法创建分支快照")) {
+                || message.startsWith("无法创建分支内容版本")) {
             return message.length() <= 500 ? message : message.substring(0, 500);
         }
         return GENERIC_FAILURE;
@@ -361,12 +361,12 @@ public class BranchPreparationJobs {
             UUID token,
             String kind,
             String commit,
-            UUID snapshotId) {
+            UUID contentVersion) {
         Runnable resolving = checkpoint(actor, repoId, id, token, "RESOLVING");
         resolving.run();
         BranchReadContext context =
-                snapshotId != null
-                        ? codeOperations.snapshotContext(actor, repoId, branchId, snapshotId)
+                contentVersion != null
+                        ? codeOperations.contentVersionContext(actor, repoId, branchId, contentVersion)
                         : codeOperations.executeSync(
                                 actor,
                                 repoId,
@@ -383,8 +383,8 @@ public class BranchPreparationJobs {
                                 },
                                 resolving);
         if (db.update(
-                        "UPDATE branch_preparation_jobs SET target_snapshot=?,target_commit=? WHERE id=? AND attempt_token=? AND status='RUNNING'",
-                        context.snapshotId(),
+                        "UPDATE branch_preparation_jobs SET target_content_version=?,target_commit=? WHERE id=? AND attempt_token=? AND status='RUNNING'",
+                        context.contentVersion(),
                         context.commitSha(),
                         id,
                         token)

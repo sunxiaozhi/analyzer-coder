@@ -8,30 +8,24 @@ ALTER TABLE repository_branches
 CREATE INDEX idx_repository_branches_active
     ON repository_branches(repo_id,name) WHERE tracking_status='ACTIVE';
 
--- Keep the legacy published default version addressable through the same branch context model.
--- This makes rollout non-disruptive and also seeds branches for repositories created after V3.
+-- Seed the default branch from the legacy repository fields. The branch owns the only live
+-- workspace and publication token; no historical source object is created.
 INSERT INTO repository_branches(id,repo_id,name)
 SELECT md5(r.id::text || ':branch:' || COALESCE(r.default_branch,'WORKSPACE'))::uuid,
        r.id,COALESCE(r.default_branch,'WORKSPACE')
 FROM repositories r
 ON CONFLICT(repo_id,name) DO NOTHING;
-INSERT INTO branch_snapshots(id,repo_id,branch_id,commit_sha,content_path)
-SELECT r.current_snapshot_id,r.id,b.id,COALESCE(r.current_commit,r.worktree_digest,'WORKSPACE'),r.current_snapshot_path
-FROM repositories r JOIN repository_branches b
-  ON b.repo_id=r.id AND b.name=COALESCE(r.default_branch,'WORKSPACE')
-WHERE r.current_snapshot_id IS NOT NULL AND r.current_snapshot_path IS NOT NULL
-  AND NOT EXISTS(SELECT 1 FROM branch_snapshots existing WHERE existing.id=r.current_snapshot_id);
 UPDATE repository_branches b SET
-    published_snapshot_id=r.current_snapshot_id,
+    content_version=r.current_content_version,
+    commit_sha=COALESCE(r.current_commit,r.worktree_digest,'WORKSPACE'),
+    content_path=r.current_workspace_path,
+    published_at=COALESCE(r.content_published_at,CURRENT_TIMESTAMP),
     preparation_status='READY',
     preparation_error=NULL,
     updated_at=CURRENT_TIMESTAMP
 FROM repositories r
 WHERE b.repo_id=r.id AND b.name=COALESCE(r.default_branch,'WORKSPACE')
-  AND EXISTS(
-      SELECT 1 FROM branch_snapshots s
-      WHERE s.id=r.current_snapshot_id AND s.repo_id=r.id AND s.branch_id=b.id
-  );
+  AND r.current_content_version IS NOT NULL AND r.current_workspace_path IS NOT NULL;
 
 CREATE FUNCTION synchronize_default_repository_branch() RETURNS trigger AS $$
 DECLARE branch_uuid UUID;
@@ -40,38 +34,39 @@ BEGIN
     INSERT INTO repository_branches(id,repo_id,name)
     VALUES(branch_uuid,NEW.id,COALESCE(NEW.default_branch,'WORKSPACE'))
     ON CONFLICT(repo_id,name) DO NOTHING;
+    IF NEW.source_type='ZIP' THEN
+        DELETE FROM repository_branches WHERE repo_id=NEW.id AND id<>branch_uuid;
+    END IF;
     SELECT id INTO branch_uuid FROM repository_branches
     WHERE repo_id=NEW.id AND name=COALESCE(NEW.default_branch,'WORKSPACE');
-    IF NEW.current_snapshot_id IS NOT NULL AND NEW.current_snapshot_path IS NOT NULL
+    IF NEW.current_content_version IS NOT NULL AND NEW.current_workspace_path IS NOT NULL
        AND EXISTS(SELECT 1 FROM repository_branches WHERE id=branch_uuid AND tracking_status='ACTIVE') THEN
-        INSERT INTO branch_snapshots(id,repo_id,branch_id,commit_sha,content_path)
-        VALUES(NEW.current_snapshot_id,NEW.id,branch_uuid,
-               COALESCE(NEW.current_commit,NEW.worktree_digest,'WORKSPACE'),NEW.current_snapshot_path)
-        ON CONFLICT(id) DO NOTHING;
         UPDATE repository_branches SET
-            published_snapshot_id=NEW.current_snapshot_id,
+            content_version=NEW.current_content_version,
+            commit_sha=COALESCE(NEW.current_commit,NEW.worktree_digest,'WORKSPACE'),
+            content_path=NEW.current_workspace_path,
+            published_at=COALESCE(NEW.content_published_at,CURRENT_TIMESTAMP),
             preparation_status='READY',preparation_error=NULL,updated_at=CURRENT_TIMESTAMP
-        WHERE id=branch_uuid AND repo_id=NEW.id
-          AND EXISTS(SELECT 1 FROM branch_snapshots WHERE id=NEW.current_snapshot_id AND branch_id=branch_uuid);
+        WHERE id=branch_uuid AND repo_id=NEW.id;
     END IF;
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
-CREATE TRIGGER repositories_default_branch_snapshot
-AFTER INSERT OR UPDATE OF current_snapshot_id,current_snapshot_path,current_commit,default_branch
+CREATE TRIGGER repositories_default_branch_contentVersion
+AFTER INSERT OR UPDATE OF current_content_version,current_workspace_path,current_commit,default_branch
 ON repositories FOR EACH ROW EXECUTE FUNCTION synchronize_default_repository_branch();
 
--- A question belongs to a branch, while snapshot_id keeps the exact historical version.
+-- A question belongs to a branch; content_version records the publication used for its answer.
 ALTER TABLE qa_conversations
     ADD COLUMN branch_id UUID,
     ADD COLUMN context_id UUID,
     ADD COLUMN branch_name TEXT,
     ADD COLUMN commit_sha TEXT;
 UPDATE qa_conversations q SET
-    branch_id=s.branch_id,
+    branch_id=b.id,
     branch_name=b.name,
-    commit_sha=s.commit_sha
-FROM branch_snapshots s JOIN repository_branches b ON b.id=s.branch_id
-WHERE q.snapshot_id=s.id AND q.repo_id=s.repo_id;
+    commit_sha=b.commit_sha
+FROM repository_branches b
+WHERE q.content_version=b.content_version AND q.repo_id=b.repo_id;
 ALTER TABLE qa_conversations
     ADD CONSTRAINT fk_qa_conversation_branch
         FOREIGN KEY(repo_id,branch_id) REFERENCES repository_branches(repo_id,id),
@@ -91,10 +86,10 @@ ALTER TABLE repository_markdown_sources
     ADD CONSTRAINT uq_repository_markdown_source_branch_path UNIQUE(repo_id,branch_id,file_path),
     ADD CONSTRAINT fk_markdown_source_branch
         FOREIGN KEY(repo_id,branch_id) REFERENCES repository_branches(repo_id,id) ON DELETE CASCADE;
-DROP INDEX idx_repository_markdown_sources_snapshot;
+DROP INDEX idx_repository_markdown_sources_contentVersion;
 DROP INDEX idx_repository_markdown_sources_path_hash;
-CREATE INDEX idx_repository_markdown_sources_snapshot
-    ON repository_markdown_sources(repo_id,branch_id,snapshot_id,file_path);
+CREATE INDEX idx_repository_markdown_sources_contentVersion
+    ON repository_markdown_sources(repo_id,branch_id,content_version,file_path);
 CREATE INDEX idx_repository_markdown_sources_path_hash
     ON repository_markdown_sources(repo_id,branch_id,file_path,content_hash);
 

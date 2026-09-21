@@ -8,7 +8,7 @@ import com.analyzercoder.application.repository.RegisterRepositoryUseCase;
 import com.analyzercoder.application.repository.RepositoryPreparationService;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.ProjectHealthMapper;
 import com.analyzercoder.infrastructure.persistence.model.ProjectKnowledgeHealthRow;
@@ -37,7 +37,7 @@ class ProjectHealthOverviewServiceTest {
 
         assertThat(result.state()).isEqualTo("READY");
         assertThat(result.readyForSearch()).isTrue();
-        assertThat(result.snapshotId()).isEqualTo(repository.currentSnapshotId().value());
+        assertThat(result.contentVersion()).isEqualTo(repository.currentContentVersion().value());
         assertThat(result.issues()).isEmpty();
         assertThat(result.knowledge().trusted()).isEqualTo(3);
     }
@@ -124,9 +124,9 @@ class ProjectHealthOverviewServiceTest {
                 "abc123",
                 "digest",
                 false,
-                RepositorySnapshotId.newId(),
-                Path.of("snapshot"),
-                Path.of("snapshot/.codegraph"),
+                RepositoryContentVersion.newId(),
+                Path.of("contentVersion"),
+                Path.of("contentVersion/.codegraph"),
                 now,
                 now,
                 now,

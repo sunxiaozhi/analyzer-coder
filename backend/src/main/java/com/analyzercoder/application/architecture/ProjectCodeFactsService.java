@@ -62,11 +62,11 @@ public class ProjectCodeFactsService {
     }
 
     public CodeFacts analyze(CodeRepositoryId repositoryId) {
-        RepositoryCodeBrowserService.SnapshotFiles snapshot = browser.list(repositoryId);
+        RepositoryCodeBrowserService.ContentVersionFiles contentVersion = browser.list(repositoryId);
         ProjectArchitectureMapService.ArchitectureMap map = architecture.map(repositoryId);
         CodeGraphService.Artifact artifact = codeGraph.latest(repositoryId.value());
         return analyze(
-                snapshot,
+                contentVersion,
                 path -> browser.read(repositoryId, path).content(),
                 map,
                 artifact,
@@ -79,31 +79,31 @@ public class ProjectCodeFactsService {
                 browser.list(repository),
                 path -> browser.read(repository, path).content(),
                 architecture.map(repository),
-                codeGraph.latestSnapshot(
-                        repository.id().value(), repository.currentSnapshotId().value()),
+                codeGraph.latestContentVersion(
+                        repository.id().value(), repository.currentContentVersion().value()),
                 json,
                 Instant.now());
     }
 
     static CodeFacts analyze(
-            RepositoryCodeBrowserService.SnapshotFiles snapshot,
+            RepositoryCodeBrowserService.ContentVersionFiles contentVersion,
             Function<String, String> contentReader,
             ProjectArchitectureMapService.ArchitectureMap architecture,
             CodeGraphService.Artifact artifact,
             ObjectMapper json,
             Instant generatedAt) {
         List<RepositoryCodeBrowserService.FileEntry> codeFiles =
-                snapshot.files().stream().filter(ProjectCodeFactsService::isCodeFile).toList();
+                contentVersion.files().stream().filter(ProjectCodeFactsService::isCodeFile).toList();
         List<CodeTypeCount> codeTypes = codeTypes(codeFiles);
         List<FileCategory> categories = categories(codeFiles);
-        List<TechnologyFact> technologies = technologies(snapshot.files(), contentReader, json);
+        List<TechnologyFact> technologies = technologies(contentVersion.files(), contentReader, json);
         GraphFacts graph = graphFacts(architecture, artifact);
         List<ProjectSuggestion> suggestions =
                 suggestions(codeFiles, categories, technologies, architecture, artifact, graph);
         int confidence = confidence(architecture, artifact, technologies);
         return new CodeFacts(
-                snapshot.snapshotId(),
-                snapshot.commit(),
+                contentVersion.contentVersion(),
+                contentVersion.commit(),
                 generatedAt,
                 projectType(technologies, codeFiles),
                 confidence,
@@ -116,7 +116,7 @@ public class ProjectCodeFactsService {
                 List.of(
                         "技术栈仅来自源码扩展名、构建文件、依赖清单和运行配置",
                         "代码职责分类来自文件路径和命名约定，样例路径用于复核",
-                        "CodeGraph 符号规模与快照静态模块关系分开统计，避免混为同一种图谱",
+                        "CodeGraph 符号规模与内容版本静态模块关系分开统计，避免混为同一种图谱",
                         "README、设计文档和其他 Markdown 不参与本页结论"));
     }
 
@@ -550,13 +550,13 @@ public class ProjectCodeFactsService {
                     new ProjectSuggestion(
                             "HIGH",
                             "GRAPH",
-                            "构建当前快照的 CodeGraph",
+                            "构建当前内容版本的 CodeGraph",
                             "当前没有已发布的符号图谱，无法可靠查看符号调用与变更影响。",
                             List.of(
-                                    "snapshot:"
+                                    "contentVersion:"
                                             + (architecture == null
                                                     ? "unknown"
-                                                    : architecture.snapshotId()))));
+                                                    : architecture.contentVersion()))));
         }
         if (graph.partial()) {
             result.add(
@@ -786,7 +786,7 @@ public class ProjectCodeFactsService {
     }
 
     public record CodeFacts(
-            String snapshotId,
+            String contentVersion,
             String commitSha,
             Instant generatedAt,
             String projectType,

@@ -163,14 +163,14 @@ public class ChangedSymbolResolver {
             LineRange range,
             int hunkIndex,
             Set<ResolutionUnknown> unknowns) {
-        UUID snapshotId = snapshotFor(repository, source);
-        if (snapshotId == null || source.commitSha() == null || graphLookups.isEmpty()) {
+        UUID contentVersion = contentVersionFor(repository, source);
+        if (contentVersion == null || source.commitSha() == null || graphLookups.isEmpty()) {
             return List.of();
         }
         GraphLookupRequest request =
                 new GraphLookupRequest(
                         repository.id().value(),
-                        snapshotId,
+                        contentVersion,
                         source.commitSha(),
                         source.path(),
                         range.startLine(),
@@ -187,7 +187,7 @@ public class ChangedSymbolResolver {
                                         "CODEGRAPH_VERSION_MISMATCH",
                                         source.path(),
                                         hunkIndex,
-                                        "CodeGraph 返回了仓库、快照、提交或路径不一致的节点，已排除"));
+                                        "CodeGraph 返回了仓库、内容版本、提交或路径不一致的节点，已排除"));
                     }
                     candidates.stream()
                             .filter(node -> validGraphNode(node, request, range))
@@ -218,14 +218,14 @@ public class ChangedSymbolResolver {
                                                 new Provenance(
                                                         ProvenanceType.CODEGRAPH_NODE,
                                                         repository.id().value(),
-                                                        node.snapshotId(),
+                                                        node.contentVersion(),
                                                         node.commitSha(),
                                                         change.worktreeDigest(),
                                                         source.path(),
                                                         node.startLine(),
                                                         node.endLine(),
                                                         source.side(),
-                                                        "当前快照 CodeGraph 节点与 Hunk 相交"))))
+                                                        "当前内容版本 CodeGraph 节点与 Hunk 相交"))))
                 .toList();
     }
 
@@ -287,7 +287,7 @@ public class ChangedSymbolResolver {
                         new Provenance(
                                 ProvenanceType.SOURCE_TEXT,
                                 repository.id().value(),
-                                snapshotFor(repository, source),
+                                contentVersionFor(repository, source),
                                 source.commitSha(),
                                 change.worktreeDigest(),
                                 source.path(),
@@ -321,7 +321,7 @@ public class ChangedSymbolResolver {
                         new Provenance(
                                 ProvenanceType.CHUNK_INDEX,
                                 repository.id().value(),
-                                chunk.snapshotId().value(),
+                                chunk.contentVersion().value(),
                                 chunk.commitSha(),
                                 change.worktreeDigest(),
                                 source.path(),
@@ -352,7 +352,7 @@ public class ChangedSymbolResolver {
                         new Provenance(
                                 ProvenanceType.FILE_CHANGE,
                                 repository.id().value(),
-                                snapshotFor(repository, source),
+                                contentVersionFor(repository, source),
                                 source.commitSha(),
                                 change.worktreeDigest(),
                                 source.path(),
@@ -669,7 +669,7 @@ public class ChangedSymbolResolver {
             GraphSymbol node, GraphLookupRequest request, LineRange range) {
         return node != null
                 && request.repositoryId().equals(node.repositoryId())
-                && request.snapshotId().equals(node.snapshotId())
+                && request.contentVersion().equals(node.contentVersion())
                 && request.commitSha().equals(node.commitSha())
                 && request.filePath().equals(node.filePath())
                 && node.symbolId() != null
@@ -684,7 +684,7 @@ public class ChangedSymbolResolver {
     private static boolean graphVersionMismatch(GraphSymbol node, GraphLookupRequest request) {
         return node != null
                 && (!request.repositoryId().equals(node.repositoryId())
-                        || !request.snapshotId().equals(node.snapshotId())
+                        || !request.contentVersion().equals(node.contentVersion())
                         || !request.commitSha().equals(node.commitSha())
                         || !request.filePath().equals(node.filePath()));
     }
@@ -700,14 +700,14 @@ public class ChangedSymbolResolver {
         return Math.max(0, end - start);
     }
 
-    private static UUID snapshotFor(CodeRepository repository, LoadedSource source) {
-        if (repository.currentSnapshotId() == null
+    private static UUID contentVersionFor(CodeRepository repository, LoadedSource source) {
+        if (repository.currentContentVersion() == null
                 || repository.currentCommit() == null
                 || source.commitSha() == null
                 || !repository.currentCommit().equals(source.commitSha())) {
             return null;
         }
-        return repository.currentSnapshotId().value();
+        return repository.currentContentVersion().value();
     }
 
     private static String symbolId(String language, String path, String kind, String name) {
@@ -797,7 +797,7 @@ public class ChangedSymbolResolver {
     public record Provenance(
             ProvenanceType sourceType,
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String worktreeDigest,
             String filePath,
@@ -822,7 +822,7 @@ public class ChangedSymbolResolver {
 
     public record GraphLookupRequest(
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String filePath,
             int startLine,
@@ -831,7 +831,7 @@ public class ChangedSymbolResolver {
 
     public record GraphSymbol(
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String filePath,
             String symbolId,

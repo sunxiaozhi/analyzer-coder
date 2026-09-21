@@ -14,11 +14,11 @@ describe('branch API boundaries', () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
   it('reads readiness for the exact historical context', async () => {
-    await branchesApi.snapshotIndexStatus({ repositoryId:'repo', branchId:'release', contextId:'ctx' } as BranchContext);
+    await branchesApi.contentVersionIndexStatus({ repositoryId:'repo', branchId:'release', contextId:'ctx' } as BranchContext);
     expect(request).toHaveBeenCalledWith('/api/repositories/repo/branches/release/index-status?contextId=ctx');
   });
   it('pins searches to the explicitly provided context', async () => {
-    const context: BranchContext = { contextId: 'context-a', repositoryId: 'repo-a', branchId: 'branch-a', branchName: 'main', snapshotId: 'snapshot-a', commitSha: 'abc', expiresAt: '' };
+    const context: BranchContext = { contextId: 'context-a', repositoryId: 'repo-a', branchId: 'branch-a', branchName: 'main', contentVersion: 'contentVersion-a', commitSha: 'abc', expiresAt: '' };
     await branchesApi.search(context, '退款');
     expect(request).toHaveBeenCalledWith('/api/repositories/repo-a/evidence-search?query=%E9%80%80%E6%AC%BE&limit=30', { headers: { 'X-Branch-Context': 'context-a' } });
   });
@@ -32,12 +32,7 @@ describe('branch API boundaries', () => {
     await expect(branchesApi.search({ repositoryId: 'repo', contextId: 'expired' } as BranchContext, 'test')).rejects.toThrow('CONTEXT_EXPIRED');
     expect(request).toHaveBeenCalledTimes(1);
   });
-  it('sends the revision when updating a shared scope', async () => {
-    const scope = { cardId: 'card', revision: 3, mode: 'ALL_BRANCHES' as const, branchIds: [] };
-    await branchesApi.scope('repo', scope);
-    expect(request).toHaveBeenCalledWith('/api/repositories/repo/knowledge/card/branch-scope', { method: 'PUT', body: JSON.stringify(scope) });
-  });
-  it('submits code vectors for the chosen reading context without preparing another snapshot', async () => {
+  it('submits code vectors for the chosen reading context without preparing another contentVersion', async () => {
     await branchesApi.prepareVectors({ repositoryId: 'repo', contextId: 'ctx', branchId: 'branch' } as BranchContext);
     expect(request).toHaveBeenCalledWith('/api/repositories/repo/branch-vector-jobs', { method: 'POST', body: JSON.stringify({ contextId: 'ctx', branchId: 'branch' }) });
     expect(request).toHaveBeenCalledTimes(1);

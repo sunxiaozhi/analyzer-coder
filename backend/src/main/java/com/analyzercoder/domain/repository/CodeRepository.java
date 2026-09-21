@@ -14,10 +14,10 @@ public record CodeRepository(
         String currentCommit,
         String worktreeDigest,
         boolean worktreeDirty,
-        RepositorySnapshotId currentSnapshotId,
-        Path currentSnapshotPath,
+        RepositoryContentVersion currentContentVersion,
+        Path currentContentVersionPath,
         Path codeGraphPath,
-        Instant snapshotCreatedAt,
+        Instant contentVersionCreatedAt,
         Instant lastScannedAt,
         Instant createdAt,
         Instant updatedAt) {
@@ -46,8 +46,7 @@ public record CodeRepository(
             CodeRepositoryId id,
             String name,
             Path path,
-            GitRepositorySnapshot sourceVersion,
-            ManagedRepositorySnapshot managedSnapshot) {
+            GitRepositoryContentVersion sourceVersion) {
         Instant now = Instant.now();
         Path normalizedPath = path.toAbsolutePath().normalize();
         return new CodeRepository(
@@ -59,44 +58,43 @@ public record CodeRepository(
                 sourceVersion.commit(),
                 sourceVersion.worktreeDigest(),
                 sourceVersion.dirty(),
-                managedSnapshot.id(),
-                managedSnapshot.contentPath(),
-                managedSnapshot.contentPath().resolve(".codegraph"),
-                managedSnapshot.createdAt(),
+                null,
+                null,
+                normalizedPath.resolve(".codegraph"),
+                null,
                 sourceVersion.scannedAt(),
                 now,
                 now);
     }
 
-    public boolean hasSameVersion(GitRepositorySnapshot snapshot) {
-        return currentSnapshotId != null
-                && Objects.equals(defaultBranch, snapshot.branch())
-                && Objects.equals(currentCommit, snapshot.commit())
-                && Objects.equals(worktreeDigest, snapshot.worktreeDigest())
-                && worktreeDirty == snapshot.dirty();
+    public boolean hasSameVersion(GitRepositoryContentVersion contentVersion) {
+        return Objects.equals(defaultBranch, contentVersion.branch())
+                && Objects.equals(currentCommit, contentVersion.commit())
+                && Objects.equals(worktreeDigest, contentVersion.worktreeDigest())
+                && worktreeDirty == contentVersion.dirty();
     }
 
-    public CodeRepository withScanMetadata(GitRepositorySnapshot snapshot) {
+    public CodeRepository withScanMetadata(GitRepositoryContentVersion contentVersion) {
         return new CodeRepository(
                 id,
                 name,
                 path,
                 sourceType,
-                snapshot.branch(),
-                snapshot.commit(),
-                snapshot.worktreeDigest(),
-                snapshot.dirty(),
-                currentSnapshotId,
-                currentSnapshotPath,
+                contentVersion.branch(),
+                contentVersion.commit(),
+                contentVersion.worktreeDigest(),
+                contentVersion.dirty(),
+                currentContentVersion,
+                currentContentVersionPath,
                 codeGraphPath,
-                snapshotCreatedAt,
-                snapshot.scannedAt(),
+                contentVersionCreatedAt,
+                contentVersion.scannedAt(),
                 createdAt,
                 Instant.now());
     }
 
-    public CodeRepository withManagedSnapshot(
-            GitRepositorySnapshot sourceVersion, ManagedRepositorySnapshot managedSnapshot) {
+    public CodeRepository withManagedContentVersion(
+            GitRepositoryContentVersion sourceVersion, ManagedRepositoryContentVersion managedContentVersion) {
         return new CodeRepository(
                 id,
                 name,
@@ -106,10 +104,10 @@ public record CodeRepository(
                 sourceVersion.commit(),
                 sourceVersion.worktreeDigest(),
                 sourceVersion.dirty(),
-                managedSnapshot.id(),
-                managedSnapshot.contentPath(),
-                managedSnapshot.contentPath().resolve(".codegraph"),
-                managedSnapshot.createdAt(),
+                managedContentVersion.id(),
+                managedContentVersion.contentPath(),
+                managedContentVersion.contentPath().resolve(".codegraph"),
+                managedContentVersion.createdAt(),
                 sourceVersion.scannedAt(),
                 createdAt,
                 Instant.now());

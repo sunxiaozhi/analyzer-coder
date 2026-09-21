@@ -17,7 +17,7 @@ public record KnowledgeCardRow(
         UUID ownerAccountId,
         String scopePayload,
         String obligationsPayload,
-        UUID lastVerifiedSnapshotId,
+        UUID lastVerifiedContentVersion,
         String verificationNote,
         String publicationStatus,
         int revision,

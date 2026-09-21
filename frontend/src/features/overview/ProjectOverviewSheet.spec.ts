@@ -15,9 +15,9 @@ const repository = {
   description: '',
   branch: 'main',
   commit: '1234567890abcdef',
-  snapshotId: 'snapshot-1',
+  contentVersion: 'contentVersion-1',
   dirty: false,
-  snapshotCreatedAt: new Date().toISOString(),
+  contentVersionCreatedAt: new Date().toISOString(),
   capabilities: { canIndex: true, canUpdate: true },
 } as Repository;
 
@@ -40,7 +40,7 @@ const profile = {
 } satisfies ProjectProfile;
 
 const preparation = {
-  snapshotId: 'snapshot-1',
+  contentVersion: 'contentVersion-1',
   commitSha: '1234567890abcdef',
   branch: 'main',
   dirty: false,
@@ -50,7 +50,7 @@ const preparation = {
   progress: 100,
   message: '项目已准备完成',
   stages: [
-    { key: 'snapshot', label: '代码快照', state: 'READY', detail: '40 个文件已发布' },
+    { key: 'contentVersion', label: '代码内容版本', state: 'READY', detail: '40 个文件已发布' },
     { key: 'content', label: '内容索引', state: 'READY', detail: '80 个片段' },
     { key: 'vectors', label: '语义索引', state: 'READY', detail: '80 个向量' },
     { key: 'graph', label: '调用图谱', state: 'READY', detail: '120 个节点' },
@@ -63,7 +63,7 @@ const preparation = {
 } satisfies RepositoryPreparation;
 
 const codeFacts = {
-  snapshotId: 'snapshot-1',
+  contentVersion: 'contentVersion-1',
   commitSha: '1234567890abcdef',
   generatedAt: new Date().toISOString(),
   projectType: '前后端分离 Web 应用',
@@ -124,7 +124,7 @@ const codeFacts = {
 
 const health = {
   repositoryId: 'repo-1',
-  snapshotId: 'snapshot-1',
+  contentVersion: 'contentVersion-1',
   commitSha: '1234567890abcdef',
   state: 'DEGRADED',
   readyForSearch: true,
@@ -163,14 +163,14 @@ function mountSheet(currentPreparation: RepositoryPreparation = preparation) {
 }
 
 describe('ProjectOverviewSheet', () => {
-  it('shows snapshot facts, knowledge health and code categories without unrelated review data', () => {
+  it('shows contentVersion facts, knowledge health and code categories without unrelated review data', () => {
     const wrapper = mountSheet();
     const text = wrapper.text();
 
     expect(text).toContain('示例项目');
     expect(text).toContain('检索可用，部分能力降级');
     expect(text).toContain('1234567890');
-    expect(text).toContain('快照 snapshot');
+    expect(text).toContain('内容版本 contentV');
     expect(text).toContain('代码图谱');
     expect(text).toContain('120');
     expect(text).toContain('100%');

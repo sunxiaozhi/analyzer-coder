@@ -59,16 +59,16 @@
 | 工具 | 作用 | readOnlyHint | destructiveHint | idempotentHint | 来源 |
 | --- | --- | --- | --- | --- | --- |
 | `search_project` | 在代码与已发布知识中做一次联合排序检索 | true | false | true | `backend/src/main/resources/mcp-tools.json:45-49` |
-| `resolve_project_context` | 固定已准备分支快照与适用知识修订，返回 contextId | true | false | false | `backend/src/main/resources/mcp-tools.json:78-82` |
+| `resolve_project_context` | 固定已准备分支内容版本与适用知识修订，返回 contextId | true | false | false | `backend/src/main/resources/mcp-tools.json:78-82` |
 | `list_codegraph_scopes` | 列出令牌账户可见项目与分支的图谱就绪状态 | true | false | true | `backend/src/main/resources/mcp-tools.json:106-110` |
-| `codegraph_explore` | 在固定快照中探索相关源码与调用路径 | true | false | true | `backend/src/main/resources/mcp-tools.json:151-155` |
+| `codegraph_explore` | 在固定内容版本中探索相关源码与调用路径 | true | false | true | `backend/src/main/resources/mcp-tools.json:151-155` |
 | `codegraph_node` | 读取符号或文件及其关系与行号 | true | false | true | `backend/src/main/resources/mcp-tools.json:206-210` |
-| `codegraph_search` | 在固定快照中搜索已索引符号 | true | false | true | `backend/src/main/resources/mcp-tools.json:251-255` |
+| `codegraph_search` | 在固定内容版本中搜索已索引符号 | true | false | true | `backend/src/main/resources/mcp-tools.json:251-255` |
 | `codegraph_callers` | 查询某符号的调用方 | true | false | true | `backend/src/main/resources/mcp-tools.json:296-300` |
 | `codegraph_callees` | 查询某符号的被调用方 | true | false | true | `backend/src/main/resources/mcp-tools.json:341-345` |
 | `codegraph_impact` | 从某符号做下游影响分析 | true | false | true | `backend/src/main/resources/mcp-tools.json:386-390` |
-| `codegraph_files` | 列出固定快照中已索引的文件 | true | false | true | `backend/src/main/resources/mcp-tools.json:429-433` |
-| `codegraph_status` | 读取固定快照的 CodeGraph 状态 | true | false | true | `backend/src/main/resources/mcp-tools.json:462-466` |
+| `codegraph_files` | 列出固定内容版本中已索引的文件 | true | false | true | `backend/src/main/resources/mcp-tools.json:429-433` |
+| `codegraph_status` | 读取固定内容版本的 CodeGraph 状态 | true | false | true | `backend/src/main/resources/mcp-tools.json:462-466` |
 | `codegraph_affected` | 由改动文件推导受影响符号线索 | true | false | true | `backend/src/main/resources/mcp-tools.json:511-515` |
 
 - 规则：`resolve_project_context` 的 `idempotentHint` 为 `false`，其余 11 个为 `true`；12 个工具的 `readOnlyHint` 全为 `true`、`destructiveHint` 全为 `false`。证据：`backend/src/main/resources/mcp-tools.json:45-49`、`backend/src/main/resources/mcp-tools.json:78-82`。
@@ -180,19 +180,19 @@
   - 项目按名称小写升序排序后再切页。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:159-163`。
   - 返回 `projects[]`、`page`、`pageSize`、`totalProjects`、`hasMore`。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:195-206`。
   - 项目项字段：`repositoryId`、`name`、`sourceType`、`branches[]`。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:184-193`。
-  - 分支项字段：`branchId`、`name`、`status`、`trackingStatus`、`snapshotId`、`commitSha`、`codegraphReady`。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:166-181`。
-  - `codegraphReady` 为真要求分支未归档、快照非空且存在 `PUBLISHED` 产物。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:173-181`。
+  - 分支项字段：`branchId`、`name`、`status`、`trackingStatus`、`contentVersion`、`commitSha`、`codegraphReady`。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:166-181`。
+  - `codegraphReady` 为真要求分支未归档、内容版本非空且存在 `PUBLISHED` 产物。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:173-181`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:149-207`
 
 ### MCP-015 contextId 的获取与复用
-- 需求：首次调用用 `branchId` 解析出固定的阅读上下文，后续调用复用 `contextId`，保持同一快照。
+- 需求：首次调用用 `branchId` 解析出固定的阅读上下文，后续调用复用 `contextId`，保持同一内容版本。
 - 规则：
   - `resolve_project_context` 必须提供 `branchId` 或 `contextId`，否则抛「解析上下文需要 branchId 或 contextId」。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpToolService.java:54-56`。
   - 图谱类工具在两者都缺失时抛「CodeGraph 查询需要 branchId 或 contextId」。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:54-55`。
-  - 上下文解析结果直接序列化返回，包含 `contextId`、`repositoryId`、`branchId`、`branchName`、`snapshotId`、`commitSha`、`expiresAt`；内部内容路径被 `@JsonIgnore` 排除。证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchReadContext.java:9-17`。
+  - 上下文解析结果直接序列化返回，包含 `contextId`、`repositoryId`、`branchId`、`branchName`、`contentVersion`、`commitSha`、`expiresAt`；内部内容路径被 `@JsonIgnore` 排除。证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchReadContext.java:9-17`。
   - 图谱工具返回体固定包含 `context`、`artifactId`、`cliVersion`、`result`，便于客户端复用。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:137-146`。
   - `search_project` 带分支参数时返回 `{context, result}`，不带时返回原始检索结果。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpToolService.java:63-72`。
-  - 上下文不会自动跟随分支更新；每次以 `contextId` 解析都会读到创建时固定的快照。证据：`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:350-376`。
+  - 上下文不会自动跟随分支更新；每次以 `contextId` 解析都会读到创建时固定的内容版本。证据：`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:350-376`。
   - stdio 适配器把该能力包装为 `resolve_project_context`，并在 `search_project` 中先解析再以 `X-Branch-Context` 头复用。证据：`mcp-server/src/server.mjs:46-57`、`mcp-server/src/server.mjs:32-39`、`mcp-server/test/server.test.mjs:95-99`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchReadContext.java:8-17`
 
@@ -206,20 +206,20 @@
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:347-377`
 
 ### MCP-017 未就绪分支可见但不可查询；ZIP 项目不入发现列表
-- 需求：发现列表应展示未就绪分支以便用户判断，但查询必须失败且不回退；ZIP 单版本项目不参与分支图谱发现。
+- 需求：发现列表应展示未就绪分支以便用户判断，但查询必须失败且不回退；ZIP 的 `WORKSPACE` 分支同样参与发现。
 - 规则：
   - 分支列表返回所有受管分支，未就绪者以 `codegraphReady=false` 体现，不隐藏。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:166-181`。
-  - 查询未发布产物的分支时抛 `CODEGRAPH_ARTIFACT_NOT_AVAILABLE`「所选分支快照尚未发布 CodeGraph 产物」，不换分支、不换快照。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:57-60`、`backend/src/test/java/com/analyzercoder/application/mcp/McpCodeGraphToolsTest.java:106-109`。
-  - 分支尚未准备（无可发布快照）时解析上下文报 409 `BRANCH_NOT_READY`，提示「不会使用其他分支的数据」。证据：`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:400-402`。
+  - 查询未发布产物的分支时抛 `CODEGRAPH_ARTIFACT_NOT_AVAILABLE`「所选分支内容版本尚未发布 CodeGraph 产物」，不换分支、不换内容版本。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:57-60`、`backend/src/test/java/com/analyzercoder/application/mcp/McpCodeGraphToolsTest.java:106-109`。
+  - 分支尚未准备（无可发布内容版本）时解析上下文报 409 `BRANCH_NOT_READY`，提示「不会使用其他分支的数据」。证据：`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:400-402`。
   - 发现列表过滤 `sourceType == ZIP` 的项目。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:154-158`。
-  - README 明确「ZIP 单版本项目继续使用 `search_project` 的默认快照检索，不出现在分支图谱发现列表中」。证据：`mcp-server/README.md:11`。
+  - README 明确 ZIP 项目通过 `WORKSPACE` 使用同一分支图谱协议。证据：`mcp-server/README.md`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:57-60`
 
-### MCP-018 不接受服务器文件路径、任意快照 ID 或任意产物 ID
-- 需求：外部客户端不得指定服务器文件路径、任意快照 ID 或产物路径；快照与产物一律由服务端从分支身份解析。
+### MCP-018 不接受服务器文件路径、任意内容版本 ID 或任意产物 ID
+- 需求：外部客户端不得指定服务器文件路径、任意内容版本 ID 或产物路径；内容版本与产物一律由服务端从分支身份解析。
 - 规则：
-  - 12 个工具的 schema 中没有 `snapshotId`、`artifactPath` 或绝对路径参数，只有 `repositoryId` + `branchId`/`contextId` 与查询条件。证据：`backend/src/main/resources/mcp-tools.json:6-517`。
-  - 快照 ID 一律来自服务端解析出的上下文：`graphs.latestSnapshot(repositoryId, context.snapshotId())`。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:56-57`。
+  - 12 个工具的 schema 中没有 `contentVersion`、`artifactPath` 或绝对路径参数，只有 `repositoryId` + `branchId`/`contextId` 与查询条件。证据：`backend/src/main/resources/mcp-tools.json:6-517`。
+  - 内容版本 ID 一律来自服务端解析出的上下文：`graphs.latestContentVersion(repositoryId, context.contentVersion())`。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:56-57`。
   - 产物路径只从数据库行读取，且必须位于配置的受管根目录内，否则 `CODEGRAPH_ARTIFACT_MISSING`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:187-190`。
   - 返回内容中不回显产物绝对路径（把项目路径替换为 `.`）。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:227`、`backend/src/test/java/com/analyzercoder/application/mcp/McpCodeGraphToolsTest.java:83-84`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:56-57`
@@ -240,7 +240,7 @@
   - 单次查询超时 30 秒，超时/失败统一映射为 `CODEGRAPH_QUERY_FAILED`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:223`、`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:230-233`。
   - 输出超过 200000 字符抛 `CODEGRAPH_RESULT_TOO_LARGE`「CodeGraph 查询结果过大，请缩小范围」。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:224-226`。
   - 进程错误输出截断到 1000 字符后才进入错误消息。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:374-376`。
-  - CLI 调用前先校验产物可用性（`published`），确保命令只在已发布的受管快照上执行。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:210`。
+  - CLI 调用前先校验产物可用性（`published`），确保命令只在已发布的受管内容版本上执行。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:210`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:194-234`
 
 ### MCP-021 工具结果结构与错误封装
@@ -291,7 +291,7 @@
 - 访问令牌存储字段：`id`、账户、名称、SHA-256 摘要、12 位前缀、创建时间、过期时间、`lastUsedAt`、`revokedAt`；对外视图不返回摘要。证据：`backend/src/main/java/com/analyzercoder/security/AccessTokenService.java:47-58`、`backend/src/main/java/com/analyzercoder/security/AccessTokenService.java:119-126`。
 - 令牌状态判定只看三个事实：是否撤销、是否过期、账户是否可用（启用、非强制改密、未锁定）。证据：`backend/src/main/java/com/analyzercoder/security/AccessTokenService.java:73-97`。
 - MCP 服务端无状态：不保存会话、事件流或工具调用状态，所有请求带 `no-store`。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/McpController.java:22`、`backend/src/main/java/com/analyzercoder/interfaces/rest/McpController.java:149`。
-- 阅读上下文（contextId）字段：`contextId`、`repositoryId`、`branchId`、`branchName`、`snapshotId`、`commitSha`、`expiresAt`；`contentPath` 标记 `@JsonIgnore` 不出现在工具响应中。证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchReadContext.java:8-17`。
+- 阅读上下文（contextId）字段：`contextId`、`repositoryId`、`branchId`、`branchName`、`contentVersion`、`commitSha`、`expiresAt`；`contentPath` 标记 `@JsonIgnore` 不出现在工具响应中。证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchReadContext.java:8-17`。
 - 上下文的持久化状态：`branch_read_contexts`（含 `expires_at`）与 `branch_context_knowledge`（固定适用的知识修订）。证据：`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:404-421`。
 - 分支发现在意三个状态：`trackingStatus`（`ACTIVE`/`ARCHIVED`）、`status`（准备状态，如 `READY`/`BUILDING`/`FAILED`）、`codegraphReady`。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:166-181`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:66-75`。
 - 图谱产物状态为 `PUBLISHED`（可查询）与 `RETIRED`（被新发布替换），MCP 只认 `PUBLISHED`。证据：`backend/src/main/resources/mappers/CodeGraphArtifactMapper.xml:31-43`、`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:58`。
@@ -344,7 +344,7 @@
 | --- | --- | --- | --- |
 | `CONTEXT_EXPIRED` | 409 | contextId 不存在、不属于该账户或已过期（有效期 1 小时） | `backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:371-372` |
 | `CONTEXT_MISMATCH` | 409 | 同时给出的 branchId 与 contextId 指向不同分支 | `backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:374-375` |
-| `BRANCH_NOT_READY` | 409 | 分支尚未准备，无可发布快照（不会回退其他分支） | `backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:400-402` |
+| `BRANCH_NOT_READY` | 409 | 分支尚未准备，无可发布内容版本（不会回退其他分支） | `backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:400-402` |
 | `BRANCH_NOT_FOUND` | 404 | 分支不存在或非活动分支 | `backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:189` |
 | `BRANCH_GRAPH_BUSY` | 409 | 仓库已有绑定其他版本的活动图谱任务 | `backend/src/main/java/com/analyzercoder/application/branch/BranchGraphTasks.java:74` |
 | `BRANCH_CONTEXT_UNSUPPORTED` | 409 | 端点未接入分支上下文，拒绝静默回退到默认分支 | `backend/src/main/java/com/analyzercoder/security/BranchContextInterceptor.java:41-42` |
@@ -353,8 +353,8 @@ CodeGraph（在 MCP 中以 `isError=true` 文本 `<code>: <message>` 返回；�
 
 | 错误码 | 网页 HTTP | 含义 | 来源 |
 | --- | --- | --- | --- |
-| `CODEGRAPH_ARTIFACT_NOT_AVAILABLE` | 409 | 所选快照没有 `PUBLISHED` 产物 | `backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:179-181` |
-| `CODEGRAPH_VERSION_MISMATCH` | 409 | 产物与请求快照不一致，或查询期间快照已更新 | `backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:184-185`、`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:242` |
+| `CODEGRAPH_ARTIFACT_NOT_AVAILABLE` | 409 | 所选内容版本没有 `PUBLISHED` 产物 | `backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:179-181` |
+| `CODEGRAPH_VERSION_MISMATCH` | 409 | 产物与请求内容版本不一致，或查询期间内容版本已更新 | `backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:184-185`、`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:242` |
 | `CODEGRAPH_ARTIFACT_MISSING` | 409 | 产物目录不存在或超出受管目录 | `backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:189` |
 | `CODEGRAPH_QUERY_FAILED` | 409 | 只读 CLI 查询执行失败 | `backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:231-232` |
 | `CODEGRAPH_RESULT_TOO_LARGE` | 409 | 查询输出超过 200000 字符 | `backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:225-226` |
@@ -391,7 +391,7 @@ CodeGraph（在 MCP 中以 `isError=true` 文本 `<code>: <message>` 返回；�
 - `codegraph_node` 的 schema 只要求 `repositoryId`，「name 或 file 至少提供一个」由服务端运行期校验，客户端 schema 层面无法预知。证据：`backend/src/main/resources/mcp-tools.json:202-205`、`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:81-82`。
 - `repositoryId` 的 `pattern` 强度不一致：`search_project` 使用严格 UUID 版本/变体校验，其余工具使用宽松的 36 位十六进制模式。证据：`backend/src/main/resources/mcp-tools.json:13`、`backend/src/main/resources/mcp-tools.json:30`。
 - `codegraph_files` 与 `codegraph_status` 没有 `limit` 参数，输出规模仅靠 `CODEGRAPH_RESULT_TOO_LARGE` 兜底。证据：`backend/src/main/resources/mcp-tools.json:396-428`、`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:224-226`。
-- `list_codegraph_scopes` 对每个分支单独查询一次产物（`latestSnapshot`），没有批量接口；项目/分支很多时可能产生大量查询。需人工确认是否需要批量化。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:173-181`。
+- `list_codegraph_scopes` 对每个分支单独查询一次产物（`latestContentVersion`），没有批量接口；项目/分支很多时可能产生大量查询。需人工确认是否需要批量化。证据：`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:173-181`。
 - stdio 适配器的会话 Cookie 模式（`ANALYZER_SESSION_TOKEN` + `ANALYZER_CSRF_TOKEN`）能调用 `search_project` 与上下文解析，但图谱工具因后端白名单限制必然失败并返回 401；该模式与 README 中「图谱工具需提供访问令牌」的说明一致但易误用。证据：`mcp-server/src/api-client.mjs:26-31`、`mcp-server/src/server.mjs:82`。
 - `mcp-server/README.md` 把 `codegraph_affected` 描述为「受影响测试线索」，而 `mcp-tools.json` 的标题是 `Analyze affected symbols`；两处表述不一致，需人工确认以哪一处为准。证据：`mcp-server/README.md:86`、`backend/src/main/resources/mcp-tools.json:470`。
 - `ApiExceptionHandler` 保留了 `CODEGRAPH_EXPORT_NOT_AVAILABLE` 到 503 的映射，但当前代码中没有抛出该错误码的位置。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/ApiExceptionHandler.java:63`。

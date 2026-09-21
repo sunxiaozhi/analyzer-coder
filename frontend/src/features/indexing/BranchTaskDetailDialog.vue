@@ -15,7 +15,7 @@ const emit = defineEmits<{ manage: [] }>();
         <div><dt>状态</dt><dd>{{ statusLabel }}</dd></div>
         <div><dt>阶段</dt><dd>{{ stageLabel }}</dd></div>
         <div class="full"><dt>任务编号</dt><dd><code>{{ job.id }}</code></dd></div>
-        <div class="full"><dt>快照编号</dt><dd><code>{{ job.snapshotId ?? '尚未锁定' }}</code></dd></div>
+        <div class="full"><dt>内容版本编号</dt><dd><code>{{ job.contentVersion ?? '尚未锁定' }}</code></dd></div>
       </dl>
       <el-alert v-if="job.error" :title="job.error" type="error" :closable="false" show-icon />
       <p class="task-note">任务属于创建时锁定的版本；历史任务不代表当前分支的索引状态。</p>

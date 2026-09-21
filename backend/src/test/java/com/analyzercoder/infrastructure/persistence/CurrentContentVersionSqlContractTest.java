@@ -12,7 +12,7 @@ import org.apache.ibatis.builder.xml.XMLMapperBuilder;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.Test;
 
-class CurrentSnapshotSqlContractTest {
+class CurrentContentVersionSqlContractTest {
     private static final String BASELINE_MIGRATION = "db/migration/V1__init_schema.sql";
 
     @Test
@@ -31,38 +31,38 @@ class CurrentSnapshotSqlContractTest {
     }
 
     @Test
-    void codeChunkQueriesReuseTheCurrentSnapshotBoundary() throws Exception {
+    void codeChunkQueriesReuseTheCurrentContentVersionBoundary() throws Exception {
         String mapper = resource("mappers/CodeChunkMapper.xml");
 
-        assertThat(mapper).contains("<sql id=\"currentSnapshot\">");
-        assertThat(occurrences(mapper, "<include refid=\"currentSnapshot\"/>")).isEqualTo(3);
+        assertThat(mapper).contains("<sql id=\"currentContentVersion\">");
+        assertThat(occurrences(mapper, "<include refid=\"currentContentVersion\"/>")).isEqualTo(3);
         assertThat(mapper)
-                .contains("SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId}");
+                .contains("SELECT current_content_version FROM repositories WHERE id=#{repositoryId}");
         assertThat(compact(mapper))
                 .contains(
-                        "<selectid=\"findByPath\"resultMap=\"row\">SELECT<includerefid=\"columns\"/>FROMcode_chunksWHERErepo_id=#{repositoryId}ANDfile_path=#{filePath}<includerefid=\"currentSnapshot\"/>");
+                        "<selectid=\"findByPath\"resultMap=\"row\">SELECT<includerefid=\"columns\"/>FROMcode_chunksWHERErepo_id=#{repositoryId}ANDfile_path=#{filePath}<includerefid=\"currentContentVersion\"/>");
     }
 
     @Test
-    void intelligenceAndKnowledgeQueriesRejectPreviousSnapshots() throws Exception {
+    void intelligenceAndKnowledgeQueriesRejectPreviousContentVersions() throws Exception {
         String intelligence = compact(resource("mappers/IntelligenceMapper.xml"));
         String vectors = compact(resource("mappers/VectorIndexQueryMapper.xml"));
 
         assertThat(
                         occurrences(
                                 intelligence,
-                                "snapshot_id=(SELECTcurrent_snapshot_idFROMrepositoriesWHEREid=#{repositoryId})"))
+                                "content_version=(SELECTcurrent_content_versionFROMrepositoriesWHEREid=#{repositoryId})"))
                 .isGreaterThanOrEqualTo(6);
         assertThat(intelligence)
                 .contains(
-                        "current_chunk.snapshot_id=(SELECTcurrent_snapshot_idFROMrepositoriesWHEREid=r.repo_id)");
+                        "current_chunk.content_version=(SELECTcurrent_content_versionFROMrepositoriesWHEREid=r.repo_id)");
         assertThat(vectors)
                 .contains(
-                        "current_chunk.snapshot_id=(SELECTcurrent_snapshot_idFROMrepositoriesWHEREid=ref.repo_id)");
+                        "current_chunk.content_version=(SELECTcurrent_content_versionFROMrepositoriesWHEREid=ref.repo_id)");
     }
 
     @Test
-    void structuralRetrievalUsesOnlyThePublishedGraphSnapshot() throws Exception {
+    void structuralRetrievalUsesOnlyThePublishedGraphContentVersion() throws Exception {
         Select select =
                 GraphRetrievalMapper.class
                         .getMethod(
@@ -73,8 +73,8 @@ class CurrentSnapshotSqlContractTest {
                         .getAnnotation(Select.class);
         String sql = compact(String.join(" ", Arrays.asList(select.value())));
 
-        assertThat(sql).contains("g.snapshot_id=r.current_snapshot_id");
-        assertThat(sql).contains("c.snapshot_id=r.current_snapshot_id");
+        assertThat(sql).contains("g.content_version=r.current_content_version");
+        assertThat(sql).contains("c.content_version=r.current_content_version");
         assertThat(sql).contains("FROMheuristic_call_edgesg");
         assertThat(sql).doesNotContain("FROMcode_graph_edgesg");
     }
@@ -121,7 +121,7 @@ class CurrentSnapshotSqlContractTest {
                         "owner_account_id",
                         "scope_payload",
                         "obligations_payload",
-                        "last_verified_snapshot_id",
+                        "last_verified_content_version",
                         "verification_note")
                 .contains("'UNVERIFIED','CURRENT','SUSPECT','STALE'")
                 .contains("NEW.scope_payload", "NEW.obligations_payload");
@@ -133,7 +133,7 @@ class CurrentSnapshotSqlContractTest {
                 .contains("publication_status='DRAFT'")
                 .contains("review_status='UNREVIEWED'")
                 .contains("source_version_status='UNVERIFIED'")
-                .contains("last_verified_snapshot_id=NULL,verification_note=NULL");
+                .contains("last_verified_content_version=NULL,verification_note=NULL");
         assertThat(resource("mappers/VectorIndexQueryMapper.xml"))
                 .contains("source_version_status NOT IN ('SUSPECT','STALE')");
     }
@@ -147,7 +147,7 @@ class CurrentSnapshotSqlContractTest {
                 .contains("DROP TRIGGER IF EXISTS trg_repository_knowledge_stale")
                 .contains("CREATE TABLE knowledge_drift_events")
                 .contains("reasons_payload JSONB")
-                .contains("uq_knowledge_drift_automatic_snapshot");
+                .contains("uq_knowledge_drift_automatic_contentVersion");
         assertThat(mapper)
                 .contains("source_version_status='SUSPECT'")
                 .contains("source_version_status='CURRENT'")
@@ -201,7 +201,7 @@ class CurrentSnapshotSqlContractTest {
 
     private static String resource(String name) throws Exception {
         try (InputStream input =
-                CurrentSnapshotSqlContractTest.class.getClassLoader().getResourceAsStream(name)) {
+                CurrentContentVersionSqlContractTest.class.getClassLoader().getResourceAsStream(name)) {
             assertThat(input).as(name).isNotNull();
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
@@ -209,7 +209,7 @@ class CurrentSnapshotSqlContractTest {
 
     private static void parseMapper(Configuration configuration, String name) throws Exception {
         try (InputStream input =
-                CurrentSnapshotSqlContractTest.class.getClassLoader().getResourceAsStream(name)) {
+                CurrentContentVersionSqlContractTest.class.getClassLoader().getResourceAsStream(name)) {
             assertThat(input).as(name).isNotNull();
             new XMLMapperBuilder(input, configuration, name, configuration.getSqlFragments())
                     .parse();

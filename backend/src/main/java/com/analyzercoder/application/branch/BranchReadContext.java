@@ -11,7 +11,7 @@ public record BranchReadContext(
         UUID repositoryId,
         UUID branchId,
         String branchName,
-        UUID snapshotId,
+        UUID contentVersion,
         String commitSha,
         @JsonIgnore Path contentPath,
         Instant expiresAt) {}

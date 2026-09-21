@@ -9,7 +9,6 @@ import RepositoryEditDialog from '@/features/repositories/RepositoryEditDialog.v
 import RepositoryGovernanceDialog from '@/features/repositories/RepositoryGovernanceDialog.vue';
 import ProjectSettingsPanel from '@/features/repositories/ProjectSettingsPanel.vue';
 import ProjectManagementHeader from '@/features/repositories/ProjectManagementHeader.vue';
-import SingleVersionOperations from '@/features/repositories/SingleVersionOperations.vue';
 import { useBranchContextStore } from '@/stores/branchContextStore';
 import ProjectSelectionList from '@/features/repositories/ProjectSelectionList.vue';
 import BranchWorkspace from '@/features/branches/BranchWorkspace.vue';
@@ -45,7 +44,6 @@ const readingBusy = shallowRef(false);
 const readingBranchName = computed(() => branchContext.context?.branchName ?? branchContext.selectedBranch?.name ?? null);
 const selectingProject = shallowRef(false);
 const selectedProject = computed(() => store.selectedRepository);
-const gitProject = computed(() => selectedProject.value && ['LOCAL_GIT', 'REMOTE_GIT', 'GITLAB'].includes(selectedProject.value.sourceType));
 let pageVersion = 0;
 let alive = true;
 let searchTimer: number | undefined;
@@ -206,10 +204,9 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
     <section class="surface project-branches" aria-label="当前项目分支">
       <template v-if="selectedProject">
         <ProjectManagementHeader :repository="selectedProject" :reading-branch-name="readingBranchName" @settings="openSettings(selectedProject)" @govern="govern(selectedProject)" @remove="remove(selectedProject.id, selectedProject.name)" />
-        <BranchWorkspace v-if="gitProject" :key="selectedProject.id" :repository-id="selectedProject.id"
+        <BranchWorkspace :key="selectedProject.id" :repository-id="selectedProject.id"
           :can-maintain="selectedProject.capabilities.canUpdate" :can-manage="selectedProject.capabilities.canConfigure"
-          :default-branch="selectedProject.branch" :reading-busy="readingBusy" :remote-source="['REMOTE_GIT', 'GITLAB'].includes(selectedProject.sourceType)" :reading-branch-id="branchContext.selectedBranchId" :initial-branch-id="typeof route.query.branchId === 'string' ? route.query.branchId : undefined" show-branch-list @changed="branchesChanged" @read="readBranch" />
-        <SingleVersionOperations v-else :repository="selectedProject" @changed="reloadAll" />
+          :can-track="selectedProject.sourceType !== 'ZIP'" :default-branch="selectedProject.branch || 'WORKSPACE'" :reading-busy="readingBusy" :remote-source="['REMOTE_GIT', 'GITLAB'].includes(selectedProject.sourceType)" :reading-branch-id="branchContext.selectedBranchId" :initial-branch-id="typeof route.query.branchId === 'string' ? route.query.branchId : undefined" show-branch-list @changed="branchesChanged" @read="readBranch" />
       </template>
       <el-empty v-else description="从左侧选择项目，或先接入一个项目" />
     </section>

@@ -16,7 +16,7 @@ class BranchLifecycleSqlContractTest {
                 .contains("tracking_status")
                 .contains("repository_project_drafts")
                 .contains("source_branch_id")
-                .contains("repositories_default_branch_snapshot")
+                .contains("repositories_default_branch_contentVersion")
                 .contains("FOREIGN KEY(repo_id,branch_id)");
         assertThat(markdown)
                 .contains("ON CONFLICT(repo_id,branch_id,file_path)")
@@ -25,7 +25,7 @@ class BranchLifecycleSqlContractTest {
         assertThat(intelligence)
                 .contains("branch_id=#{branchId}")
                 .contains("source_scope")
-                .contains("snapshot_id=#{snapshotId}");
+                .contains("content_version=#{contentVersion}");
     }
 
     private String resource(String path) throws Exception {

@@ -23,7 +23,7 @@ interface Props {
   repositoryId: string | null;
   filePath: string | null;
   initialSymbol: string | null;
-  snapshotId: string | null;
+  contentVersion: string | null;
   contextId?: string | null;
   canMaintainKnowledge?: boolean;
 }
@@ -93,7 +93,7 @@ function openAtlas() {
   if (!props.filePath) return;
   void router.push({ name: 'atlas', query: {
     path: props.filePath, symbol: props.initialSymbol || undefined,
-    snapshotId: props.snapshotId || undefined, contextId: props.contextId || undefined,
+    contentVersion: props.contentVersion || undefined, contextId: props.contextId || undefined,
     branchId: branches.context?.branchId,
   } });
 }
@@ -101,7 +101,7 @@ async function copyEvidence() {
   if (!context.value || !props.filePath) return;
   const lines = [
     `文件证据：${props.filePath}`,
-    `快照：${context.value.snapshotId ?? '无'}  提交：${context.value.commitSha ?? '无'}`,
+    `内容版本：${context.value.contentVersion ?? '无'}  提交：${context.value.commitSha ?? '无'}`,
     `符号：${props.initialSymbol || '未指定'}`,
     `适用知识：${context.value.knowledgeReferences.length} 条（可信 ${trustedKnowledgeCount.value}，需关注 ${attentionKnowledgeCount.value}）`,
     ...context.value.knowledgeReferences.map(item => `- [知识] ${item.title} · ${item.trusted ? '可信' : statusLabel(item.sourceVersionStatus)} · ${(item.applicability ?? []).map(reason => applicabilityLabel(reason.kind)).join('、')}`),
@@ -115,7 +115,7 @@ async function copyEvidence() {
 }
 
 watch(
-  () => [props.repositoryId, props.filePath, props.initialSymbol, props.snapshotId, props.contextId] as const,
+  () => [props.repositoryId, props.filePath, props.initialSymbol, props.contentVersion, props.contextId] as const,
   () => void load(),
   { immediate: true },
 );
@@ -132,7 +132,7 @@ onScopeDispose(() => {
         <div><b>文件关联证据</b><p class="mono" :title="filePath ?? ''">{{ filePath ?? '尚未选择文件' }}</p></div>
       </div>
       <div class="context-facts">
-        <span>快照 <b class="mono">{{ context?.snapshotId?.slice(0, 8) ?? snapshotId?.slice(0, 8) ?? '未发布' }}</b></span>
+        <span>内容版本 <b class="mono">{{ context?.contentVersion?.slice(0, 8) ?? contentVersion?.slice(0, 8) ?? '未发布' }}</b></span>
         <span>更新 <b>{{ context ? shortDate(context.generatedAt) : '读取中' }}</b></span>
       </div>
       <div class="context-actions">
@@ -165,8 +165,8 @@ onScopeDispose(() => {
           <div class="reason-list">
             <span v-for="reason in (item.applicability ?? [])" :key="`${reason.kind}:${reason.rule}`" :title="reason.detail"><b>{{ applicabilityLabel(reason.kind) }}</b><code>{{ reason.rule }}</code></span>
           </div>
-          <button v-for="binding in item.bindings" :key="`${binding.chunkId}:${binding.startLine}`" type="button" class="binding" :disabled="binding.stale || !binding.currentSnapshot" @click="emit('openFile', filePath!, binding.startLine, binding.endLine)">
-            <span class="mono">{{ binding.symbolName ?? filePath }}:{{ binding.startLine ?? 1 }}</span><em v-if="binding.stale || !binding.currentSnapshot">旧版本绑定</em><ArrowRight v-else :size="12" />
+          <button v-for="binding in item.bindings" :key="`${binding.chunkId}:${binding.startLine}`" type="button" class="binding" :disabled="binding.stale || !binding.currentContentVersion" @click="emit('openFile', filePath!, binding.startLine, binding.endLine)">
+            <span class="mono">{{ binding.symbolName ?? filePath }}:{{ binding.startLine ?? 1 }}</span><em v-if="binding.stale || !binding.currentContentVersion">旧版本绑定</em><ArrowRight v-else :size="12" />
           </button>
         </article>
       </div>

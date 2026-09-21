@@ -25,9 +25,9 @@ const projects = computed(() => props.repositories.filter(project => ['LOCAL_GIT
 const rows = computed(() => jobs.value.filter(job => !branchId.value || job.branchId === branchId.value));
 const selected = computed(() => rows.value.find(job => job.id === selectedId.value));
 const detailOpen = computed({ get: () => Boolean(selected.value), set: (value: boolean) => { if (!value) selectedId.value = ''; } });
-const kinds: Record<string, string> = { SYNC: '同步代码', CONTENT: '内容索引', GRAPH: '代码图谱', PREPARE: '一键准备', VECTORS: '向量索引', SNAPSHOT: '旧版准备' };
+const kinds: Record<string, string> = { SYNC: '同步代码', CONTENT: '内容索引', GRAPH: '代码图谱', PREPARE: '一键准备', VECTORS: '向量索引' };
 const states: Record<string, string> = { QUEUED: '排队中', RUNNING: '执行中', SUCCEEDED: '已完成', FAILED: '失败' };
-const stages: Record<string, string> = { QUEUED: '等待执行', RESOLVING: '确认目标版本', SNAPSHOT: '导出代码', PUBLISHING: '发布快照', INDEXING: '构建内容索引', GRAPH: '构建图谱', EMBEDDING: '构建向量', COMPLETED: '已完成', FAILED: '失败' };
+const stages: Record<string, string> = { QUEUED: '等待执行', RESOLVING: '确认目标版本', SYNC: '同步代码', PUBLISHING: '发布分支代码', INDEXING: '构建内容索引', GRAPH: '构建图谱', EMBEDDING: '构建向量', COMPLETED: '已完成', FAILED: '失败' };
 function branchName(id: string) { return branches.value.find(branch => branch.id === id)?.name ?? id; }
 async function refresh() {
   clearTimeout(timer);
@@ -80,9 +80,9 @@ onBeforeUnmount(() => { stopped = true; ++version; clearTimeout(timer); });
     <el-empty v-if="!projects.length" description="没有可读取的 Git 项目" />
     <template v-else>
       <div class="branch-task-table">
-        <table><thead><tr><th>分支</th><th>任务</th><th>状态</th><th>阶段</th><th>快照</th><th>操作</th></tr></thead>
+        <table><thead><tr><th>分支</th><th>任务</th><th>状态</th><th>阶段</th><th>内容版本</th><th>操作</th></tr></thead>
           <tbody><tr v-for="job in rows" :key="job.id" :class="{ selected: selected?.id === job.id }">
-            <td>{{ branchName(job.branchId) }}</td><td>{{ kinds[job.kind] }}</td><td>{{ states[job.status] }}</td><td>{{ stages[job.stage] ?? job.stage }}</td><td><code>{{ job.snapshotId?.slice(0, 8) ?? '等待锁定' }}</code></td>
+            <td>{{ branchName(job.branchId) }}</td><td>{{ kinds[job.kind] }}</td><td>{{ states[job.status] }}</td><td>{{ stages[job.stage] ?? job.stage }}</td><td><code>{{ job.contentVersion?.slice(0, 8) ?? '等待锁定' }}</code></td>
             <td><button type="button" @click="selectedId = job.id">查看</button></td>
           </tr><tr v-if="!rows.length"><td colspan="6">{{ loading ? '正在加载任务' : '当前筛选下没有分支任务' }}</td></tr></tbody>
         </table>

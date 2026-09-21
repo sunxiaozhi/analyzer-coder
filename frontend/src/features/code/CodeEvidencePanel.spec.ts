@@ -23,7 +23,7 @@ describe('CodeEvidencePanel', () => {
   it('shows directly bound knowledge with its trust and applicability evidence', async () => {
     api.codeEvidenceContext.mockResolvedValue({
       repositoryId: 'repo-1',
-      snapshotId: 'snapshot-1',
+      contentVersion: 'contentVersion-1',
       commitSha: 'abc',
       filePath: 'src/RefundService.java',
       symbol: 'approveRefund',
@@ -41,13 +41,13 @@ describe('CodeEvidencePanel', () => {
         trusted: true,
         bindings: [{
           chunkId: 'chunk-1',
-          snapshotId: 'snapshot-1',
+          contentVersion: 'contentVersion-1',
           symbolName: 'approveRefund',
           startLine: 10,
           endLine: 20,
           contentHash: 'hash',
           stale: false,
-          currentSnapshot: true,
+          currentContentVersion: true,
         }],
       }],
       limitations: ['DIRECT_KNOWLEDGE_BINDINGS_ONLY'],
@@ -60,7 +60,7 @@ describe('CodeEvidencePanel', () => {
         repositoryId: 'repo-1',
         filePath: 'src/RefundService.java',
         initialSymbol: 'approveRefund',
-        snapshotId: 'snapshot-1',
+        contentVersion: 'contentVersion-1',
       },
       global: {
         stubs: {
@@ -78,7 +78,7 @@ describe('CodeEvidencePanel', () => {
     expect(api.latestGraph).not.toHaveBeenCalled();
     expect(api.graph).not.toHaveBeenCalled();
     await wrapper.get('.context-actions button').trigger('click');
-    expect(push).toHaveBeenCalledWith({ name: 'atlas', query: { path: 'src/RefundService.java', symbol: 'approveRefund', snapshotId: 'snapshot-1', contextId: undefined, branchId: 'release' } });
+    expect(push).toHaveBeenCalledWith({ name: 'atlas', query: { path: 'src/RefundService.java', symbol: 'approveRefund', contentVersion: 'contentVersion-1', contextId: undefined, branchId: 'release' } });
     expect(wrapper.text()).toContain('退款审批规则');
     expect(wrapper.text()).toContain('可信知识');
     expect(wrapper.text()).toContain('不把关键词相似结果冒充适用规则');

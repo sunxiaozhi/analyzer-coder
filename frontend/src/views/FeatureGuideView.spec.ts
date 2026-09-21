@@ -2,7 +2,7 @@ import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reactive } from 'vue';
 import FeatureGuideView from './FeatureGuideView.vue';
-import { getRepositoryProfile } from '@/api/repositories';
+import { getBranchOverview } from '@/api/repositories';
 
 const mocks = vi.hoisted(() => ({ push: vi.fn(), profile: vi.fn() }));
 let repositoryStore: {
@@ -12,20 +12,23 @@ let repositoryStore: {
     name: string;
     branch: string;
     commit: string;
-    snapshotId: string | null;
+    contentVersion: string | null;
     capabilities: { canUpdate: boolean };
   };
 };
 let authStore: { isAdmin: boolean };
+let branchContext: any;
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => repositoryStore }));
+vi.mock('@/stores/branchContextStore', () => ({ useBranchContextStore: () => branchContext }));
+vi.mock('@/features/branches/useBranchReadScope', () => ({ useBranchReadScope: () => ({ blocked: { value: false }, reason: { value: '' } }) }));
 vi.mock('@/stores/authStore', () => ({ useAuthStore: () => authStore }));
-vi.mock('@/api/repositories', () => ({ getRepositoryProfile: mocks.profile }));
+vi.mock('@/api/repositories', () => ({ getBranchOverview: mocks.profile }));
 
 function preparation(state = 'READY') {
   return {
-    snapshotId: 'snapshot-1',
+    contentVersion: 'contentVersion-1',
     commitSha: '1234567890abcdef',
     branch: 'main',
     dirty: false,
@@ -56,19 +59,23 @@ describe('feature guide', () => {
         name: 'analyzer-coder',
         branch: 'main',
         commit: '1234567890abcdef',
-        snapshotId: 'snapshot-1',
+        contentVersion: 'contentVersion-1',
         capabilities: { canUpdate: false },
       },
     });
     authStore = reactive({ isAdmin: false });
-    mocks.profile.mockResolvedValue(preparation());
+    branchContext = reactive({
+      identity: 'main:contentVersion-1',
+      context: { contextId: 'ctx-main', repositoryId: 'repo-1', branchId: 'main', branchName: 'main', contentVersion: 'contentVersion-1', commitSha: '1234567890abcdef' },
+    });
+    mocks.profile.mockResolvedValue({ preparation: preparation() });
   });
 
   it('shows the five-step retrieval workflow with live repository status and data sources', async () => {
     const wrapper = mountView();
     await flushPromises();
 
-    expect(getRepositoryProfile).toHaveBeenCalledWith('repo-1');
+    expect(getBranchOverview).toHaveBeenCalledWith('repo-1', 'ctx-main');
     expect(wrapper.findAll('.workflow-card')).toHaveLength(5);
     expect(wrapper.text()).toContain('证据已就绪');
     expect(wrapper.text()).toContain('code_chunks 与已发布知识');
@@ -87,7 +94,7 @@ describe('feature guide', () => {
     await flushPromises();
 
     expect(wrapper.findAll('.administration-card')).toHaveLength(4);
-    expect(wrapper.text()).toContain('索引任务');
+    expect(wrapper.text()).toContain('任务中心');
     expect(wrapper.text()).toContain('账号权限');
     wrapper.unmount();
   });
@@ -98,7 +105,7 @@ describe('feature guide', () => {
     const wrapper = mountView();
     await flushPromises();
 
-    expect(getRepositoryProfile).not.toHaveBeenCalled();
+    expect(getBranchOverview).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('尚未选择项目');
     expect(wrapper.text()).toContain('需要选择项目');
 

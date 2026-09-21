@@ -39,7 +39,7 @@ public interface KnowledgeDriftMapper {
             @Param("expectedRevision") int expectedRevision,
             @Param("resultStatus") String resultStatus,
             @Param("currentCommit") String currentCommit,
-            @Param("currentSnapshotId") UUID currentSnapshotId,
+            @Param("currentContentVersion") UUID currentContentVersion,
             @Param("note") String note,
             @Param("actorId") UUID actorId);
 

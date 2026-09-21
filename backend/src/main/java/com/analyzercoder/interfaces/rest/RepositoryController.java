@@ -6,8 +6,6 @@ import com.analyzercoder.application.repository.RegisterRepositoryUseCase;
 import com.analyzercoder.application.repository.RepositoryEditingService;
 import com.analyzercoder.application.repository.RepositoryGovernanceService;
 import com.analyzercoder.application.repository.RepositoryPageService;
-import com.analyzercoder.application.repository.RepositoryPreparationService;
-import com.analyzercoder.application.repository.RepositoryRemoteSyncService;
 import com.analyzercoder.application.repository.RepositoryScanResult;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
@@ -48,8 +46,6 @@ public class RepositoryController {
     private final RepositoryEditingService editing;
     private final RepositoryPageService pageService;
     private final CodeGraphArtifactMapper codeGraphArtifacts;
-    private final RepositoryRemoteSyncService remoteSync;
-    private final RepositoryPreparationService preparation;
 
     public RepositoryController(
             RegisterRepositoryUseCase useCase,
@@ -57,17 +53,13 @@ public class RepositoryController {
             RepositoryGovernanceService governance,
             RepositoryEditingService editing,
             RepositoryPageService pageService,
-            CodeGraphArtifactMapper codeGraphArtifacts,
-            RepositoryRemoteSyncService remoteSync,
-            RepositoryPreparationService preparation) {
+            CodeGraphArtifactMapper codeGraphArtifacts) {
         this.useCase = useCase;
         this.accessControl = accessControl;
         this.governance = governance;
         this.editing = editing;
         this.pageService = pageService;
         this.codeGraphArtifacts = codeGraphArtifacts;
-        this.remoteSync = remoteSync;
-        this.preparation = preparation;
     }
 
     @PostMapping
@@ -122,43 +114,6 @@ public class RepositoryController {
                 result.changed(), response(result.repository(), account));
     }
 
-    @PostMapping("/{repositoryId}/sync")
-    public RemoteSyncResponse sync(@PathVariable UUID repositoryId, HttpServletRequest request) {
-        var account = SecurityContext.account(request);
-        var result = remoteSync.sync(account, CodeRepositoryId.of(repositoryId));
-        return new RemoteSyncResponse(
-                result.changed(), response(result.repository(), account), result.indexJobId());
-    }
-
-    @GetMapping("/{repositoryId}/profile")
-    public RepositoryPreparationService.PreparationView profile(
-            @PathVariable UUID repositoryId, HttpServletRequest request) {
-        var account = SecurityContext.account(request);
-        var id = CodeRepositoryId.of(repositoryId);
-        accessControl.require(account, id, RepositoryPermission.READ);
-        return preparation.view(id);
-    }
-
-    @PostMapping("/{repositoryId}/prepare")
-    public RepositoryPreparationService.PreparationView prepare(
-            @PathVariable UUID repositoryId, HttpServletRequest request) {
-        var account = SecurityContext.account(request);
-        var id = CodeRepositoryId.of(repositoryId);
-        accessControl.require(account, id, RepositoryPermission.MAINTAIN);
-        return preparation.prepare(account, id);
-    }
-
-    @PostMapping("/{repositoryId}/prepare/stages/{stageKey}/retry")
-    public RepositoryPreparationService.PreparationView retryPreparationStage(
-            @PathVariable UUID repositoryId,
-            @PathVariable String stageKey,
-            HttpServletRequest request) {
-        var account = SecurityContext.account(request);
-        var id = CodeRepositoryId.of(repositoryId);
-        accessControl.require(account, id, RepositoryPermission.MAINTAIN);
-        return preparation.retryStage(account, id, stageKey);
-    }
-
     @PatchMapping("/{repositoryId}")
     public RepositoryResponse update(
             @PathVariable UUID repositoryId,
@@ -184,10 +139,10 @@ public class RepositoryController {
 
     private RepositoryResponse response(CodeRepository repository, AuthenticatedAccount account) {
         CodeGraphArtifactRow artifact =
-                repository.currentSnapshotId() == null
+                repository.currentContentVersion() == null
                         ? null
                         : codeGraphArtifacts.findPublished(
-                                repository.id().value(), repository.currentSnapshotId().value());
+                                repository.id().value(), repository.currentContentVersion().value());
         var metadata = editing.metadata(repository.id().value());
         return RepositoryResponse.from(
                 repository, accessControl.describe(account, repository.id()), artifact, metadata);
@@ -204,9 +159,6 @@ public class RepositoryController {
 
     public record RescanRepositoryResponse(boolean changed, RepositoryResponse repository) {}
 
-    public record RemoteSyncResponse(
-            boolean changed, RepositoryResponse repository, UUID indexJobId) {}
-
     public record RepositoryResponse(
             UUID id,
             String name,
@@ -218,8 +170,8 @@ public class RepositoryController {
             String commit,
             String worktreeDigest,
             boolean dirty,
-            UUID snapshotId,
-            Instant snapshotCreatedAt,
+            UUID contentVersion,
+            Instant contentVersionCreatedAt,
             String codeGraphPath,
             boolean codeGraphDetected,
             Instant lastScannedAt,
@@ -249,10 +201,10 @@ public class RepositoryController {
                     repository.currentCommit(),
                     repository.worktreeDigest(),
                     repository.worktreeDirty(),
-                    repository.currentSnapshotId() == null
+                    repository.currentContentVersion() == null
                             ? null
-                            : repository.currentSnapshotId().value(),
-                    repository.snapshotCreatedAt(),
+                            : repository.currentContentVersion().value(),
+                    repository.contentVersionCreatedAt(),
                     artifact == null
                             ? repository.codeGraphPath().toString()
                             : artifact.artifactPath(),

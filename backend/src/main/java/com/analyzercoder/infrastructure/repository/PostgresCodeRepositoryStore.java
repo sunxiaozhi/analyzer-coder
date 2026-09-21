@@ -3,7 +3,7 @@ package com.analyzercoder.infrastructure.repository;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryMapper;
 import com.analyzercoder.infrastructure.persistence.model.RepositoryRow;
@@ -79,12 +79,12 @@ public class PostgresCodeRepositoryStore implements CodeRepositoryStore {
                 row.currentCommit(),
                 row.worktreeDigest(),
                 row.worktreeDirty(),
-                row.currentSnapshotId() == null
+                row.currentContentVersion() == null
                         ? null
-                        : RepositorySnapshotId.of(row.currentSnapshotId()),
-                row.currentSnapshotPath() == null ? null : Path.of(row.currentSnapshotPath()),
+                        : RepositoryContentVersion.of(row.currentContentVersion()),
+                row.currentContentVersionPath() == null ? null : Path.of(row.currentContentVersionPath()),
                 Path.of(row.codegraphPath()),
-                row.snapshotCreatedAt(),
+                row.contentVersionCreatedAt(),
                 row.lastScannedAt(),
                 row.createdAt(),
                 row.updatedAt());

@@ -31,7 +31,7 @@ export function useBranchManagement(options: Options) {
   const preparation = useBranchPreparation(options.repositoryId, async () => { await reload(); if (alive) options.changed(); });
   const busy = computed(() => loading.value || acting.value || resolving.value || Boolean(options.externalBusy?.()));
   const selected = computed(() => branches.value.find(branch => branch.id === selectedId.value));
-  const selectedStatus = computed(() => indexes.statuses.value.find(status => status.branchId === selectedId.value && status.snapshotId === selected.value?.snapshotId));
+  const selectedStatus = computed(() => indexes.statuses.value.find(status => status.branchId === selectedId.value && status.contentVersion === selected.value?.contentVersion));
   const selectedJobs = computed(() => preparation.jobs.value.filter(job => job.branchId === selectedId.value));
   const trackedNames = computed(() => branches.value.map(branch => branch.name));
   const message = (cause: unknown) => cause instanceof Error ? cause.message : '操作失败，请重试';
@@ -47,7 +47,7 @@ export function useBranchManagement(options: Options) {
       branches.value = rows;
       await indexes.refresh();
       if (!alive || version !== listVersion) return;
-      if (context.value && selected.value?.snapshotId !== context.value.snapshotId) await select(selectedId.value);
+      if (context.value && selected.value?.contentVersion !== context.value.contentVersion) await select(selectedId.value);
     } catch (cause) { if (alive && version === listVersion) error.value = message(cause); }
     finally { if (alive && version === listVersion) loading.value = false; }
   }
@@ -56,7 +56,7 @@ export function useBranchManagement(options: Options) {
     const version = ++contextVersion;
     selectedId.value = branchId; context.value = null; error.value = '';
     const branch = branches.value.find(item => item.id === branchId);
-    if (!branch?.snapshotId || branch.trackingStatus !== 'ACTIVE' || branch.status !== 'READY') { resolving.value = false; return; }
+    if (!branch?.contentVersion || branch.trackingStatus !== 'ACTIVE' || branch.status !== 'READY') { resolving.value = false; return; }
     resolving.value = true;
     try {
       const resolved = await branchesApi.context(options.repositoryId(), branchId);
@@ -82,7 +82,7 @@ export function useBranchManagement(options: Options) {
   async function operate(branchId: string, kind: BranchCodeOperation) {
     const branch = currentBranch(branchId);
     if (!options.canMaintain() || !branch || running(branchId) || branch.status === 'BUILDING') return;
-    if ((kind === 'CONTENT' || kind === 'GRAPH') && (!branch.snapshotId || branch.status !== 'READY')) return;
+    if ((kind === 'CONTENT' || kind === 'GRAPH') && (!branch.contentVersion || branch.status !== 'READY')) return;
     await perform(async () => {
       const pinned = kind === 'CONTENT' || kind === 'GRAPH' ? await pin(branchId) : null;
       if (!alive) return;
@@ -93,8 +93,8 @@ export function useBranchManagement(options: Options) {
 
   async function prepareVectors(branchId: string) {
     const branch = currentBranch(branchId);
-    const status = indexes.statuses.value.find(item => item.branchId === branchId && item.snapshotId === branch?.snapshotId);
-    if (!options.canMaintain() || !branch?.snapshotId || branch.status !== 'READY' || !status?.contentReady || running(branchId)) return;
+    const status = indexes.statuses.value.find(item => item.branchId === branchId && item.contentVersion === branch?.contentVersion);
+    if (!options.canMaintain() || !branch?.contentVersion || branch.status !== 'READY' || !status?.contentReady || running(branchId)) return;
     await perform(async () => {
       const pinned = await pin(branchId);
       if (!alive) return;
@@ -126,7 +126,7 @@ export function useBranchManagement(options: Options) {
     const branch = currentBranch(branchId);
     if (!options.canManage() || !branch || busy.value || running(branchId)) return;
     try {
-      await ElMessageBox.confirm('取消跟踪“' + branch.name + '”后将停止准备该分支；历史快照和引用会保留，可随时恢复跟踪。', '取消跟踪分支', { confirmButtonText: '取消跟踪', cancelButtonText: '保留跟踪', type: 'warning' });
+      await ElMessageBox.confirm('取消跟踪“' + branch.name + '”后将停止同步与构建；该分支的知识和问答引用仍会保留，可随时恢复跟踪。', '取消跟踪分支', { confirmButtonText: '取消跟踪', cancelButtonText: '保留跟踪', type: 'warning' });
     } catch { return; }
     await perform(async () => {
       await branchesApi.archive(options.repositoryId(), branchId);

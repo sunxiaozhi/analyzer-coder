@@ -9,14 +9,14 @@ import type {
   Repository,
   RepositoryAssetType,
   RepositoryFileContent,
-  RepositorySnapshotFiles,
+  RepositoryContentVersionFiles,
   RescanRepositoryResponse,
 } from '@/types/api';
 
 export type PreparationStageState = 'READY' | 'RUNNING' | 'PENDING' | 'FAILED' | 'DEGRADED';
 
 export interface PreparationStage {
-  key: 'snapshot' | 'content' | 'vectors' | 'graph' | 'knowledge_drift';
+  key: 'contentVersion' | 'content' | 'vectors' | 'graph' | 'knowledge_drift';
   label: string;
   state: PreparationStageState;
   detail: string;
@@ -102,7 +102,7 @@ export interface ProjectSuggestion {
 }
 
 export interface ProjectCodeFacts {
-  snapshotId: string;
+  contentVersion: string;
   commitSha: string | null;
   generatedAt: string;
   projectType: string;
@@ -117,7 +117,7 @@ export interface ProjectCodeFacts {
 }
 
 export interface RepositoryPreparation {
-  snapshotId: string | null;
+  contentVersion: string | null;
   commitSha: string | null;
   branch: string | null;
   dirty: boolean;
@@ -156,7 +156,7 @@ export interface ProjectHealthIssue {
 
 export interface ProjectHealthOverview {
   repositoryId: string;
-  snapshotId: string | null;
+  contentVersion: string | null;
   commitSha: string | null;
   state: ProjectHealthState;
   readyForSearch: boolean;
@@ -217,9 +217,6 @@ export function listChunks(
   const suffix = search.toString() ? `?${search}` : '';
   return request<CodeChunkListResponse>(`/api/repositories/${repositoryId}/chunks${suffix}`);
 }
-export function getRepositoryProfile(repositoryId: string): Promise<RepositoryPreparation> {
-  return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/profile`);
-}
 export interface BranchOverview {
   preparation: RepositoryPreparation;
   codeFacts: ProjectCodeFacts;
@@ -228,29 +225,8 @@ export interface BranchOverview {
 export function getBranchOverview(repositoryId: string, contextId: string): Promise<BranchOverview> {
   return request<BranchOverview>(`/api/repositories/${repositoryId}/branch-overview`, branchContextOptions(contextId));
 }
-export function getProjectHealthOverview(repositoryId: string): Promise<ProjectHealthOverview> {
-  return request<ProjectHealthOverview>(`/api/repositories/${repositoryId}/health-overview`);
-}
-export function getProjectCodeFacts(repositoryId: string): Promise<ProjectCodeFacts> {
-  return request<ProjectCodeFacts>(`/api/repositories/${repositoryId}/code-facts`);
-}
-
-export function prepareRepository(repositoryId: string): Promise<RepositoryPreparation> {
-  return request<RepositoryPreparation>(`/api/repositories/${repositoryId}/prepare`, { method: 'POST' });
-}
-
-export function retryPreparationStage(
-  repositoryId: string,
-  stage: PreparationStage['key'],
-): Promise<RepositoryPreparation> {
-  return request<RepositoryPreparation>(
-    `/api/repositories/${repositoryId}/prepare/stages/${stage}/retry`,
-    { method: 'POST' },
-  );
-}
-
-export function listRepositoryFiles(repositoryId: string, contextId?: string | null): Promise<RepositorySnapshotFiles> {
-  return request<RepositorySnapshotFiles>(`/api/repositories/${repositoryId}/files`, branchContextOptions(contextId));
+export function listRepositoryFiles(repositoryId: string, contextId?: string | null): Promise<RepositoryContentVersionFiles> {
+  return request<RepositoryContentVersionFiles>(`/api/repositories/${repositoryId}/files`, branchContextOptions(contextId));
 }
 
 export function getRepositoryFile(repositoryId: string, path: string, contextId?: string | null): Promise<RepositoryFileContent> {

@@ -116,7 +116,7 @@ class KnowledgeStateWorkflowTest {
                         () ->
                                 service.setCardPublication(
                                         repositoryId, cardId, actorId, "PUBLISHED"))
-                .hasMessageContaining("当前代码快照");
+                .hasMessageContaining("当前代码版本");
         verify(mapper, never()).setCardPublication(any(), any(), any(), any());
     }
 

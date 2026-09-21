@@ -130,8 +130,8 @@ class RepositoryHttpWorkflowIT {
         assertThat(answer.path("fallbackReason").asText()).isEqualTo("LOCAL_EVIDENCE_MODE");
         assertThat(answer.path("citations").get(0).path("filePath").asText())
                 .isEqualTo("src/OrderCheckoutWorkflow.java");
-        assertThat(answer.path("snapshotId").asText())
-                .isEqualTo(imported.path("snapshotId").asText());
+        assertThat(answer.path("contentVersion").asText())
+                .isEqualTo(imported.path("contentVersion").asText());
         JsonNode history =
                 send(
                         HttpMethod.GET,

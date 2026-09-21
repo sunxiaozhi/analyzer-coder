@@ -265,7 +265,7 @@ onMounted(() => {
       <span v-if="branchContext.context" class="locked-commit mono" title="当前页面数据锁定到该提交">
         锁定 {{ branchContext.context.commitSha.slice(0, 8) }}
       </span>
-      <span v-else class="locked-commit">{{ branchContext.error ?? '快照未就绪' }}</span>
+      <span v-else class="locked-commit">{{ branchContext.error ?? '版本未就绪' }}</span>
       <button class="branch-refresh" type="button" title="刷新分支和锁定版本" @click="refreshBranchContext"><RefreshCw :size="14" /></button>
     </div>
     <div class="topbar-spacer" /><RouterLink class="help-entry" to="/help" title="查看功能导航和数据来源"><CircleHelp :size="16" /><span>帮助说明</span></RouterLink><RouterLink class="mcp-entry" to="/mcp" title="查看 MCP 接入指导"><Plug :size="16" /><span>MCP 接入</span></RouterLink><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>

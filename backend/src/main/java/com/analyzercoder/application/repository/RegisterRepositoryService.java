@@ -5,18 +5,15 @@ import com.analyzercoder.domain.indexing.IndexJobStore;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.GitRepositorySnapshot;
+import com.analyzercoder.domain.repository.GitRepositoryContentVersion;
 import com.analyzercoder.domain.repository.LocalGitInspector;
-import com.analyzercoder.domain.repository.ManagedRepositorySnapshot;
-import com.analyzercoder.domain.repository.RepositorySnapshotPort;
+import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import com.analyzercoder.infrastructure.repository.RepositoryPathPolicy;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.validation.annotation.Validated;
 
 /** 编排代码仓库相关应用流程，协调领域对象、权限校验与基础设施端口。 */
@@ -28,7 +25,7 @@ public class RegisterRepositoryService implements RegisterRepositoryUseCase {
     private final IndexJobStore indexJobStore;
     private final RepositoryPathPolicy pathPolicy;
     private final LocalGitInspector gitInspector;
-    private final RepositorySnapshotPort snapshotPort;
+    private final GitBranchContentVersionFactory workspaces;
 
     public RegisterRepositoryService(
             CodeRepositoryStore repositoryStore,
@@ -36,13 +33,13 @@ public class RegisterRepositoryService implements RegisterRepositoryUseCase {
             IndexJobStore indexJobStore,
             RepositoryPathPolicy pathPolicy,
             LocalGitInspector gitInspector,
-            RepositorySnapshotPort snapshotPort) {
+            GitBranchContentVersionFactory workspaces) {
         this.repositoryStore = repositoryStore;
         this.codeChunkStore = codeChunkStore;
         this.indexJobStore = indexJobStore;
         this.pathPolicy = pathPolicy;
         this.gitInspector = gitInspector;
-        this.snapshotPort = snapshotPort;
+        this.workspaces = workspaces;
     }
 
     @Override
@@ -66,18 +63,11 @@ public class RegisterRepositoryService implements RegisterRepositoryUseCase {
             throw new IllegalStateException("该仓库路径已经接入平台");
         }
         CodeRepositoryId id = CodeRepositoryId.newId();
-        GitRepositorySnapshot version = gitInspector.inspect(source);
-        ManagedRepositorySnapshot snapshot = snapshotPort.create(id, source, version);
-        try {
-            assertSourceUnchanged(version, gitInspector.inspect(source));
-            CodeRepository repository =
-                    CodeRepository.createLocalGit(id, name, source, version, snapshot);
-            repositoryStore.saveOwned(repository, command.ownerAccountId());
-            return repository;
-        } catch (RuntimeException exception) {
-            snapshotPort.delete(snapshot);
-            throw exception;
-        }
+        GitRepositoryContentVersion version = gitInspector.inspect(source);
+        assertSourceUnchanged(version, gitInspector.inspect(source));
+        CodeRepository repository = CodeRepository.createLocalGit(id, name, source, version);
+        repositoryStore.saveOwned(repository, command.ownerAccountId());
+        return repository;
     }
 
     @Override
@@ -100,22 +90,15 @@ public class RegisterRepositoryService implements RegisterRepositoryUseCase {
         if (indexJobStore.hasActiveJob(id)) {
             throw new IllegalStateException("仓库存在运行中的索引任务，暂时不能同步");
         }
-        GitRepositorySnapshot version = gitInspector.inspect(repository.path());
+        GitRepositoryContentVersion version = gitInspector.inspect(repository.path());
         if (repository.hasSameVersion(version)) {
             return new RepositoryScanResult(
                     false, repositoryStore.save(repository.withScanMetadata(version)));
         }
-        ManagedRepositorySnapshot snapshot = snapshotPort.create(id, repository.path(), version);
-        try {
-            assertSourceUnchanged(version, gitInspector.inspect(repository.path()));
-            CodeRepository updated = repository.withManagedSnapshot(version, snapshot);
-            repositoryStore.save(updated);
-            deletePreviousVersionAfterCommit(repository);
-            return new RepositoryScanResult(true, updated);
-        } catch (RuntimeException exception) {
-            snapshotPort.delete(snapshot);
-            throw exception;
-        }
+        assertSourceUnchanged(version, gitInspector.inspect(repository.path()));
+        CodeRepository updated = repository.withScanMetadata(version);
+        repositoryStore.save(updated);
+        return new RepositoryScanResult(true, updated);
     }
 
     @Override
@@ -128,36 +111,11 @@ public class RegisterRepositoryService implements RegisterRepositoryUseCase {
         codeChunkStore.deleteByRepositoryId(id);
         indexJobStore.deleteByRepositoryId(id);
         repositoryStore.delete(id);
-        snapshotPort.deleteRepository(id);
-    }
-
-    private void deletePreviousVersionAfterCommit(CodeRepository repository) {
-        if (repository.currentSnapshotId() == null || repository.currentSnapshotPath() == null) {
-            return;
-        }
-        ManagedRepositorySnapshot previous =
-                new ManagedRepositorySnapshot(
-                        repository.currentSnapshotId(),
-                        repository.id(),
-                        repository.currentSnapshotPath(),
-                        repository.currentCommit(),
-                        repository.worktreeDigest(),
-                        repository.snapshotCreatedAt());
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            snapshotPort.delete(previous);
-                        }
-                    });
-        } else {
-            snapshotPort.delete(previous);
-        }
+        workspaces.deleteRepository(id);
     }
 
     private static void assertSourceUnchanged(
-            GitRepositorySnapshot expected, GitRepositorySnapshot actual) {
+            GitRepositoryContentVersion expected, GitRepositoryContentVersion actual) {
         boolean same =
                 Objects.equals(expected.branch(), actual.branch())
                         && Objects.equals(expected.commit(), actual.commit())

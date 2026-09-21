@@ -83,7 +83,7 @@ const primaryModules = computed(() => (
           </span>
         </li>
       </ul>
-      <p v-else class="empty-copy">当前快照没有可识别的源码类型。</p>
+      <p v-else class="empty-copy">当前版本没有可识别的源码类型。</p>
     </section>
 
     <section class="composition-panel structure-panel" aria-labelledby="system-structure-title">

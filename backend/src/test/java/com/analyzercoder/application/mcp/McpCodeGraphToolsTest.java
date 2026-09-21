@@ -41,12 +41,12 @@ class McpCodeGraphToolsTest {
     void discoveryFiltersInvisibleRepositoriesAndMarksGraphReadiness() {
         var visible = CodeRepository.create("Visible", Path.of("visible"));
         var hidden = CodeRepository.create("Hidden", Path.of("hidden"));
-        var snapshot = UUID.randomUUID();
+        var contentVersion = UUID.randomUUID();
         var branch =
                 new RepositoryBranchService.Branch(
                         UUID.randomUUID(),
                         "main",
-                        snapshot,
+                        contentVersion,
                         "abc",
                         "READY",
                         null,
@@ -56,12 +56,12 @@ class McpCodeGraphToolsTest {
         when(access.visibleRepositoryIds(actor)).thenReturn(List.of(visible.id().value()));
         when(repositories.findAll()).thenReturn(List.of(hidden, visible));
         when(branches.list(actor, visible.id().value())).thenReturn(List.of(branch));
-        when(graphs.latestSnapshot(visible.id().value(), snapshot))
+        when(graphs.latestContentVersion(visible.id().value(), contentVersion))
                 .thenReturn(
                         new CodeGraphService.Artifact(
                                 UUID.randomUUID(),
                                 visible.id().value(),
-                                snapshot,
+                                contentVersion,
                                 "1.5.0",
                                 "PUBLISHED",
                                 "private-path",
@@ -85,15 +85,15 @@ class McpCodeGraphToolsTest {
     }
 
     @Test
-    void graphQueryUsesPinnedSnapshotAndRejectsMissingArtifact() {
-        UUID repo = UUID.randomUUID(), branch = UUID.randomUUID(), snapshot = UUID.randomUUID();
+    void graphQueryUsesPinnedContentVersionAndRejectsMissingArtifact() {
+        UUID repo = UUID.randomUUID(), branch = UUID.randomUUID(), contentVersion = UUID.randomUUID();
         var context =
                 new BranchReadContext(
                         UUID.randomUUID(),
                         repo,
                         branch,
                         "main",
-                        snapshot,
+                        contentVersion,
                         "abc",
                         null,
                         Instant.now().plusSeconds(60));
@@ -107,26 +107,26 @@ class McpCodeGraphToolsTest {
                 .isInstanceOf(CodeGraphException.class)
                 .hasMessageContaining("尚未发布");
         verifyNoInteractions(managed);
-        when(graphs.latestSnapshot(repo, snapshot))
+        when(graphs.latestContentVersion(repo, contentVersion))
                 .thenReturn(
                         new CodeGraphService.Artifact(
                                 UUID.randomUUID(),
                                 repo,
-                                snapshot,
+                                contentVersion,
                                 "1.5.0",
                                 "PUBLISHED",
                                 "private-path",
                                 1,
                                 1));
-        when(managed.readSnapshot(
-                        repo, snapshot, "query", List.of("-l", "20", "-j", "RefundService")))
+        when(managed.readContentVersion(
+                        repo, contentVersion, "query", List.of("-l", "20", "-j", "RefundService")))
                 .thenReturn("[]");
         var result = tools.call("codegraph_search", input, actor);
-        assertThat(result.path("context").path("snapshotId").asText())
-                .isEqualTo(snapshot.toString());
+        assertThat(result.path("context").path("contentVersion").asText())
+                .isEqualTo(contentVersion.toString());
         assertThat(result.path("result").isArray()).isTrue();
         assertThat(result.toString()).doesNotContain("private-path");
         verify(managed)
-                .readSnapshot(repo, snapshot, "query", List.of("-l", "20", "-j", "RefundService"));
+                .readContentVersion(repo, contentVersion, "query", List.of("-l", "20", "-j", "RefundService"));
     }
 }

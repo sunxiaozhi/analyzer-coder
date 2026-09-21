@@ -60,7 +60,7 @@ public class CodeGraphController {
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
         return context == null
                 ? service.latest(repoId)
-                : service.latestSnapshot(repoId, context.snapshotId());
+                : service.latestContentVersion(repoId, context.contentVersion());
     }
 
     @GetMapping("/impact")
@@ -76,7 +76,7 @@ public class CodeGraphController {
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
         return context == null
                 ? service.impact(repoId, symbol, depth)
-                : service.impactSnapshot(repoId, context.snapshotId(), symbol, depth);
+                : service.impactContentVersion(repoId, context.contentVersion(), symbol, depth);
     }
 
     @GetMapping("/explore")
@@ -93,7 +93,7 @@ public class CodeGraphController {
             throw new IllegalArgumentException("查询范围过长");
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
         if (context != null)
-            return service.exploreSnapshot(repoId, context.snapshotId(), module, query);
+            return service.exploreContentVersion(repoId, context.contentVersion(), module, query);
         return service.explore(repoId, module, query);
     }
 }

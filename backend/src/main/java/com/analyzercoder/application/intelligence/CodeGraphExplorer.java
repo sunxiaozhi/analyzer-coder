@@ -11,7 +11,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
-/** Bounded, snapshot-bound projection of the published graph for interactive exploration. */
+/** Bounded, contentVersion-bound projection of the published graph for interactive exploration. */
 public final class CodeGraphExplorer {
     private CodeGraphExplorer() {}
 
@@ -29,7 +29,7 @@ public final class CodeGraphExplorer {
 
     public record View(
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String level,
             List<Node> nodes,
             List<Edge> edges,
@@ -38,7 +38,7 @@ public final class CodeGraphExplorer {
             boolean partial) {}
 
     static View project(
-            JsonNode graph, UUID repositoryId, UUID snapshotId, String module, String query) {
+            JsonNode graph, UUID repositoryId, UUID contentVersion, String module, String query) {
         Map<String, Node> symbols = new LinkedHashMap<>();
         Map<String, Integer> groups = new TreeMap<>();
         for (JsonNode row : graph.path("nodes")) {
@@ -115,7 +115,7 @@ public final class CodeGraphExplorer {
                         .toList();
         return new View(
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 overview ? "MODULE" : "SYMBOL",
                 nodes,
                 edges,

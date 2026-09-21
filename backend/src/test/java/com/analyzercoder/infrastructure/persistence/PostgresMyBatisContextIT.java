@@ -11,7 +11,7 @@ import com.analyzercoder.application.indexing.VectorIndexQueryService;
 import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.application.repository.RepositorySourceImportService;
 import com.analyzercoder.domain.repository.CodeRepository;
-import com.analyzercoder.domain.repository.RepositorySnapshotPort;
+import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import com.analyzercoder.infrastructure.persistence.mapper.AuthMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.CaptchaMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.CodeChunkMapper;
@@ -56,7 +56,7 @@ class PostgresMyBatisContextIT {
     @Autowired VectorIndexQueryService vectorIndexService;
     @Autowired KnowledgeHistoryMapper history;
     @Autowired RepositorySourceImportService imports;
-    @Autowired RepositorySnapshotPort managedFiles;
+    @Autowired GitBranchContentVersionFactory managedFiles;
     @Autowired JdbcTemplate jdbc;
 
     @Autowired
@@ -80,7 +80,7 @@ class PostgresMyBatisContextIT {
                     assertNotNull(projectHealth.knowledgeHealth(UUID.randomUUID()));
                     if (!visible.isEmpty()) {
                         UUID id = visible.get(0).id();
-                        chunks.count(id, null);
+                        chunks.count(id, null, null);
                         intelligence.cards(id, true);
                         history.findHistory(id, UUID.randomUUID());
                         vectorIndex.summary(id);
@@ -89,8 +89,8 @@ class PostgresMyBatisContextIT {
                         vectorIndexService.summary(id);
                         vectorIndexService.chunks(id, null, null, null, 1, 15);
                         vectorIndexService.knowledge(id, null, null, 1, 15);
-                        if (visible.get(0).currentSnapshotId() != null) {
-                            markdownSources.listSources(id, visible.get(0).currentSnapshotId());
+                        if (visible.get(0).currentContentVersion() != null) {
+                            markdownSources.listSources(id, visible.get(0).currentContentVersion());
                         }
                     }
                 });
@@ -149,63 +149,63 @@ class PostgresMyBatisContextIT {
 
     @Test
     @Transactional
-    void realMyBatisQueriesSwitchAtomicallyWithCurrentSnapshot() {
+    void realMyBatisQueriesSwitchAtomicallyWithCurrentContentVersion() {
         UUID ownerId = auth.listAccounts().get(0).id();
         UUID repositoryId = UUID.randomUUID();
-        UUID oldSnapshot = UUID.randomUUID();
-        UUID currentSnapshot = UUID.randomUUID();
+        UUID oldContentVersion = UUID.randomUUID();
+        UUID currentContentVersion = UUID.randomUUID();
         jdbc.update(
                 """
                 INSERT INTO repositories(
-                    id,name,normalized_name,path,current_commit,current_snapshot_id,
-                    current_snapshot_path,codegraph_path,owner_account_id,created_at,updated_at)
+                    id,name,normalized_name,path,current_commit,current_content_version,
+                    current_workspace_path,codegraph_path,owner_account_id,created_at,updated_at)
                 VALUES(?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
                 """,
                 repositoryId,
-                "snapshot-switch",
-                "snapshot-switch-" + repositoryId,
-                "/tmp/snapshot-switch-" + repositoryId,
+                "contentVersion-switch",
+                "contentVersion-switch-" + repositoryId,
+                "/tmp/contentVersion-switch-" + repositoryId,
                 "current-commit",
-                currentSnapshot,
+                currentContentVersion,
                 "/tmp/current",
                 "/tmp/current/.codegraph",
                 ownerId);
-        insertChunk(repositoryId, oldSnapshot, "old-commit", "src/Old.java", "old-only");
+        insertChunk(repositoryId, oldContentVersion, "old-commit", "src/Old.java", "old-only");
         insertChunk(
                 repositoryId,
-                currentSnapshot,
+                currentContentVersion,
                 "current-commit",
                 "src/Current.java",
                 "current-only");
 
-        assertEquals(1, chunks.count(repositoryId, null));
-        assertEquals("src/Current.java", chunks.find(repositoryId, null, 20, 0).get(0).filePath());
-        assertTrue(chunks.find(repositoryId, "old-only", 20, 0).isEmpty());
+        assertEquals(1, chunks.count(repositoryId, null, null));
+        assertEquals("src/Current.java", chunks.find(repositoryId, null, null, 20, 0).get(0).filePath());
+        assertTrue(chunks.find(repositoryId, null, "old-only", 20, 0).isEmpty());
 
         jdbc.update(
-                "UPDATE repositories SET current_snapshot_id=? WHERE id=?",
-                oldSnapshot,
+                "UPDATE repositories SET current_content_version=? WHERE id=?",
+                oldContentVersion,
                 repositoryId);
 
-        assertEquals(1, chunks.count(repositoryId, null));
-        assertEquals("src/Old.java", chunks.find(repositoryId, null, 20, 0).get(0).filePath());
-        assertTrue(chunks.find(repositoryId, "current-only", 20, 0).isEmpty());
+        assertEquals(1, chunks.count(repositoryId, null, null));
+        assertEquals("src/Old.java", chunks.find(repositoryId, null, null, 20, 0).get(0).filePath());
+        assertTrue(chunks.find(repositoryId, null, "current-only", 20, 0).isEmpty());
         assertEquals(
                 3, jdbc.queryForObject("SELECT vector_dims('[1,2,3]'::vector)", Integer.class));
     }
 
     private void insertChunk(
-            UUID repositoryId, UUID snapshotId, String commit, String path, String content) {
+            UUID repositoryId, UUID contentVersion, String commit, String path, String content) {
         jdbc.update(
                 """
                 INSERT INTO code_chunks(
-                    id,repo_id,snapshot_id,commit_sha,file_path,language,chunk_type,asset_type,
+                    id,repo_id,content_version,commit_sha,file_path,language,chunk_type,asset_type,
                     start_line,end_line,content,content_hash,created_at)
                 VALUES(?,?,?,?,?,'java','FILE','CODE',1,1,?,?,CURRENT_TIMESTAMP)
                 """,
                 UUID.randomUUID(),
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 commit,
                 path,
                 content,

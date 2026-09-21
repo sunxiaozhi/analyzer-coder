@@ -67,9 +67,9 @@ public class ManagedCodeGraphService extends CodeGraphService {
     }
 
     @Override
-    public Artifact buildSnapshot(
-            UUID repositoryId, UUID snapshotId, Path snapshotPath, BuildControl control) {
-        return buildVersion(repositoryId, new Version(snapshotId, snapshotPath), control, true);
+    public Artifact buildContentVersion(
+            UUID repositoryId, UUID contentVersion, Path contentVersionPath, BuildControl control) {
+        return buildVersion(repositoryId, new Version(contentVersion, contentVersionPath), control, true);
     }
 
     private Artifact buildVersion(
@@ -77,14 +77,14 @@ public class ManagedCodeGraphService extends CodeGraphService {
         UUID artifactId = UUID.randomUUID();
         Path project =
                 immutableBranch
-                        ? version.snapshotPath()
+                        ? version.contentVersionPath()
                         : artifactProject(repositoryId, version, artifactId);
         try {
             if (immutableBranch) {
                 prepareBranchWorkspace(project);
             } else {
-                control.checkpoint("copy_snapshot");
-                copySnapshot(version.snapshotPath(), project, control);
+                control.checkpoint("copy_contentVersion");
+                copyContentVersion(version.contentVersionPath(), project, control);
             }
             Path marker = project.resolve(".codegraph");
             String operation = Files.isDirectory(marker) ? "index" : "init";
@@ -106,14 +106,14 @@ public class ManagedCodeGraphService extends CodeGraphService {
 
             control.checkpoint("publish_codegraph");
             Version current = immutableBranch ? version : version(repositoryId);
-            if (!version.snapshotId().equals(current.snapshotId())) {
-                throw new IllegalStateException("CodeGraph 构建期间仓库快照已切换，拒绝发布旧版本产物");
+            if (!version.contentVersion().equals(current.contentVersion())) {
+                throw new IllegalStateException("CodeGraph 构建期间仓库内容版本已切换，拒绝发布旧版本产物");
             }
             CodeGraphArtifactRow row =
                     new CodeGraphArtifactRow(
                             artifactId,
                             repositoryId,
-                            version.snapshotId(),
+                            version.contentVersion(),
                             cliVersion,
                             "PUBLISHED",
                             marker.toString(),
@@ -123,7 +123,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
             return new Artifact(
                     artifactId,
                     repositoryId,
-                    version.snapshotId(),
+                    version.contentVersion(),
                     cliVersion,
                     "PUBLISHED",
                     marker.toString(),
@@ -137,7 +137,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
     private Path artifactProject(UUID repositoryId, Version version, UUID artifactId) {
         return root.resolve(repositoryId.toString())
                 .resolve("codegraph")
-                .resolve(version.snapshotId().toString())
+                .resolve(version.contentVersion().toString())
                 .resolve(artifactId.toString())
                 .resolve("project");
     }
@@ -154,13 +154,13 @@ public class ManagedCodeGraphService extends CodeGraphService {
     @Override
     public CodeGraphPropagation impact(UUID repositoryId, String symbol, int depth) {
         Version version = version(repositoryId);
-        return impactSnapshot(repositoryId, version.snapshotId(), symbol, depth);
+        return impactContentVersion(repositoryId, version.contentVersion(), symbol, depth);
     }
 
     @Override
-    public CodeGraphPropagation impactSnapshot(
-            UUID repositoryId, UUID snapshotId, String symbol, int depth) {
-        Artifact artifact = published(repositoryId, snapshotId);
+    public CodeGraphPropagation impactContentVersion(
+            UUID repositoryId, UUID contentVersion, String symbol, int depth) {
+        Artifact artifact = published(repositoryId, contentVersion);
         Path project = Path.of(artifact.artifactPath()).getParent();
         int boundedDepth = Math.max(1, Math.min(depth, MAX_IMPACT_DEPTH));
         String impactOutput;
@@ -192,18 +192,18 @@ public class ManagedCodeGraphService extends CodeGraphService {
     @Override
     public Artifact latest(UUID repositoryId) {
         Version version = version(repositoryId);
-        return artifact(mapper.findLatest(repositoryId, version.snapshotId()));
+        return artifact(mapper.findLatest(repositoryId, version.contentVersion()));
     }
 
-    private Artifact published(UUID repositoryId, UUID snapshotId) {
-        Artifact result = artifact(mapper.findPublished(repositoryId, snapshotId));
+    private Artifact published(UUID repositoryId, UUID contentVersion) {
+        Artifact result = artifact(mapper.findPublished(repositoryId, contentVersion));
         if (result == null) {
             throw new CodeGraphException(
-                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 Snapshot 尚未发布 CodeGraph 产物");
+                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 ContentVersion 尚未发布 CodeGraph 产物");
         }
-        if (!snapshotId.equals(result.snapshotId())) {
+        if (!contentVersion.equals(result.contentVersion())) {
             throw new CodeGraphException(
-                    "CODEGRAPH_VERSION_MISMATCH", "CodeGraph 产物与当前 Snapshot 不一致");
+                    "CODEGRAPH_VERSION_MISMATCH", "CodeGraph 产物与当前 ContentVersion 不一致");
         }
         Path marker = Path.of(result.artifactPath()).toAbsolutePath().normalize();
         if (!marker.startsWith(root) || !Files.isDirectory(marker)) {
@@ -212,9 +212,9 @@ public class ManagedCodeGraphService extends CodeGraphService {
         return result;
     }
 
-    /** Fixed read commands over a published managed snapshot. */
-    public String readSnapshot(
-            UUID repositoryId, UUID snapshotId, String operation, List<String> arguments) {
+    /** Fixed read commands over a published managed contentVersion. */
+    public String readContentVersion(
+            UUID repositoryId, UUID contentVersion, String operation, List<String> arguments) {
         if (!List.of(
                         "explore",
                         "node",
@@ -228,7 +228,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
                 .contains(operation)) {
             throw new IllegalArgumentException("不支持的 CodeGraph 只读操作");
         }
-        Artifact artifact = published(repositoryId, snapshotId);
+        Artifact artifact = published(repositoryId, contentVersion);
         Path project = Path.of(artifact.artifactPath()).getParent();
         List<String> command = new ArrayList<>();
         command.add(operation);
@@ -257,22 +257,22 @@ public class ManagedCodeGraphService extends CodeGraphService {
     @Override
     public CodeGraphExplorer.View explore(UUID repositoryId, String module, String query) {
         Version current = version(repositoryId);
-        Artifact artifact = published(repositoryId, current.snapshotId());
+        Artifact artifact = published(repositoryId, current.contentVersion());
         var graph = CodeGraphDatabaseReader.read(json, Path.of(artifact.artifactPath()));
-        if (!current.snapshotId().equals(version(repositoryId).snapshotId())) {
-            throw new CodeGraphException("CODEGRAPH_VERSION_MISMATCH", "查询期间快照已更新，请刷新图谱");
+        if (!current.contentVersion().equals(version(repositoryId).contentVersion())) {
+            throw new CodeGraphException("CODEGRAPH_VERSION_MISMATCH", "查询期间内容版本已更新，请刷新图谱");
         }
-        return CodeGraphExplorer.project(graph, repositoryId, current.snapshotId(), module, query);
+        return CodeGraphExplorer.project(graph, repositoryId, current.contentVersion(), module, query);
     }
 
     @Override
-    public CodeGraphExplorer.View exploreSnapshot(
-            UUID repositoryId, UUID snapshotId, String module, String query) {
-        Artifact artifact = published(repositoryId, snapshotId);
+    public CodeGraphExplorer.View exploreContentVersion(
+            UUID repositoryId, UUID contentVersion, String module, String query) {
+        Artifact artifact = published(repositoryId, contentVersion);
         return CodeGraphExplorer.project(
                 CodeGraphDatabaseReader.read(json, Path.of(artifact.artifactPath())),
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 module,
                 query);
     }
@@ -282,15 +282,15 @@ public class ManagedCodeGraphService extends CodeGraphService {
         if (row == null) {
             throw new IllegalArgumentException("仓库不存在");
         }
-        return new Version(row.snapshotId(), Path.of(row.snapshotPath()));
+        return new Version(row.contentVersion(), Path.of(row.contentVersionPath()));
     }
 
-    private static void copySnapshot(Path source, Path target, BuildControl control)
+    private static void copyContentVersion(Path source, Path target, BuildControl control)
             throws IOException {
         Files.createDirectories(target);
         try (var paths = Files.walk(source)) {
             for (Path path : paths.filter(candidate -> !candidate.equals(source)).toList()) {
-                control.checkpoint("copy_snapshot");
+                control.checkpoint("copy_contentVersion");
                 Path relativePath = source.relativize(path);
                 if (relativePath.getNameCount() > 0
                         && ".codegraph".equals(relativePath.getName(0).toString())) {
@@ -299,7 +299,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
 
                 Path outputPath = target.resolve(relativePath).normalize();
                 if (!outputPath.startsWith(target)) {
-                    throw new IOException("快照路径越界");
+                    throw new IOException("内容版本路径越界");
                 }
                 if (Files.isSymbolicLink(path)) {
                     continue;
@@ -409,5 +409,5 @@ public class ManagedCodeGraphService extends CodeGraphService {
         return Integer.parseInt(matcher.group(1).replace(",", ""));
     }
 
-    private record Version(UUID snapshotId, Path snapshotPath) {}
+    private record Version(UUID contentVersion, Path contentVersionPath) {}
 }

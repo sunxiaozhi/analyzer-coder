@@ -31,12 +31,12 @@ public class RepositoryCodeBrowserService {
         this.maxPreviewBytes = maxPreviewBytes;
     }
 
-    public SnapshotFiles list(CodeRepositoryId repositoryId) {
+    public ContentVersionFiles list(CodeRepositoryId repositoryId) {
         return list(published(repositoryId));
     }
 
-    public SnapshotFiles list(CodeRepository repository) {
-        Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
+    public ContentVersionFiles list(CodeRepository repository) {
+        Path root = repository.currentContentVersionPath().toAbsolutePath().normalize();
         try (var paths = Files.walk(root)) {
             List<FileEntry> files =
                     paths.filter(path -> !Files.isSymbolicLink(path) && Files.isRegularFile(path))
@@ -45,13 +45,13 @@ public class RepositoryCodeBrowserService {
                                     Comparator.comparing(
                                             FileEntry::path, String.CASE_INSENSITIVE_ORDER))
                             .toList();
-            return new SnapshotFiles(
-                    repository.currentSnapshotId().value().toString(),
+            return new ContentVersionFiles(
+                    repository.currentContentVersion().value().toString(),
                     repository.defaultBranch(),
                     repository.currentCommit(),
                     files);
         } catch (IOException exception) {
-            throw new IllegalStateException("无法读取当前代码快照", exception);
+            throw new IllegalStateException("无法读取当前代码内容版本", exception);
         }
     }
 
@@ -60,11 +60,11 @@ public class RepositoryCodeBrowserService {
     }
 
     public FileContent read(CodeRepository repository, String requestedPath) {
-        Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
+        Path root = repository.currentContentVersionPath().toAbsolutePath().normalize();
         Path file = resolve(root, requestedPath);
         try {
             if (!Files.isRegularFile(file) || Files.isSymbolicLink(file)) {
-                throw new IllegalArgumentException("文件不存在于当前代码快照");
+                throw new IllegalArgumentException("文件不存在于当前代码内容版本");
             }
             long size = Files.size(file);
             if (size > maxPreviewBytes) {
@@ -80,7 +80,7 @@ public class RepositoryCodeBrowserService {
             }
             String path = portable(root.relativize(file));
             return new FileContent(
-                    repository.currentSnapshotId().value().toString(),
+                    repository.currentContentVersion().value().toString(),
                     path,
                     file.getFileName().toString(),
                     language(path),
@@ -88,21 +88,21 @@ public class RepositoryCodeBrowserService {
                     lineCount(content),
                     content);
         } catch (IOException exception) {
-            throw new IllegalStateException("无法读取快照文件", exception);
+            throw new IllegalStateException("无法读取内容版本文件", exception);
         }
     }
 
-    /** 读取 README 引用的图片资源；仅允许受控图片类型并复用快照路径越界校验。 */
+    /** 读取 README 引用的图片资源；仅允许受控图片类型并复用内容版本路径越界校验。 */
     public BinaryContent readImage(CodeRepositoryId repositoryId, String requestedPath) {
         return readImage(published(repositoryId), requestedPath);
     }
 
     public BinaryContent readImage(CodeRepository repository, String requestedPath) {
-        Path root = repository.currentSnapshotPath().toAbsolutePath().normalize();
+        Path root = repository.currentContentVersionPath().toAbsolutePath().normalize();
         Path file = resolve(root, requestedPath);
         try {
             if (!Files.isRegularFile(file) || Files.isSymbolicLink(file)) {
-                throw new IllegalArgumentException("图片不存在于当前代码快照");
+                throw new IllegalArgumentException("图片不存在于当前代码内容版本");
             }
             String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
             int dot = name.lastIndexOf('.');
@@ -116,14 +116,14 @@ public class RepositoryCodeBrowserService {
             }
             return new BinaryContent(imageMediaType(extension), Files.readAllBytes(file));
         } catch (IOException exception) {
-            throw new IllegalStateException("无法读取快照图片", exception);
+            throw new IllegalStateException("无法读取内容版本图片", exception);
         }
     }
 
     private CodeRepository published(CodeRepositoryId repositoryId) {
         CodeRepository repository = repositories.get(repositoryId);
-        if (repository.currentSnapshotId() == null || repository.currentSnapshotPath() == null) {
-            throw new IllegalStateException("仓库尚未发布可浏览的代码快照");
+        if (repository.currentContentVersion() == null || repository.currentContentVersionPath() == null) {
+            throw new IllegalStateException("仓库尚未发布可浏览的代码内容版本");
         }
         return repository;
     }
@@ -134,7 +134,7 @@ public class RepositoryCodeBrowserService {
             return new FileEntry(
                     path, file.getFileName().toString(), language(path), Files.size(file));
         } catch (IOException exception) {
-            throw new IllegalStateException("无法读取快照文件元数据", exception);
+            throw new IllegalStateException("无法读取内容版本文件元数据", exception);
         }
     }
 
@@ -153,11 +153,11 @@ public class RepositoryCodeBrowserService {
             throw new IllegalArgumentException("文件路径无效", exception);
         }
         if (relative.isAbsolute() || relative.startsWith("..")) {
-            throw new IllegalArgumentException("文件路径不能超出代码快照");
+            throw new IllegalArgumentException("文件路径不能超出代码内容版本");
         }
         Path resolved = root.resolve(relative).normalize();
         if (!resolved.startsWith(root)) {
-            throw new IllegalArgumentException("文件路径不能超出代码快照");
+            throw new IllegalArgumentException("文件路径不能超出代码内容版本");
         }
         return resolved;
     }
@@ -264,13 +264,13 @@ public class RepositoryCodeBrowserService {
         };
     }
 
-    public record SnapshotFiles(
-            String snapshotId, String branch, String commit, List<FileEntry> files) {}
+    public record ContentVersionFiles(
+            String contentVersion, String branch, String commit, List<FileEntry> files) {}
 
     public record FileEntry(String path, String name, String language, long sizeBytes) {}
 
     public record FileContent(
-            String snapshotId,
+            String contentVersion,
             String path,
             String name,
             String language,

@@ -3,6 +3,7 @@ package com.analyzercoder.domain.chunk;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import java.util.Collection;
 import java.util.List;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 
 /** 定义代码片段的持久化端口，使领域逻辑不依赖具体存储技术。 */
 public interface CodeChunkStore {
@@ -21,14 +22,14 @@ public interface CodeChunkStore {
      * @param repositoryId 目标对象的唯一标识
      * @param paths 相对于仓库根目录的文件路径集合
      * @param chunks 待处理的代码片段数据
-     * @param snapshotId 目标对象的唯一标识
+     * @param contentVersion 目标对象的唯一标识
      * @param commitSha 代码片段所属的 Git 提交号
      */
     void replaceRepositoryPaths(
             CodeRepositoryId repositoryId,
             Collection<String> paths,
             Collection<CodeChunk> chunks,
-            com.analyzercoder.domain.repository.RepositorySnapshotId snapshotId,
+            com.analyzercoder.domain.repository.RepositoryContentVersion contentVersion,
             String commitSha);
 
     /**
@@ -57,8 +58,11 @@ public interface CodeChunkStore {
      */
     List<CodeChunk> findByRepositoryId(CodeRepositoryId repositoryId, int limit, int offset);
 
+    List<CodeChunk> findByRepositoryVersion(
+            CodeRepositoryId repositoryId, RepositoryContentVersion contentVersion, int limit, int offset);
+
     /**
-     * 查询当前快照中指定仓库相对路径的代码片段。
+     * 查询当前内容版本中指定仓库相对路径的代码片段。
      *
      * @param repositoryId 目标仓库
      * @param filePath 仓库相对路径
@@ -78,6 +82,13 @@ public interface CodeChunkStore {
     List<CodeChunk> searchByRepositoryId(
             CodeRepositoryId repositoryId, String query, int limit, int offset);
 
+    List<CodeChunk> searchByRepositoryVersion(
+            CodeRepositoryId repositoryId,
+            RepositoryContentVersion contentVersion,
+            String query,
+            int limit,
+            int offset);
+
     /**
      * 统计符合给定条件的记录数。
      *
@@ -85,6 +96,9 @@ public interface CodeChunkStore {
      * @return 符合条件的记录数
      */
     long countByRepositoryId(CodeRepositoryId repositoryId);
+
+    long countByRepositoryVersion(
+            CodeRepositoryId repositoryId, RepositoryContentVersion contentVersion);
 
     /**
      * 统计符合给定条件的记录数。
@@ -94,6 +108,9 @@ public interface CodeChunkStore {
      * @return 符合条件的记录数
      */
     long countSearchByRepositoryId(CodeRepositoryId repositoryId, String query);
+
+    long countSearchByRepositoryVersion(
+            CodeRepositoryId repositoryId, RepositoryContentVersion contentVersion, String query);
 
     /**
      * 删除符合给定条件的数据。

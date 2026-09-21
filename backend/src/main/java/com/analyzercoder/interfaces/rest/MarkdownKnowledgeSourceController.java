@@ -40,7 +40,8 @@ public class MarkdownKnowledgeSourceController {
             @PathVariable UUID repoId, HttpServletRequest request) {
         require(request, repoId, RepositoryPermission.READ);
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
-        return context == null ? service.list(repoId) : service.list(repoId, context);
+        if (context == null) throw new IllegalArgumentException("请选择知识所属分支");
+        return service.list(repoId, context);
     }
 
     @PostMapping("/generate")
@@ -51,11 +52,10 @@ public class MarkdownKnowledgeSourceController {
         var account = require(request, repoId, RepositoryPermission.MAINTAIN);
         var input =
                 new MarkdownKnowledgeSourceService.GenerateInput(
-                        body.sourcePath(), body.expectedSnapshotId(), body.expectedContentHash());
+                        body.sourcePath(), body.expectedContentVersion(), body.expectedContentHash());
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
-        return context == null
-                ? service.generate(repoId, account.id(), input)
-                : service.generate(repoId, account.id(), input, context);
+        if (context == null) throw new IllegalArgumentException("请选择知识所属分支");
+        return service.generate(repoId, account.id(), input, context);
     }
 
     @PostMapping("/generate-pending")
@@ -65,9 +65,8 @@ public class MarkdownKnowledgeSourceController {
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.MAINTAIN);
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
-        return context == null
-                ? service.generatePending(repoId, account.id(), body.expectedSnapshotId())
-                : service.generatePending(repoId, account.id(), body.expectedSnapshotId(), context);
+        if (context == null) throw new IllegalArgumentException("请选择知识所属分支");
+        return service.generatePending(repoId, account.id(), body.expectedContentVersion(), context);
     }
 
     private com.analyzercoder.security.AuthenticatedAccount require(
@@ -79,9 +78,9 @@ public class MarkdownKnowledgeSourceController {
 
     public record GenerateRequest(
             @NotBlank String sourcePath,
-            @NotNull UUID expectedSnapshotId,
+            @NotNull UUID expectedContentVersion,
             @NotBlank @Pattern(regexp = "(?i)^[0-9a-f]{64}$", message = "Markdown 内容摘要格式无效")
                     String expectedContentHash) {}
 
-    public record GeneratePendingRequest(@NotNull UUID expectedSnapshotId) {}
+    public record GeneratePendingRequest(@NotNull UUID expectedContentVersion) {}
 }

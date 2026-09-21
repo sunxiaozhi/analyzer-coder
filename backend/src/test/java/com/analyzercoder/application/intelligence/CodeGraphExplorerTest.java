@@ -10,7 +10,7 @@ class CodeGraphExplorerTest {
     private final ObjectMapper json = new ObjectMapper();
 
     @Test
-    void aggregatesOnlyRealCrossModuleEdgesAndRetainsSnapshot() throws Exception {
+    void aggregatesOnlyRealCrossModuleEdgesAndRetainsContentVersion() throws Exception {
         var graph =
                 json.readTree(
                         """
@@ -23,19 +23,19 @@ class CodeGraphExplorerTest {
                           {"source":"b","target":"c","relation":"calls"},
                           {"source":"a","target":"missing","relation":"calls"}]}
                 """);
-        var snapshot = UUID.randomUUID();
-        var result = CodeGraphExplorer.project(graph, UUID.randomUUID(), snapshot, "", "");
-        assertThat(result.snapshotId()).isEqualTo(snapshot);
+        var contentVersion = UUID.randomUUID();
+        var result = CodeGraphExplorer.project(graph, UUID.randomUUID(), contentVersion, "", "");
+        assertThat(result.contentVersion()).isEqualTo(contentVersion);
         assertThat(result.nodes()).hasSize(2);
         assertThat(result.edges())
                 .containsExactly(new CodeGraphExplorer.Edge("frontend", "backend", "calls", 2));
-        var symbols = CodeGraphExplorer.project(graph, UUID.randomUUID(), snapshot, "frontend", "");
+        var symbols = CodeGraphExplorer.project(graph, UUID.randomUUID(), contentVersion, "frontend", "");
         assertThat(symbols.nodes()).hasSize(2);
         assertThat(symbols.edges())
                 .containsExactly(new CodeGraphExplorer.Edge("a", "b", "calls", 1));
         assertThat(
                         CodeGraphExplorer.project(
-                                        graph, UUID.randomUUID(), snapshot, "frontend", "SAVE")
+                                        graph, UUID.randomUUID(), contentVersion, "frontend", "SAVE")
                                 .nodes())
                 .isEmpty();
     }

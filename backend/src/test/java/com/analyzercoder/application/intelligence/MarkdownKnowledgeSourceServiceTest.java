@@ -16,7 +16,7 @@ import com.analyzercoder.domain.indexing.ScannedRepositoryFile;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.MarkdownKnowledgeSourceMapper;
 import com.analyzercoder.security.ApiSecurityException;
@@ -38,8 +38,9 @@ import org.mockito.ArgumentCaptor;
 class MarkdownKnowledgeSourceServiceTest {
     private static final UUID REPOSITORY_ID =
             UUID.fromString("10000000-0000-0000-0000-000000000001");
-    private static final UUID SNAPSHOT_ID = UUID.fromString("20000000-0000-0000-0000-000000000002");
+    private static final UUID CONTENT_VERSION_ID = UUID.fromString("20000000-0000-0000-0000-000000000002");
     private static final UUID ACTOR_ID = UUID.fromString("30000000-0000-0000-0000-000000000003");
+    private static final UUID BRANCH_ID = UUID.fromString("40000000-0000-0000-0000-000000000004");
 
     private MarkdownKnowledgeSourceMapper mapper;
     private CodeRepositoryStore repositories;
@@ -53,7 +54,7 @@ class MarkdownKnowledgeSourceServiceTest {
         repositories = mock(CodeRepositoryStore.class);
         intelligence = mock(IntelligenceService.class);
         service = new MarkdownKnowledgeSourceService(mapper, repositories, intelligence);
-        repository = repository(SNAPSHOT_ID);
+        repository = repository(CONTENT_VERSION_ID);
         when(repositories.findById(repository.id())).thenReturn(Optional.of(repository));
     }
 
@@ -73,7 +74,7 @@ class MarkdownKnowledgeSourceServiceTest {
                 .upsertSource(
                         any(UUID.class),
                         eq(REPOSITORY_ID),
-                        eq(SNAPSHOT_ID),
+                        eq(CONTENT_VERSION_ID),
                         eq("docs/design.md"),
                         eq(sha256(content)),
                         eq("深入设计"),
@@ -82,7 +83,7 @@ class MarkdownKnowledgeSourceServiceTest {
                         eq(3),
                         eq((long) content.getBytes(StandardCharsets.UTF_8).length));
         verify(mapper).deleteMissingSources(REPOSITORY_ID, List.of("docs/design.md"));
-        verify(mapper).reconcileLinkedCards(REPOSITORY_ID, SNAPSHOT_ID, "current-commit", true);
+        verify(mapper).reconcileLinkedCards(REPOSITORY_ID, CONTENT_VERSION_ID, "current-commit", true);
     }
 
     @Test
@@ -93,21 +94,21 @@ class MarkdownKnowledgeSourceServiceTest {
         UUID chunkId = UUID.randomUUID();
         IntelligenceService.KnowledgeCard created = card(UUID.randomUUID(), 1, content, "DRAFT");
         when(mapper.lockSource(REPOSITORY_ID, "README.md"))
-                .thenReturn(lockRow(sourceId, SNAPSHOT_ID, "README.md", hash));
-        when(mapper.findSource(REPOSITORY_ID, SNAPSHOT_ID, "README.md"))
+                .thenReturn(lockRow(sourceId, CONTENT_VERSION_ID, "README.md", hash));
+        when(mapper.findSource(REPOSITORY_ID, CONTENT_VERSION_ID, "README.md"))
                 .thenReturn(
                         sourceRow(
                                 sourceId,
-                                SNAPSHOT_ID,
+                                CONTENT_VERSION_ID,
                                 "README.md",
                                 content,
                                 hash,
                                 "PENDING",
                                 null,
                                 null));
-        when(mapper.findChunkIds(REPOSITORY_ID, SNAPSHOT_ID, "README.md", 30))
+        when(mapper.findChunkIds(REPOSITORY_ID, CONTENT_VERSION_ID, "README.md", 30))
                 .thenReturn(List.of(chunkId));
-        when(intelligence.createCard(eq(REPOSITORY_ID), eq(ACTOR_ID), any())).thenReturn(created);
+        when(intelligence.createCard(eq(REPOSITORY_ID), eq(BRANCH_ID), eq(ACTOR_ID), any())).thenReturn(created);
         when(intelligence.cards(REPOSITORY_ID, true)).thenReturn(List.of(created));
 
         IntelligenceService.KnowledgeCard result =
@@ -115,23 +116,24 @@ class MarkdownKnowledgeSourceServiceTest {
                         REPOSITORY_ID,
                         ACTOR_ID,
                         new MarkdownKnowledgeSourceService.GenerateInput(
-                                "README.md", SNAPSHOT_ID, hash));
+                                "README.md", CONTENT_VERSION_ID, hash));
 
         ArgumentCaptor<IntelligenceService.CardInput> input =
                 ArgumentCaptor.forClass(IntelligenceService.CardInput.class);
-        verify(intelligence).createCard(eq(REPOSITORY_ID), eq(ACTOR_ID), input.capture());
+        verify(intelligence).createCard(eq(REPOSITORY_ID), eq(BRANCH_ID), eq(ACTOR_ID), input.capture());
         assertEquals("项目说明", input.getValue().cardType());
         assertEquals(content, input.getValue().content());
         assertEquals(
                 List.of(new IntelligenceService.CodeReferenceInput(chunkId)),
                 input.getValue().codeReferences());
         verify(mapper)
-                .insertProvenance(
+                .insertBranchProvenance(
                         created.id(),
                         created.revision(),
                         sourceId,
                         REPOSITORY_ID,
-                        SNAPSHOT_ID,
+                        BRANCH_ID,
+                        CONTENT_VERSION_ID,
                         "README.md",
                         hash);
         assertEquals(created.id(), result.id());
@@ -144,12 +146,12 @@ class MarkdownKnowledgeSourceServiceTest {
         UUID sourceId = UUID.randomUUID();
         IntelligenceService.KnowledgeCard existing = card(UUID.randomUUID(), 4, content, "DRAFT");
         when(mapper.lockSource(REPOSITORY_ID, "docs/current.md"))
-                .thenReturn(lockRow(sourceId, SNAPSHOT_ID, "docs/current.md", hash));
-        when(mapper.findSource(REPOSITORY_ID, SNAPSHOT_ID, "docs/current.md"))
+                .thenReturn(lockRow(sourceId, CONTENT_VERSION_ID, "docs/current.md", hash));
+        when(mapper.findSource(REPOSITORY_ID, CONTENT_VERSION_ID, "docs/current.md"))
                 .thenReturn(
                         sourceRow(
                                 sourceId,
-                                SNAPSHOT_ID,
+                                CONTENT_VERSION_ID,
                                 "docs/current.md",
                                 content,
                                 hash,
@@ -163,13 +165,13 @@ class MarkdownKnowledgeSourceServiceTest {
                         REPOSITORY_ID,
                         ACTOR_ID,
                         new MarkdownKnowledgeSourceService.GenerateInput(
-                                "docs/current.md", SNAPSHOT_ID, hash));
+                                "docs/current.md", CONTENT_VERSION_ID, hash));
 
         assertSame(existing, result);
-        verify(intelligence, never()).createCard(any(), any(), any());
+        verify(intelligence, never()).createCard(any(), any(), any(), any());
         verify(intelligence, never()).updateCard(any(), any(), any(), any());
         verify(mapper, never())
-                .insertProvenance(any(), anyInt(), any(), any(), any(), any(), any());
+                .insertBranchProvenance(any(), anyInt(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -182,19 +184,19 @@ class MarkdownKnowledgeSourceServiceTest {
         IntelligenceService.KnowledgeCard previous = card(cardId, 2, oldContent, "PUBLISHED");
         IntelligenceService.KnowledgeCard updated = card(cardId, 3, content, "DRAFT");
         when(mapper.lockSource(REPOSITORY_ID, "docs/guide.md"))
-                .thenReturn(lockRow(sourceId, SNAPSHOT_ID, "docs/guide.md", hash));
-        when(mapper.findSource(REPOSITORY_ID, SNAPSHOT_ID, "docs/guide.md"))
+                .thenReturn(lockRow(sourceId, CONTENT_VERSION_ID, "docs/guide.md", hash));
+        when(mapper.findSource(REPOSITORY_ID, CONTENT_VERSION_ID, "docs/guide.md"))
                 .thenReturn(
                         sourceRow(
                                 sourceId,
-                                SNAPSHOT_ID,
+                                CONTENT_VERSION_ID,
                                 "docs/guide.md",
                                 content,
                                 hash,
                                 "STALE",
                                 cardId,
                                 previous.revision()));
-        when(mapper.findChunkIds(REPOSITORY_ID, SNAPSHOT_ID, "docs/guide.md", 30))
+        when(mapper.findChunkIds(REPOSITORY_ID, CONTENT_VERSION_ID, "docs/guide.md", 30))
                 .thenReturn(List.of());
         when(intelligence.cards(REPOSITORY_ID, true))
                 .thenReturn(List.of(previous))
@@ -207,7 +209,7 @@ class MarkdownKnowledgeSourceServiceTest {
                         REPOSITORY_ID,
                         ACTOR_ID,
                         new MarkdownKnowledgeSourceService.GenerateInput(
-                                "docs/guide.md", SNAPSHOT_ID, hash));
+                                "docs/guide.md", CONTENT_VERSION_ID, hash));
 
         ArgumentCaptor<IntelligenceService.CardInput> input =
                 ArgumentCaptor.forClass(IntelligenceService.CardInput.class);
@@ -215,15 +217,15 @@ class MarkdownKnowledgeSourceServiceTest {
                 .updateCard(eq(REPOSITORY_ID), eq(cardId), eq(ACTOR_ID), input.capture());
         assertEquals(content, input.getValue().content());
         verify(mapper)
-                .insertProvenance(
-                        cardId, 3, sourceId, REPOSITORY_ID, SNAPSHOT_ID, "docs/guide.md", hash);
+                .insertBranchProvenance(
+                        cardId, 3, sourceId, REPOSITORY_ID, BRANCH_ID, CONTENT_VERSION_ID, "docs/guide.md", hash);
         assertEquals(cardId, result.id());
         assertEquals(3, result.revision());
     }
 
     @Test
-    void changedExpectedSnapshotReturnsConflict() {
-        UUID otherSnapshot = UUID.randomUUID();
+    void changedExpectedContentVersionReturnsConflict() {
+        UUID otherContentVersion = UUID.randomUUID();
         String hash = sha256("# Changed");
 
         ApiSecurityException error =
@@ -234,7 +236,7 @@ class MarkdownKnowledgeSourceServiceTest {
                                         REPOSITORY_ID,
                                         ACTOR_ID,
                                         new MarkdownKnowledgeSourceService.GenerateInput(
-                                                "README.md", otherSnapshot, hash)));
+                                                "README.md", otherContentVersion, hash)));
 
         assertEquals(409, error.status());
         assertEquals("MARKDOWN_SOURCE_CHANGED", error.code());
@@ -247,7 +249,7 @@ class MarkdownKnowledgeSourceServiceTest {
         String expectedHash = sha256("# Expected");
         UUID sourceId = UUID.randomUUID();
         when(mapper.lockSource(REPOSITORY_ID, "README.md"))
-                .thenReturn(lockRow(sourceId, SNAPSHOT_ID, "README.md", actualHash));
+                .thenReturn(lockRow(sourceId, CONTENT_VERSION_ID, "README.md", actualHash));
 
         ApiSecurityException error =
                 assertThrows(
@@ -257,61 +259,61 @@ class MarkdownKnowledgeSourceServiceTest {
                                         REPOSITORY_ID,
                                         ACTOR_ID,
                                         new MarkdownKnowledgeSourceService.GenerateInput(
-                                                "README.md", SNAPSHOT_ID, expectedHash)));
+                                                "README.md", CONTENT_VERSION_ID, expectedHash)));
 
         assertEquals(409, error.status());
         assertEquals("MARKDOWN_SOURCE_CHANGED", error.code());
-        verify(intelligence, never()).createCard(any(), any(), any());
+        verify(intelligence, never()).createCard(any(), any(), any(), any());
     }
 
     @Test
-    void sameHashAcrossSnapshotsRemainsCurrentWhileDifferentHashIsStale() {
-        UUID oldSnapshot = UUID.randomUUID();
+    void sameHashAcrossContentVersionsRemainsCurrentWhileDifferentHashIsStale() {
+        UUID oldContentVersion = UUID.randomUUID();
         String currentHash = sha256("# Unchanged");
         String changedHash = sha256("# Changed");
-        when(mapper.listSources(REPOSITORY_ID, SNAPSHOT_ID))
+        when(mapper.listSources(REPOSITORY_ID, CONTENT_VERSION_ID))
                 .thenReturn(
                         List.of(
                                 metadataRow(
                                         UUID.randomUUID(),
-                                        SNAPSHOT_ID,
+                                        CONTENT_VERSION_ID,
                                         "README.md",
                                         currentHash,
                                         "CURRENT",
                                         UUID.randomUUID(),
-                                        oldSnapshot,
+                                        oldContentVersion,
                                         currentHash),
                                 metadataRow(
                                         UUID.randomUUID(),
-                                        SNAPSHOT_ID,
+                                        CONTENT_VERSION_ID,
                                         "docs/guide.md",
                                         changedHash,
                                         "STALE",
                                         UUID.randomUUID(),
-                                        oldSnapshot,
+                                        oldContentVersion,
                                         sha256("# Old"))));
 
         MarkdownKnowledgeSourceService.MarkdownSourceList result = service.list(REPOSITORY_ID);
 
         assertEquals(1, result.counts().current());
         assertEquals(1, result.counts().stale());
-        assertEquals(oldSnapshot, result.items().get(0).generatedSnapshotId());
+        assertEquals(oldContentVersion, result.items().get(0).generatedContentVersion());
         assertEquals(currentHash, result.items().get(0).generatedContentHash());
     }
 
     private static Map<String, Object> lockRow(
-            UUID sourceId, UUID snapshotId, String path, String hash) {
+            UUID sourceId, UUID contentVersion, String path, String hash) {
         return Map.ofEntries(
                 Map.entry("source_id", sourceId),
-                Map.entry("source_snapshot_id", snapshotId),
-                Map.entry("repository_snapshot_id", snapshotId),
+                Map.entry("source_content_version", contentVersion),
+                Map.entry("repository_content_version", contentVersion),
                 Map.entry("source_path", path),
                 Map.entry("source_content_hash", hash));
     }
 
     private static Map<String, Object> sourceRow(
             UUID sourceId,
-            UUID snapshotId,
+            UUID contentVersion,
             String path,
             String content,
             String hash,
@@ -320,7 +322,8 @@ class MarkdownKnowledgeSourceServiceTest {
             Integer cardRevision) {
         Map<String, Object> row = new java.util.LinkedHashMap<>();
         row.put("source_id", sourceId);
-        row.put("source_snapshot_id", snapshotId);
+        row.put("source_branch_id", BRANCH_ID);
+        row.put("source_content_version", contentVersion);
         row.put("source_path", path);
         row.put("source_content_hash", hash);
         row.put("title", "Project");
@@ -332,7 +335,7 @@ class MarkdownKnowledgeSourceServiceTest {
         if (cardId != null) {
             row.put("card_id", cardId);
             row.put("card_revision", cardRevision);
-            row.put("generated_snapshot_id", UUID.randomUUID());
+            row.put("generated_content_version", UUID.randomUUID());
             row.put("generated_content_hash", hash);
         }
         return row;
@@ -340,16 +343,16 @@ class MarkdownKnowledgeSourceServiceTest {
 
     private static Map<String, Object> metadataRow(
             UUID sourceId,
-            UUID snapshotId,
+            UUID contentVersion,
             String path,
             String hash,
             String status,
             UUID cardId,
-            UUID generatedSnapshotId,
+            UUID generatedContentVersion,
             String generatedHash) {
         return Map.ofEntries(
                 Map.entry("source_id", sourceId),
-                Map.entry("source_snapshot_id", snapshotId),
+                Map.entry("source_content_version", contentVersion),
                 Map.entry("source_path", path),
                 Map.entry("source_content_hash", hash),
                 Map.entry("title", path),
@@ -359,7 +362,7 @@ class MarkdownKnowledgeSourceServiceTest {
                 Map.entry("source_status", status),
                 Map.entry("card_id", cardId),
                 Map.entry("card_revision", 1),
-                Map.entry("generated_snapshot_id", generatedSnapshotId),
+                Map.entry("generated_content_version", generatedContentVersion),
                 Map.entry("generated_content_hash", generatedHash));
     }
 
@@ -396,7 +399,7 @@ class MarkdownKnowledgeSourceServiceTest {
                 List.of());
     }
 
-    private static CodeRepository repository(UUID snapshotId) {
+    private static CodeRepository repository(UUID contentVersion) {
         Instant now = Instant.parse("2026-08-23T10:00:00Z");
         Path path = Path.of("repository").toAbsolutePath().normalize();
         return new CodeRepository(
@@ -408,7 +411,7 @@ class MarkdownKnowledgeSourceServiceTest {
                 "current-commit",
                 "worktree-digest",
                 false,
-                RepositorySnapshotId.of(snapshotId),
+                RepositoryContentVersion.of(contentVersion),
                 path,
                 path.resolve(".codegraph"),
                 now,

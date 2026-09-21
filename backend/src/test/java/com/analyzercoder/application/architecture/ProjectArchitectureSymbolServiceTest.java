@@ -17,17 +17,17 @@ import org.junit.jupiter.api.Test;
 class ProjectArchitectureSymbolServiceTest {
 
     @Test
-    void returnsCurrentSnapshotSymbolsForValidatedLayerModule() {
+    void returnsCurrentContentVersionSymbolsForValidatedLayerModule() {
         ProjectArchitectureMapService architecture = mock(ProjectArchitectureMapService.class);
         CodeChunkMapper chunks = mock(CodeChunkMapper.class);
         ProjectArchitectureSymbolService service =
                 new ProjectArchitectureSymbolService(architecture, chunks);
         CodeRepositoryId repositoryId = CodeRepositoryId.newId();
-        UUID snapshotId = UUID.randomUUID();
+        UUID contentVersion = UUID.randomUUID();
         when(architecture.map(repositoryId))
-                .thenReturn(map(repositoryId, snapshotId, "backend/domain"));
+                .thenReturn(map(repositoryId, contentVersion, "backend/domain"));
         when(chunks.findModuleSymbols(
-                        repositoryId.value(), snapshotId, "backend", "domain", false, 3))
+                        repositoryId.value(), contentVersion, "backend", "domain", false, 3))
                 .thenReturn(
                         List.of(
                                 symbol(
@@ -49,14 +49,14 @@ class ProjectArchitectureSymbolServiceTest {
         ProjectArchitectureSymbolService.ModuleSymbols result =
                 service.symbols(repositoryId, "backend/domain", 2);
 
-        assertThat(result.snapshotId()).isEqualTo(snapshotId.toString());
+        assertThat(result.contentVersion()).isEqualTo(contentVersion.toString());
         assertThat(result.module()).isEqualTo("backend/domain");
         assertThat(result.symbols())
                 .extracting(ProjectArchitectureSymbolService.ModuleSymbol::symbolName)
                 .containsExactly("Order", "create");
         assertThat(result.truncated()).isTrue();
         verify(chunks)
-                .findModuleSymbols(repositoryId.value(), snapshotId, "backend", "domain", false, 3);
+                .findModuleSymbols(repositoryId.value(), contentVersion, "backend", "domain", false, 3);
     }
 
     @Test
@@ -75,10 +75,10 @@ class ProjectArchitectureSymbolServiceTest {
     }
 
     private static ProjectArchitectureMapService.ArchitectureMap map(
-            CodeRepositoryId repositoryId, UUID snapshotId, String module) {
+            CodeRepositoryId repositoryId, UUID contentVersion, String module) {
         return new ProjectArchitectureMapService.ArchitectureMap(
                 repositoryId.value().toString(),
-                snapshotId.toString(),
+                contentVersion.toString(),
                 "abc123",
                 Instant.parse("2026-08-21T00:00:00Z"),
                 List.of(

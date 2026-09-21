@@ -159,7 +159,7 @@ public class IntelligenceController {
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
         return context == null
                 ? service.graphTarget(repoId, chunkId)
-                : service.graphTarget(repoId, chunkId, context.snapshotId());
+                : service.graphTarget(repoId, chunkId, context.contentVersion());
     }
 
     @GetMapping("/repositories/{repoId}/graph")
@@ -170,7 +170,8 @@ public class IntelligenceController {
             @RequestParam(defaultValue = "BOTH") String direction,
             HttpServletRequest request) {
         require(request, repoId, RepositoryPermission.READ);
-        return service.graph(repoId, symbol, depth, direction);
+        var context = branchContexts.resolve(request, repoId);
+        return service.graph(repoId, symbol, depth, direction, context.contentVersion());
     }
 
     @GetMapping("/repositories/{repoId}/knowledge")
@@ -181,8 +182,9 @@ public class IntelligenceController {
                 access.canAccess(
                         account, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        if (context == null || branchKnowledge == null)
+            throw new IllegalArgumentException("请选择知识所属分支");
         List<IntelligenceService.KnowledgeCard> cards = service.cards(repoId, includeDraft);
-        if (context == null || branchKnowledge == null) return cards;
         var applicable = branchKnowledge.applicable(repoId, context.branchId());
         return cards.stream().filter(card -> applicable.contains(card.id())).toList();
     }
@@ -193,11 +195,9 @@ public class IntelligenceController {
             @Valid @RequestBody IntelligenceService.CardInput body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.MAINTAIN);
-        IntelligenceService.KnowledgeCard card = service.createCard(repoId, account.id(), body);
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
-        if (context != null && branchKnowledge != null)
-            branchKnowledge.bindCreated(repoId, card.id(), context.branchId());
-        return card;
+        if (context == null) throw new IllegalArgumentException("请选择知识所属分支");
+        return service.createCard(repoId, context.branchId(), account.id(), body);
     }
 
     @PutMapping("/repositories/{repoId}/knowledge/{cardId}")
@@ -207,6 +207,7 @@ public class IntelligenceController {
             @Valid @RequestBody IntelligenceService.CardInput body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.MAINTAIN);
+        requireKnowledgeBranch(request, repoId, cardId);
         return service.updateCard(repoId, cardId, account.id(), body);
     }
 
@@ -217,6 +218,7 @@ public class IntelligenceController {
             @RequestBody ReviewCardRequest body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.MANAGE);
+        requireKnowledgeBranch(request, repoId, cardId);
         return service.reviewCard(repoId, cardId, account.id(), body.reviewStatus());
     }
 
@@ -227,6 +229,7 @@ public class IntelligenceController {
             @RequestBody PublicationRequest body,
             HttpServletRequest request) {
         var account = require(request, repoId, RepositoryPermission.MANAGE);
+        requireKnowledgeBranch(request, repoId, cardId);
         return service.setCardPublication(repoId, cardId, account.id(), body.publicationStatus());
     }
 
@@ -252,6 +255,13 @@ public class IntelligenceController {
         var account = SecurityContext.account(request);
         access.require(account, CodeRepositoryId.of(repoId), permission);
         return account;
+    }
+
+    private void requireKnowledgeBranch(
+            HttpServletRequest request, UUID repositoryId, UUID cardId) {
+        var context = branchContexts.resolve(request, repositoryId);
+        if (!branchKnowledge.applicable(repositoryId, context.branchId()).contains(cardId))
+            throw new IllegalArgumentException("知识卡不属于当前阅读分支");
     }
 
     public record Question(

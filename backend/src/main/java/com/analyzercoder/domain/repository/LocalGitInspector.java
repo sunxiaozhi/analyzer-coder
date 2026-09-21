@@ -10,5 +10,5 @@ public interface LocalGitInspector {
      * @param repositoryRoot 已经过路径策略校验的本地仓库根目录
      * @return 接口约定的操作结果
      */
-    GitRepositorySnapshot inspect(Path repositoryRoot);
+    GitRepositoryContentVersion inspect(Path repositoryRoot);
 }

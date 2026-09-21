@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 class CodeGraphArtifactPublisherTest {
     @Test
-    void swapsOnlyTheSnapshotArtifactInOneTransactionAfterBuildProvidesCandidate()
+    void swapsOnlyTheContentVersionArtifactInOneTransactionAfterBuildProvidesCandidate()
             throws Exception {
         CodeGraphArtifactMapper mapper = mock(CodeGraphArtifactMapper.class);
         CodeGraphArtifactPublisher publisher = new CodeGraphArtifactPublisher(mapper);
@@ -31,7 +31,7 @@ class CodeGraphArtifactPublisherTest {
         publisher.publish(artifact);
 
         InOrder order = inOrder(mapper);
-        order.verify(mapper).retireSnapshot(artifact.repositoryId(), artifact.snapshotId());
+        order.verify(mapper).retireContentVersion(artifact.repositoryId(), artifact.contentVersion());
         order.verify(mapper).insertPublished(artifact);
         assertThat(
                         CodeGraphArtifactPublisher.class

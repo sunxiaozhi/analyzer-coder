@@ -1,8 +1,8 @@
 package com.analyzercoder.infrastructure.repository;
 
 import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.ManagedRepositorySnapshot;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.ManagedRepositoryContentVersion;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -24,15 +24,15 @@ import org.springframework.stereotype.Component;
 
 /** Exports committed objects only; never checks out or modifies the user's worktree. */
 @Component
-public class GitBranchSnapshotFactory {
+public class GitBranchContentVersionFactory {
     private final Path root;
     private final int maxFiles;
     private final long maxBytes;
 
-    public GitBranchSnapshotFactory(
-            @Value("${app.repository.snapshot-root}") String root,
-            @Value("${app.repository.snapshot-max-files:50000}") int maxFiles,
-            @Value("${app.repository.snapshot-max-total-bytes:2147483648}") long maxBytes) {
+    public GitBranchContentVersionFactory(
+            @Value("${app.repository.workspace-root}") String root,
+            @Value("${app.repository.workspace-max-files:50000}") int maxFiles,
+            @Value("${app.repository.workspace-max-total-bytes:2147483648}") long maxBytes) {
         this.root = Path.of(root).toAbsolutePath().normalize();
         this.maxFiles = maxFiles;
         this.maxBytes = maxBytes;
@@ -72,123 +72,44 @@ public class GitBranchSnapshotFactory {
         return result;
     }
 
-    public ManagedRepositorySnapshot create(
-            CodeRepositoryId repositoryId, Path source, String commit) {
-        if (commit == null || !commit.matches("[0-9a-fA-F]{40,64}"))
-            throw new IllegalArgumentException("提交标识无效");
-        RepositorySnapshotId id = RepositorySnapshotId.newId();
-        Path target = root.resolve(repositoryId.value().toString()).resolve("branch-" + id.value());
-        Path archive = target.resolve("source.zip"), content = target.resolve("content");
-        try {
-            Files.createDirectories(content);
-            // Reject symlinks and submodules instead of silently exporting misleading source
-            // content.
-            String tree = output(source, List.of("ls-tree", "-r", "-l", commit));
-            if (tree.lines()
-                    .anyMatch(line -> line.startsWith("120000 ") || line.startsWith("160000 ")))
-                throw new IllegalArgumentException("分支包含符号链接或子模块，暂不支持准备该分支");
-            long treeBytes = 0;
-            int treeFiles = 0;
-            for (String line : tree.lines().toList()) {
-                String[] fields = line.split("\\s+", 5);
-                if (fields.length < 4) throw new IllegalArgumentException("Git 文件清单无效");
-                treeBytes = Math.addExact(treeBytes, Long.parseLong(fields[3]));
-                if (++treeFiles > maxFiles) throw new IllegalArgumentException("分支文件数超过限制");
-                if (treeBytes > maxBytes) throw new IllegalArgumentException("分支内容超过大小限制");
-            }
-            run(
-                    source,
-                    List.of("archive", "--format=zip", "--output=" + archive, commit),
-                    target.resolve("git.out"));
-            int count = 0;
-            long total = 0;
-            try (ZipInputStream zip = new ZipInputStream(Files.newInputStream(archive))) {
-                java.util.zip.ZipEntry entry;
-                byte[] buffer = new byte[8192];
-                while ((entry = zip.getNextEntry()) != null) {
-                    String name = entry.getName();
-                    Path path = content.resolve(name).normalize();
-                    if (!path.startsWith(content)
-                            || name.contains("\\")
-                            || name.contains(":")
-                            || name.startsWith("/")
-                            || Arrays.stream(name.split("/"))
-                                    .anyMatch(s -> s.equalsIgnoreCase(".git")))
-                        throw new IllegalArgumentException("Git 导出路径越界");
-                    if (entry.isDirectory()) {
-                        Files.createDirectories(path);
-                        continue;
-                    }
-                    if (++count > maxFiles) throw new IllegalArgumentException("分支文件数超过限制");
-                    Files.createDirectories(path.getParent());
-                    try (OutputStream out =
-                            Files.newOutputStream(path, StandardOpenOption.CREATE_NEW)) {
-                        int read;
-                        while ((read = zip.read(buffer)) != -1) {
-                            total += read;
-                            if (total > maxBytes) throw new IllegalArgumentException("分支内容超过大小限制");
-                            out.write(buffer, 0, read);
-                        }
-                    }
-                }
-            }
-            Files.deleteIfExists(archive);
-            Files.deleteIfExists(target.resolve("git.out"));
-            try (var paths = Files.walk(content)) {
-                paths.filter(Files::isRegularFile)
-                        .forEach(p -> p.toFile().setWritable(false, false));
-            }
-            return new ManagedRepositorySnapshot(
-                    id, repositoryId, content, commit, commit, Instant.now());
-        } catch (IOException | RuntimeException error) {
-            cleanup(target);
-            throw new IllegalStateException("无法创建分支快照：" + error.getMessage(), error);
-        }
+    /** Resolves the committed content of an imported workspace whose logical branch is WORKSPACE. */
+    public String resolveWorkspace(Path source) {
+        String result = output(source, List.of("rev-parse", "--verify", "HEAD^{commit}"));
+        if (!result.matches("[0-9a-fA-F]{40,64}"))
+            throw new IllegalArgumentException("工作区尚未包含有效提交");
+        return result;
     }
 
     /**
-     * Maintains one physical workspace for the latest version of a branch. A new snapshot id is
-     * still returned as a compatibility token for the existing database model, but unchanged
-     * files and the local .codegraph index stay in place across commits.
+     * Prepares a private publication slot for a branch. The slot is not visible to readers until
+     * the caller commits the matching database update; it is then confirmed and older slots are
+     * removed. This is a deployment primitive, not retained source history.
      */
-    public ManagedRepositorySnapshot createLatest(
+    public ManagedRepositoryContentVersion createLatest(
             CodeRepositoryId repositoryId, UUID branchId, Path source, String commit) {
         if (branchId == null) throw new IllegalArgumentException("分支标识不能为空");
         if (commit == null || !commit.matches("[0-9a-fA-F]{40,64}"))
             throw new IllegalArgumentException("提交标识无效");
-        RepositorySnapshotId id = RepositorySnapshotId.newId();
-        Path workspace =
+        RepositoryContentVersion id = RepositoryContentVersion.newId();
+        Path branchWorkspace =
                 root.resolve(repositoryId.value().toString())
                         .resolve("branches")
                         .resolve(branchId.toString());
-        Path content = workspace.resolve("content");
-        Path commitFile = workspace.resolve("current-commit");
-        Path staging = workspace.resolve(".staging-" + id.value());
+        Path publication = branchWorkspace.resolve("publication-" + id.value());
+        Path content = publication.resolve("content");
+        Path commitFile = publication.resolve("current-commit");
+        Path staging = publication.resolve(".staging");
         try {
             validateTree(source, commit);
-            Files.createDirectories(workspace);
-            String previous = readCommit(commitFile);
-            List<ChangedPath> changes = null;
-            if (!Files.isDirectory(content)) {
-                refreshWorkspace(source, commit, workspace, content, staging);
-            } else if (!commit.equals(previous)) {
-                try {
-                    changes = updateChangedFiles(source, previous, commit, content, staging);
-                } catch (IOException | RuntimeException incrementalFailure) {
-                    cleanup(staging);
-                    refreshWorkspace(source, commit, workspace, content, staging);
-                    changes = null;
-                }
-            } else {
-                changes = List.of();
-            }
-            retainCommit(source, branchId, commit, workspace);
-            writeChanges(workspace.resolve("current-changes"), commit, changes);
+            Files.createDirectories(publication);
+            refreshWorkspace(source, commit, publication, content, staging);
+            retainCommit(source, branchId, commit, branchWorkspace);
+            writeChanges(publication.resolve("current-changes"), commit, null);
             writeCommit(commitFile, commit);
-            return new ManagedRepositorySnapshot(
+            return new ManagedRepositoryContentVersion(
                     id, repositoryId, content, commit, commit, Instant.now());
         } catch (IOException | RuntimeException error) {
-            cleanup(staging);
+            cleanup(publication);
             throw new IllegalStateException("无法更新分支工作区：" + error.getMessage(), error);
         }
     }
@@ -196,13 +117,38 @@ public class GitBranchSnapshotFactory {
     public boolean isLatestWorkspace(
             CodeRepositoryId repositoryId, UUID branchId, Path contentPath) {
         if (repositoryId == null || branchId == null || contentPath == null) return false;
-        Path expected =
+        Path branchWorkspace =
                 root.resolve(repositoryId.value().toString())
                         .resolve("branches")
                         .resolve(branchId.toString())
-                        .resolve("content")
                         .normalize();
-        return expected.equals(contentPath.toAbsolutePath().normalize());
+        Path actual = contentPath.toAbsolutePath().normalize();
+        Path publication = actual.getParent();
+        return publication != null
+                && actual.equals(publication.resolve("content"))
+                && publication.getParent() != null
+                && publication.getParent().equals(branchWorkspace)
+                && publication.getFileName().toString().startsWith("publication-")
+                && Files.isDirectory(actual);
+    }
+
+    /** Confirms database publication and removes all superseded transient slots for the branch. */
+    public void confirmPublished(ManagedRepositoryContentVersion contentVersion) {
+        Path publication = publicationPath(contentVersion);
+        Path branchWorkspace = publication.getParent();
+        if (branchWorkspace == null) throw new IllegalArgumentException("非法分支发布路径");
+        try (var children = Files.list(branchWorkspace)) {
+            children.filter(Files::isDirectory)
+                    .filter(path -> path.getFileName().toString().startsWith("publication-"))
+                    .filter(path -> !path.equals(publication))
+                    .forEach(this::cleanup);
+        } catch (IOException ignored) {
+            /* The current database pointer is authoritative; orphan cleanup can retry later. */
+        }
+    }
+
+    public void deleteRepository(CodeRepositoryId repositoryId) {
+        cleanup(root.resolve(repositoryId.value().toString()));
     }
 
     private void validateTree(Path source, String commit) {
@@ -468,22 +414,22 @@ public class GitBranchSnapshotFactory {
         }
     }
 
-    /** Only call for a snapshot created by this factory whose database publication failed. */
-    public void discardUnpublished(ManagedRepositorySnapshot snapshot) {
-        Path content = snapshot.contentPath().toAbsolutePath().normalize();
-        Path repositoryRoot = root.resolve(snapshot.repositoryId().value().toString()).normalize();
-        if (content.startsWith(repositoryRoot.resolve("branches"))
-                && content.getFileName() != null
-                && "content".equals(content.getFileName().toString())) {
-            // Latest-only branch workspaces are shared by consecutive compatibility snapshots.
-            return;
-        }
-        Path target =
-                root.resolve(snapshot.repositoryId().value().toString())
-                        .resolve("branch-" + snapshot.id().value());
-        if (!snapshot.contentPath().toAbsolutePath().normalize().equals(target.resolve("content")))
-            throw new IllegalArgumentException("非法分支快照清理目标");
-        cleanup(target);
+    /** Only call for a prepared publication whose database transaction failed. */
+    public void discardUnpublished(ManagedRepositoryContentVersion contentVersion) {
+        cleanup(publicationPath(contentVersion));
+    }
+
+    private Path publicationPath(ManagedRepositoryContentVersion contentVersion) {
+        Path content = contentVersion.contentPath().toAbsolutePath().normalize();
+        Path repositoryRoot = root.resolve(contentVersion.repositoryId().value().toString()).normalize();
+        Path publication = content.getParent();
+        if (publication == null
+                || !content.equals(publication.resolve("content"))
+                || !publication.startsWith(repositoryRoot.resolve("branches"))
+                || !publication.getFileName().toString()
+                        .equals("publication-" + contentVersion.id().value()))
+            throw new IllegalArgumentException("非法分支发布路径");
+        return publication;
     }
 
     private void run(Path source, List<String> args, Path output) {

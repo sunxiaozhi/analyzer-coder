@@ -6,7 +6,7 @@ export type VectorSource = 'code' | 'knowledge';
 
 export interface VectorIndexSummary {
   repositoryId: string;
-  snapshotId: string | null;
+  contentVersion: string | null;
   commitSha: string | null;
   totalChunks: number;
   vectorizedChunks: number;
@@ -22,7 +22,7 @@ export interface VectorIndexSummary {
 
 export interface VectorIndexChunk {
   id: string;
-  snapshotId: string;
+  contentVersion: string;
   commitSha: string;
   filePath: string;
   symbolName: string | null;

@@ -6,7 +6,7 @@ import BranchListTable from './BranchListTable.vue';
 import BranchDetailsDialog from './BranchDetailsDialog.vue';
 import BranchTrackDialog from './BranchTrackDialog.vue';
 import { useBranchManagement } from './useBranchManagement';
-const props = withDefaults(defineProps<{ repositoryId: string; canMaintain: boolean; canManage?: boolean; remoteSource?: boolean; showBranchList?: boolean; readingBranchId?: string | null; initialBranchId?: string; defaultBranch?: string | null; readingBusy?: boolean }>(), { remoteSource: false, canManage: false, showBranchList: true, readingBusy: false });
+const props = withDefaults(defineProps<{ repositoryId: string; canMaintain: boolean; canManage?: boolean; canTrack?: boolean; remoteSource?: boolean; showBranchList?: boolean; readingBranchId?: string | null; initialBranchId?: string; defaultBranch?: string | null; readingBusy?: boolean }>(), { remoteSource: false, canManage: false, canTrack: true, showBranchList: true, readingBusy: false });
 const emit = defineEmits<{ changed: []; read: [branchId: string, target?: 'search' | 'atlas'] }>();
 const detailsOpen = shallowRef(false), trackOpen = shallowRef(false);
 const detailTab = shallowRef<'status' | 'tasks'>('status');
@@ -19,12 +19,12 @@ function operateSelected(kind: BranchCodeOperation) { void operate(selectedId.va
 </script>
 <template>
   <section class="branch-workspace" aria-label="分支管理">
-    <header class="branch-toolbar"><div><h3>分支</h3><p>每个分支独立同步和构建，切换阅读不会修改默认分支。</p></div><div class="branch-toolbar-actions"><el-button :loading="loading" :disabled="busy" @click="reload"><RefreshCw :size="14" />刷新列表</el-button><el-button v-if="canMaintain" type="primary" :disabled="busy" @click="openTrack"><Plus :size="15" />添加跟踪分支</el-button></div></header>
+    <header class="branch-toolbar"><div><h3>分支</h3><p>代码、知识与派生索引都归属分支；切换阅读不会修改默认分支。</p></div><div class="branch-toolbar-actions"><el-button :loading="loading" :disabled="busy" @click="reload"><RefreshCw :size="14" />刷新列表</el-button><el-button v-if="canMaintain && canTrack" type="primary" :disabled="busy" @click="openTrack"><Plus :size="15" />添加跟踪分支</el-button></div></header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <el-alert v-if="indexes.error.value || preparation.error.value" :title="indexes.error.value || preparation.error.value" type="warning" :closable="false" />
     <div v-loading="loading" class="branch-table-region"><BranchListTable :branches="branches" :selected-id="selectedId" :reading-branch-id="readingBranchId" :default-branch="defaultBranch" :disabled="busy" :can-manage="canManage" :can-maintain="canMaintain" :indexes="indexes.statuses.value" :jobs="preparation.jobs.value" @select="openDetails" @read="(branchId, target) => emit('read', branchId, target)" @operate="operate" @vectors="prepareVectors" @archive="archive" @restore="restoreBranch" /></div>
     <BranchDetailsDialog v-model="detailsOpen" v-model:tab="detailTab" :repository-id="repositoryId" :branch="selected" :context="context" :status="selectedStatus" :jobs="selectedJobs" :disabled="busy" :can-maintain="canMaintain" :error="error" @operate="operateSelected" @vectors="prepareVectors(selectedId)" @refresh="select(selectedId)" @read="target => emit('read', selectedId, target)" @copy="copyCoordinates" />
-    <BranchTrackDialog v-if="canMaintain" v-model="trackOpen" :remote-source="remoteSource" :branches="remoteBranches" :tracked-names="trackedNames" :discovering="discovering" :disabled="busy" :error="error" @discover="discoverRemote" @track="track" />
+    <BranchTrackDialog v-if="canMaintain && canTrack" v-model="trackOpen" :remote-source="remoteSource" :branches="remoteBranches" :tracked-names="trackedNames" :discovering="discovering" :disabled="busy" :error="error" @discover="discoverRemote" @track="track" />
   </section>
 </template>
 <style scoped>

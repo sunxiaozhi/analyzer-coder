@@ -153,7 +153,7 @@ class EngineeringKnowledgePolicyTest {
                                         scope,
                                         "APPROVED",
                                         "UNVERIFIED"))
-                .hasMessageContaining("当前代码快照");
+                .hasMessageContaining("当前代码版本");
 
         policy.validateForPublication(
                 KnowledgeEnforcement.REQUIRED, owner, scope, "APPROVED", "CURRENT");

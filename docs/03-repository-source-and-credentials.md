@@ -28,7 +28,7 @@
   - 注册时校验同一所有者下名称唯一（名称 trim 后按小写规范化比较），冲突时拒绝。
   - 校验仓库路径尚未被接入平台（按规范化绝对路径计数）。
   - 新仓库初始 `repository_status='READY'`、`repository_version=1`。
-  - 创建时记录 `owner_account_id`；创建后立即读取 Git 版本并发布受管快照；发布前后各读一次源状态，不一致则回滚并提示重试。
+  - 创建时记录 `owner_account_id`；创建后立即读取 Git 版本并发布受管内容版本；发布前后各读一次源状态，不一致则回滚并提示重试。
 - 证据：`backend/src/main/java/com/analyzercoder/application/repository/RegisterRepositoryService.java:60`、`backend/src/main/java/com/analyzercoder/application/repository/RegisterRepositoryService.java:159`、`backend/src/main/java/com/analyzercoder/infrastructure/persistence/model/RepositoryRow.java:60`、`backend/src/main/resources/mappers/RepositoryMapper.xml:107`
 
 ### REP-002 本地 Git 接入与允许根目录
@@ -42,17 +42,17 @@
   - 本地路径还必须是 Git 工作区根目录（`rev-parse --show-toplevel` 与传入路径指向同一文件）。
 - 证据：`backend/src/main/resources/application.yml:67`、`backend/src/main/resources/application.yml:70`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/RepositoryPathPolicy.java:24`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/RepositoryPathPolicy.java:47`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/RepositoryPathPolicy.java:52`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/RepositoryPathPolicy.java:57`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitCliLocalGitInspector.java:31`
 
-### REP-003 快照容量上限与单文件上限
+### REP-003 内容版本容量上限与单文件上限
 
-- 需求：发布受管快照时限制文件总数与总字节数，防止超大仓库拖垮平台；单文件预览与单文件索引入库分别设限。
+- 需求：发布受管内容版本时限制文件总数与总字节数，防止超大仓库拖垮平台；单文件预览与单文件索引入库分别设限。
 - 规则：
-  - 受管分支内容文件数上限 `app.repository.snapshot-max-files`，默认 50000。
-  - 受管快照总字节上限 `app.repository.snapshot-max-total-bytes`，默认 2147483648（2 GiB）。
-  - 快照复制拒绝符号链接与非普通文件；只复制 `git ls-files -co --exclude-standard` 列出的文件。
-  - 远程/分支快照导出前先用 `git ls-tree -r -l` 预检文件数与字节数，超出即拒绝；导出后再次累计校验。
+  - 受管分支工作区文件数上限 `app.repository.workspace-max-files`，默认 50000。
+  - 受管分支工作区总字节上限 `app.repository.workspace-max-total-bytes`，默认 2147483648（2 GiB）。
+  - 内容版本复制拒绝符号链接与非普通文件；只复制 `git ls-files -co --exclude-standard` 列出的文件。
+  - 远程/分支内容版本导出前先用 `git ls-tree -r -l` 预检文件数与字节数，超出即拒绝；导出后再次累计校验。
   - 源码预览读取的单文件上限 `app.repository.browser-max-file-bytes`，默认 2097152（2 MiB）。
   - 纳入内容索引的单文件上限 `app.indexing.max-file-bytes`，默认 524288（512 KiB），超出跳过。
-- 证据：`backend/src/main/resources/application.yml:74`、`backend/src/main/resources/application.yml:78`、`backend/src/main/resources/application.yml:83`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/FileSystemRepositorySnapshotAdapter.java:41`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/FileSystemRepositorySnapshotAdapter.java:116`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/FileSystemRepositorySnapshotAdapter.java:128`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:31`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:90`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:120`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCodeBrowserService.java:29`、`backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java:84`
+- 证据：`backend/src/main/resources/application.yml`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchContentVersionFactory.java`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCodeBrowserService.java`
 
 ### REP-004 仓库列表与分页
 
@@ -71,7 +71,7 @@
 - 规则：
   - 读取详情需要 `READ`。
   - 描述与乐观锁版本取自 `repositories.description`、`repositories.repository_version`。
-  - `codeGraphPath`：当前快照存在已发布 CodeGraph 产物时取产物路径并置 `codeGraphDetected=true`；否则回退 `repositories.codegraph_path` 并置 `false`。
+  - `codeGraphPath`：当前内容版本存在已发布 CodeGraph 产物时取产物路径并置 `codeGraphDetected=true`；否则回退 `repositories.codegraph_path` 并置 `false`。
   - 能力位映射：`canRead` 恒为 true；`canEditRepository` = MANAGE；`canUpdate` = MAINTAIN；`canIndex` = MAINTAIN；`canBuildCodeGraph` = MAINTAIN；`canConfigure` = MANAGE；`canGrant`、`canManageCredential`、`canTransferOwnership`、`canDelete` = 所有者或超级管理员。
   - `relationship` 取值为 `SUPER_ADMIN`、`OWNER` 或权限级别名。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryController.java:95`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryController.java:185`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryController.java:210`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryEditingService.java:30`、`backend/src/main/java/com/analyzercoder/security/AccessControlService.java:62`、`backend/src/main/java/com/analyzercoder/security/AccessControlService.java:75`、`backend/src/main/java/com/analyzercoder/security/RepositoryAccess.java:13`
@@ -90,12 +90,12 @@
 
 ### REP-007 仓库重扫
 
-- 需求：重扫检查源目录当前版本并决定是否发布新的受管快照。
+- 需求：重扫检查源目录当前版本并决定是否发布新的受管内容版本。
 - 规则：
   - 需要 `MAINTAIN`；响应体为 `{changed, repository}`。
   - 仓库存在活动索引任务（`QUEUED`/`RUNNING`/`CANCEL_REQUESTED`）时拒绝，409 `CONFLICT`。
-  - 版本判定要求分支、提交号、工作区摘要、`dirty` 全部相同且已有当前快照；相同时 `changed=false`，只刷新 `last_scanned_at`。
-  - 版本变化时创建新受管快照、复核源未变化后发布，并在事务提交后删除上一版本目录。
+  - 版本判定要求分支、提交号、工作区摘要、`dirty` 全部相同且已有当前内容版本；相同时 `changed=false`，只刷新 `last_scanned_at`。
+  - 版本变化时创建新受管内容版本、复核源未变化后发布，并在事务提交后删除上一版本目录。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryController.java:114`、`backend/src/main/java/com/analyzercoder/application/repository/RegisterRepositoryService.java:98`、`backend/src/main/java/com/analyzercoder/application/repository/RegisterRepositoryService.java:134`、`backend/src/main/java/com/analyzercoder/domain/repository/CodeRepository.java:71`、`backend/src/main/resources/mappers/IndexJobMapper.xml:57`
 
 ### REP-008 远程同步
@@ -151,18 +151,18 @@
   - 后台 Worker 每 2 秒（`app.repository.import-poll-interval-ms`）串行认领一条 `QUEUED` 作业（`FOR UPDATE SKIP LOCKED`）：置 `RUNNING`/`validating` → 若已请求取消则置 `CANCELED` 并让草稿进入 `FAILED` → 否则 `current_step='cloning'` 执行导入 → 成功置 `SUCCEEDED`、回填 `result_repository_id` 并完成草稿；异常置 `FAILED`、`current_step='failed'`、错误信息截断 500 字符，并让草稿进入 `FAILED`。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:38`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:51`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:58`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:64`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:52`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:104`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:138`、`backend/src/main/java/com/analyzercoder/worker/RepositoryImportJobWorker.java:17`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:7`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:8`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:16`、`backend/src/main/resources/db/migration/V1__init_schema.sql:266`
 
-### REP-012 ZIP 上传导入与单版本模式
+### REP-012 ZIP 上传导入与 WORKSPACE 分支
 
-- 需求：支持以 ZIP 压缩包接入代码，并把该来源限定为"单版本"使用。
+- 需求：支持以 ZIP 压缩包接入代码，并把该来源映射为固定逻辑分支 `WORKSPACE`。
 - 规则：
   - 请求为 `multipart/form-data`，表单字段 `name` 与文件部件 `file`。
   - 文件名必须以 `.zip` 结尾，否则 400「仅支持 ZIP 文件」。
   - 解压到导入暂存根下的随机目录；条目数超过 20000、单文件超过 20 MiB、累计超过 500 MiB、或条目路径越界（`..` 逃出根目录）均拒绝。
-  - 解压后在工作副本内执行 `git init`、配置 `user.email`/`user.name`、`git add .`、`git commit --allow-empty -m "Imported ZIP snapshot"`。
+  - 解压后在工作副本内执行 `git init`、配置 `user.email`/`user.name`、`git add .`、`git commit --allow-empty -m "Imported ZIP contentVersion"`。
   - 以受管方式注册，并把暂存目录原子移动到 `<受管数据根>/<repositoryId>/worktree`；路径越界时回滚已注册记录并清理暂存目录。
   - `hideGitVersion=true` 使 `default_branch` 与 `current_commit` 被清空，ZIP 项目不暴露 Git 版本信息；该仓库也不写入 `remote_url`，因此不能做远程分支发现与拉取。
-  - ZIP 项目的前端界面走仓库级"单版本"操作（重扫 / 全量内容索引 / 构建代码图谱），不使用分支级任务。
-- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:87`、`backend/src/main/java/com/analyzercoder/application/repository/RepositorySourceImportService.java:102`、`backend/src/main/java/com/analyzercoder/application/repository/RepositorySourceImportService.java:184`、`backend/src/main/java/com/analyzercoder/application/repository/RepositorySourceImportService.java:127`、`backend/src/main/resources/mappers/RepositoryMapper.xml:92`、`frontend/src/views/RepositoriesM0View.vue:212`、`frontend/src/features/repositories/SingleVersionOperations.vue:21`
+  - ZIP 项目与 Git 使用相同的分支准备、阅读、知识和图谱任务；界面不允许为 ZIP 添加其他跟踪分支。
+- 证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositorySourceImportService.java`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchContentVersionFactory.java`、`frontend/src/views/RepositoriesM0View.vue`
 
 ### REP-013 项目草稿生命周期
 
@@ -249,7 +249,7 @@
   - 所有权转移前要求仓库状态属于 `READY`/`AUTH_ERROR`，并要求目标所有者名下无同名仓库。
   - 授权接口拒绝把所有者本人写入普通授权记录。
   - 删除申请在有活动写任务时拒绝（409「仓库存在运行中的写任务，暂不能删除」）。
-  - 只有所有者（或超级管理员）能执行删除、转移、授权，以及凭据绑定；`MANAGE` 成员可编辑资料、归档/恢复分支、清理快照，但不能删除仓库或改授权。
+  - 只有所有者（或超级管理员）能执行删除、转移、授权，以及凭据绑定；`MANAGE` 成员可编辑资料、归档/恢复分支、清理内容版本，但不能删除仓库或改授权。
   - 治理写操作使用 `ownership_version` 乐观锁，版本不匹配时报 409 请求刷新。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryGovernanceController.java:33`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:39`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:44`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:63`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:138`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:157`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:78`
 
@@ -260,7 +260,7 @@
   - 删除接口仅所有者或超级管理员可调用。
   - 有活动写任务时拒绝。
   - 软删除写入 `repository_status='DELETING'`、`deleted_at=now`、`ownership_version+1`，并插入删除墓碑（同一仓库重复请求为幂等空操作）。
-  - 后台 Worker 默认每 5 秒认领墓碑（`PENDING`/`FAILED`，或 `RUNNING` 超过 10 分钟），先删除受管文件，再级联清理问答、知识卡、启发式调用边、CodeGraph 产物、向量、片段、索引任务、成员授权与治理锁，最后置 `repository_status='DELETED'`、`path='[deleted]/<id>'`、清空当前快照与 CodeGraph 指针，并把墓碑置 `COMPLETE`。
+  - 后台 Worker 默认每 5 秒认领墓碑（`PENDING`/`FAILED`，或 `RUNNING` 超过 10 分钟），先删除受管文件，再级联清理问答、知识卡、启发式调用边、CodeGraph 产物、向量、片段、索引任务、成员授权与治理锁，最后置 `repository_status='DELETED'`、`path='[deleted]/<id>'`、清空当前内容版本与 CodeGraph 指针，并把墓碑置 `COMPLETE`。
   - 清理失败时墓碑置 `FAILED`、`retry_count+1`，等待下一轮重试。
   - 状态变为 `DELETED` 时数据库触发器删除该仓库的全部分支记录。
   - 所有仓库读取路径都带 `deleted_at IS NULL` 条件，因此软删除后仓库立即从列表、详情与所有权限查询中消失。
@@ -268,9 +268,9 @@
 
 ### REP-021 前端仓库接入与来源凭据界面
 
-- 需求：前端提供项目分页列表、两步接入向导、凭据管理、草稿续接与单版本操作入口。
+- 需求：前端提供项目分页列表、两步接入向导、凭据管理、草稿续接与统一分支操作入口。
 - 规则：
-  - 管理页按 `pageSize=15` 分页、搜索 300ms 防抖，使用分页接口；页面右侧按来源渲染：Git 类项目渲染分支工作区，ZIP 项目渲染"单版本代码"操作区。
+  - 管理页按 `pageSize=15` 分页、搜索 300ms 防抖，使用分页接口；页面右侧统一渲染分支工作区，ZIP 使用 `WORKSPACE` 且隐藏添加分支入口。
   - 接入向导来源类型为 `GITLAB`/`REMOTE_GIT`/`ZIP`/`LOCAL_GIT` 四选一；本地 Git 输入服务端路径，远程输入 HTTPS 地址与分支并可选凭据，ZIP 选择文件。
   - 三种来源的前端接入流程统一先建草稿、再 `PATCH .../source`：本地 Git 调 `POST /api/repositories` 后 `complete`；ZIP 调 `POST /api/repository-imports/zip` 后 `complete`；远程走 `POST /api/repository-imports/remote-jobs` 并轮询作业（最多 120 次、每次 1 秒），作业完成后由后端自动 `complete` 草稿。
   - 未完成草稿在列表上方最多展示 3 条并提供"继续接入"，复用同一草稿 id 重新配置。
@@ -320,11 +320,9 @@
 | GET | `/api/repositories/{repositoryId}` | 项目详情与能力位 | READ |
 | PATCH | `/api/repositories/{repositoryId}` | 编辑名称/描述/默认分支 | MANAGE |
 | DELETE | `/api/repositories/{repositoryId}` | 申请删除（软删除） | 所有者（或超级管理员） |
-| POST | `/api/repositories/{repositoryId}/rescan` | 重扫并发布新快照 | MAINTAIN |
-| POST | `/api/repositories/{repositoryId}/sync` | 远程拉取并触发增量索引 | MAINTAIN |
-| GET | `/api/repositories/{repositoryId}/profile` | 项目准备状态与画像 | READ |
-| POST | `/api/repositories/{repositoryId}/prepare` | 项目级一键准备 | MAINTAIN |
-| POST | `/api/repositories/{repositoryId}/prepare/stages/{stageKey}/retry` | 重试单个准备阶段 | MAINTAIN |
+| POST | `/api/repositories/{repositoryId}/rescan` | 刷新项目来源元数据，不发布代码 | MAINTAIN |
+| GET | `/api/repositories/{repositoryId}/branch-overview` | 读取显式分支上下文的聚合总览 | READ + `X-Branch-Context` |
+| POST | `/api/repositories/{repositoryId}/branches/{branchId}/code-jobs` | 按分支提交同步、索引或准备任务 | MAINTAIN |
 | GET | `/api/repositories/{repositoryId}/credential` | 查询仓库凭据绑定 | 所有者（或超级管理员） |
 | PUT | `/api/repositories/{repositoryId}/credential` | 绑定/更换仓库凭据 | 所有者（或超级管理员） |
 | DELETE | `/api/repositories/{repositoryId}/credential` | 解绑仓库凭据 | 所有者（或超级管理员） |
@@ -356,12 +354,12 @@
 
 ## 5 边界与非目标
 
-- 不在本文范围：分支与快照发布、准备任务与阶段、阅读上下文与快照保留（见 `docs/04-branch-snapshot-and-preparation.md`）。
+- 不在本文范围：分支与内容版本发布、准备任务与阶段、阅读上下文与内容版本保留（见 `docs/04-branch-contentVersion-and-preparation.md`）。
 - 一个项目对应一个代码来源与一个默认分支；来源类型在接入后不可通过编辑接口修改（编辑接口不接收来源字段）。
 - 只支持 HTTPS 远程仓库，不支持 SSH、`git://`、本地文件远程或内嵌凭据的 URL。
 - 只支持单文件 ZIP 上传，不解析 `.tar.gz` 等其它打包格式，ZIP 内不保留原始提交历史（导入后为一条新提交）。
 - 凭据只保存"服务地址 + 用户名 + 令牌"，不支持 SSH 私钥、证书文件、多因子或多凭据链。
-- 平台不修改用户的本地工作区：快照与分支导出都只读 Git 对象，不执行 checkout 或 reset（远程同步的 `reset --hard` 只作用于平台自己克隆出的受管工作副本）。
+- 平台不修改用户的本地工作区：内容版本与分支导出都只读 Git 对象，不执行 checkout 或 reset（远程同步的 `reset --hard` 只作用于平台自己克隆出的受管工作副本）。
 - 删除仓库是异步物理清理，接口返回不代表文件已删除完成。
 
 ## 6 已知缺口
@@ -374,6 +372,6 @@
 - 草稿的 `credentialId` 在 `PATCH /{id}/source` 时不校验凭据归属与状态，其他账号的凭据 id 只要存在即可写入草稿；错误会在后续导入提交时才暴露。需人工确认是否预期。证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:41`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:61`
 - 没有删除项目草稿的接口，`FAILED` 草稿只能被复用或长期保留。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryProjectDraftController.java:17`
 - 前端没有导入作业列表与取消入口，也没有同步远程导入入口；异步导入只有 120 秒轮询，超时后仅提示稍后刷新。证据：`frontend/src/api/sourceImports.ts:21`、`frontend/src/views/RepositoriesM0View.vue:133`
-- 前端未消费部分后端字段：`snapshotCreatedAt`、`codeGraphPath`、`codeGraphDetected`、`worktreeDigest`、`repositoryStatus` 与 `capabilities.canRead` 在界面中没有读取点。证据：`frontend/src/api/repositories.ts:119`、`frontend/src/api/repositories.ts:83`
+- 前端未消费部分后端字段：`contentVersionCreatedAt`、`codeGraphPath`、`codeGraphDetected`、`worktreeDigest`、`repositoryStatus` 与 `capabilities.canRead` 在界面中没有读取点。证据：`frontend/src/api/repositories.ts:119`、`frontend/src/api/repositories.ts:83`
 - 测试覆盖缺口（据 `backend/src/test` 检索）：`RepositoryPathPolicy` 的白名单越界拒绝没有测试；项目分页、详情、资料编辑、删除申请、同步/异步远程导入、`RepositoryRemoteSyncService`、凭据 CRUD 全链路、草稿生命周期（除 `complete` 的 SQL 契约）均无测试；ZIP 的容量上限与 `hideGitVersion` 行为无断言。证据：`backend/src/test/java/com/analyzercoder/application/repository/RegisterRepositoryServiceTest.java:65`、`backend/src/test/java/com/analyzercoder/application/repository/RepositoryProjectDraftServiceTest.java:29`
 - 集成测试类名以 `IT` 结尾且 `backend/pom.xml` 未配置 failsafe，`mvn test` 默认不会执行它们，其中部分是 ZIP 导入与凭据使用链路的唯一端到端证据。需人工确认 CI 是否单独运行这些用例。证据：`backend/src/test/java/com/analyzercoder/integration/RepositoryHttpWorkflowIT.java:27`、`backend/pom.xml:1`

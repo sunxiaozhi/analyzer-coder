@@ -1,11 +1,11 @@
 # 代码索引与向量索引
 > 本文档由当前实现反推生成（2026-09-19）。描述已实现的需求，不是新设计。
 
-本文覆盖两条互相衔接但彼此独立的链路：一是把仓库快照切分为可检索的**代码片段**（chunk，含文件片段与符号片段）并抽取符号；二是为片段与知识卡生成、维护**字符向量 / 语义向量**，并提供覆盖统计。代码位置仅以当前实现为准。
+本文覆盖两条互相衔接但彼此独立的链路：一是把仓库内容版本切分为可检索的**代码片段**（chunk，含文件片段与符号片段）并抽取符号；二是为片段与知识卡生成、维护**字符向量 / 语义向量**，并提供覆盖统计。代码位置仅以当前实现为准。
 
 ## 1 功能范围与角色
 
-- 范围：仓库文件扫描与分类、片段切分、符号抽取、索引任务生命周期、增量执行计划、片段与**快照**（snapshotId）的一致性、向量写入与覆盖统计、向量模型配置。
+- 范围：仓库文件扫描与分类、片段切分、符号抽取、索引任务生命周期、增量执行计划、片段与**内容版本**（contentVersion）的一致性、向量写入与覆盖统计、向量模型配置。
 - 角色与权限级别：`READ`、`MAINTAIN`、`MANAGE` 三级，另有仓库所有者（owner）关系与超级管理员角色。启动索引/图谱任务、取消与重试需要 `MAINTAIN`；读取索引状态、片段列表、向量覆盖统计需要 `READ`；跨仓库索引任务分页、向量模型配置与启用仅超级管理员可操作。
 - 后台执行者：索引任务由定时 Worker 领取执行，不依赖 HTTP 请求线程；检索请求本身不构建索引。
 - 非范围：调用关系解析、跨语言语义分析、向量近邻索引（HNSW 等）不在本域实现。
@@ -16,7 +16,7 @@
 
 - 需求：只把明确支持的文件类型纳入索引，跳过不支持的扩展名、忽略目录与超限文件。
 - 规则：
-  - 递归遍历仓库快照根目录，只处理普通文件；路径中任一层目录名命中忽略集合即整棵子树跳过：`.git`、`.codegraph`、`.idea`、`.vscode`、`node_modules`、`dist`、`build`、`target`。
+  - 递归遍历仓库内容版本根目录，只处理普通文件；路径中任一层目录名命中忽略集合即整棵子树跳过：`.git`、`.codegraph`、`.idea`、`.vscode`、`node_modules`、`dist`、`build`、`target`。
   - 仅当扩展名或文件名出现在语言映射表中才纳入；文件以 UTF-8 读取，内容全为空白则跳过。
   - 读取失败或运行期异常的文件被静默跳过，只返回空列表，不使整次扫描失败；相对路径统一以 `/` 分隔。
 - 证据：`backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java:23`、`backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java:94`、`backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java:107`、`backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java:116`、`backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java:129`、`backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java:144`
@@ -81,14 +81,14 @@
 
 ### IDX-008 分支内容索引的切分规则（与默认链路并列的独立实现）
 
-- 需求：分支快照的内容索引使用一套独立的切分实现，同时产出文件片段与符号片段。
+- 需求：分支内容版本的内容索引使用一套独立的切分实现，同时产出文件片段与符号片段。
 - 规则：
   - 文件片段：起点步长 100 行，结束行 `min(总行数, 起始 + 120)`，即与默认链路相同的 120/100 窗口。
   - 符号片段：对每个抽取到的符号，按其声明起止行切片，但从符号起始行起**最多 120 行**，超出部分被截断（完整内容仍可由文件片段获得）。
   - 起始行不小于结束行的符号直接跳过。
   - 片段总数超过 100000 时抛错要求缩小索引范围。
   - 一个文件都没有可索引文本时抛错，不发布空索引。
-  - 写入前对分支快照行加 `FOR UPDATE` 锁并二次检查是否已索引，避免重复或恢复的任务重复写入。
+  - 写入前对分支内容版本行加 `FOR UPDATE` 锁并二次检查是否已索引，避免重复或恢复的任务重复写入。
   - 批量写入大小为 250。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:52`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:69`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:76`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:91`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:100`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:108`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:154`
 
@@ -191,20 +191,20 @@
   - 差异路径若为空、绝对路径、盘符路径或含 `..` 段则直接抛错，拒绝使用。
   - `affectedPaths` 收集旧路径与新路径（COPIED 的旧路径不收集）；`indexPaths` 只收集新路径。
   - 仅 `indexPaths` 中的文件会重新切分；`affectedPaths` 用于删除旧片段。
-  - 增量写入顺序是：按路径删除 → 重贴未变更片段到新快照与提交号 → 批量插入新片段。
-  - 属于分支快照（`branch_snapshots`）的片段不会被上述删除或重贴触及。
+  - 增量写入顺序是：按路径删除 → 重贴未变更片段到新内容版本与提交号 → 批量插入新片段。
+  - 片段始终携带 `branch_id`，删除、增量复制和重贴都限制在目标分支内。
 - 证据：`backend/src/main/java/com/analyzercoder/application/indexing/GitDiffService.java:59`、`backend/src/main/java/com/analyzercoder/application/indexing/GitDiffService.java:94`、`backend/src/main/java/com/analyzercoder/application/indexing/GitDiffService.java:116`、`backend/src/main/java/com/analyzercoder/application/indexing/GitDiffService.java:127`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:148`、`backend/src/main/java/com/analyzercoder/infrastructure/chunk/PostgresCodeChunkStore.java:39`、`backend/src/main/resources/mappers/CodeChunkMapper.xml:44`、`backend/src/main/resources/mappers/CodeChunkMapper.xml:48`
 
-### IDX-018 片段写入必须绑定快照与提交号
+### IDX-018 片段写入必须绑定内容版本与提交号
 
-- 需求：任何片段都必须绑定其生成的快照（snapshotId）与提交号（commitSha），新旧快照不得混用。
+- 需求：任何片段都必须绑定其生成的内容版本（contentVersion）与提交号（commitSha），新旧内容版本不得混用。
 - 规则：
-  - 领域对象强制要求 `snapshotId`、`commitSha`、`filePath`、`chunkType`、`content`、`contentHash`、`createdAt`、`assetType` 非空。
+  - 领域对象强制要求 `contentVersion`、`commitSha`、`filePath`、`chunkType`、`content`、`contentHash`、`createdAt`、`assetType` 非空。
   - `commitSha` 为空或空白时被替换为字面量 `unknown`，不报错。
-  - 默认链路在开始执行时就要求仓库已有 `currentSnapshotId`，否则任务失败。
-  - 片段使用仓库当前的快照与提交号构造；增量写入也显式传入这两个值。
-  - 分支内容索引要求来源仓库快照与阅读上下文快照、内容路径三者一致，否则拒绝执行。
-  - 数据库触发器禁止改写或删除属于分支快照的片段。
+  - 默认链路在开始执行时就要求仓库已有 `currentContentVersion`，否则任务失败。
+  - 片段使用仓库当前的内容版本与提交号构造；增量写入也显式传入这两个值。
+  - 分支内容索引要求来源仓库内容版本与阅读上下文内容版本、内容路径三者一致，否则拒绝执行。
+  - 数据库触发器禁止改写或删除属于分支内容版本的片段。
 - 证据：`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:104`、`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:123`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:127`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:163`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:39`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:110`
 
 ### IDX-019 片段内容摘要
@@ -245,8 +245,8 @@
 - 规则：
   - 片段侧“需要补建”的条件：无记录，或 `content_hash` 与片段不一致，或模型、维度、检索能力任一与当前启用模型不一致；知识卡侧条件类似，但以修订号代替 `content_hash`。
   - 默认链路补建入口：`prepareRepositoryEmbeddings`，内部顺序为重建启发式调用关系 → 补片段向量 → 补知识向量；任一环节抛异常则整体返回 `false`（不向上抛），索引任务据此把完成串标为 `:vectors-degraded`。
-  - 分支链路补建入口：`prepareBranchEmbeddings(repositoryId, snapshotId, checkpoint)`，快照为空直接拒绝；只处理该快照自己的片段。
-  - 分支向量任务要求先完成该快照的内容索引，否则拒绝入队；同一分支同一快照只允许一个向量任务，目标快照不同则返回冲突。
+  - 分支链路补建入口：`prepareBranchEmbeddings(repositoryId, contentVersion, checkpoint)`，内容版本为空直接拒绝；只处理该内容版本自己的片段。
+  - 分支向量任务要求先完成该内容版本的内容索引，否则拒绝入队；同一分支同一内容版本只允许一个向量任务，目标内容版本不同则返回冲突。
   - 知识卡向量只在“转为 PUBLISHED”这一步顺带补齐；该补齐失败被吞掉，已发布知识仍可通过关键词通道检索。
 - 证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:428`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:412`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:446`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:905`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:115`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:181`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1265`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:209`
 
@@ -255,7 +255,7 @@
 - 需求：同一仓库内正文摘要相同、且模型/维度/能力一致的片段向量可以被复用，不重复调用嵌入模型。
 - 规则：
   - 复用查询条件：`repo_id` + `content_hash` + `model` + `dimension` + `retrieval_capability` 全部一致，取任意一条。
-  - 复用只发生在分支向量补建路径（有明确 snapshotId 时）；默认链路不查复用表。
+  - 复用只发生在分支向量补建路径（有明确 contentVersion 时）；默认链路不查复用表。
   - 复用命中时直接写 upsert，不调用模型。
   - 数据库为该复用查询建立了 `(repo_id, content_hash, model, dimension, retrieval_capability)` 索引。
 - 证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:452`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:920`、`backend/src/main/resources/db/migration/V6__branch_embedding_reuse.sql:2`、`backend/src/test/java/com/analyzercoder/application/intelligence/IntelligenceServiceMultiTurnTest.java:71`
@@ -274,8 +274,8 @@
 
 - 需求：按仓库给出当前默认版本的向量覆盖情况，并能下钻到每个片段、每张知识卡的向量状态。
 - 规则：
-  - 统计范围固定为 `repositories.current_snapshot_id` 指向的片段，以及“有效知识”集合内的知识卡。
-  - 汇总字段：快照标识、提交号、片段总数、已向量化片段数、缺失片段数、知识卡总数、已向量化知识卡数、当前模型、维度、检索能力与中文能力标签、最近向量时间。
+  - 统计范围固定为 `repositories.current_content_version` 指向的片段，以及“有效知识”集合内的知识卡。
+  - 汇总字段：内容版本标识、提交号、片段总数、已向量化片段数、缺失片段数、知识卡总数、已向量化知识卡数、当前模型、维度、检索能力与中文能力标签、最近向量时间。
   - 片段列表支持按关键词（文件路径/符号名/正文，忽略大小写）、按状态 `EMBEDDED`/`MISSING`、按片段类型过滤；其它状态值直接报错。
   - 列表按“缺失优先”排序，便于定位待补建记录；分页由 PageHelper 提供。
   - 列表只返回正文前 260 个字符的摘要（空白压缩为单空格），不返回完整正文。
@@ -307,7 +307,7 @@
 - 需求：索引阶段额外生成“符号名 + 左括号”字符串匹配的调用候选，供检索的图谱相关通道使用；它不是静态分析结果。
 - 规则：
   - 构建时机是在向量补建链路中（`prepareRepositoryEmbeddings` 的第一步），检索时绝不重建。
-  - 先删除该仓库当前快照的旧边，再遍历当前快照内有符号名的片段。
+  - 先删除该仓库当前内容版本的旧边，再遍历当前内容版本内有符号名的片段。
   - 对每个片段内容，若包含“其它符号名 + `(`”，则写入一条 `CALLS` 边。
   - 自指边不写入；同名符号只保留首次出现的片段作为目标。
   - 该关系的能力与限制在接口层显式声明：算法标识 `SYMBOL_TOKEN_FOLLOWED_BY_PARENTHESIS`，并声明“不是 CodeGraph CLI 结果”“无法可靠识别重载、动态分派、反射、别名和跨语言调用”。
@@ -315,13 +315,13 @@
 
 ### IDX-029 分支内容索引与 Markdown 知识源同步
 
-- 需求：分支内容索引完成后同步该快照的 Markdown 知识源清单，但只有“该快照确实是分支当前发布快照”时才做，避免过期任务覆盖新分支来源。
+- 需求：分支内容索引完成后同步该内容版本的 Markdown 知识源清单，但只有“该内容版本确实是分支当前发布内容版本”时才做，避免过期任务覆盖新分支来源。
 - 规则：
-  - 同步条件：该分支的 `published_snapshot_id` 等于本次索引的快照。
-  - 内容索引完成时间写入 `branch_snapshots.content_indexed_at`；该字段非空即视为“已索引”，重复任务直接短路返回。
+  - 同步条件：该分支的 `content_version` 等于本次索引的内部内容令牌。
+  - 内容索引完成时间写入 `repository_branches.content_indexed_at`；该字段非空即视为“已索引”，重复任务直接短路返回。
   - 固定分支工作区提供当前提交的变化路径清单；存在上一个已索引版本时，数据库直接复制未变化路径的片段，只读取并解析新增或修改文件，删除路径不再复制。
   - Markdown 来源仍扫描完整 Markdown 清单，但不会读取其它未变化源码文件，防止删除或改名的文档残留。
-  - 默认链路完成写入后也会顺带把仓库 `current_snapshot_id` 对应分支快照的 `content_indexed_at` 置为当前时间（兼容旧默认版本索引）。
+  - 默认链路完成写入后也会顺带把仓库 `current_content_version` 对应分支内容版本的 `content_indexed_at` 置为当前时间（兼容旧默认版本索引）。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:136`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:146`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:154`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:177`
 
 ### IDX-030 相关配置项与默认值
@@ -332,7 +332,7 @@
   - `app.llm.master-key` 无默认值、必填，用于加密模型 API Key；`app.llm.allow-insecure-local` 默认 false。
   - `app.llm.connectivity-timeout-seconds` 默认 15（秒）；`app.llm.breaker-failure-threshold` 默认 3（连续失败熔断阈值）。
   - 向量模型标识、维度、检索能力**不在** `application.yml` 中，全部来自数据库表。
-  - 相邻但不同域的上限（分支内容准备与源码预览）：`app.repository.snapshot-max-files` 默认 50000、`snapshot-max-total-bytes` 默认 2147483648、`browser-max-file-bytes` 默认 2097152。
+  - 相邻但不同域的上限（分支工作区与源码预览）：`app.repository.workspace-max-files` 默认 50000、`workspace-max-total-bytes` 默认 2147483648、`browser-max-file-bytes` 默认 2097152。
 - 证据：`backend/src/main/resources/application.yml:80`、`backend/src/main/resources/application.yml:95`、`backend/src/main/resources/application.yml:75`、`backend/src/main/resources/application.yml:79`、`backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java:84`
 
 ### IDX-031 前端：索引任务与向量索引界面
@@ -353,12 +353,12 @@
 
 ### 3.1 主要数据表
 
-- `code_chunks`：片段表。字段含 `repo_id`、`snapshot_id`、`commit_sha`、`file_path`、`symbol_id/name/kind`、`language`、`chunk_type`、`asset_type`、`start_line`、`end_line`、`content`、`content_hash`、`created_at`；`snapshot_id` 与 `commit_sha` 非空，`asset_type` 受 CHECK 约束。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:375`
+- `code_chunks`：片段表。字段含 `repo_id`、`content_version`、`commit_sha`、`file_path`、`symbol_id/name/kind`、`language`、`chunk_type`、`asset_type`、`start_line`、`end_line`、`content`、`content_hash`、`created_at`；`content_version` 与 `commit_sha` 非空，`asset_type` 受 CHECK 约束。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:375`
 - `chunk_embeddings` / `knowledge_card_embeddings`：片段向量与知识卡向量，主键分别为 `chunk_id`、`card_id`，均含 `model`、`dimension`、`embedding`、`content_hash`、`retrieval_capability`、`created_at`（知识卡另含 `revision`）。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:421`、`backend/src/main/resources/db/migration/V1__init_schema.sql:675`
 - `vector_model_configs` / `vector_model_activation`：向量模型备案（协议、模型标识、维度、超时、密钥版本）与单例启用记录（含 `activation_version`）。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:819`、`backend/src/main/resources/db/migration/V1__init_schema.sql:845`
 - `index_jobs`：任务表，含 `job_type`、`status`、`current_step`、`execution_mode`、`fallback_reason`、`failure_code`、`error_message`、`started_at`、`heartbeat_at`、`timeout_at`、`finished_at`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:348`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1256`
 - `heuristic_call_edges`：索引阶段生成的启发式调用候选。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:306`
-- `branch_snapshots` / `repository_branches` / `branch_read_contexts`：分支快照与阅读上下文。证据：`backend/src/main/resources/db/migration/V3__branch_contexts.sql:2`
+- `repository_branches` / `branch_read_contexts`：分支当前工作区与阅读上下文。证据：`backend/src/main/resources/db/migration/V3__branch_contexts.sql`
 
 ### 3.2 状态与枚举
 
@@ -366,11 +366,11 @@
 - 向量状态（统计接口视角）：`EMBEDDED`、`MISSING`；检索能力：`CHARACTER_HASH`、`SEMANTIC_EMBEDDING`。证据：`backend/src/main/java/com/analyzercoder/application/indexing/VectorIndexQueryService.java:114`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1242`
 - 片段类型：`FILE`、`SYMBOL`、`DOC_SECTION`、`TEST_CASE`、`CONFIG`、`KNOWLEDGE_CARD`（后两者中 `TEST_CASE`、`KNOWLEDGE_CARD` 当前不会被写入）；资产类型：`CODE`、`DOCUMENT`、`RULE`、`TASK`、`CONFIG`。证据：`backend/src/main/java/com/analyzercoder/domain/chunk/ChunkType.java:4`、`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetType.java:4`
 
-### 3.3 快照语义
+### 3.3 内容版本语义
 
-- `repositories.current_snapshot_id` 是仓库的**默认版本令牌**，不是当前阅读分支的快照；在多分支下二者不相等。
-- 分支模式使用阅读上下文携带的 `snapshotId` 与 `commitSha`（`branch_read_contexts` 解析结果）。证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchReadContext.java:9`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:347`
-- 因此“默认模式”的片段范围由 `repositories.current_snapshot_id` 决定，“分支模式”的片段范围由阅读上下文快照决定，两者互不混用。
+- `repositories.current_content_version` 是仓库的**默认版本令牌**，不是当前阅读分支的内容版本；在多分支下二者不相等。
+- 分支模式使用阅读上下文携带的 `contentVersion` 与 `commitSha`（`branch_read_contexts` 解析结果）。证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchReadContext.java:9`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:347`
+- 因此“默认模式”的片段范围由 `repositories.current_content_version` 决定，“分支模式”的片段范围由阅读上下文内容版本决定，两者互不混用。
 
 ## 4 接口清单
 
@@ -389,7 +389,7 @@
 | POST | `/api/repositories/{repositoryId}/branches/{branchId}/code-jobs` | 启动分支代码任务，`kind` 为 `SYNC`/`PREPARE`/`CONTENT`/`GRAPH` | `MAINTAIN` |
 | GET | `/api/repositories/{repositoryId}/branch-index-statuses` | 列出各分支的内容/图谱/向量就绪状态 | `READ` |
 | GET | `/api/repositories/{repositoryId}/branches/{branchId}/index-status` | 查询指定上下文的索引就绪状态，需 `contextId` | `READ` |
-| POST | `/api/repositories/{repositoryId}/branch-vector-jobs` | 为指定阅读上下文快照启动向量补建，body 需 `contextId` | `MAINTAIN` |
+| POST | `/api/repositories/{repositoryId}/branch-vector-jobs` | 为指定阅读上下文内容版本启动向量补建，body 需 `contextId` | `MAINTAIN` |
 
 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:43`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:57`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:64`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:81`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:93`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:101`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:111`、`backend/src/main/java/com/analyzercoder/interfaces/rest/BranchCodeOperationsController.java:36`、`backend/src/main/java/com/analyzercoder/interfaces/rest/BranchCodeOperationsController.java:42`、`backend/src/main/java/com/analyzercoder/interfaces/rest/BranchCodeOperationsController.java:52`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryBranchController.java:96`
 
@@ -397,7 +397,7 @@
 
 | 方法 | 路径 | 用途 | 所需权限 |
 | --- | --- | --- | --- |
-| GET | `/api/repositories/{repositoryId}/chunks` | 列出/检索当前默认快照的片段，`limit` 1–200，默认 50 | `READ` |
+| GET | `/api/repositories/{repositoryId}/chunks` | 列出/检索当前默认内容版本的片段，`limit` 1–200，默认 50 | `READ` |
 | GET | `/api/repositories/{repositoryId}/vector-index/summary` | 向量覆盖汇总 | `READ` |
 | GET | `/api/repositories/{repositoryId}/vector-index/chunks` | 片段向量覆盖分页列表，支持 `q`/`status`/`chunkType` | `READ` |
 | GET | `/api/repositories/{repositoryId}/vector-index/knowledge` | 知识卡向量覆盖分页列表，支持 `q`/`status` | `READ` |
@@ -426,9 +426,9 @@
 
 - `ChunkType` 声明了 `TEST_CASE` 与 `KNOWLEDGE_CARD`，但没有任何代码路径写入这两个取值；前端片段类型下拉却提供 `TEST_CASE` 选项，属于界面与实现的偏差。证据：`backend/src/main/java/com/analyzercoder/domain/chunk/ChunkType.java:4`、`frontend/src/features/indexing/CurrentVectorIndexPanel.vue:74`
 - `CodeSymbolExtractor.generatedCode` 已实现但无调用点，生成代码未被排除；并且单文件符号截断信息（`truncated` / `SYMBOL_COUNT_LIMIT_EXCEEDED`）未写入任何持久化字段或接口响应，截断在调用侧不可见。证据：`backend/src/main/java/com/analyzercoder/application/code/CodeSymbolExtractor.java:137`、`backend/src/main/java/com/analyzercoder/application/code/CodeSymbolExtractor.java:110`
-- 缺失向量的补建**没有独立的按缺失重建接口**：默认链路只能通过重新启动 `FULL`/`INCREMENTAL` 索引任务触发，分支链路需先满足“该快照已内容索引”再提交分支向量任务；向量索引面板只读，没有“重建缺失向量”按钮。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/VectorIndexController.java:33`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:115`、`frontend/src/features/indexing/CurrentVectorIndexPanel.vue:20`
+- 缺失向量的补建**没有独立的按缺失重建接口**：默认链路只能通过重新启动 `FULL`/`INCREMENTAL` 索引任务触发，分支链路需先满足“该内容版本已内容索引”再提交分支向量任务；向量索引面板只读，没有“重建缺失向量”按钮。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/VectorIndexController.java:33`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:115`、`frontend/src/features/indexing/CurrentVectorIndexPanel.vue:20`
 - 知识卡向量只在“转为 PUBLISHED”时顺带补齐，且失败被静默吞掉；后续若模型切换，知识卡向量同样只在下次索引任务的补建环节被替换，没有针对知识卡的单独补建入口。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1141`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1265`
-- 默认链路（`prepareCodeEmbeddings` 无 snapshotId 分支）不做同内容摘要复用，只有分支链路复用；同一内容在默认链路下会重复调用嵌入模型。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:920`
+- 默认链路（`prepareCodeEmbeddings` 无 contentVersion 分支）不做同内容摘要复用，只有分支链路复用；同一内容在默认链路下会重复调用嵌入模型。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:920`
 - 索引任务失败后的自动重试策略：代码中只有超时回收（按任务类型）与人工重试，未见指数退避或自动重试；是否存在部署侧的补偿调度需人工确认。
 - `index_jobs` 的 `execution_mode` / `fallback_reason` 只在 `RUNNING` 期间写入，排队阶段这两个字段为空；排队阶段前端显示“尚未决策”，符合实现，但若任务在抽样前被取消则不会留下任何执行计划信息。
 - 分支内容索引与默认索引是两套切分实现（默认链路按窗口选符号，分支链路同时产出文件片段与截断符号片段），两者对同一文件的片段集合可能不同；是否有意为之需人工确认。

@@ -51,7 +51,10 @@ class McpToolServiceTest {
     void catalogRejectsMissingQueryAndOversizedLimit() throws Exception {
         var json = new ObjectMapper();
         var catalog = new McpToolCatalog(json);
-        var input = json.createObjectNode().put("repositoryId", UUID.randomUUID().toString());
+        var input =
+                json.createObjectNode()
+                        .put("repositoryId", UUID.randomUUID().toString())
+                        .put("branchId", UUID.randomUUID().toString());
         assertThatThrownBy(() -> catalog.validate("search_project", input))
                 .isInstanceOf(IllegalArgumentException.class);
         input.put("query", "订单").put("limit", 51);

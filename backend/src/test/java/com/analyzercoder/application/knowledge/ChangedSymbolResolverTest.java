@@ -11,7 +11,7 @@ import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.chunk.InMemoryCodeChunkStore;
 import com.analyzercoder.infrastructure.git.ProcessGitClient;
@@ -172,7 +172,7 @@ class ChangedSymbolResolverTest {
                         List.of(
                                 new ChangedSymbolResolver.GraphSymbol(
                                         request.repositoryId(),
-                                        request.snapshotId(),
+                                        request.contentVersion(),
                                         request.commitSha(),
                                         request.filePath(),
                                         "graph:findAccount",
@@ -182,7 +182,7 @@ class ChangedSymbolResolverTest {
                                         4),
                                 new ChangedSymbolResolver.GraphSymbol(
                                         request.repositoryId(),
-                                        request.snapshotId(),
+                                        request.contentVersion(),
                                         "0".repeat(40),
                                         request.filePath(),
                                         "imaginary",
@@ -223,7 +223,7 @@ class ChangedSymbolResolverTest {
         CodeChunk chunk =
                 CodeChunk.symbolChunk(
                         repository.id(),
-                        repository.currentSnapshotId(),
+                        repository.currentContentVersion(),
                         headCommit,
                         "plain.txt",
                         "text",
@@ -284,7 +284,7 @@ class ChangedSymbolResolverTest {
     private CodeRepository repository(String commit) {
         Instant now = Instant.now();
         CodeRepositoryId repositoryId = CodeRepositoryId.newId();
-        RepositorySnapshotId snapshotId = RepositorySnapshotId.newId();
+        RepositoryContentVersion contentVersion = RepositoryContentVersion.newId();
         return new CodeRepository(
                 repositoryId,
                 "resolver-test",
@@ -294,7 +294,7 @@ class ChangedSymbolResolverTest {
                 commit,
                 null,
                 false,
-                snapshotId,
+                contentVersion,
                 repositoryRoot,
                 repositoryRoot.resolve(".codegraph"),
                 now,

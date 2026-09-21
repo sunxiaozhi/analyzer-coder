@@ -25,7 +25,7 @@ class BranchCodeOperationsControllerTest {
     final UUID repo = UUID.randomUUID(),
             branch = UUID.randomUUID(),
             ctx = UUID.randomUUID(),
-            snapshot = UUID.randomUUID();
+            contentVersion = UUID.randomUUID();
     final BranchPreparationJobs jobs = mock(BranchPreparationJobs.class);
     final RepositoryBranchService branches = mock(RepositoryBranchService.class);
     final BranchCodeOperationsService operations = mock(BranchCodeOperationsService.class);
@@ -51,7 +51,7 @@ class BranchCodeOperationsControllerTest {
                                         new BranchCodeOperationsController.Operation(
                                                 "CONTENT", null),
                                         request()))
-                .hasMessageContaining("分支快照");
+                .hasMessageContaining("分支内容版本");
         verifyNoInteractions(jobs);
         when(branches.resolve(actor, repo, branch, ctx))
                 .thenReturn(
@@ -60,7 +60,7 @@ class BranchCodeOperationsControllerTest {
                                 repo,
                                 branch,
                                 "main",
-                                snapshot,
+                                contentVersion,
                                 "a".repeat(40),
                                 Path.of("."),
                                 Instant.now().plusSeconds(60)));
@@ -70,7 +70,7 @@ class BranchCodeOperationsControllerTest {
                 new BranchCodeOperationsController.Operation("CONTENT", ctx),
                 request());
         verify(branches).resolve(actor, repo, branch, ctx);
-        verify(jobs).submitOperation(actor, repo, branch, "CONTENT", snapshot);
+        verify(jobs).submitOperation(actor, repo, branch, "CONTENT", contentVersion);
     }
 
     @Test

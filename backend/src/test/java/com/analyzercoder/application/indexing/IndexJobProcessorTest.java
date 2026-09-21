@@ -21,7 +21,7 @@ import com.analyzercoder.domain.indexing.ScannedRepositoryFile;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.CodeGraphArtifactMapper;
 import java.nio.file.Path;
@@ -147,7 +147,7 @@ class IndexJobProcessorTest {
                         eq(fixture.repository().id()),
                         eq(Set.of("old-name.java", "new-name.java", "removed.java")),
                         chunkCaptor.capture(),
-                        eq(fixture.repository().currentSnapshotId()),
+                        eq(fixture.repository().currentContentVersion()),
                         eq(fixture.repository().currentCommit()));
         assertThat(chunkCaptor.getValue())
                 .extracting(chunk -> chunk.filePath())
@@ -166,7 +166,7 @@ class IndexJobProcessorTest {
     }
 
     @Test
-    void emptySnapshotFailsActionablyWithoutPublishingAnEmptyIndex() {
+    void emptyContentVersionFailsActionablyWithoutPublishingAnEmptyIndex() {
         Fixture fixture = fixture(cleanRepository(), null, List.of());
         assertThat(fixture.processor().processNextQueuedJob()).isFalse();
         verify(fixture.chunks(), never()).replaceRepositoryChunks(any(), any());
@@ -212,7 +212,7 @@ class IndexJobProcessorTest {
         order.verify(chunks).replaceRepositoryChunks(eq(repository.id()), any());
         order.verify(graphTasks).start(repository.id());
         verify(graphArtifacts)
-                .findPublished(repository.id().value(), repository.currentSnapshotId().value());
+                .findPublished(repository.id().value(), repository.currentContentVersion().value());
         ArgumentCaptor<IndexJob> saved = ArgumentCaptor.forClass(IndexJob.class);
         verify(jobs, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
         assertThat(saved.getAllValues())
@@ -282,7 +282,7 @@ class IndexJobProcessorTest {
                 "current-commit",
                 "worktree-digest",
                 true,
-                RepositorySnapshotId.of(UUID.fromString("20000000-0000-0000-0000-000000000002")),
+                RepositoryContentVersion.of(UUID.fromString("20000000-0000-0000-0000-000000000002")),
                 path,
                 path.resolve(".codegraph"),
                 now,
@@ -302,10 +302,10 @@ class IndexJobProcessorTest {
                 dirty.currentCommit(),
                 dirty.worktreeDigest(),
                 false,
-                dirty.currentSnapshotId(),
-                dirty.currentSnapshotPath(),
+                dirty.currentContentVersion(),
+                dirty.currentContentVersionPath(),
                 dirty.codeGraphPath(),
-                dirty.snapshotCreatedAt(),
+                dirty.contentVersionCreatedAt(),
                 dirty.lastScannedAt(),
                 dirty.createdAt(),
                 dirty.updatedAt());

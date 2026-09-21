@@ -10,7 +10,7 @@ const emit = defineEmits<{ edit: []; remove: [] }>();
       <dt>项目</dt><dd>{{ repository.name }}</dd>
       <dt>代码来源</dt><dd>{{ repository.sourceType }}</dd>
       <dt>服务端路径</dt><dd class="source-path">{{ repository.path }}</dd>
-      <dt>默认分支</dt><dd>{{ repository.branch || '单版本代码源' }}<small>仅作为首次进入项目时的阅读偏好</small></dd>
+      <dt>默认分支</dt><dd>{{ repository.branch || 'WORKSPACE' }}<small>仅作为首次进入项目时的阅读偏好；ZIP 导入使用固定逻辑分支 WORKSPACE</small></dd>
       <dt>所有者</dt><dd>{{ repository.ownerDisplayName }}</dd>
     </dl>
     <el-button v-if="repository.capabilities.canEditRepository ?? repository.capabilities.canConfigure" type="primary" @click="emit('edit')">编辑资料与凭据</el-button>

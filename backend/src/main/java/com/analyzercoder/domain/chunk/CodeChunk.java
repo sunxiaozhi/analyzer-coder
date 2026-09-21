@@ -2,7 +2,7 @@ package com.analyzercoder.domain.chunk;
 
 import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -14,7 +14,7 @@ import java.util.Objects;
 public record CodeChunk(
         CodeChunkId id,
         CodeRepositoryId repositoryId,
-        RepositorySnapshotId snapshotId,
+        RepositoryContentVersion contentVersion,
         String commitSha,
         String filePath,
         String symbolId,
@@ -30,7 +30,7 @@ public record CodeChunk(
         Instant createdAt) {
     public static CodeChunk fileChunk(
             CodeRepositoryId repositoryId,
-            RepositorySnapshotId snapshotId,
+            RepositoryContentVersion contentVersion,
             String commitSha,
             String filePath,
             String language,
@@ -40,7 +40,7 @@ public record CodeChunk(
             String content) {
         return create(
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 commitSha,
                 filePath,
                 null,
@@ -56,7 +56,7 @@ public record CodeChunk(
 
     public static CodeChunk symbolChunk(
             CodeRepositoryId repositoryId,
-            RepositorySnapshotId snapshotId,
+            RepositoryContentVersion contentVersion,
             String commitSha,
             String filePath,
             String language,
@@ -69,7 +69,7 @@ public record CodeChunk(
         String symbolId = filePath + "#" + symbolName + ":" + startLine;
         return create(
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 commitSha,
                 filePath,
                 symbolId,
@@ -89,7 +89,7 @@ public record CodeChunk(
 
     private static CodeChunk create(
             CodeRepositoryId repositoryId,
-            RepositorySnapshotId snapshotId,
+            RepositoryContentVersion contentVersion,
             String commitSha,
             String filePath,
             String symbolId,
@@ -104,7 +104,7 @@ public record CodeChunk(
         return new CodeChunk(
                 CodeChunkId.newId(),
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 commitSha == null || commitSha.isBlank() ? "unknown" : commitSha,
                 filePath,
                 symbolId,
@@ -123,7 +123,7 @@ public record CodeChunk(
     public CodeChunk {
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(repositoryId, "repositoryId must not be null");
-        Objects.requireNonNull(snapshotId, "snapshotId must not be null");
+        Objects.requireNonNull(contentVersion, "contentVersion must not be null");
         Objects.requireNonNull(commitSha, "commitSha must not be null");
         Objects.requireNonNull(filePath, "filePath must not be null");
         Objects.requireNonNull(chunkType, "chunkType must not be null");

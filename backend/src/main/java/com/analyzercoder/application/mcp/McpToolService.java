@@ -47,12 +47,10 @@ public class McpToolService {
                 input.hasNonNull("contextId")
                         ? UUID.fromString(input.path("contextId").asText())
                         : null;
-        var context =
-                branchId != null || contextId != null
-                        ? branches.resolve(actor, repository.value(), branchId, contextId)
-                        : null;
+        if (branchId == null && contextId == null)
+            throw new IllegalArgumentException("需要 branchId 或 contextId");
+        var context = branches.resolve(actor, repository.value(), branchId, contextId);
         if ("resolve_project_context".equals(name)) {
-            if (context == null) throw new IllegalArgumentException("解析上下文需要 branchId 或 contextId");
             return json.valueToTree(context);
         }
         String query = input.path("query").asText("").trim();
@@ -60,15 +58,11 @@ public class McpToolService {
             throw new IllegalArgumentException("检索词不能为空");
         }
         int limit = Math.max(1, Math.min(input.path("limit").asInt(20), 50));
-        if (context != null)
-            return json.valueToTree(
-                    java.util.Map.of(
-                            "context",
-                            context,
-                            "result",
-                            intelligence.unifiedSearchDetailed(
-                                    repository.value(), query, limit, context)));
         return json.valueToTree(
-                intelligence.unifiedSearchDetailed(repository.value(), query, limit));
+                java.util.Map.of(
+                        "context",
+                        context,
+                        "result",
+                        intelligence.unifiedSearchDetailed(repository.value(), query, limit, context)));
     }
 }

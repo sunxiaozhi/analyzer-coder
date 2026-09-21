@@ -23,9 +23,9 @@ import com.analyzercoder.domain.indexing.RepositoryScannerPort;
 import com.analyzercoder.domain.indexing.ScannedRepositoryFile;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.ManagedRepositorySnapshot;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
-import com.analyzercoder.infrastructure.repository.GitBranchSnapshotFactory;
+import com.analyzercoder.domain.repository.ManagedRepositoryContentVersion;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
+import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.AccountRole;
 import com.analyzercoder.security.ApiSecurityException;
@@ -98,21 +98,16 @@ class BranchCodeOperationsDatabaseTest {
                             UUID.class,
                             repo);
             UUID legacy = UUID.randomUUID();
+            chunk(db, repo, main, legacy, "legacy proof");
             db.update(
-                    "INSERT INTO branch_snapshots(id,repo_id,branch_id,commit_sha,content_path) VALUES(?,?,?,?,?)",
+                    "UPDATE repository_branches SET content_version=?,commit_sha=?,content_path=?,published_at=CURRENT_TIMESTAMP,preparation_status='READY' WHERE id=?",
                     legacy,
-                    repo,
-                    main,
                     "a".repeat(40),
-                    directory.resolve("legacy").toString());
-            chunk(db, repo, legacy, "legacy proof");
-            db.update(
-                    "UPDATE repository_branches SET published_snapshot_id=?,preparation_status='READY' WHERE id=?",
-                    legacy,
+                    directory.resolve("legacy").toString(),
                     main);
             UUID legacyJob = UUID.randomUUID();
             db.update(
-                    "INSERT INTO branch_preparation_jobs(id,repo_id,branch_id,account_id,status,kind) VALUES(?,?,?,?,'SUCCEEDED','SNAPSHOT')",
+                    "INSERT INTO branch_preparation_jobs(id,repo_id,branch_id,account_id,status,kind) VALUES(?,?,?,?,'SUCCEEDED','PREPARE')",
                     legacyJob,
                     repo,
                     main,
@@ -125,16 +120,16 @@ class BranchCodeOperationsDatabaseTest {
                     .migrate();
             assertThat(
                             db.queryForObject(
-                                    "SELECT content_indexed_at IS NOT NULL FROM branch_snapshots WHERE id=?",
+                                    "SELECT content_indexed_at IS NOT NULL FROM repository_branches WHERE id=?",
                                     Boolean.class,
-                                    legacy))
+                                    main))
                     .isTrue();
             assertThat(
                             db.queryForObject(
                                     "SELECT kind FROM branch_preparation_jobs WHERE id=?",
                                     String.class,
                                     legacyJob))
-                    .isEqualTo("SNAPSHOT");
+                    .isEqualTo("PREPARE");
             UUID feature = UUID.randomUUID();
             db.update(
                     "INSERT INTO repository_branches(id,repo_id,name) VALUES(?,?,'feature')",
@@ -155,14 +150,14 @@ class BranchCodeOperationsDatabaseTest {
                             call ->
                                     db.query(
                                             """
-                    SELECT b.*,s.commit_sha FROM repository_branches b LEFT JOIN branch_snapshots s ON s.id=b.published_snapshot_id WHERE b.repo_id=?
+                    SELECT b.* FROM repository_branches b WHERE b.repo_id=?
                     """,
                                             (r, n) ->
                                                     new RepositoryBranchService.Branch(
                                                             r.getObject("id", UUID.class),
                                                             r.getString("name"),
                                                             r.getObject(
-                                                                    "published_snapshot_id",
+                                                                    "content_version",
                                                                     UUID.class),
                                                             r.getString("commit_sha"),
                                                             r.getString("preparation_status"),
@@ -172,10 +167,10 @@ class BranchCodeOperationsDatabaseTest {
                                                             null),
                                             repo));
             when(branches.repositoryFor(any()))
-                    .thenAnswer(call -> snapshotRepository(repository, call.getArgument(0)));
+                    .thenAnswer(call -> contentVersionRepository(repository, call.getArgument(0)));
             var repositories = mock(CodeRepositoryStore.class);
             when(repositories.findById(repository.id())).thenReturn(Optional.of(repository));
-            var factory = mock(GitBranchSnapshotFactory.class);
+            var factory = mock(GitBranchContentVersionFactory.class);
             when(factory.resolve(directory, "feature")).thenReturn("b".repeat(40));
             when(factory.resolve(directory, "main")).thenReturn("a".repeat(40));
             when(factory.isLatestWorkspace(eq(repository.id()), eq(feature), any()))
@@ -183,8 +178,8 @@ class BranchCodeOperationsDatabaseTest {
             when(factory.createLatest(eq(repository.id()), eq(feature), eq(directory), anyString()))
                     .thenAnswer(
                             call ->
-                                    new ManagedRepositorySnapshot(
-                                            RepositorySnapshotId.newId(),
+                                    new ManagedRepositoryContentVersion(
+                                            RepositoryContentVersion.newId(),
                                             repository.id(),
                                             directory.resolve(UUID.randomUUID().toString()),
                                             call.getArgument(3),
@@ -216,7 +211,7 @@ class BranchCodeOperationsDatabaseTest {
                                         .checkpoint("INDEXING");
                                 db.update(
                                         """
-                        INSERT INTO codegraph_artifacts(id,repo_id,snapshot_id,cli_version,status,artifact_path,node_count,edge_count)
+                        INSERT INTO codegraph_artifacts(id,repo_id,content_version,cli_version,status,artifact_path,node_count,edge_count)
                         VALUES(?,?,?,'test','PUBLISHED','test-artifact',1,0)
                         """,
                                         UUID.randomUUID(),
@@ -225,7 +220,7 @@ class BranchCodeOperationsDatabaseTest {
                                 return null;
                             })
                     .when(graph)
-                    .buildSnapshot(any(), any(), any(), any());
+                    .buildContentVersion(any(), any(), any(), any());
             var remote = mock(BranchRemoteService.class);
             var operations =
                     new BranchCodeOperationsService(
@@ -251,7 +246,7 @@ class BranchCodeOperationsDatabaseTest {
             assertThat(chunkCount(db, repo, first)).isZero();
             assertThat(published(db, main)).isEqualTo(legacy);
             verifyNoInteractions(scanner, graph, remote);
-            assertThatThrownBy(() -> operations.snapshotContext(actor, repo, main, first))
+            assertThatThrownBy(() -> operations.contentVersionContext(actor, repo, main, first))
                     .isInstanceOf(ApiSecurityException.class);
 
             jobs.submitOperation(actor, repo, feature, "CONTENT", first);
@@ -260,7 +255,7 @@ class BranchCodeOperationsDatabaseTest {
             long count = chunkCount(db, repo, first);
             jobs.submitOperation(actor, repo, feature, "CONTENT", first);
             jobs.processNext();
-            assertThat(chunkCount(db, repo, first)).isEqualTo(count);
+            assertThat(chunkCount(db, repo, first)).isZero();
             verify(factory, times(1)).resolve(directory, "feature");
             verifyNoInteractions(graph);
             var before =
@@ -281,7 +276,7 @@ class BranchCodeOperationsDatabaseTest {
                                     .graphReady())
                     .isTrue();
 
-            // An unchanged commit reuses the snapshot instead of exporting another full tree.
+            // An unchanged commit reuses the contentVersion instead of exporting another full tree.
             jobs.submitOperation(actor, repo, feature, "SYNC", null);
             jobs.processNext();
             assertThat(published(db, feature)).isEqualTo(first);
@@ -307,19 +302,17 @@ class BranchCodeOperationsDatabaseTest {
 
             // Latest-only branch mode rejects historical versions.
             clearInvocations(markdown);
-            assertThatThrownBy(() -> operations.snapshotContext(actor, repo, feature, first))
+            assertThatThrownBy(() -> operations.contentVersionContext(actor, repo, feature, first))
                     .isInstanceOf(ApiSecurityException.class);
             verifyNoInteractions(markdown);
             assertThat(published(db, feature)).isEqualTo(second);
             assertThat(
                             db.queryForObject(
-                                    "SELECT current_snapshot_id FROM repositories WHERE id=?",
+                                    "SELECT current_content_version FROM repositories WHERE id=?",
                                     UUID.class,
                                     repo))
                     .isNull();
-            assertThatThrownBy(
-                            () -> db.update("DELETE FROM code_chunks WHERE snapshot_id=?", first))
-                    .hasMessageContaining("Immutable");
+            assertThat(db.update("DELETE FROM code_chunks WHERE content_version=?", first)).isZero();
 
             // Project-level maintenance permission gates all branch writes before side effects.
             clearInvocations(factory);
@@ -332,7 +325,7 @@ class BranchCodeOperationsDatabaseTest {
                             () ->
                                     operations.indexContent(
                                             actor,
-                                            operations.snapshotContext(actor, repo, feature, second),
+                                            operations.contentVersionContext(actor, repo, feature, second),
                                             () -> {}))
                     .isInstanceOf(ApiSecurityException.class);
             verifyNoInteractions(factory);
@@ -343,12 +336,12 @@ class BranchCodeOperationsDatabaseTest {
         }
     }
 
-    private static CodeRepository snapshotRepository(CodeRepository source, BranchReadContext c) {
-        return source.withManagedSnapshot(
-                new com.analyzercoder.domain.repository.GitRepositorySnapshot(
+    private static CodeRepository contentVersionRepository(CodeRepository source, BranchReadContext c) {
+        return source.withManagedContentVersion(
+                new com.analyzercoder.domain.repository.GitRepositoryContentVersion(
                         c.branchName(), c.commitSha(), c.commitSha(), false, Instant.now()),
-                new ManagedRepositorySnapshot(
-                        RepositorySnapshotId.of(c.snapshotId()),
+                new ManagedRepositoryContentVersion(
+                        RepositoryContentVersion.of(c.contentVersion()),
                         source.id(),
                         c.contentPath(),
                         c.commitSha(),
@@ -358,28 +351,30 @@ class BranchCodeOperationsDatabaseTest {
 
     private static UUID published(JdbcTemplate db, UUID branch) {
         return db.queryForObject(
-                "SELECT published_snapshot_id FROM repository_branches WHERE id=?",
+                "SELECT content_version FROM repository_branches WHERE id=?",
                 UUID.class,
                 branch);
     }
 
-    private static long chunkCount(JdbcTemplate db, UUID repo, UUID snapshot) {
+    private static long chunkCount(JdbcTemplate db, UUID repo, UUID contentVersion) {
         return db.queryForObject(
-                "SELECT COUNT(*) FROM code_chunks WHERE repo_id=? AND snapshot_id=?",
+                "SELECT COUNT(*) FROM code_chunks WHERE repo_id=? AND content_version=?",
                 Long.class,
                 repo,
-                snapshot);
+                contentVersion);
     }
 
-    private static void chunk(JdbcTemplate db, UUID repo, UUID snapshot, String text) {
+    private static void chunk(
+            JdbcTemplate db, UUID repo, UUID branch, UUID contentVersion, String text) {
         db.update(
                 """
-                INSERT INTO code_chunks(id,repo_id,snapshot_id,commit_sha,file_path,language,chunk_type,start_line,end_line,content,content_hash,created_at)
-                VALUES(?,?,?,'legacy','src/legacy.ts','typescript','FILE',1,1,?,'legacy-hash',CURRENT_TIMESTAMP)
+                INSERT INTO code_chunks(id,repo_id,branch_id,content_version,commit_sha,file_path,language,chunk_type,start_line,end_line,content,content_hash,created_at)
+                VALUES(?,?,?,?,'legacy','src/legacy.ts','typescript','FILE',1,1,?,'legacy-hash',CURRENT_TIMESTAMP)
                 """,
                 UUID.randomUUID(),
                 repo,
-                snapshot,
+                branch,
+                contentVersion,
                 text);
     }
 }

@@ -17,7 +17,7 @@ interface Props {
   repositoryId: string | null;
   filePath: string | null;
   initialSymbol: string | null;
-  snapshotId: string | null;
+  contentVersion: string | null;
   contextId?: string | null;
   initialDepth?: number;
   autoAnalyze?: boolean;
@@ -107,7 +107,7 @@ async function load(resetSymbol = true, rerunRelation = false) {
       : intelligenceApi.latestGraph(props.repositoryId);
     const graphArtifact = await graphRequest;
     if (version !== contextVersion) return;
-    artifact.value = graphArtifact?.snapshotId === props.snapshotId ? graphArtifact : null;
+    artifact.value = graphArtifact?.contentVersion === props.contentVersion ? graphArtifact : null;
     if ((props.autoAnalyze || rerunRelation) && symbol.value && artifact.value) {
       await analyze();
     }
@@ -134,7 +134,7 @@ async function analyze() {
     return;
   }
   if (!artifact.value) {
-    relationError.value = '当前快照尚未发布代码图谱，不能生成真实关系路径。';
+    relationError.value = '当前内容版本尚未发布代码图谱，不能生成真实关系路径。';
     return;
   }
   analyzing.value = true;
@@ -148,8 +148,8 @@ async function analyze() {
       props.contextId,
     );
     if (version !== relationVersion || context !== contextVersion) return;
-    if (result.snapshotId !== props.snapshotId) {
-      relationError.value = '代码快照已更新，请刷新文件和图谱后重新查询。';
+    if (result.contentVersion !== props.contentVersion) {
+      relationError.value = '代码内容版本已更新，请刷新文件和图谱后重新查询。';
       return;
     }
     relation.value = result;
@@ -165,7 +165,7 @@ async function analyze() {
 async function buildGraph() {
   if (!props.repositoryId || !props.canBuildGraph || building.value) return;
   const repositoryId = props.repositoryId;
-  const snapshotId = props.snapshotId;
+  const contentVersion = props.contentVersion;
   const version = ++buildVersion;
   building.value = true;
   buildJob.value = null;
@@ -176,7 +176,7 @@ async function buildGraph() {
     buildJob.value = task;
     for (let attempt = 0; attempt < 240 && ['QUEUED', 'RUNNING', 'CANCEL_REQUESTED'].includes(task.status); attempt += 1) {
       await new Promise(resolve => window.setTimeout(resolve, 1500));
-      if (version !== buildVersion || disposed || repositoryId !== props.repositoryId || snapshotId !== props.snapshotId) return;
+      if (version !== buildVersion || disposed || repositoryId !== props.repositoryId || contentVersion !== props.contentVersion) return;
       task = await getIndexJob(task.id);
       buildJob.value = task;
     }
@@ -201,7 +201,7 @@ function openNode(nodeId: string) {
 }
 
 watch(
-  () => [props.repositoryId, props.filePath, props.initialSymbol, props.snapshotId, props.contextId, props.autoAnalyze, props.initialDepth] as const,
+  () => [props.repositoryId, props.filePath, props.initialSymbol, props.contentVersion, props.contextId, props.autoAnalyze, props.initialDepth] as const,
   () => void load(true),
   { immediate: true },
 );
@@ -226,8 +226,8 @@ onScopeDispose(() => {
         <span class="artifact-icon"><CheckCircle2 v-if="artifact && !building" :size="17" /><RefreshCw v-else :size="17" :class="{ spinning: building }" /></span>
         <div>
           <b v-if="building">{{ buildJobLabel(buildJob) }}</b>
-          <b v-else-if="artifact">当前快照图谱已发布</b>
-          <b v-else>当前快照没有已发布图谱</b>
+          <b v-else-if="artifact">当前内容版本图谱已发布</b>
+          <b v-else>当前内容版本没有已发布图谱</b>
           <p v-if="building">{{ buildJob?.currentStep || '任务已提交，完成后会自动刷新并执行影响分析。' }}</p>
           <p v-else-if="artifact">CodeGraph {{ artifact.cliVersion }} · {{ artifact.nodeCount }} 节点 · {{ artifact.edgeCount }} 条关系</p>
           <p v-else>构建后才能展示可回溯到源码的调用和依赖路径。</p>

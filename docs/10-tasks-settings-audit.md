@@ -41,8 +41,8 @@
 - 需求：索引任务有 4 种类型，不同入口允许的类型不同。
 - 规则：
   - 类型：`FULL`、`INCREMENTAL`、`CODEGRAPH`、`KNOWLEDGE_DRIFT`。
-  - `POST /api/repositories/{id}/index` 只允许 `FULL`/`INCREMENTAL`，缺省按 `FULL`；该接口同时是旧版默认版本索引入口，完成后会写 `branch_snapshots.content_indexed_at` 以兼容分支模型。
-  - 代码图谱任务由 `POST /api/repositories/{repoId}/codegraph/build`（需 `MAINTAIN`）创建；有分支阅读上下文时改为创建绑定该快照的任务。
+  - 产品主路径通过分支任务执行内容索引；完成后写 `repository_branches.content_indexed_at`。
+  - 代码图谱任务由 `POST /api/repositories/{repoId}/codegraph/build`（需 `MAINTAIN`）创建；有分支阅读上下文时改为创建绑定该内容版本的任务。
   - 知识失效检查没有直接 HTTP 启动入口，只能由代码图谱成功后的自动后继或仓库准备流程创建。
   - 向量构建不是独立类型：旧版索引任务内部串行执行 `build_embeddings` 步骤。
 - 证据：`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJobType.java:4`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:50`、`backend/src/main/java/com/analyzercoder/interfaces/rest/CodeGraphController.java:42`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:177,185`、`backend/src/main/java/com/analyzercoder/application/knowledge/KnowledgeDriftTaskService.java:19`
@@ -54,7 +54,7 @@
   - 领取执行由 SQL 原子完成（`FOR UPDATE SKIP LOCKED`），FULL/INCREMENTAL 初始阶段 `scan_repository`。
   - 成功可从 `RUNNING` 或 `CANCEL_REQUESTED` 进入；失败同理；终态不被改写，重试创建新任务。
   - 每仓库同时只允许一个活动任务（数据库部分唯一索引）。
-  - 观察到的阶段值包括 `scan_repository`、`write_chunks`、`build_embeddings`、`cancel_requested`、`canceled`、`timed_out`、`codegraph_failed` 及 `full:completed:<块数>:vectors-ready`、`codegraph_published:<snapshotId>`、`knowledge_drift_completed:<snapshotId>:ready|degraded` 等终态摘要。
+  - 观察到的阶段值包括 `scan_repository`、`write_chunks`、`build_embeddings`、`cancel_requested`、`canceled`、`timed_out`、`codegraph_failed` 及 `full:completed:<块数>:vectors-ready`、`codegraph_published:<contentVersion>`、`knowledge_drift_completed:<contentVersion>:ready|degraded` 等终态摘要。
 - 证据：`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJobStatus.java:4`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJob.java:24,196,217`、`backend/src/main/resources/mappers/IndexJobMapper.xml:64`、`backend/src/main/resources/db/migration/V1__init_schema.sql:372`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:160,202`
 ### TSK-006 取消任务的适用状态
 
@@ -71,7 +71,7 @@
 - 规则：
   - 需要任务所属仓库 `MAINTAIN`。
   - 只有 `FAILED` 可重试；其他状态抛"只有失败的任务可以重试"。
-  - 原任务带分支目标（`index_job_branch_targets`）时，重试为同一仓库新建 `CODEGRAPH` 任务并沿用该分支快照；分支目标不存在时抛错。
+  - 原任务带分支目标（`index_job_branch_targets`）时，重试为同一仓库新建 `CODEGRAPH` 任务并沿用该分支内容版本；分支目标不存在时抛错。
   - 若该仓库已存在活动任务（`QUEUED`/`RUNNING`/`CANCEL_REQUESTED`），重试不创建新任务而是直接返回该活动任务。
   - 分支准备任务不提供重试接口，只能重新提交对应操作。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:111`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java:88,100`、`backend/src/main/java/com/analyzercoder/application/branch/BranchGraphTasks.java:53`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJob.java:42`
@@ -83,14 +83,14 @@
   - 回退判定顺序：缺索引基线 `BASELINE_MISSING`、工作区脏 `DIRTY_WORKTREE`、Git 差异失败 `GIT_DIFF_FAILED`、变更比例超阈值 `CHANGE_RATIO_EXCEEDED`。
   - 阈值：变更文件数 / 当前文件总数 > 0.35 即回退全量。
 - 证据：`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:32,245`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJob.java:113`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1361`
-### TSK-009 失败代码、错误信息与快照绑定
+### TSK-009 失败代码、错误信息与内容版本绑定
 
-- 需求：失败任务同时保留稳定失败代码与人类可读信息；任务详情的快照绑定是已知缺口。
+- 需求：失败任务同时保留稳定失败代码与人类可读信息；任务详情的内容版本绑定是已知缺口。
 - 规则：
   - 通用失败码 `TASK_FAILED`；CodeGraph 为 `CODEGRAPH_TIMEOUT`/`CODEGRAPH_BUILD_FAILED`；知识失效检查为 `KNOWLEDGE_DRIFT_TIMEOUT`/`KNOWLEDGE_DRIFT_FAILED`。
   - 超时收敛由 SQL 直接写入固定错误文本；处理器侧错误信息截断到 500 字符。
   - 前端在 CodeGraph 失败且错误信息不可解码时提示配置 `app.codegraph.executable`。
-  - `IndexJobResponse` 不含快照字段，因此任务中心无法展示"任务针对哪个快照"（见第 6 节）。
+  - `IndexJobResponse` 不含内容版本字段，因此任务中心无法展示"任务针对哪个内容版本"（见第 6 节）。
 - 证据：`backend/src/main/resources/mappers/IndexJobMapper.xml:86`、`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:87`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:123`、`frontend/src/features/indexing/UnifiedIndexJobDetail.vue:12`
 ### TSK-010 后台调度线程池与轮询间隔
 
@@ -123,48 +123,48 @@
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:194,423`、`backend/src/main/resources/mappers/LlmSettingsMapper.xml:104`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:84`、`backend/src/main/resources/mappers/IndexJobMapper.xml:64`
 ### TSK-013 分支准备任务模型与并发约束
 
-- 需求：分支代码操作以分支准备任务承载，种类、状态、阶段与目标快照分别记录。
+- 需求：分支代码操作以分支准备任务承载，种类、状态、阶段与目标内容版本分别记录。
 - 规则：
-  - 种类（`kind`）：`SNAPSHOT`（旧版准备，兼容保留）、`SYNC`、`CONTENT`、`GRAPH`、`VECTORS`、`PREPARE`。
-  - 状态：`QUEUED`/`RUNNING`/`SUCCEEDED`/`FAILED`；阶段默认 `QUEUED`，执行中经过 `RESOLVING`、`SNAPSHOT`、`PUBLISHING`、`INDEXING`、`GRAPH`、`EMBEDDING`、`COMPLETED` 等检查点。
-  - 目标快照约束：`SNAPSHOT`/`SYNC`/`PREPARE` 可空，`CONTENT`/`GRAPH`/`VECTORS` 必须非空。
-  - 同分支同 `kind` 只允许一个 `QUEUED`/`RUNNING` 任务（部分唯一索引）；重复提交复用既有活动任务；若活动任务的目标快照不同则返回 409 `BRANCH_VECTOR_BUSY`。
+  - 种类（`kind`）：`SYNC`、`CONTENT`、`GRAPH`、`VECTORS`、`PREPARE`。
+  - 状态：`QUEUED`/`RUNNING`/`SUCCEEDED`/`FAILED`；阶段默认 `QUEUED`，执行中经过 `RESOLVING`、`SYNC`、`PUBLISHING`、`INDEXING`、`GRAPH`、`EMBEDDING`、`COMPLETED` 等检查点。
+  - 目标内容令牌约束：`SYNC`/`PREPARE` 可空，`CONTENT`/`GRAPH`/`VECTORS` 必须非空。
+  - 同分支同 `kind` 只允许一个 `QUEUED`/`RUNNING` 任务（部分唯一索引）；重复提交复用既有活动任务；若活动任务的目标内容版本不同则返回 409 `BRANCH_VECTOR_BUSY`。
   - 提交时对分支行加锁（`FOR UPDATE OF b`）并要求分支 `tracking_status='ACTIVE'` 且仓库未删除；失败统一写"任务失败，请检查分支、仓库权限、凭据或向量模型配置后重试"。
 - 证据：`backend/src/main/resources/db/migration/V8__branch_code_operations.sql:12`、`backend/src/main/resources/db/migration/V5__branch_preparation_jobs.sql:19`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:134,181,307`、`frontend/src/features/indexing/BranchTasksPanel.vue:28,30`
 ### TSK-014 分支任务提交与查询接口
 
 - 需求：分支操作提供三类提交入口与两类查询入口，其中一类提交入口为旧版兼容。
 - 规则：
-  - `POST /branches/{branchId}/prepare` 提交 `SNAPSHOT`（旧版兼容）；`POST /branches/{branchId}/code-jobs` 按 `kind` 分派，`SYNC`/`PREPARE` 不接受 `contextId`（否则报"同步操作不能指定历史阅读上下文"），其他操作必须提供 `contextId`（否则报"索引操作需要已同步的分支快照"）。
-  - `POST /branch-vector-jobs` 提交 `VECTORS`，必须提供 `contextId`，并要求目标快照已完成内容索引（`content_indexed_at` 非空且存在代码片段），否则报"请先构建此分支快照的内容索引"。
+  - `POST /branches/{branchId}/prepare` 提交 `PREPARE`；`POST /branches/{branchId}/code-jobs` 按 `kind` 分派，`SYNC`/`PREPARE` 不接受 `contextId`，其他操作必须提供当前分支的 `contextId`。
+  - `POST /branch-vector-jobs` 提交 `VECTORS`，必须提供 `contextId`，并要求目标内容版本已完成内容索引（`content_indexed_at` 非空且存在代码片段），否则报"请先构建此分支内容版本的内容索引"。
   - 提交需 `MAINTAIN` 并返回 202；查询需 `READ`。
   - `GET /branch-preparation-jobs` 只返回每 `(branch_id, kind)` 最新一条（`DISTINCT ON`）；`GET /branch-preparation-jobs/history` 返回完整历史分页，可按 `branchId` 过滤，页码默认 1、每页默认 15。
   - 前端分支任务面板只列出 `LOCAL_GIT`/`REMOTE_GIT`/`GITLAB` 来源的项目，并按项目与分支筛选，每 2500 ms 静默刷新。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryBranchController.java:81,90,96,184`、`backend/src/main/java/com/analyzercoder/interfaces/rest/BranchCodeOperationsController.java:52`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:57,77,101,115`、`frontend/src/features/indexing/BranchTasksPanel.vue:24,39,50`
 ### TSK-015 分支级锁与阅读上下文（contextId）
 
-- 需求：执行期按分支串行化任务，并把代码操作固定到不可变快照。
+- 需求：执行期按分支串行化任务，并把代码操作固定到不可变内容版本。
 - 规则：
   - 领取任务时按分支 UUID 计算 64 位键并 `pg_try_advisory_lock`；同一分支同一时刻只允许一个执行中的任务，不同分支可并发；执行结束（含异常）必须释放锁。
   - 拿到锁后置 `RUNNING` 并写入随机 `attempt_token`，条件不满足则本轮放弃。
-  - 阅读上下文由 `branch_read_contexts` 表达，绑定账号、仓库、分支、快照，有效期 1 小时；解析校验归属账号与过期时间，过期返回 409 `CONTEXT_EXPIRED`，分支不一致返回 409 `CONTEXT_MISMATCH`。
-  - 未提供 `contextId` 时按已发布快照新建上下文；分支尚未准备返回 409 `BRANCH_NOT_READY`（"不会使用其他分支的数据"），同时把该分支范围内已发布且评审通过的知识固化进 `branch_context_knowledge`。
+  - 阅读上下文由 `branch_read_contexts` 表达，绑定账号、仓库、分支、内容版本，有效期 1 小时；解析校验归属账号与过期时间，过期返回 409 `CONTEXT_EXPIRED`，分支不一致返回 409 `CONTEXT_MISMATCH`。
+  - 未提供 `contextId` 时按已发布内容版本新建上下文；分支尚未准备返回 409 `BRANCH_NOT_READY`（"不会使用其他分支的数据"），同时把该分支范围内已发布且评审通过的知识固化进 `branch_context_knowledge`。
   - 分支发布用 `generation` 乐观并发：不匹配返回 409 `BRANCH_BUSY`，被新任务取代返回 409 `BRANCH_BUILD_SUPERSEDED`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:202,317,391`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:347,379,404,412`、`backend/src/main/java/com/analyzercoder/application/branch/BranchCodeOperationsService.java:74`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:30`
 ### TSK-016 分支索引状态与向量就绪判定
 
-- 需求：按分支与快照分别报告内容索引、图谱与向量三类就绪状态。
+- 需求：按分支与内容版本分别报告内容索引、图谱与向量三类就绪状态。
 - 规则：
-  - `GET /branch-index-statuses` 返回仓库全部分支状态；`GET /branches/{branchId}/index-status?contextId=...` 返回指定快照状态；均需 `READ`。
-  - 内容就绪 = `branch_snapshots.content_indexed_at` 非空；图谱就绪 = 存在 `PUBLISHED` 产物；向量就绪 = 该快照每个片段都有与当前启用向量模型的模型名、维度、检索能力一致的向量。
+  - `GET /branch-index-statuses` 返回仓库全部分支状态；`GET /branches/{branchId}/index-status?contextId=...` 返回指定内容版本状态；均需 `READ`。
+  - 内容就绪 = `repository_branches.content_indexed_at` 非空；图谱就绪 = 当前令牌存在 `PUBLISHED` 产物；向量就绪 = 当前分支每个片段都有与启用模型一致的向量。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchCodeOperationsService.java:205,213,227`、`backend/src/main/java/com/analyzercoder/interfaces/rest/BranchCodeOperationsController.java:36`
 ### TSK-017 自动后继任务
 
 - 需求：任务成功后按固定顺序自动排队后继任务，后继排队失败不影响已完成任务。
 - 规则：
-  - 内容索引成功后，若当前快照已变化则不排队 CodeGraph；若该快照尚无已发布产物则创建 `CODEGRAPH` 任务；排队异常只记告警。
+  - 内容索引成功后，若当前内容版本已变化则不排队 CodeGraph；若该内容版本尚无已发布产物则创建 `CODEGRAPH` 任务；排队异常只记告警。
   - CodeGraph 成功后，仅对非分支目标的任务自动排队知识失效检查；排队异常只记告警。
-  - 代码图谱单一活动约束：同类型活动任务直接返回；存在其他类型活动任务时报"仓库已有活动任务，请等待完成后再构建 CodeGraph"；有分支目标且活动任务快照不同则返回 409 `BRANCH_GRAPH_BUSY`。
+  - 代码图谱单一活动约束：同类型活动任务直接返回；存在其他类型活动任务时报"仓库已有活动任务，请等待完成后再构建 CodeGraph"；有分支目标且活动任务内容版本不同则返回 409 `BRANCH_GRAPH_BUSY`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:221`、`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:93`、`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphTaskService.java:19`、`backend/src/main/java/com/analyzercoder/application/branch/BranchGraphTasks.java:65`
 ### TSK-018 任务中心前端可达性与轮询
 
@@ -355,18 +355,18 @@
 | `failure_code`、`error_message` | 稳定失败码与人类可读信息 |
 | `started_at`、`heartbeat_at`、`timeout_at`、`finished_at` | 时间线；只有按类型领取的任务写 `timeout_at` |
 
-约束与索引：`uq_index_jobs_one_active_per_repository`（每仓库一个活动任务）、`idx_index_jobs_running_timeout`（超时收敛）、`index_job_branch_targets`（分支快照目标）。
+约束与索引：`uq_index_jobs_one_active_per_repository`（每仓库一个活动任务）、`idx_index_jobs_running_timeout`（超时收敛）、`index_job_branch_targets`（分支内容版本目标）。
 ### 分支准备任务（`branch_preparation_jobs`）
 
 | 字段 | 说明 |
 | --- | --- |
-| `kind` | `SNAPSHOT` / `SYNC` / `CONTENT` / `GRAPH` / `VECTORS` / `PREPARE` |
+| `kind` | `SYNC` / `CONTENT` / `GRAPH` / `VECTORS` / `PREPARE` |
 | `status` | `QUEUED` / `RUNNING` / `SUCCEEDED` / `FAILED` |
 | `stage` | 检查点名称，默认 `QUEUED` |
 | `attempt_token` | 执行权令牌，用于识别被接管的旧 worker |
-| `target_commit`、`target_snapshot`、`error` | 目标提交、目标快照与失败文本 |
+| `target_commit`、`target_content_version`、`error` | 目标提交、目标内容版本与失败文本 |
 
-约束与索引：`branch_preparation_one_active`、`branch_preparation_queue`、`branch_job_snapshot`。
+约束与索引：`branch_preparation_one_active`、`branch_preparation_queue`、`branch_job_contentVersion`。
 ### 模型配置状态
 
 - `llm_provider_configs`（不可变版本 + 唯一 `config_version`）与 `llm_provider_runtime_states`（可用性 `UNTESTED`/`AVAILABLE`/`DEGRADED`/`UNAVAILABLE`、熔断 `CLOSED`/`OPEN`、连续失败数、最近成功/失败时间、最近错误码）。
@@ -391,16 +391,16 @@
 | POST | `/api/index-jobs/{jobId}/cancel` | 取消任务 | 任务所属仓库 `MAINTAIN` |
 | POST | `/api/index-jobs/{jobId}/retries` | 重试失败任务 | 任务所属仓库 `MAINTAIN` |
 | POST | `/api/repositories/{repoId}/codegraph/build` | 创建代码图谱任务 | `MAINTAIN` |
-| POST | `/api/repositories/{id}/branches/{branchId}/prepare` | 旧版分支准备（`SNAPSHOT`） | `MAINTAIN` |
-| POST | `/api/repositories/{id}/branches/{branchId}/code-jobs` | 分支同步或固定快照索引任务 | `MAINTAIN` |
+| POST | `/api/repositories/{id}/branches/{branchId}/prepare` | 一键分支准备（`PREPARE`） | `MAINTAIN` |
+| POST | `/api/repositories/{id}/branches/{branchId}/code-jobs` | 分支同步或固定内容版本索引任务 | `MAINTAIN` |
 | POST | `/api/repositories/{id}/branch-vector-jobs` | 分支向量索引任务 | `MAINTAIN` |
 | GET | `/api/repositories/{id}/branch-preparation-jobs` | 每分支每类型最新任务 | `READ` |
 | GET | `/api/repositories/{id}/branch-preparation-jobs/history` | 分支任务历史分页 | `READ` |
 | GET | `/api/repositories/{id}/branch-index-statuses` | 分支索引状态列表 | `READ` |
-| GET | `/api/repositories/{id}/branches/{branchId}/index-status` | 指定快照的索引状态 | `READ` |
+| GET | `/api/repositories/{id}/branches/{branchId}/index-status` | 指定内容版本的索引状态 | `READ` |
 | POST | `/api/repositories/{id}/contexts` | 解析/创建阅读上下文 | `READ` |
-| GET | `/api/repositories/{id}/branches/{branchId}/snapshots/{snapshotId}/retention` | 查询快照引用 | `MANAGE` |
-| DELETE | `/api/repositories/{id}/branches/{branchId}/snapshots/{snapshotId}` | 删除无引用快照 | `MANAGE` |
+| GET | `/api/repositories/{id}/branches/{branchId}/contentVersions/{contentVersion}/retention` | 查询内容版本引用 | `MANAGE` |
+| DELETE | `/api/repositories/{id}/branches/{branchId}/contentVersions/{contentVersion}` | 删除无引用内容版本 | `MANAGE` |
 | GET | `/api/repositories/{id}/vector-index/summary` | 当前向量索引摘要 | `READ` |
 | GET | `/api/repositories/{id}/vector-index/chunks` | 片段向量覆盖分页 | `READ` |
 | GET | `/api/repositories/{id}/vector-index/knowledge` | 知识卡片向量覆盖分页 | `READ` |
@@ -434,7 +434,7 @@
 
 1. **FULL/INCREMENTAL 索引任务缺少崩溃恢复与超时**：`claimNextQueued` 只领取 `QUEUED` 且不写 `timeout_at`，`expireTimedOut` 仅处理 `CODEGRAPH`/`KNOWLEDGE_DRIFT`。执行期间 worker 崩溃会留下永久 `RUNNING` 记录，部分唯一索引阻止该仓库新建任务，而 `start` 会返回该活动任务而非报错。
    - 证据：`backend/src/main/resources/mappers/IndexJobMapper.xml:64,86`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java:26`
-2. **任务详情不暴露快照绑定**：`index_job_branch_targets` 已记录分支与快照，但 `IndexJobResponse` 未包含该字段。
+2. **任务详情不暴露内容版本绑定**：`index_job_branch_targets` 已记录分支与内容版本，但 `IndexJobResponse` 未包含该字段。
    - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:123`、`backend/src/main/resources/db/migration/V4__branch_graph_tasks.sql:1`
 3. **连通性检测取消无前端入口**：后端提供取消接口，但 `frontend/src/api/llmSettings.ts` 未封装，界面也无按钮。
    - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/LlmSettingsController.java:121`、`frontend/src/api/llmSettings.ts:115`

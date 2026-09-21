@@ -14,13 +14,13 @@ import { RouterLink } from 'vue-router';
       <article>
         <Network :size="21" aria-hidden="true" />
         <h3>代码图谱</h3>
-        <p>在已发布 CodeGraph 的项目快照中查看模块、符号、源码和关系。目标分支尚未准备时，先到项目管理完成准备。</p>
+        <p>在已发布 CodeGraph 的项目版本中查看模块、符号、源码和关系。目标分支尚未准备时，先到项目管理完成准备。</p>
         <RouterLink to="/atlas">查看图谱</RouterLink>
       </article>
       <article>
         <Plug :size="21" aria-hidden="true" />
         <h3>MCP 接入</h3>
-        <p>创建账户访问令牌，连接同一个 MCP 地址。客户端可发现授权项目和分支，用 contextId 固定快照后查询代码、知识和图谱。</p>
+        <p>创建账户访问令牌，连接同一个 MCP 地址。客户端可发现授权项目和分支，用 contextId 固定版本后查询代码、知识和图谱。</p>
         <RouterLink to="/mcp">查看接入说明</RouterLink>
       </article>
     </div>

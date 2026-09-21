@@ -6,7 +6,7 @@
             <idArg column="id" javaType="java.util.UUID"/>
             <arg column="revision" javaType="_int"/>
             <arg column="scope_payload" javaType="string"/>
-            <arg column="last_verified_snapshot_id" javaType="java.util.UUID"/>
+            <arg column="last_verified_content_version" javaType="java.util.UUID"/>
             <arg column="verified_commit" javaType="string"/>
             <arg column="source_version_status" javaType="string"/>
         </constructor>
@@ -26,8 +26,8 @@
             <arg column="repo_id" javaType="java.util.UUID"/>
             <arg column="card_id" javaType="java.util.UUID"/>
             <arg column="card_revision" javaType="_int"/>
-            <arg column="from_snapshot_id" javaType="java.util.UUID"/>
-            <arg column="to_snapshot_id" javaType="java.util.UUID"/>
+            <arg column="from_content_version" javaType="java.util.UUID"/>
+            <arg column="to_content_version" javaType="java.util.UUID"/>
             <arg column="from_commit" javaType="string"/>
             <arg column="to_commit" javaType="string"/>
             <arg column="previous_status" javaType="string"/>
@@ -41,7 +41,7 @@
     </resultMap>
 
     <sql id="candidateColumns">
-        id,revision,scope_payload::text AS scope_payload,last_verified_snapshot_id,
+        id,revision,scope_payload::text AS scope_payload,last_verified_content_version,
         verified_commit,source_version_status
     </sql>
     <select id="candidates" resultMap="candidate">
@@ -74,23 +74,23 @@
     <update id="reviewSource">
         UPDATE knowledge_cards SET source_version_status=#{resultStatus},
             verified_commit=CASE WHEN #{resultStatus}='CURRENT' THEN #{currentCommit} ELSE verified_commit END,
-            last_verified_snapshot_id=CASE WHEN #{resultStatus}='CURRENT' THEN #{currentSnapshotId} ELSE last_verified_snapshot_id END,
+            last_verified_content_version=CASE WHEN #{resultStatus}='CURRENT' THEN #{currentContentVersion} ELSE last_verified_content_version END,
             verification_note=#{note},source_version_checked_at=CURRENT_TIMESTAMP,
             updated_by=#{actorId},updated_at=CURRENT_TIMESTAMP
         WHERE repo_id=#{repositoryId} AND id=#{cardId} AND revision=#{expectedRevision}
     </update>
     <insert id="insertEvent">
         INSERT INTO knowledge_drift_events(
-            id,repo_id,card_id,card_revision,from_snapshot_id,to_snapshot_id,from_commit,to_commit,
+            id,repo_id,card_id,card_revision,from_content_version,to_content_version,from_commit,to_commit,
             previous_status,result_status,trigger_type,reasons_payload,note,actor_id,created_at
         ) VALUES(
-            #{id},#{repositoryId},#{cardId},#{cardRevision},#{fromSnapshotId},#{toSnapshotId},
+            #{id},#{repositoryId},#{cardId},#{cardRevision},#{fromContentVersion},#{toContentVersion},
             #{fromCommit},#{toCommit},#{previousStatus},#{resultStatus},#{triggerType},
             CAST(#{reasonsPayload} AS jsonb),#{note},#{actorId},#{createdAt}
         ) ON CONFLICT DO NOTHING
     </insert>
     <select id="latestEvent" resultMap="event">
-        SELECT id,repo_id,card_id,card_revision,from_snapshot_id,to_snapshot_id,from_commit,to_commit,
+        SELECT id,repo_id,card_id,card_revision,from_content_version,to_content_version,from_commit,to_commit,
             previous_status,result_status,trigger_type,reasons_payload::text AS reasons_payload,
             note,actor_id,created_at
         FROM knowledge_drift_events

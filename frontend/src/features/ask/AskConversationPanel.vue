@@ -112,7 +112,7 @@ function shortcut(event: KeyboardEvent) {
                 <span v-if="turn.retrieval.degraded">· 已降级</span>
               </summary>
               <div>
-                <span>快照 {{ turn.retrieval.snapshotId?.slice(0, 8) ?? '不可用' }}</span>
+                <span>内容版本 {{ turn.retrieval.contentVersion?.slice(0, 8) ?? '不可用' }}</span>
                 <span>向量模型 {{ turn.retrieval.vectorModel ?? '未执行' }}</span>
                 <span>启用通道 {{ turn.retrieval.enabledChannels.join('、') || '无' }}</span>
               </div>

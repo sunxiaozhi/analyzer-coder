@@ -15,7 +15,6 @@ const emit = defineEmits<{
   view: [card: KnowledgeCard];
   edit: [card: KnowledgeCard];
   history: [card: KnowledgeCard];
-  scope: [card: KnowledgeCard];
   review: [card: KnowledgeCard, status: 'APPROVED' | 'CHANGES_REQUESTED'];
   publish: [card: KnowledgeCard, status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'];
 }>();
@@ -89,7 +88,6 @@ const enforcementLabels: Record<string, string> = {
       <el-button v-if="canMaintain" link @click="emit('edit', card)">编辑</el-button>
       <el-button v-if="canMaintain" link @click="emit('history', card)">历史</el-button>
       <template v-if="canManage">
-        <el-button link @click="emit('scope', card)">适用分支</el-button>
         <el-button v-if="card.reviewStatus !== 'APPROVED'" link type="primary" @click="emit('review', card, 'APPROVED')">通过评审</el-button>
         <el-button v-else link @click="emit('review', card, 'CHANGES_REQUESTED')">要求修改</el-button>
         <el-button v-if="card.publicationStatus !== 'PUBLISHED' && card.reviewStatus === 'APPROVED' && !['SUSPECT', 'STALE'].includes(card.sourceVersionStatus)" link type="success" @click="emit('publish', card, 'PUBLISHED')">发布</el-button>

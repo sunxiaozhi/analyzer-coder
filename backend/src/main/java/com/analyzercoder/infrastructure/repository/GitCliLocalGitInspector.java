@@ -1,6 +1,6 @@
 package com.analyzercoder.infrastructure.repository;
 
-import com.analyzercoder.domain.repository.GitRepositorySnapshot;
+import com.analyzercoder.domain.repository.GitRepositoryContentVersion;
 import com.analyzercoder.domain.repository.LocalGitInspector;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -27,7 +27,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
     private static final long COMMAND_TIMEOUT_SECONDS = 15;
 
     @Override
-    public GitRepositorySnapshot inspect(Path repositoryRoot) {
+    public GitRepositoryContentVersion inspect(Path repositoryRoot) {
         Path root = repositoryRoot.toAbsolutePath().normalize();
         String topLevel =
                 text(run(
@@ -70,7 +70,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
                                         "--exclude-standard",
                                         "-z")
                                 .stdout());
-        return new GitRepositorySnapshot(branch, commit, digest, dirty, Instant.now());
+        return new GitRepositoryContentVersion(branch, commit, digest, dirty, Instant.now());
     }
 
     private static String digestWorktree(Path root, byte[] nulSeparatedPaths) {

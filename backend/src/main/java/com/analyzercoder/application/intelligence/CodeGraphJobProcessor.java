@@ -59,9 +59,9 @@ public class CodeGraphJobProcessor {
                             : branchTasks.target(running.id().value());
             CodeGraphService.Artifact artifact =
                     branch.isPresent()
-                            ? codeGraph.buildSnapshot(
+                            ? codeGraph.buildContentVersion(
                                     branch.get().repoId(),
-                                    branch.get().snapshotId(),
+                                    branch.get().contentVersion(),
                                     branch.get().path(),
                                     step -> checkpoint(running, step))
                             : codeGraph.build(
@@ -73,7 +73,7 @@ public class CodeGraphJobProcessor {
                 jobs.save(latest.cancel());
                 return true;
             }
-            jobs.save(latest.succeed("codegraph_published:" + artifact.snapshotId()));
+            jobs.save(latest.succeed("codegraph_published:" + artifact.contentVersion()));
             if (branch.isEmpty()) enqueueKnowledgeDrift(running);
             return true;
         } catch (CodeGraphService.BuildCanceledException exception) {

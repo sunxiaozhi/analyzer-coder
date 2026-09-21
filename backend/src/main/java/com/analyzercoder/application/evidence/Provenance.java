@@ -14,7 +14,7 @@ public record Provenance(
         UUID id,
         TruthSource sourceType,
         UUID repositoryId,
-        UUID snapshotId,
+        UUID contentVersion,
         String commitSha,
         String worktreeDigest,
         String filePath,
@@ -42,7 +42,7 @@ public record Provenance(
                     stableId(
                             sourceType,
                             repositoryId,
-                            snapshotId,
+                            contentVersion,
                             commitSha,
                             worktreeDigest,
                             filePath,
@@ -59,11 +59,11 @@ public record Provenance(
                             null);
         }
         switch (sourceType) {
-            case GIT_FACT, CODE_FACT -> requireVersion(snapshotId, commitSha, worktreeDigest);
+            case GIT_FACT, CODE_FACT -> requireVersion(contentVersion, commitSha, worktreeDigest);
             case VERIFIED_KNOWLEDGE ->
                     requireKnowledge(knowledgeCardId, knowledgeRevision, knowledgeReviewStatus);
             case GRAPH_INFERENCE -> {
-                requireVersion(snapshotId, commitSha, worktreeDigest);
+                requireVersion(contentVersion, commitSha, worktreeDigest);
                 if (blank(graphArtifactId) || relationPath.isEmpty()) {
                     throw new IllegalArgumentException("图谱推断必须包含图谱产物和关系路径");
                 }
@@ -86,7 +86,7 @@ public record Provenance(
 
     public static Provenance gitFact(
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String worktreeDigest,
             String filePath,
@@ -94,7 +94,7 @@ public record Provenance(
         return create(
                 TruthSource.GIT_FACT,
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 commitSha,
                 worktreeDigest,
                 filePath,
@@ -115,7 +115,7 @@ public record Provenance(
 
     public static Provenance codeFact(
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String worktreeDigest,
             String filePath,
@@ -128,7 +128,7 @@ public record Provenance(
         return create(
                 TruthSource.CODE_FACT,
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 commitSha,
                 worktreeDigest,
                 filePath,
@@ -177,7 +177,7 @@ public record Provenance(
 
     public static Provenance graphInference(
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String graphArtifactId,
             List<String> relationPath,
@@ -186,7 +186,7 @@ public record Provenance(
         return create(
                 TruthSource.GRAPH_INFERENCE,
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 commitSha,
                 null,
                 filePath,
@@ -288,7 +288,7 @@ public record Provenance(
     private static Provenance create(
             TruthSource sourceType,
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String worktreeDigest,
             String filePath,
@@ -309,7 +309,7 @@ public record Provenance(
                 null,
                 sourceType,
                 repositoryId,
-                snapshotId,
+                contentVersion,
                 commitSha,
                 worktreeDigest,
                 filePath,
@@ -328,8 +328,8 @@ public record Provenance(
                 detail);
     }
 
-    private static void requireVersion(UUID snapshotId, String commitSha, String worktreeDigest) {
-        if (snapshotId == null && blank(commitSha) && blank(worktreeDigest)) {
+    private static void requireVersion(UUID contentVersion, String commitSha, String worktreeDigest) {
+        if (contentVersion == null && blank(commitSha) && blank(worktreeDigest)) {
             throw new IllegalArgumentException("Git 和代码事实必须包含版本信息");
         }
     }

@@ -7,10 +7,11 @@ import ChunksM0View from './ChunksM0View.vue';
 import RepositoryFileTree from '@/components/RepositoryFileTree.vue';
 import RepositoryFilePreview from '@/components/RepositoryFilePreview.vue';
 import CodeEvidencePanel from '@/features/code/CodeEvidencePanel.vue';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 
 const api = vi.hoisted(() => ({ files: vi.fn(), file: vi.fn(), search: vi.fn(), push: vi.fn() }));
 let route: { query: Record<string, string> };
-let store: { selectedRepositoryId: string; selectedRepository: { snapshotId: string; capabilities: object }; repositories: object[] };
+let store: { selectedRepositoryId: string; selectedRepository: { contentVersion: string; capabilities: object }; repositories: object[] };
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: api.push }) }));
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => store }));
 vi.mock('@/api/repositories', () => ({ listRepositoryFiles: api.files, getRepositoryFile: api.file }));
@@ -22,7 +23,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 function file(path: string) {
-  return { snapshotId: 's1', path, content: path, lineCount: 1, language: 'typescript', name: path, sizeBytes: 10 };
+  return { contentVersion: 's1', path, content: path, lineCount: 1, language: 'typescript', name: path, sizeBytes: 10 };
 }
 function mountCode() {
   return shallowMount(ChunksM0View, {
@@ -41,8 +42,12 @@ describe('code browsing continuity', () => {
     vi.resetAllMocks();
     setActivePinia(createPinia());
     route = reactive({ query: {} });
-    store = reactive({ selectedRepositoryId: 'r1', selectedRepository: { snapshotId: 's1', capabilities: {} }, repositories: [{}] });
-    api.files.mockResolvedValue({ snapshotId: 's1', files: [{ path: 'a.ts' }, { path: 'b.ts' }] });
+    store = reactive({ selectedRepositoryId: 'r1', selectedRepository: { contentVersion: 's1', capabilities: {} }, repositories: [{}] });
+    const branches = useBranchContextStore();
+    branches.repositoryId = 'r1';
+    branches.selectedBranchId = 'main';
+    branches.context = { contextId: 'ctx-main', repositoryId: 'r1', branchId: 'main', branchName: 'main', contentVersion: 's1', commitSha: 'abc', expiresAt: '' };
+    api.files.mockResolvedValue({ contentVersion: 's1', files: [{ path: 'a.ts' }, { path: 'b.ts' }] });
     api.file.mockImplementation(async (_repository, path) => file(path));
   });
 
@@ -72,11 +77,11 @@ describe('code browsing continuity', () => {
   });
 
   it('does not open current source for a historical citation', async () => {
-    route.query = { path: 'a.ts', snapshotId: 'old' };
+    route.query = { path: 'a.ts', contentVersion: 'old' };
     const wrapper = mountCode();
     await flushPromises();
     expect(api.file).not.toHaveBeenCalled();
-    expect(wrapper.findComponent(RepositoryFilePreview).props('error')).toContain('历史快照');
+    expect(wrapper.findComponent(RepositoryFilePreview).props('error')).toContain('历史内容版本');
     wrapper.unmount();
   });
 
@@ -88,11 +93,11 @@ describe('code browsing continuity', () => {
     route.query.q = 'caller';
     await flushPromises();
     store.selectedRepositoryId = 'r2';
-    store.selectedRepository.snapshotId = 's2';
+    store.selectedRepository.contentVersion = 's2';
     route.query = {};
-    api.files.mockResolvedValue({ snapshotId: 's2', files: [] });
+    api.files.mockResolvedValue({ contentVersion: 's2', files: [] });
     await flushPromises();
-    pending.resolve({ retrieval: { snapshotId: 's1' }, evidence: [] });
+    pending.resolve({ retrieval: { contentVersion: 's1' }, evidence: [] });
     await flushPromises();
     expect(wrapper.find('.workbench-results').exists()).toBe(false);
     wrapper.unmount();

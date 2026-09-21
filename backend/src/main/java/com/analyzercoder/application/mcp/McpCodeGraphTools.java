@@ -6,7 +6,6 @@ import com.analyzercoder.application.intelligence.CodeGraphService;
 import com.analyzercoder.application.intelligence.ManagedCodeGraphService;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.AuthenticatedAccount;
 import com.analyzercoder.security.RepositoryPermission;
@@ -20,7 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
-/** Account-scoped discovery and read-only CodeGraph queries on pinned branch snapshots. */
+/** Account-scoped discovery and read-only CodeGraph queries on pinned branch contentVersions. */
 @Service
 public class McpCodeGraphTools {
     private final AccessControlService access;
@@ -54,10 +53,10 @@ public class McpCodeGraphTools {
         if (branchId == null && contextId == null)
             throw new IllegalArgumentException("CodeGraph 查询需要 branchId 或 contextId");
         var context = branches.resolve(actor, repositoryId, branchId, contextId);
-        var artifact = graphs.latestSnapshot(repositoryId, context.snapshotId());
+        var artifact = graphs.latestContentVersion(repositoryId, context.contentVersion());
         if (artifact == null || !"PUBLISHED".equals(artifact.status()))
             throw new CodeGraphException(
-                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "所选分支快照尚未发布 CodeGraph 产物");
+                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "所选分支内容版本尚未发布 CodeGraph 产物");
         List<String> args = new ArrayList<>();
         String operation;
         switch (name) {
@@ -127,7 +126,7 @@ public class McpCodeGraphTools {
             }
             default -> throw new IllegalArgumentException("未知 MCP 工具");
         }
-        String output = managed.readSnapshot(repositoryId, context.snapshotId(), operation, args);
+        String output = managed.readContentVersion(repositoryId, context.contentVersion(), operation, args);
         JsonNode result;
         try {
             result = json.readTree(output);
@@ -152,10 +151,7 @@ public class McpCodeGraphTools {
         Set<UUID> visible = Set.copyOf(access.visibleRepositoryIds(actor));
         var projects =
                 repositories.findAll().stream()
-                        .filter(
-                                r ->
-                                        visible.contains(r.id().value())
-                                                && r.sourceType() != RepositorySourceType.ZIP)
+                        .filter(r -> visible.contains(r.id().value()))
                         .sorted(Comparator.comparing(r -> r.name().toLowerCase()))
                         .toList();
         int start = (int) Math.min(projects.size(), (long) (page - 1) * pageSize);
@@ -168,12 +164,12 @@ public class McpCodeGraphTools {
                 item.put("name", branch.name());
                 item.put("status", branch.status());
                 item.put("trackingStatus", branch.trackingStatus());
-                item.put("snapshotId", branch.snapshotId());
+                item.put("contentVersion", branch.contentVersion());
                 item.put("commitSha", branch.commitSha());
                 var artifact =
-                        branch.snapshotId() == null
+                        branch.contentVersion() == null
                                 ? null
-                                : graphs.latestSnapshot(project.id().value(), branch.snapshotId());
+                                : graphs.latestContentVersion(project.id().value(), branch.contentVersion());
                 item.put(
                         "codegraphReady",
                         branch.archivedAt() == null

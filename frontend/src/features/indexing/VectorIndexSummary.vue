@@ -7,7 +7,7 @@ defineProps<{
 }>();
 
 function shortHash(value: string | null) {
-  return value?.slice(0, 10) ?? '尚无快照';
+  return value?.slice(0, 10) ?? '尚无内容版本';
 }
 </script>
 
@@ -33,7 +33,7 @@ function shortHash(value: string | null) {
       </div>
     </article>
     <footer>
-      <span>当前快照 <code>{{ shortHash(summary.snapshotId) }}</code></span>
+      <span>当前内容版本 <code>{{ shortHash(summary.contentVersion) }}</code></span>
       <span>提交版本 <code>{{ shortHash(summary.commitSha) }}</code></span>
       <span>知识卡片 {{ summary.vectorizedKnowledgeCards }}/{{ summary.knowledgeCards }}</span>
       <span v-if="summary.retrievalCapability === 'CHARACTER_HASH'">字符哈希不理解同义词或代码语义</span>

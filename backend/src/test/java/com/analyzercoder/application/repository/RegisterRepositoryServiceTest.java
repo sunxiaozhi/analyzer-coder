@@ -3,16 +3,13 @@ package com.analyzercoder.application.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.GitRepositorySnapshot;
+import com.analyzercoder.domain.repository.GitRepositoryContentVersion;
 import com.analyzercoder.domain.repository.LocalGitInspector;
-import com.analyzercoder.domain.repository.ManagedRepositorySnapshot;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
-import com.analyzercoder.domain.repository.RepositorySnapshotPort;
 import com.analyzercoder.infrastructure.chunk.InMemoryCodeChunkStore;
 import com.analyzercoder.infrastructure.indexing.InMemoryIndexJobStore;
 import com.analyzercoder.infrastructure.repository.InMemoryCodeRepositoryStore;
 import com.analyzercoder.infrastructure.repository.RepositoryPathPolicy;
+import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import java.nio.file.Path;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -22,16 +19,16 @@ class RegisterRepositoryServiceTest {
     @TempDir Path root;
 
     @Test
-    void registersLocalGitMetadataAndManagedSnapshot() {
+    void registersLocalGitMetadataWithoutPublishingCode() {
         MutableInspector inspector =
-                new MutableInspector(snapshot("main", "a".repeat(40), "1".repeat(64), false));
+                new MutableInspector(contentVersion("main", "a".repeat(40), "1".repeat(64), false));
         RegisterRepositoryService service = service(inspector);
         var repository =
                 service.register(new RegisterRepositoryCommand(" sample ", root.toString()));
         assertThat(repository.name()).isEqualTo("sample");
         assertThat(repository.defaultBranch()).isEqualTo("main");
-        assertThat(repository.currentSnapshotId()).isNotNull();
-        assertThat(repository.currentSnapshotPath()).isNotEqualTo(repository.path());
+        assertThat(repository.currentContentVersion()).isNull();
+        assertThat(repository.currentContentVersionPath()).isNull();
         assertThatThrownBy(
                         () ->
                                 service.register(
@@ -41,19 +38,19 @@ class RegisterRepositoryServiceTest {
     }
 
     @Test
-    void rescanKeepsSnapshotWhenUnchangedAndPublishesNewSnapshotWhenChanged() {
+    void rescanOnlyRefreshesSourceMetadataAndLeavesPublishingToTheBranch() {
         MutableInspector inspector =
-                new MutableInspector(snapshot("main", "a".repeat(40), "1".repeat(64), false));
+                new MutableInspector(contentVersion("main", "a".repeat(40), "1".repeat(64), false));
         RegisterRepositoryService service = service(inspector);
         var repository = service.register(new RegisterRepositoryCommand("sample", root.toString()));
-        var originalSnapshotId = repository.currentSnapshotId();
-        assertThat(service.rescan(repository.id()).repository().currentSnapshotId())
-                .isEqualTo(originalSnapshotId);
+        var originalContentVersion = repository.currentContentVersion();
+        assertThat(service.rescan(repository.id()).repository().currentContentVersion())
+                .isEqualTo(originalContentVersion);
 
-        inspector.snapshot = snapshot("feature", "b".repeat(40), "2".repeat(64), true);
+        inspector.contentVersion = contentVersion("feature", "b".repeat(40), "2".repeat(64), true);
         var changed = service.rescan(repository.id());
         assertThat(changed.changed()).isTrue();
-        assertThat(changed.repository().currentSnapshotId()).isNotEqualTo(originalSnapshotId);
+        assertThat(changed.repository().currentContentVersion()).isEqualTo(originalContentVersion);
         assertThat(changed.repository().worktreeDirty()).isTrue();
     }
 
@@ -64,54 +61,26 @@ class RegisterRepositoryServiceTest {
                 new InMemoryIndexJobStore(),
                 new RepositoryPathPolicy(root.toString()),
                 inspector,
-                new FakeSnapshotPort(root.resolve("managed")));
+                new GitBranchContentVersionFactory(root.resolve("managed").toString(), 1000, 10_000_000));
     }
 
-    private static GitRepositorySnapshot snapshot(
+    private static GitRepositoryContentVersion contentVersion(
             String branch, String commit, String digest, boolean dirty) {
-        return new GitRepositorySnapshot(
+        return new GitRepositoryContentVersion(
                 branch, commit, digest, dirty, Instant.parse("2026-07-21T00:00:00Z"));
     }
 
     private static final class MutableInspector implements LocalGitInspector {
-        private GitRepositorySnapshot snapshot;
+        private GitRepositoryContentVersion contentVersion;
 
-        private MutableInspector(GitRepositorySnapshot snapshot) {
-            this.snapshot = snapshot;
+        private MutableInspector(GitRepositoryContentVersion contentVersion) {
+            this.contentVersion = contentVersion;
         }
 
         @Override
-        public GitRepositorySnapshot inspect(Path repositoryRoot) {
-            return snapshot;
+        public GitRepositoryContentVersion inspect(Path repositoryRoot) {
+            return contentVersion;
         }
     }
 
-    private static final class FakeSnapshotPort implements RepositorySnapshotPort {
-        private final Path managedRoot;
-
-        private FakeSnapshotPort(Path managedRoot) {
-            this.managedRoot = managedRoot;
-        }
-
-        @Override
-        public ManagedRepositorySnapshot create(
-                CodeRepositoryId repositoryId,
-                Path sourceRoot,
-                GitRepositorySnapshot sourceVersion) {
-            RepositorySnapshotId id = RepositorySnapshotId.newId();
-            return new ManagedRepositorySnapshot(
-                    id,
-                    repositoryId,
-                    managedRoot.resolve(id.value().toString()),
-                    sourceVersion.commit(),
-                    sourceVersion.worktreeDigest(),
-                    Instant.now());
-        }
-
-        @Override
-        public void delete(ManagedRepositorySnapshot snapshot) {}
-
-        @Override
-        public void deleteRepository(CodeRepositoryId repositoryId) {}
-    }
 }

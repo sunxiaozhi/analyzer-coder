@@ -5,7 +5,7 @@
         <constructor>
             <idArg column="id" javaType="java.util.UUID"/>
             <arg column="repo_id" javaType="java.util.UUID"/>
-            <arg column="snapshot_id" javaType="java.util.UUID"/>
+            <arg column="content_version" javaType="java.util.UUID"/>
             <arg column="commit_sha" javaType="java.lang.String"/>
             <arg column="file_path" javaType="java.lang.String"/>
             <arg column="symbol_id" javaType="java.lang.String"/>
@@ -32,34 +32,39 @@
         </constructor>
     </resultMap>
     <sql id="columns">
-        id,repo_id,snapshot_id,commit_sha,file_path,symbol_id,symbol_name,symbol_kind,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at
+        id,repo_id,content_version,commit_sha,file_path,symbol_id,symbol_name,symbol_kind,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at
     </sql>
-    <sql id="currentSnapshot">
-        AND snapshot_id=(
-            SELECT current_snapshot_id FROM repositories WHERE id=#{repositoryId}
-        )
+    <sql id="currentContentVersion">
+        <choose>
+            <when test="contentVersion != null">AND content_version=#{contentVersion}</when>
+            <otherwise>AND content_version=(SELECT current_content_version FROM repositories WHERE id=#{repositoryId})</otherwise>
+        </choose>
     </sql>
     <delete id="deleteByRepositoryId">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}
-        AND NOT EXISTS(SELECT 1 FROM branch_snapshots b WHERE b.id=code_chunks.snapshot_id)</delete>
+        AND NOT EXISTS(SELECT 1 FROM repository_branches b WHERE b.repo_id=code_chunks.repo_id
+            AND code_chunks.content_version IN (b.content_version,b.previous_content_version))</delete>
     <delete id="deleteByPaths">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}
-        AND NOT EXISTS(SELECT 1 FROM branch_snapshots b WHERE b.id=code_chunks.snapshot_id) AND file_path IN
+        AND NOT EXISTS(SELECT 1 FROM repository_branches b WHERE b.repo_id=code_chunks.repo_id
+            AND code_chunks.content_version IN (b.content_version,b.previous_content_version)) AND file_path IN
         <foreach collection="paths" item="path" open="(" close=")" separator=",">#{path}</foreach>
     </delete>
-    <update id="rebaseUnchanged">UPDATE code_chunks SET snapshot_id=#{snapshotId},commit_sha=#{commitSha}
+    <update id="rebaseUnchanged">UPDATE code_chunks SET content_version=#{contentVersion},commit_sha=#{commitSha}
         WHERE repo_id=#{repositoryId}
-        AND NOT EXISTS(SELECT 1 FROM branch_snapshots b WHERE b.id=code_chunks.snapshot_id)
+        AND NOT EXISTS(SELECT 1 FROM repository_branches b WHERE b.repo_id=code_chunks.repo_id
+            AND code_chunks.content_version IN (b.content_version,b.previous_content_version))
         <if test="paths != null and !paths.isEmpty()">AND file_path NOT IN
             <foreach collection="paths" item="path" open="(" close=")" separator=",">#{path}</foreach>
         </if>
     </update>
     <select id="latestIndexedCommit" resultType="string">
         SELECT commit_sha FROM code_chunks WHERE repo_id=#{repositoryId}
-        AND NOT EXISTS(SELECT 1 FROM branch_snapshots b WHERE b.id=code_chunks.snapshot_id)
+        AND NOT EXISTS(SELECT 1 FROM repository_branches b WHERE b.repo_id=code_chunks.repo_id
+            AND code_chunks.content_version IN (b.content_version,b.previous_content_version))
         ORDER BY created_at DESC LIMIT 1
     </select>
     <insert id="insertBatch">INSERT INTO code_chunks(<include refid="columns"/>) VALUES
         <foreach collection="rows" item="row" separator=",">
-            (#{row.id},#{row.repositoryId},#{row.snapshotId},#{row.commitSha},#{row.filePath},#{row.symbolId},#{row.symbolName},#{row.symbolKind},#{row.language},#{row.assetType},#{row.chunkType},#{row.startLine},#{row.endLine},#{row.content},#{row.contentHash},#{row.createdAt})
+            (#{row.id},#{row.repositoryId},#{row.contentVersion},#{row.commitSha},#{row.filePath},#{row.symbolId},#{row.symbolName},#{row.symbolKind},#{row.language},#{row.assetType},#{row.chunkType},#{row.startLine},#{row.endLine},#{row.content},#{row.contentHash},#{row.createdAt})
         </foreach>
     </insert>
     <sql id="filter">
@@ -73,7 +78,7 @@
     <select id="find" resultMap="row">SELECT
         <include refid="columns"/>
         FROM code_chunks WHERE repo_id=#{repositoryId}
-        <include refid="currentSnapshot"/>
+        <include refid="currentContentVersion"/>
         <include refid="filter"/>
         ORDER BY <if test="query != null and query != ''">CASE WHEN POSITION(LOWER(#{query}) IN LOWER(file_path))&gt;0
             THEN 4 ELSE 0 END+CASE WHEN POSITION(LOWER(#{query}) IN LOWER(COALESCE(symbol_name,'')))&gt;0 THEN 3 ELSE 0
@@ -85,7 +90,7 @@
     <select id="findByPath" resultMap="row">SELECT
         <include refid="columns"/>
         FROM code_chunks WHERE repo_id=#{repositoryId} AND file_path=#{filePath}
-        <include refid="currentSnapshot"/>
+        <include refid="currentContentVersion"/>
         ORDER BY start_line NULLS LAST,id
     </select>
     <select id="findModuleSymbols" resultMap="moduleSymbol">
@@ -93,7 +98,7 @@
             symbol_name,symbol_kind,file_path,start_line,end_line,language
         FROM code_chunks
         WHERE repo_id=#{repositoryId}
-          AND snapshot_id=#{snapshotId}
+          AND content_version=#{contentVersion}
           AND asset_type='CODE'
           AND symbol_name IS NOT NULL
           AND BTRIM(symbol_name)&lt;&gt;''
@@ -113,7 +118,7 @@
         LIMIT #{limit}
     </select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM code_chunks WHERE repo_id=#{repositoryId}
-        <include refid="currentSnapshot"/>
+        <include refid="currentContentVersion"/>
         <include refid="filter"/>
     </select>
 </mapper>

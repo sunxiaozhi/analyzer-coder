@@ -60,7 +60,7 @@ public class MarkdownKnowledgeSourceService {
 
     /**
      * Synchronizes the complete Markdown manifest from a repository scan. Both full and incremental
-     * indexing pass the complete scan so unchanged sources also advance to the new snapshot token.
+     * indexing pass the complete scan so unchanged sources also advance to the new contentVersion token.
      */
     @Transactional
     public void synchronize(
@@ -71,7 +71,7 @@ public class MarkdownKnowledgeSourceService {
         Objects.requireNonNull(repository, "repository must not be null");
         Objects.requireNonNull(allFiles, "allFiles must not be null");
         UUID repositoryId = repository.id().value();
-        UUID snapshotId = currentSnapshot(repository);
+        UUID contentVersion = currentContentVersion(repository);
 
         Map<String, SourceDocument> documents = new LinkedHashMap<>();
         for (ScannedRepositoryFile file : allFiles) {
@@ -90,7 +90,7 @@ public class MarkdownKnowledgeSourceService {
             mapper.upsertSource(
                     UUID.randomUUID(),
                     repositoryId,
-                    snapshotId,
+                    contentVersion,
                     source.path(),
                     source.contentHash(),
                     source.title(),
@@ -105,7 +105,7 @@ public class MarkdownKnowledgeSourceService {
         mapper.deleteMissingSources(repositoryId, new ArrayList<>(documents.keySet()));
         mapper.reconcileLinkedCards(
                 repositoryId,
-                repository.currentSnapshotId().value(),
+                repository.currentContentVersion().value(),
                 repository.currentCommit(),
                 repository.currentCommit() != null && !repository.currentCommit().isBlank());
     }
@@ -115,11 +115,11 @@ public class MarkdownKnowledgeSourceService {
     public void synchronizeBranch(
             UUID repositoryId,
             UUID branchId,
-            UUID snapshotId,
+            UUID contentVersion,
             List<ScannedRepositoryFile> allFiles) {
         Objects.requireNonNull(repositoryId, "repositoryId must not be null");
         Objects.requireNonNull(branchId, "branchId must not be null");
-        Objects.requireNonNull(snapshotId, "snapshotId must not be null");
+        Objects.requireNonNull(contentVersion, "contentVersion must not be null");
         Map<String, SourceDocument> documents = new LinkedHashMap<>();
         for (ScannedRepositoryFile file : allFiles) {
             if (isMarkdown(file)) {
@@ -135,7 +135,7 @@ public class MarkdownKnowledgeSourceService {
                     UUID.randomUUID(),
                     repositoryId,
                     branchId,
-                    snapshotId,
+                    contentVersion,
                     source.path(),
                     source.contentHash(),
                     source.title(),
@@ -146,22 +146,22 @@ public class MarkdownKnowledgeSourceService {
         }
         mapper.deleteMissingBranchSources(
                 repositoryId, branchId, new ArrayList<>(documents.keySet()));
-        mapper.reconcileBranchValidations(repositoryId, branchId, snapshotId);
+        mapper.reconcileBranchValidations(repositoryId, branchId, contentVersion);
     }
 
     @Transactional(readOnly = true)
     public MarkdownSourceList list(UUID repositoryId) {
         CodeRepository repository = repository(repositoryId);
-        UUID snapshotId = currentSnapshot(repository);
+        UUID contentVersion = currentContentVersion(repository);
         List<MarkdownSource> items =
-                mapper.listSources(repositoryId, snapshotId).stream()
+                mapper.listSources(repositoryId, contentVersion).stream()
                         .map(MarkdownKnowledgeSourceService::sourceView)
                         .toList();
         long current = items.stream().filter(item -> "CURRENT".equals(item.status())).count();
         long stale = items.stream().filter(item -> "STALE".equals(item.status())).count();
         long pending = items.size() - current - stale;
         return new MarkdownSourceList(
-                snapshotId, new Counts(items.size(), pending, current, stale), items);
+                contentVersion, new Counts(items.size(), pending, current, stale), items);
     }
 
     @Transactional(readOnly = true)
@@ -169,18 +169,18 @@ public class MarkdownKnowledgeSourceService {
         requireContext(repositoryId, context);
         List<MarkdownSource> items =
                 mapper
-                        .listBranchSources(repositoryId, context.branchId(), context.snapshotId())
+                        .listBranchSources(repositoryId, context.branchId(), context.contentVersion())
                         .stream()
                         .map(MarkdownKnowledgeSourceService::sourceView)
                         .toList();
-        return sourceList(context.snapshotId(), items);
+        return sourceList(context.contentVersion(), items);
     }
 
     @Transactional
     public IntelligenceService.KnowledgeCard generate(
             UUID repositoryId, UUID actorId, GenerateInput input) {
         if (input == null
-                || input.expectedSnapshotId() == null
+                || input.expectedContentVersion() == null
                 || input.sourcePath() == null
                 || input.expectedContentHash() == null) {
             throw new IllegalArgumentException("Markdown 来源参数不能为空");
@@ -188,11 +188,11 @@ public class MarkdownKnowledgeSourceService {
         String sourcePath = normalizePath(input.sourcePath());
         String expectedHash = normalizeHash(input.expectedContentHash());
         CodeRepository repository = repository(repositoryId);
-        verifyExpectedSnapshot(repository, input.expectedSnapshotId());
+        verifyExpectedContentVersion(repository, input.expectedContentVersion());
         Map<String, Object> source = lockCurrentSource(repositoryId, sourcePath);
-        verifySourceVersion(source, input.expectedSnapshotId(), expectedHash);
+        verifySourceVersion(source, input.expectedContentVersion(), expectedHash);
         Map<String, Object> view =
-                mapper.findSource(repositoryId, input.expectedSnapshotId(), sourcePath);
+                mapper.findSource(repositoryId, input.expectedContentVersion(), sourcePath);
         if (view == null) {
             throw sourceChanged();
         }
@@ -204,28 +204,28 @@ public class MarkdownKnowledgeSourceService {
             UUID repositoryId, UUID actorId, GenerateInput input, BranchReadContext context) {
         validateInput(input);
         requireContext(repositoryId, context);
-        verifyExpectedSnapshot(context, input.expectedSnapshotId());
+        verifyExpectedContentVersion(context, input.expectedContentVersion());
         String sourcePath = normalizePath(input.sourcePath());
         Map<String, Object> source =
                 mapper.lockBranchSource(repositoryId, context.branchId(), sourcePath);
         verifySourceVersion(
-                source, input.expectedSnapshotId(), normalizeHash(input.expectedContentHash()));
+                source, input.expectedContentVersion(), normalizeHash(input.expectedContentHash()));
         Map<String, Object> view =
                 mapper.findBranchSource(
-                        repositoryId, context.branchId(), input.expectedSnapshotId(), sourcePath);
+                        repositoryId, context.branchId(), input.expectedContentVersion(), sourcePath);
         if (view == null) throw sourceChanged();
         return generateSource(repositoryId, actorId, view, false, context.branchId());
     }
 
     @Transactional
     public BatchGenerationResult generatePending(
-            UUID repositoryId, UUID actorId, UUID expectedSnapshotId) {
-        if (expectedSnapshotId == null) {
-            throw new IllegalArgumentException("预期快照不能为空");
+            UUID repositoryId, UUID actorId, UUID expectedContentVersion) {
+        if (expectedContentVersion == null) {
+            throw new IllegalArgumentException("预期内容版本不能为空");
         }
         CodeRepository repository = repository(repositoryId);
-        verifyExpectedSnapshot(repository, expectedSnapshotId);
-        List<Map<String, Object>> candidates = mapper.listSources(repositoryId, expectedSnapshotId);
+        verifyExpectedContentVersion(repository, expectedContentVersion);
+        List<Map<String, Object>> candidates = mapper.listSources(repositoryId, expectedContentVersion);
         int pendingTotal =
                 (int)
                         candidates.stream()
@@ -245,9 +245,9 @@ public class MarkdownKnowledgeSourceService {
             String sourcePath = string(candidate, "source_path");
             Map<String, Object> locked = lockCurrentSource(repositoryId, sourcePath);
             verifySourceVersion(
-                    locked, expectedSnapshotId, string(candidate, "source_content_hash"));
+                    locked, expectedContentVersion, string(candidate, "source_content_hash"));
             Map<String, Object> current =
-                    mapper.findSource(repositoryId, expectedSnapshotId, sourcePath);
+                    mapper.findSource(repositoryId, expectedContentVersion, sourcePath);
             if (current == null || !"PENDING".equals(string(current, "source_status"))) {
                 continue;
             }
@@ -262,11 +262,11 @@ public class MarkdownKnowledgeSourceService {
 
     @Transactional
     public BatchGenerationResult generatePending(
-            UUID repositoryId, UUID actorId, UUID expectedSnapshotId, BranchReadContext context) {
+            UUID repositoryId, UUID actorId, UUID expectedContentVersion, BranchReadContext context) {
         requireContext(repositoryId, context);
-        verifyExpectedSnapshot(context, expectedSnapshotId);
+        verifyExpectedContentVersion(context, expectedContentVersion);
         List<Map<String, Object>> candidates =
-                mapper.listBranchSources(repositoryId, context.branchId(), expectedSnapshotId);
+                mapper.listBranchSources(repositoryId, context.branchId(), expectedContentVersion);
         int pendingTotal =
                 (int)
                         candidates.stream()
@@ -283,10 +283,10 @@ public class MarkdownKnowledgeSourceService {
             Map<String, Object> locked =
                     mapper.lockBranchSource(repositoryId, context.branchId(), sourcePath);
             verifySourceVersion(
-                    locked, expectedSnapshotId, string(candidate, "source_content_hash"));
+                    locked, expectedContentVersion, string(candidate, "source_content_hash"));
             Map<String, Object> current =
                     mapper.findBranchSource(
-                            repositoryId, context.branchId(), expectedSnapshotId, sourcePath);
+                            repositoryId, context.branchId(), expectedContentVersion, sourcePath);
             if (current == null || !"PENDING".equals(string(current, "source_status"))) continue;
             if (generateSource(repositoryId, actorId, current, true, context.branchId()) != null)
                 generated++;
@@ -318,11 +318,11 @@ public class MarkdownKnowledgeSourceService {
                     409, "MARKDOWN_SOURCE_TOO_LARGE", "Markdown 内容超过知识卡片 600000 字符限制，暂不能直接生成");
         }
 
-        UUID snapshotId = uuid(source, "source_snapshot_id");
+        UUID contentVersion = uuid(source, "source_content_version");
         String sourcePath = string(source, "source_path");
         List<IntelligenceService.CodeReferenceInput> references =
                 mapper
-                        .findChunkIds(repositoryId, snapshotId, sourcePath, MAX_CODE_REFERENCES)
+                        .findChunkIds(repositoryId, contentVersion, sourcePath, MAX_CODE_REFERENCES)
                         .stream()
                         .map(IntelligenceService.CodeReferenceInput::new)
                         .toList();
@@ -348,32 +348,22 @@ public class MarkdownKnowledgeSourceService {
                                         .toList(),
                         references);
 
+        if (sourceBranchId == null) sourceBranchId = uuid(source, "source_branch_id");
+        if (sourceBranchId == null)
+            throw new IllegalArgumentException("Markdown 知识必须从明确的分支生成");
         IntelligenceService.KnowledgeCard generated =
                 previous == null
-                        ? intelligence.createCard(repositoryId, actorId, cardInput)
+                        ? intelligence.createCard(repositoryId, sourceBranchId, actorId, cardInput)
                         : intelligence.updateCard(repositoryId, previous.id(), actorId, cardInput);
-        if (sourceBranchId == null) {
-            mapper.insertProvenance(
-                    generated.id(),
-                    generated.revision(),
-                    uuid(source, "source_id"),
-                    repositoryId,
-                    snapshotId,
-                    sourcePath,
-                    string(source, "source_content_hash"));
-        } else {
-            mapper.insertBranchProvenance(
-                    generated.id(),
-                    generated.revision(),
-                    uuid(source, "source_id"),
-                    repositoryId,
-                    sourceBranchId,
-                    snapshotId,
-                    sourcePath,
-                    string(source, "source_content_hash"));
-            if (previous == null && branchKnowledge != null)
-                branchKnowledge.bindCreated(repositoryId, generated.id(), sourceBranchId);
-        }
+        mapper.insertBranchProvenance(
+                generated.id(),
+                generated.revision(),
+                uuid(source, "source_id"),
+                repositoryId,
+                sourceBranchId,
+                contentVersion,
+                sourcePath,
+                string(source, "source_content_hash"));
         return generated;
     }
 
@@ -386,23 +376,23 @@ public class MarkdownKnowledgeSourceService {
     }
 
     private static void verifySourceVersion(
-            Map<String, Object> source, UUID expectedSnapshotId, String expectedHash) {
-        if (!expectedSnapshotId.equals(uuid(source, "source_snapshot_id"))
-                || !expectedSnapshotId.equals(uuid(source, "repository_snapshot_id"))
+            Map<String, Object> source, UUID expectedContentVersion, String expectedHash) {
+        if (!expectedContentVersion.equals(uuid(source, "source_content_version"))
+                || !expectedContentVersion.equals(uuid(source, "repository_content_version"))
                 || !normalizeHash(expectedHash)
                         .equals(normalizeHash(string(source, "source_content_hash")))) {
             throw sourceChanged();
         }
     }
 
-    private static void verifyExpectedSnapshot(CodeRepository repository, UUID expectedSnapshotId) {
-        if (!currentSnapshot(repository).equals(expectedSnapshotId)) {
+    private static void verifyExpectedContentVersion(CodeRepository repository, UUID expectedContentVersion) {
+        if (!currentContentVersion(repository).equals(expectedContentVersion)) {
             throw sourceChanged();
         }
     }
 
-    private static void verifyExpectedSnapshot(BranchReadContext context, UUID expectedSnapshotId) {
-        if (expectedSnapshotId == null || !context.snapshotId().equals(expectedSnapshotId))
+    private static void verifyExpectedContentVersion(BranchReadContext context, UUID expectedContentVersion) {
+        if (expectedContentVersion == null || !context.contentVersion().equals(expectedContentVersion))
             throw sourceChanged();
     }
 
@@ -413,17 +403,17 @@ public class MarkdownKnowledgeSourceService {
 
     private static void validateInput(GenerateInput input) {
         if (input == null
-                || input.expectedSnapshotId() == null
+                || input.expectedContentVersion() == null
                 || input.sourcePath() == null
                 || input.expectedContentHash() == null)
             throw new IllegalArgumentException("Markdown 来源参数不能为空");
     }
 
-    private static MarkdownSourceList sourceList(UUID snapshotId, List<MarkdownSource> items) {
+    private static MarkdownSourceList sourceList(UUID contentVersion, List<MarkdownSource> items) {
         long current = items.stream().filter(item -> "CURRENT".equals(item.status())).count();
         long stale = items.stream().filter(item -> "STALE".equals(item.status())).count();
         return new MarkdownSourceList(
-                snapshotId,
+                contentVersion,
                 new Counts(items.size(), items.size() - current - stale, current, stale),
                 items);
     }
@@ -447,11 +437,11 @@ public class MarkdownKnowledgeSourceService {
                 .orElseThrow(() -> new IllegalArgumentException("仓库不存在"));
     }
 
-    private static UUID currentSnapshot(CodeRepository repository) {
-        if (repository.currentSnapshotId() == null) {
-            throw new ApiSecurityException(409, "MARKDOWN_SOURCE_NOT_READY", "仓库尚未发布可读取的内容快照");
+    private static UUID currentContentVersion(CodeRepository repository) {
+        if (repository.currentContentVersion() == null) {
+            throw new ApiSecurityException(409, "MARKDOWN_SOURCE_NOT_READY", "仓库尚未发布可读取的内容内容版本");
         }
-        return repository.currentSnapshotId().value();
+        return repository.currentContentVersion().value();
     }
 
     private static boolean isMarkdown(ScannedRepositoryFile file) {
@@ -535,7 +525,7 @@ public class MarkdownKnowledgeSourceService {
                 uuid(row, "source_id"),
                 uuid(row, "source_branch_id"),
                 string(row, "source_path"),
-                uuid(row, "source_snapshot_id"),
+                uuid(row, "source_content_version"),
                 string(row, "source_content_hash"),
                 string(row, "title"),
                 string(row, "asset_type"),
@@ -544,7 +534,7 @@ public class MarkdownKnowledgeSourceService {
                 string(row, "source_status"),
                 uuid(row, "card_id"),
                 integerNullable(row, "card_revision"),
-                uuid(row, "generated_snapshot_id"),
+                uuid(row, "generated_content_version"),
                 string(row, "generated_content_hash"));
     }
 
@@ -643,9 +633,9 @@ public class MarkdownKnowledgeSourceService {
             long byteSize) {}
 
     public record GenerateInput(
-            String sourcePath, UUID expectedSnapshotId, String expectedContentHash) {}
+            String sourcePath, UUID expectedContentVersion, String expectedContentHash) {}
 
-    public record MarkdownSourceList(UUID snapshotId, Counts counts, List<MarkdownSource> items) {}
+    public record MarkdownSourceList(UUID contentVersion, Counts counts, List<MarkdownSource> items) {}
 
     public record Counts(long total, long pending, long current, long stale) {}
 
@@ -653,7 +643,7 @@ public class MarkdownKnowledgeSourceService {
             UUID sourceId,
             UUID branchId,
             String sourcePath,
-            UUID sourceSnapshotId,
+            UUID sourceContentVersion,
             String sourceContentHash,
             String title,
             String assetType,
@@ -662,7 +652,7 @@ public class MarkdownKnowledgeSourceService {
             String status,
             UUID cardId,
             Integer cardRevision,
-            UUID generatedSnapshotId,
+            UUID generatedContentVersion,
             String generatedContentHash) {}
 
     public record BatchGenerationResult(int generated, int remaining) {}

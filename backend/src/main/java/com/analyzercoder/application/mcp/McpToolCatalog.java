@@ -39,14 +39,15 @@ public class McpToolCatalog {
 
     private static void validateValue(JsonNode schema, JsonNode value, String path) {
         if (schema.has("anyOf")) {
+            boolean matched = false;
             for (JsonNode alternative : schema.get("anyOf")) {
-                try {
-                    validateValue(alternative, value, path);
-                    return;
-                } catch (IllegalArgumentException ignored) {
+                boolean requiredPresent = value.isObject();
+                for (JsonNode required : alternative.path("required")) {
+                    if (!value.has(required.asText())) requiredPresent = false;
                 }
+                if (requiredPresent) matched = true;
             }
-            throw invalid(path);
+            if (!matched) throw invalid(path);
         }
         boolean correct =
                 switch (schema.path("type").asText()) {

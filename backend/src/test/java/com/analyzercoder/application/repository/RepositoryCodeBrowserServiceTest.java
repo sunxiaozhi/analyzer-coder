@@ -7,7 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -20,16 +20,16 @@ class RepositoryCodeBrowserServiceTest {
     @TempDir Path root;
 
     @Test
-    void listsTheWholeSnapshotAndReadsUtf8Content() throws Exception {
+    void listsTheWholeContentVersionAndReadsUtf8Content() throws Exception {
         Files.createDirectories(root.resolve("src/components"));
         Files.writeString(
                 root.resolve("src/components/Panel.vue"), "<template>\n  <main />\n</template>\n");
         Files.writeString(root.resolve("README.md"), "# 示例");
         RepositoryCodeBrowserService service = service(2_000_000);
 
-        var snapshot = service.list(repositoryId());
-        assertThat(snapshot.branch()).isEqualTo("main");
-        assertThat(snapshot.files())
+        var contentVersion = service.list(repositoryId());
+        assertThat(contentVersion.branch()).isEqualTo("main");
+        assertThat(contentVersion.files())
                 .extracting(RepositoryCodeBrowserService.FileEntry::path)
                 .containsExactly("README.md", "src/components/Panel.vue");
 
@@ -107,7 +107,7 @@ class RepositoryCodeBrowserServiceTest {
                 "a".repeat(40),
                 "b".repeat(64),
                 false,
-                RepositorySnapshotId.of(
+                RepositoryContentVersion.of(
                         java.util.UUID.fromString("00000000-0000-0000-0000-000000000002")),
                 root,
                 root.resolve(".codegraph"),

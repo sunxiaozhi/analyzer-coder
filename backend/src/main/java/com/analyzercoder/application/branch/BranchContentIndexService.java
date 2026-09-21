@@ -5,7 +5,7 @@ import com.analyzercoder.application.intelligence.MarkdownKnowledgeSourceService
 import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.indexing.RepositoryScannerPort;
 import com.analyzercoder.domain.repository.CodeRepository;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import java.sql.Timestamp;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -45,17 +45,17 @@ public class BranchContentIndexService {
 
     public void index(BranchReadContext context, CodeRepository source, Runnable checkpoint) {
         if (!source.id().value().equals(context.repositoryId())
-                || source.currentSnapshotId() == null
-                || !source.currentSnapshotId().value().equals(context.snapshotId())
-                || !context.contentPath().equals(source.currentSnapshotPath()))
-            throw new IllegalArgumentException("内容索引必须使用目标分支快照的代码");
+                || source.currentContentVersion() == null
+                || !source.currentContentVersion().value().equals(context.contentVersion())
+                || !context.contentPath().equals(source.currentContentVersionPath()))
+            throw new IllegalArgumentException("内容索引必须使用目标分支内容版本的代码");
         checkpoint.run();
         if (indexed(context)) return;
         String commit = context.commitSha();
         var repoId = context.repositoryId();
         ChangePlan plan = changePlan(context);
-        UUID previousSnapshot = plan.full() ? null : previousIndexedSnapshot(context);
-        boolean incremental = previousSnapshot != null;
+        UUID previousContentVersion = plan.full() ? null : previousIndexedContentVersion(context);
+        boolean incremental = previousContentVersion != null;
         java.util.List<CodeChunk> chunks = new ArrayList<>();
         var scannedFiles =
                 incremental ? scanner.scan(source, plan.paths()) : scanner.scan(source);
@@ -68,7 +68,7 @@ public class BranchContentIndexService {
                 chunks.add(
                         CodeChunk.fileChunk(
                                 source.id(),
-                                RepositorySnapshotId.of(context.snapshotId()),
+                                RepositoryContentVersion.of(context.contentVersion()),
                                 commit,
                                 file.relativePath(),
                                 file.language(),
@@ -89,7 +89,7 @@ public class BranchContentIndexService {
                 chunks.add(
                         CodeChunk.symbolChunk(
                                 source.id(),
-                                RepositorySnapshotId.of(context.snapshotId()),
+                                RepositoryContentVersion.of(context.contentVersion()),
                                 commit,
                                 file.relativePath(),
                                 file.language(),
@@ -108,96 +108,104 @@ public class BranchContentIndexService {
         checkpoint.run();
         transaction.executeWithoutResult(
                 status -> {
-                    // Lock and re-check, so duplicate or recovered tasks cannot duplicate immutable
-                    // chunks.
+                    // Lock the branch and re-check its publication token so stale tasks cannot
+                    // publish derived data after a newer sync.
                     db.queryForObject(
-                            "SELECT id FROM branch_snapshots WHERE repo_id=? AND branch_id=? AND id=? FOR UPDATE",
+                            "SELECT id FROM repository_branches WHERE repo_id=? AND id=? AND content_version=? FOR UPDATE",
                             java.util.UUID.class,
                             repoId,
                             context.branchId(),
-                            context.snapshotId());
+                            context.contentVersion());
                     checkpoint.run();
                     if (indexed(context)) return;
                     if (incremental) {
                         copyUnchangedChunks(
                                 repoId,
-                                previousSnapshot,
-                                context.snapshotId(),
+                                previousContentVersion,
+                                context.contentVersion(),
                                 commit,
                                 plan.paths());
                     }
                     if (!chunks.isEmpty()) {
                         db.batchUpdate(
                                 """
-                    INSERT INTO code_chunks(id,repo_id,snapshot_id,commit_sha,file_path,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at,symbol_id,symbol_name,symbol_kind)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    INSERT INTO code_chunks(id,repo_id,branch_id,content_version,commit_sha,file_path,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at,symbol_id,symbol_name,symbol_kind)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                                 chunks,
                                 250,
                                 (statement, c) -> {
                                     statement.setObject(1, c.id().value());
                                     statement.setObject(2, repoId);
-                                    statement.setObject(3, context.snapshotId());
-                                    statement.setString(4, commit);
-                                    statement.setString(5, c.filePath());
-                                    statement.setString(6, c.language());
-                                    statement.setString(7, c.assetType().name());
-                                    statement.setString(8, c.chunkType().name());
-                                    statement.setInt(9, c.startLine());
-                                    statement.setInt(10, c.endLine());
-                                    statement.setString(11, c.content());
-                                    statement.setString(12, c.contentHash());
-                                    statement.setTimestamp(13, Timestamp.from(c.createdAt()));
-                                    statement.setString(14, c.symbolId());
-                                    statement.setString(15, c.symbolName());
-                                    statement.setString(16, c.symbolKind());
+                                    statement.setObject(3, context.branchId());
+                                    statement.setObject(4, context.contentVersion());
+                                    statement.setString(5, commit);
+                                    statement.setString(6, c.filePath());
+                                    statement.setString(7, c.language());
+                                    statement.setString(8, c.assetType().name());
+                                    statement.setString(9, c.chunkType().name());
+                                    statement.setInt(10, c.startLine());
+                                    statement.setInt(11, c.endLine());
+                                    statement.setString(12, c.content());
+                                    statement.setString(13, c.contentHash());
+                                    statement.setTimestamp(14, Timestamp.from(c.createdAt()));
+                                    statement.setString(15, c.symbolId());
+                                    statement.setString(16, c.symbolName());
+                                    statement.setString(17, c.symbolKind());
                                 });
                     }
 
                     Long total =
                             db.queryForObject(
-                                    "SELECT COUNT(*) FROM code_chunks WHERE repo_id=? AND snapshot_id=?",
+                                    "SELECT COUNT(*) FROM code_chunks WHERE repo_id=? AND branch_id=? AND content_version=?",
                                     Long.class,
                                     repoId,
-                                    context.snapshotId());
+                                    context.branchId(),
+                                    context.contentVersion());
                     if (total == null || total == 0)
                         throw new IllegalArgumentException("分支没有可索引的文本文件");
 
-                    // Old pinned index tasks must not replace the new branch's Markdown source
-                    // inventory.
                     if (Boolean.TRUE.equals(
                             db.queryForObject(
-                                    "SELECT published_snapshot_id=? FROM repository_branches WHERE repo_id=? AND id=?",
+                                    "SELECT content_version=? FROM repository_branches WHERE repo_id=? AND id=?",
                                     Boolean.class,
-                                    context.snapshotId(),
+                                    context.contentVersion(),
                                     repoId,
                                     context.branchId()))) {
                         markdown.synchronizeBranch(
-                                repoId, context.branchId(), context.snapshotId(), markdownFiles);
+                                repoId, context.branchId(), context.contentVersion(), markdownFiles);
                     }
                     db.update(
-                            "UPDATE branch_snapshots SET content_indexed_at=CURRENT_TIMESTAMP WHERE repo_id=? AND branch_id=? AND id=?",
+                            "UPDATE repository_branches SET content_indexed_at=CURRENT_TIMESTAMP,previous_content_version=NULL WHERE repo_id=? AND id=? AND content_version=?",
                             repoId,
                             context.branchId(),
-                            context.snapshotId());
+                            context.contentVersion());
+                    if (previousContentVersion != null) {
+                        db.update(
+                                "DELETE FROM codegraph_artifacts WHERE repo_id=? AND content_version=?",
+                                repoId,
+                                previousContentVersion);
+                        db.update(
+                                "DELETE FROM code_chunks WHERE repo_id=? AND branch_id=? AND content_version=?",
+                                repoId,
+                                context.branchId(),
+                                previousContentVersion);
+                    }
                 });
     }
 
-    private UUID previousIndexedSnapshot(BranchReadContext context) {
+    private UUID previousIndexedContentVersion(BranchReadContext context) {
         return db.query(
                         """
-                        SELECT previous.id
-                        FROM branch_snapshots current
-                        JOIN branch_snapshots previous
-                          ON previous.repo_id=current.repo_id AND previous.branch_id=current.branch_id
-                         AND previous.id<>current.id AND previous.content_indexed_at IS NOT NULL
-                        WHERE current.repo_id=? AND current.branch_id=? AND current.id=?
-                        ORDER BY previous.created_at DESC LIMIT 1
+                        SELECT previous_content_version
+                        FROM repository_branches
+                        WHERE repo_id=? AND id=? AND content_version=?
+                          AND previous_content_version IS NOT NULL
                         """,
-                        (row, number) -> row.getObject("id", UUID.class),
+                        (row, number) -> row.getObject("previous_content_version", UUID.class),
                         context.repositoryId(),
                         context.branchId(),
-                        context.snapshotId())
+                        context.contentVersion())
                 .stream()
                 .findFirst()
                 .orElse(null);
@@ -205,19 +213,27 @@ public class BranchContentIndexService {
 
     private void copyUnchangedChunks(
             UUID repoId,
-            UUID previousSnapshot,
-            UUID snapshotId,
+            UUID previousContentVersion,
+            UUID contentVersion,
             String commit,
             Set<String> changedPaths) {
         StringBuilder sql =
                 new StringBuilder(
                         """
-                        INSERT INTO code_chunks(id,repo_id,snapshot_id,commit_sha,file_path,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at,symbol_id,symbol_name,symbol_kind)
-                        SELECT gen_random_uuid(),repo_id,?,?,file_path,language,asset_type,chunk_type,start_line,end_line,content,content_hash,CURRENT_TIMESTAMP,symbol_id,symbol_name,symbol_kind
-                        FROM code_chunks WHERE repo_id=? AND snapshot_id=?
+                        INSERT INTO code_chunks(id,repo_id,branch_id,content_version,commit_sha,file_path,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at,symbol_id,symbol_name,symbol_kind)
+                        SELECT gen_random_uuid(),repo_id,branch_id,?,?,file_path,language,asset_type,chunk_type,start_line,end_line,content,content_hash,CURRENT_TIMESTAMP,symbol_id,symbol_name,symbol_kind
+                        FROM code_chunks WHERE repo_id=? AND branch_id=? AND content_version=?
                         """);
         ArrayList<Object> arguments =
-                new ArrayList<>(List.of(snapshotId, commit, repoId, previousSnapshot));
+                new ArrayList<>(
+                        List.of(
+                                contentVersion,
+                                commit,
+                                repoId,
+                                // content versions are branch-local publications; copy only the
+                                // branch selected by the caller.
+                                branchIdForVersion(repoId, contentVersion),
+                                previousContentVersion));
         if (!changedPaths.isEmpty()) {
             sql.append(" AND file_path NOT IN (");
             sql.append(String.join(",", java.util.Collections.nCopies(changedPaths.size(), "?")));
@@ -225,6 +241,14 @@ public class BranchContentIndexService {
             arguments.addAll(changedPaths);
         }
         db.update(sql.toString(), arguments.toArray());
+    }
+
+    private UUID branchIdForVersion(UUID repoId, UUID contentVersion) {
+        return db.queryForObject(
+                "SELECT id FROM repository_branches WHERE repo_id=? AND content_version=?",
+                UUID.class,
+                repoId,
+                contentVersion);
     }
 
     private ChangePlan changePlan(BranchReadContext context) {
@@ -264,10 +288,10 @@ public class BranchContentIndexService {
     public boolean indexed(BranchReadContext context) {
         return Boolean.TRUE.equals(
                 db.queryForObject(
-                        "SELECT content_indexed_at IS NOT NULL FROM branch_snapshots WHERE repo_id=? AND branch_id=? AND id=?",
+                        "SELECT content_indexed_at IS NOT NULL FROM repository_branches WHERE repo_id=? AND id=? AND content_version=?",
                         Boolean.class,
                         context.repositoryId(),
                         context.branchId(),
-                        context.snapshotId()));
+                        context.contentVersion()));
     }
 }

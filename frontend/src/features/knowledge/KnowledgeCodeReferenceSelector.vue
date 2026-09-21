@@ -64,7 +64,7 @@ function add(chunk: CodeChunk) {
   references.value = [...references.value, {
     repositoryId: props.repositoryId,
     chunkId: chunk.id,
-    snapshotId: chunk.snapshotId,
+    contentVersion: chunk.contentVersion,
     filePath: chunk.filePath,
     symbolName: chunk.symbolName,
     startLine: chunk.startLine,

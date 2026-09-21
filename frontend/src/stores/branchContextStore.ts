@@ -23,7 +23,7 @@ export const useBranchContextStore = defineStore('branch-context', () => {
   );
   const ready = computed(() => Boolean(context.value && selectedBranch.value?.status === 'READY'));
   const identity = computed(() => context.value
-    ? `${context.value.branchId}:${context.value.snapshotId}:${context.value.commitSha}`
+    ? `${context.value.branchId}:${context.value.contentVersion}:${context.value.commitSha}`
     : `${repositoryId.value ?? 'no-project'}:${selectedBranchId.value ?? 'no-branch'}:${loading.value ? 'loading' : 'pending'}:${error.value ?? ''}`);
 
   function clear() {
@@ -87,7 +87,7 @@ export const useBranchContextStore = defineStore('branch-context', () => {
       context.value = created;
     } catch (exception) {
       if (version === requestVersion) {
-        error.value = exception instanceof Error ? exception.message : '锁定分支快照失败';
+        error.value = exception instanceof Error ? exception.message : '锁定分支内容版本失败';
       }
       throw exception;
     } finally {

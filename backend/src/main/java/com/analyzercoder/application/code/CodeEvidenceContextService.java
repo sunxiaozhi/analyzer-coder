@@ -75,9 +75,9 @@ public class CodeEvidenceContextService {
                         .toList();
         return new CodeEvidenceContext(
                 repositoryId.value(),
-                repository.currentSnapshotId() == null
+                repository.currentContentVersion() == null
                         ? null
-                        : repository.currentSnapshotId().value(),
+                        : repository.currentContentVersion().value(),
                 repository.currentCommit(),
                 normalizedPath,
                 normalizedSymbol,
@@ -101,17 +101,17 @@ public class CodeEvidenceContextService {
                                 reference ->
                                         new CodeBinding(
                                                 reference.chunkId(),
-                                                reference.snapshotId(),
+                                                reference.contentVersion(),
                                                 reference.symbolName(),
                                                 reference.startLine(),
                                                 reference.endLine(),
                                                 reference.contentHash(),
                                                 reference.stale(),
-                                                repository.currentSnapshotId() != null
+                                                repository.currentContentVersion() != null
                                                         && repository
-                                                                .currentSnapshotId()
+                                                                .currentContentVersion()
                                                                 .value()
-                                                                .equals(reference.snapshotId())))
+                                                                .equals(reference.contentVersion())))
                         .toList();
         LinkedHashSet<ApplicabilityReason> applicability = new LinkedHashSet<>();
         if (!bindings.isEmpty()) {
@@ -185,7 +185,7 @@ public class CodeEvidenceContextService {
 
     public record CodeEvidenceContext(
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String filePath,
             String symbol,
@@ -223,11 +223,11 @@ public class CodeEvidenceContextService {
 
     public record CodeBinding(
             UUID chunkId,
-            UUID snapshotId,
+            UUID contentVersion,
             String symbolName,
             Integer startLine,
             Integer endLine,
             String contentHash,
             boolean stale,
-            boolean currentSnapshot) {}
+            boolean currentContentVersion) {}
 }

@@ -1,6 +1,6 @@
 -- 代码知识平台数据库单一初始化基线。
 -- 本文件由原 V1 至 V14 按版本顺序合并，仅支持空库或明确重建后的数据库。
--- 仓库只保留一个已发布代码版本；snapshot_id 是派生数据一致性令牌，
+-- 仓库只保留一个已发布代码版本；content_version 是派生数据一致性令牌，
 -- 不指向可长期保留的历史源码副本。
 
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -64,9 +64,9 @@ CREATE TABLE repositories (
     current_commit TEXT,
     worktree_digest TEXT,
     worktree_dirty BOOLEAN NOT NULL DEFAULT FALSE,
-    current_snapshot_id UUID,
-    current_snapshot_path TEXT,
-    snapshot_created_at TIMESTAMP,
+    current_content_version UUID,
+    current_workspace_path TEXT,
+    content_published_at TIMESTAMP,
     codegraph_path TEXT,
     last_scanned_at TIMESTAMP,
     owner_account_id UUID NOT NULL REFERENCES accounts(id),
@@ -91,9 +91,9 @@ COMMENT ON COLUMN repositories.remote_url IS '远程 Git/GitLab HTTPS 克隆地�
 COMMENT ON COLUMN repositories.current_commit IS '当前已发布代码版本的 Git 提交号';
 COMMENT ON COLUMN repositories.worktree_digest IS '当前代码文件清单及内容摘要';
 COMMENT ON COLUMN repositories.worktree_dirty IS '最近同步时源工作区是否包含未提交变化';
-COMMENT ON COLUMN repositories.current_snapshot_id IS '当前内容版本令牌，用于保证代码及派生数据版本一致';
-COMMENT ON COLUMN repositories.current_snapshot_path IS '当前已发布代码的只读受管目录';
-COMMENT ON COLUMN repositories.snapshot_created_at IS '当前代码版本发布时间';
+COMMENT ON COLUMN repositories.current_content_version IS '当前内容版本令牌，用于保证代码及派生数据版本一致';
+COMMENT ON COLUMN repositories.current_workspace_path IS '当前已发布代码的只读受管目录';
+COMMENT ON COLUMN repositories.content_published_at IS '当前代码版本发布时间';
 COMMENT ON COLUMN repositories.codegraph_path IS '当前 CodeGraph 产物路径';
 COMMENT ON COLUMN repositories.last_scanned_at IS '最近一次检查源代码变化的时间';
 COMMENT ON COLUMN repositories.owner_account_id IS '仓库所有者账号';
@@ -375,7 +375,7 @@ CREATE UNIQUE INDEX uq_index_jobs_one_active_per_repository
 CREATE TABLE code_chunks (
     id UUID PRIMARY KEY,
     repo_id UUID NOT NULL REFERENCES repositories(id),
-    snapshot_id UUID NOT NULL,
+    content_version UUID NOT NULL,
     commit_sha TEXT NOT NULL,
     file_path TEXT NOT NULL,
     symbol_id TEXT,
@@ -396,7 +396,7 @@ CREATE TABLE code_chunks (
 COMMENT ON TABLE code_chunks IS '当前仓库版本切分得到的可检索项目资产片段';
 COMMENT ON COLUMN code_chunks.id IS '代码片段唯一标识';
 COMMENT ON COLUMN code_chunks.repo_id IS '所属仓库';
-COMMENT ON COLUMN code_chunks.snapshot_id IS '生成该片段的内容版本令牌';
+COMMENT ON COLUMN code_chunks.content_version IS '生成该片段的内容版本令牌';
 COMMENT ON COLUMN code_chunks.commit_sha IS '生成该片段的 Git 提交号';
 COMMENT ON COLUMN code_chunks.file_path IS '仓库内相对文件路径';
 COMMENT ON COLUMN code_chunks.symbol_id IS '解析器生成的符号标识';
@@ -415,7 +415,7 @@ CREATE INDEX idx_code_chunks_repo_file ON code_chunks(repo_id, file_path);
 CREATE INDEX idx_code_chunks_repo_symbol ON code_chunks(repo_id, symbol_id);
 CREATE INDEX idx_code_chunks_repo_created_at ON code_chunks(repo_id, created_at DESC);
 CREATE INDEX idx_code_chunks_repo_language ON code_chunks(repo_id, language);
-CREATE INDEX idx_code_chunks_repo_snapshot ON code_chunks(repo_id, snapshot_id);
+CREATE INDEX idx_code_chunks_repo_contentVersion ON code_chunks(repo_id, content_version);
 CREATE INDEX idx_code_chunks_repo_asset_type ON code_chunks(repo_id, asset_type, file_path);
 
 CREATE TABLE chunk_embeddings (
@@ -444,20 +444,20 @@ CREATE INDEX idx_chunk_embeddings_repo ON chunk_embeddings(repo_id);
 CREATE TABLE code_graph_edges (
     id UUID PRIMARY KEY,
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    snapshot_id UUID NOT NULL,
+    content_version UUID NOT NULL,
     source_chunk_id UUID REFERENCES code_chunks(id) ON DELETE CASCADE,
     target_chunk_id UUID REFERENCES code_chunks(id) ON DELETE CASCADE,
     source_symbol TEXT NOT NULL,
     target_symbol TEXT NOT NULL,
     relation VARCHAR(30) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(repo_id, snapshot_id, source_chunk_id, target_chunk_id, relation)
+    UNIQUE(repo_id, content_version, source_chunk_id, target_chunk_id, relation)
 );
 
 COMMENT ON TABLE code_graph_edges IS '从当前代码版本提取的符号关系边';
 COMMENT ON COLUMN code_graph_edges.id IS '关系边唯一标识';
 COMMENT ON COLUMN code_graph_edges.repo_id IS '所属仓库';
-COMMENT ON COLUMN code_graph_edges.snapshot_id IS '生成该关系的内容版本令牌';
+COMMENT ON COLUMN code_graph_edges.content_version IS '生成该关系的内容版本令牌';
 COMMENT ON COLUMN code_graph_edges.source_chunk_id IS '起点代码片段';
 COMMENT ON COLUMN code_graph_edges.target_chunk_id IS '终点代码片段';
 COMMENT ON COLUMN code_graph_edges.source_symbol IS '起点符号';
@@ -471,7 +471,7 @@ CREATE INDEX idx_code_graph_edges_target ON code_graph_edges(repo_id, target_sym
 CREATE TABLE codegraph_artifacts (
     id UUID PRIMARY KEY,
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    snapshot_id UUID NOT NULL,
+    content_version UUID NOT NULL,
     cli_version VARCHAR(40) NOT NULL,
     status VARCHAR(30) NOT NULL,
     artifact_path TEXT NOT NULL,
@@ -484,7 +484,7 @@ CREATE TABLE codegraph_artifacts (
 COMMENT ON TABLE codegraph_artifacts IS '当前代码版本对应的 CodeGraph 分析产物';
 COMMENT ON COLUMN codegraph_artifacts.id IS '产物唯一标识';
 COMMENT ON COLUMN codegraph_artifacts.repo_id IS '所属仓库';
-COMMENT ON COLUMN codegraph_artifacts.snapshot_id IS '生成该产物的内容版本令牌';
+COMMENT ON COLUMN codegraph_artifacts.content_version IS '生成该产物的内容版本令牌';
 COMMENT ON COLUMN codegraph_artifacts.cli_version IS 'CodeGraph CLI 版本';
 COMMENT ON COLUMN codegraph_artifacts.status IS '产物状态';
 COMMENT ON COLUMN codegraph_artifacts.artifact_path IS '产物存储路径';
@@ -493,8 +493,8 @@ COMMENT ON COLUMN codegraph_artifacts.edge_count IS '图边数量';
 COMMENT ON COLUMN codegraph_artifacts.created_at IS '创建时间';
 COMMENT ON COLUMN codegraph_artifacts.published_at IS '发布时间';
 
-CREATE INDEX idx_codegraph_artifacts_repo_snapshot
-    ON codegraph_artifacts(repo_id, snapshot_id, created_at DESC);
+CREATE INDEX idx_codegraph_artifacts_repo_contentVersion
+    ON codegraph_artifacts(repo_id, content_version, created_at DESC);
 
 -- ============================================================================
 -- Questions, knowledge and settings
@@ -508,7 +508,7 @@ CREATE TABLE qa_conversations (
     title VARCHAR(80) NOT NULL,
     question TEXT NOT NULL,
     answer TEXT NOT NULL,
-    snapshot_id UUID,
+    content_version UUID,
     provider VARCHAR(160) NOT NULL,
     evidence_status VARCHAR(32) NOT NULL,
     fallback_reason VARCHAR(64),
@@ -538,11 +538,11 @@ COMMENT ON COLUMN qa_conversations.client_request_id IS '客户端幂等请求�
 COMMENT ON COLUMN qa_conversations.title IS '历史记录标题';
 COMMENT ON COLUMN qa_conversations.question IS '用户问题';
 COMMENT ON COLUMN qa_conversations.answer IS '生成的回答';
-COMMENT ON COLUMN qa_conversations.snapshot_id IS '回答所依据的内容版本令牌';
+COMMENT ON COLUMN qa_conversations.content_version IS '回答所依据的内容版本令牌';
 COMMENT ON COLUMN qa_conversations.provider IS '回答提供方';
 COMMENT ON COLUMN qa_conversations.evidence_status IS '回答证据状态';
 COMMENT ON COLUMN qa_conversations.fallback_reason IS '未使用模型回答或安全降级的原因';
-COMMENT ON COLUMN qa_conversations.answer_payload IS '可原样恢复的完整回答快照';
+COMMENT ON COLUMN qa_conversations.answer_payload IS '可原样恢复的完整回答内容版本';
 COMMENT ON COLUMN qa_conversations.thread_id IS '多轮问答线程标识；首轮记录通常以自身 ID 作为线程标识';
 COMMENT ON COLUMN qa_conversations.turn_no IS '当前记录在线程内的轮次，从 1 开始';
 COMMENT ON COLUMN qa_conversations.status IS '生成状态：RUNNING、COMPLETED、STOPPED 或 FAILED';
@@ -595,7 +595,7 @@ COMMENT ON COLUMN qa_citations.start_line IS '引用起始行';
 COMMENT ON COLUMN qa_citations.end_line IS '引用结束行';
 COMMENT ON COLUMN qa_citations.evidence_hash IS '引用内容摘要';
 COMMENT ON COLUMN qa_citations.rank IS '引用排序';
-COMMENT ON COLUMN qa_citations.citation_payload IS '可原样恢复的完整引用快照';
+COMMENT ON COLUMN qa_citations.citation_payload IS '可原样恢复的完整引用内容版本';
 
 CREATE TABLE knowledge_cards (
     id UUID PRIMARY KEY,
@@ -703,7 +703,7 @@ CREATE TABLE knowledge_code_refs (
     revision INTEGER NOT NULL,
     position INTEGER NOT NULL,
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    snapshot_id UUID,
+    content_version UUID,
     chunk_id UUID REFERENCES code_chunks(id) ON DELETE SET NULL,
     file_path TEXT NOT NULL,
     symbol_name TEXT,
@@ -720,7 +720,7 @@ COMMENT ON COLUMN knowledge_code_refs.card_id IS '知识卡片标识';
 COMMENT ON COLUMN knowledge_code_refs.revision IS '知识修订号';
 COMMENT ON COLUMN knowledge_code_refs.position IS '关联代码的显示顺序';
 COMMENT ON COLUMN knowledge_code_refs.repo_id IS '所属仓库';
-COMMENT ON COLUMN knowledge_code_refs.snapshot_id IS '关联代码的内容版本令牌';
+COMMENT ON COLUMN knowledge_code_refs.content_version IS '关联代码的内容版本令牌';
 COMMENT ON COLUMN knowledge_code_refs.chunk_id IS '关联代码片段；片段删除后可为空';
 COMMENT ON COLUMN knowledge_code_refs.file_path IS '关联文件路径';
 COMMENT ON COLUMN knowledge_code_refs.symbol_name IS '关联符号名称';
@@ -1095,14 +1095,14 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_refs_current_lookup
 -- 合并自 V2__markdown_knowledge_sources.sql
 -- ============================================================================
 
--- Repository Markdown files discovered from the current managed snapshot. The
+-- Repository Markdown files discovered from the current managed contentVersion. The
 -- source row is stable for a repository path; exact generation provenance is
 -- retained separately for each knowledge-card revision.
 
 CREATE TABLE repository_markdown_sources (
     id UUID PRIMARY KEY,
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    snapshot_id UUID NOT NULL,
+    content_version UUID NOT NULL,
     file_path TEXT NOT NULL,
     content_hash CHAR(64) NOT NULL,
     title VARCHAR(200) NOT NULL,
@@ -1123,16 +1123,16 @@ CREATE TABLE repository_markdown_sources (
         CHECK (BTRIM(file_path) <> '' AND file_path !~ '(^|/)\.\.(/|$)')
 );
 
-COMMENT ON TABLE repository_markdown_sources IS '当前仓库快照中可生成知识卡片的 Markdown 来源';
+COMMENT ON TABLE repository_markdown_sources IS '当前仓库内容版本中可生成知识卡片的 Markdown 来源';
 COMMENT ON COLUMN repository_markdown_sources.id IS '稳定来源标识，同一仓库相对路径保持不变';
 COMMENT ON COLUMN repository_markdown_sources.repo_id IS '所属仓库';
-COMMENT ON COLUMN repository_markdown_sources.snapshot_id IS '最近发现该 Markdown 的内容版本令牌';
+COMMENT ON COLUMN repository_markdown_sources.content_version IS '最近发现该 Markdown 的内容版本令牌';
 COMMENT ON COLUMN repository_markdown_sources.file_path IS '仓库内规范化 Markdown 相对路径';
 COMMENT ON COLUMN repository_markdown_sources.content_hash IS '完整 UTF-8 Markdown 原文的 SHA-256';
 COMMENT ON COLUMN repository_markdown_sources.content IS '用于生成知识卡片的完整 Markdown 原文';
 
-CREATE INDEX idx_repository_markdown_sources_snapshot
-    ON repository_markdown_sources(repo_id, snapshot_id, file_path);
+CREATE INDEX idx_repository_markdown_sources_contentVersion
+    ON repository_markdown_sources(repo_id, content_version, file_path);
 CREATE INDEX idx_repository_markdown_sources_path_hash
     ON repository_markdown_sources(repo_id, file_path, content_hash);
 
@@ -1141,7 +1141,7 @@ CREATE TABLE knowledge_card_markdown_source_links (
     revision INTEGER NOT NULL,
     source_id UUID REFERENCES repository_markdown_sources(id) ON DELETE SET NULL,
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    source_snapshot_id UUID NOT NULL,
+    source_content_version UUID NOT NULL,
     source_path TEXT NOT NULL,
     source_content_hash CHAR(64) NOT NULL,
     generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1158,7 +1158,7 @@ COMMENT ON TABLE knowledge_card_markdown_source_links IS '知识卡片修订与�
 COMMENT ON COLUMN knowledge_card_markdown_source_links.card_id IS '生成或同步得到的知识卡片';
 COMMENT ON COLUMN knowledge_card_markdown_source_links.revision IS '对应知识卡片修订号';
 COMMENT ON COLUMN knowledge_card_markdown_source_links.source_id IS '当前来源行；来源删除后允许为空';
-COMMENT ON COLUMN knowledge_card_markdown_source_links.source_snapshot_id IS '生成时仓库内容版本令牌';
+COMMENT ON COLUMN knowledge_card_markdown_source_links.source_content_version IS '生成时仓库内容版本令牌';
 COMMENT ON COLUMN knowledge_card_markdown_source_links.source_path IS '生成时 Markdown 相对路径';
 COMMENT ON COLUMN knowledge_card_markdown_source_links.source_content_hash IS '生成时完整 Markdown 原文 SHA-256';
 
@@ -1378,7 +1378,7 @@ ALTER TABLE knowledge_cards
     ADD COLUMN owner_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
     ADD COLUMN scope_payload JSONB NOT NULL DEFAULT '{"pathPatterns":[],"symbols":[],"modules":[]}'::jsonb,
     ADD COLUMN obligations_payload JSONB NOT NULL DEFAULT '{"requiredTests":[],"requiredApproverAccountIds":[],"instructions":[]}'::jsonb,
-    ADD COLUMN last_verified_snapshot_id UUID,
+    ADD COLUMN last_verified_content_version UUID,
     ADD COLUMN verification_note TEXT;
 
 ALTER TABLE knowledge_card_revisions
@@ -1388,7 +1388,7 @@ ALTER TABLE knowledge_card_revisions
     ADD COLUMN owner_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
     ADD COLUMN scope_payload JSONB NOT NULL DEFAULT '{"pathPatterns":[],"symbols":[],"modules":[]}'::jsonb,
     ADD COLUMN obligations_payload JSONB NOT NULL DEFAULT '{"requiredTests":[],"requiredApproverAccountIds":[],"instructions":[]}'::jsonb,
-    ADD COLUMN last_verified_snapshot_id UUID,
+    ADD COLUMN last_verified_content_version UUID,
     ADD COLUMN verification_note TEXT;
 
 ALTER TABLE knowledge_cards DROP CONSTRAINT chk_knowledge_source_version_status;
@@ -1438,7 +1438,7 @@ COMMENT ON COLUMN knowledge_cards.enforcement IS '参考、建议或必须执行
 COMMENT ON COLUMN knowledge_cards.owner_account_id IS '工程知识负责人';
 COMMENT ON COLUMN knowledge_cards.scope_payload IS '仓库内适用路径、符号和模块';
 COMMENT ON COLUMN knowledge_cards.obligations_payload IS '命中知识后要求的测试、审批和开发动作';
-COMMENT ON COLUMN knowledge_cards.last_verified_snapshot_id IS '最近完成人工或代码证据验证的仓库快照';
+COMMENT ON COLUMN knowledge_cards.last_verified_content_version IS '最近完成人工或代码证据验证的仓库内容版本';
 COMMENT ON COLUMN knowledge_cards.verification_note IS '最近验证说明';
 
 DROP TRIGGER IF EXISTS trg_knowledge_card_revision ON knowledge_cards;
@@ -1449,11 +1449,11 @@ BEGIN
     INSERT INTO knowledge_card_revisions(
         card_id,revision,repo_id,title,card_type,content,tags,publication_status,
         knowledge_kind,severity,enforcement,owner_account_id,scope_payload,obligations_payload,
-        last_verified_snapshot_id,verification_note,changed_by,changed_at
+        last_verified_content_version,verification_note,changed_by,changed_at
     ) VALUES(
         NEW.id,NEW.revision,NEW.repo_id,NEW.title,NEW.card_type,NEW.content,NEW.tags,
         NEW.publication_status,NEW.knowledge_kind,NEW.severity,NEW.enforcement,NEW.owner_account_id,
-        NEW.scope_payload,NEW.obligations_payload,NEW.last_verified_snapshot_id,
+        NEW.scope_payload,NEW.obligations_payload,NEW.last_verified_content_version,
         NEW.verification_note,NEW.updated_by,NEW.updated_at
     )
     ON CONFLICT(card_id,revision) DO UPDATE SET
@@ -1462,7 +1462,7 @@ BEGIN
         knowledge_kind=EXCLUDED.knowledge_kind,severity=EXCLUDED.severity,
         enforcement=EXCLUDED.enforcement,owner_account_id=EXCLUDED.owner_account_id,
         scope_payload=EXCLUDED.scope_payload,obligations_payload=EXCLUDED.obligations_payload,
-        last_verified_snapshot_id=EXCLUDED.last_verified_snapshot_id,
+        last_verified_content_version=EXCLUDED.last_verified_content_version,
         verification_note=EXCLUDED.verification_note,changed_by=EXCLUDED.changed_by,
         changed_at=EXCLUDED.changed_at;
     RETURN NEW;
@@ -1472,7 +1472,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_knowledge_card_revision
 AFTER INSERT OR UPDATE OF title,card_type,content,tags,publication_status,knowledge_kind,
     severity,enforcement,owner_account_id,scope_payload,obligations_payload,
-    last_verified_snapshot_id,verification_note,revision ON knowledge_cards
+    last_verified_content_version,verification_note,revision ON knowledge_cards
 FOR EACH ROW EXECUTE FUNCTION capture_knowledge_card_revision();
 
 -- ============================================================================
@@ -1491,7 +1491,7 @@ CREATE TABLE task_reviews (
     model_config_id UUID REFERENCES llm_provider_configs(id) ON DELETE SET NULL,
     base_commit VARCHAR(64),
     head_commit VARCHAR(64),
-    snapshot_id UUID NOT NULL,
+    content_version UUID NOT NULL,
     worktree_digest VARCHAR(64),
     status VARCHAR(20) NOT NULL,
     result_payload JSONB,
@@ -1517,7 +1517,7 @@ CREATE UNIQUE INDEX uq_task_reviews_client_request
 CREATE INDEX idx_task_reviews_repo_created
     ON task_reviews(repo_id,created_at DESC,id DESC);
 
-COMMENT ON TABLE task_reviews IS '绑定 Git 版本、仓库快照和确定性知识事实的不可变任务审查';
+COMMENT ON TABLE task_reviews IS '绑定 Git 版本、仓库内容版本和确定性知识事实的不可变任务审查';
 COMMENT ON COLUMN task_reviews.client_request_id IS '调用方提供的幂等请求标识';
 COMMENT ON COLUMN task_reviews.model_config_id IS '预留的模型配置，本阶段只保存且不调用模型';
 COMMENT ON COLUMN task_reviews.result_payload IS '完成后不可变的完整审查结果 JSON';
@@ -1547,8 +1547,8 @@ CREATE TABLE knowledge_drift_events (
     repo_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
     card_id UUID NOT NULL REFERENCES knowledge_cards(id) ON DELETE CASCADE,
     card_revision INTEGER NOT NULL CHECK (card_revision > 0),
-    from_snapshot_id UUID,
-    to_snapshot_id UUID NOT NULL,
+    from_content_version UUID,
+    to_content_version UUID NOT NULL,
     from_commit VARCHAR(128),
     to_commit VARCHAR(128),
     previous_status VARCHAR(32) NOT NULL,
@@ -1567,8 +1567,8 @@ CREATE TABLE knowledge_drift_events (
     CONSTRAINT chk_knowledge_drift_reasons_payload CHECK (jsonb_typeof(reasons_payload)='array')
 );
 
-CREATE UNIQUE INDEX uq_knowledge_drift_automatic_snapshot
-    ON knowledge_drift_events(card_id,card_revision,to_snapshot_id,trigger_type)
+CREATE UNIQUE INDEX uq_knowledge_drift_automatic_contentVersion
+    ON knowledge_drift_events(card_id,card_revision,to_content_version,trigger_type)
     WHERE trigger_type='AUTOMATIC_DIFF';
 CREATE INDEX idx_knowledge_drift_card_created
     ON knowledge_drift_events(repo_id,card_id,created_at DESC,id DESC);
@@ -1667,8 +1667,8 @@ CREATE TABLE engineering_project_contracts (
     name VARCHAR(160) NOT NULL,
     provider_repo_id UUID NOT NULL,
     consumer_repo_id UUID NOT NULL,
-    provider_snapshot_id UUID NOT NULL,
-    consumer_snapshot_id UUID NOT NULL,
+    provider_content_version UUID NOT NULL,
+    consumer_content_version UUID NOT NULL,
     provider_evidence_path VARCHAR(1000) NOT NULL,
     consumer_evidence_path VARCHAR(1000) NOT NULL,
     provider_content_fingerprint VARCHAR(64) NOT NULL,

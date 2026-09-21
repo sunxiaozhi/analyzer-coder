@@ -10,7 +10,7 @@ import com.analyzercoder.domain.indexing.IndexJobType;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.indexing.InMemoryIndexJobStore;
 import java.nio.file.Path;
@@ -20,9 +20,9 @@ import org.junit.jupiter.api.Test;
 
 class KnowledgeDriftJobProcessorTest {
     @Test
-    void recordsCurrentSnapshotAndReadyResult() {
+    void recordsCurrentContentVersionAndReadyResult() {
         InMemoryIndexJobStore jobs = new InMemoryIndexJobStore();
-        CodeRepository repository = repository(RepositorySnapshotId.newId());
+        CodeRepository repository = repository(RepositoryContentVersion.newId());
         IndexJob queued = jobs.save(IndexJob.create(repository.id(), IndexJobType.KNOWLEDGE_DRIFT));
         CodeRepositoryStore repositories = mock(CodeRepositoryStore.class);
         KnowledgeDriftService drift = mock(KnowledgeDriftService.class);
@@ -39,15 +39,15 @@ class KnowledgeDriftJobProcessorTest {
         assertThat(result.currentStep())
                 .isEqualTo(
                         "knowledge_drift_completed:"
-                                + repository.currentSnapshotId().value()
+                                + repository.currentContentVersion().value()
                                 + ":ready");
     }
 
     @Test
-    void rejectsResultWhenSnapshotChangesDuringInspection() {
+    void rejectsResultWhenContentVersionChangesDuringInspection() {
         InMemoryIndexJobStore jobs = new InMemoryIndexJobStore();
-        CodeRepository first = repository(RepositorySnapshotId.newId());
-        CodeRepository changed = repository(first.id(), RepositorySnapshotId.newId());
+        CodeRepository first = repository(RepositoryContentVersion.newId());
+        CodeRepository changed = repository(first.id(), RepositoryContentVersion.newId());
         IndexJob queued = jobs.save(IndexJob.create(first.id(), IndexJobType.KNOWLEDGE_DRIFT));
         CodeRepositoryStore repositories = mock(CodeRepositoryStore.class);
         KnowledgeDriftService drift = mock(KnowledgeDriftService.class);
@@ -63,7 +63,7 @@ class KnowledgeDriftJobProcessorTest {
         assertThat(processed).isFalse();
         assertThat(result.status()).isEqualTo(IndexJobStatus.FAILED);
         assertThat(result.failureCode()).isEqualTo("KNOWLEDGE_DRIFT_FAILED");
-        assertThat(result.errorMessage()).contains("Snapshot 已切换");
+        assertThat(result.errorMessage()).contains("ContentVersion 已切换");
     }
 
     @Test
@@ -89,12 +89,12 @@ class KnowledgeDriftJobProcessorTest {
         assertThat(result.failureCode()).isEqualTo("KNOWLEDGE_DRIFT_TIMEOUT");
     }
 
-    private static CodeRepository repository(RepositorySnapshotId snapshotId) {
-        return repository(CodeRepositoryId.newId(), snapshotId);
+    private static CodeRepository repository(RepositoryContentVersion contentVersion) {
+        return repository(CodeRepositoryId.newId(), contentVersion);
     }
 
     private static CodeRepository repository(
-            CodeRepositoryId repositoryId, RepositorySnapshotId snapshotId) {
+            CodeRepositoryId repositoryId, RepositoryContentVersion contentVersion) {
         Instant now = Instant.parse("2026-08-31T08:00:00Z");
         Path path = Path.of("repository").toAbsolutePath().normalize();
         return new CodeRepository(
@@ -106,7 +106,7 @@ class KnowledgeDriftJobProcessorTest {
                 "abc",
                 "digest",
                 false,
-                snapshotId,
+                contentVersion,
                 path,
                 path.resolve(".codegraph"),
                 now,

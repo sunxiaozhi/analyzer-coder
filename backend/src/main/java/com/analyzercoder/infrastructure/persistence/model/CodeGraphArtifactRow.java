@@ -6,7 +6,7 @@ import java.util.UUID;
 public record CodeGraphArtifactRow(
         UUID id,
         UUID repositoryId,
-        UUID snapshotId,
+        UUID contentVersion,
         String cliVersion,
         String status,
         String artifactPath,

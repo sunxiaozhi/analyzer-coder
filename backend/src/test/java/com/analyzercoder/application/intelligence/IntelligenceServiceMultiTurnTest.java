@@ -69,28 +69,28 @@ class IntelligenceServiceMultiTurnTest {
 
     @Test
     void reusesMatchingRepositoryVectorsWithoutCallingTheModel() {
-        UUID repo = UUID.randomUUID(), snapshot = UUID.randomUUID(), chunk = UUID.randomUUID();
+        UUID repo = UUID.randomUUID(), contentVersion = UUID.randomUUID(), chunk = UUID.randomUUID();
         when(llm.activeVectorModelName()).thenReturn("model");
         when(llm.activeVectorModelDimension()).thenReturn(3);
         when(llm.activeRetrievalCapability()).thenReturn("SEMANTIC_EMBEDDING");
-        when(mapper.missingBranchEmbeddings(repo, snapshot, "model", 3, "SEMANTIC_EMBEDDING"))
+        when(mapper.missingBranchEmbeddings(repo, contentVersion, "model", 3, "SEMANTIC_EMBEDDING"))
                 .thenReturn(
                         List.of(Map.of("id", chunk, "content", "source", "content_hash", "hash")));
         when(mapper.reusableCodeEmbedding(repo, "hash", "model", 3, "SEMANTIC_EMBEDDING"))
                 .thenReturn("[1,0,0]");
-        service.prepareBranchEmbeddings(repo, snapshot, () -> {});
+        service.prepareBranchEmbeddings(repo, contentVersion, () -> {});
         verify(llm, never()).vectorize(anyString());
         verify(mapper)
                 .upsertEmbedding(chunk, repo, "model", 3, "SEMANTIC_EMBEDDING", "[1,0,0]", "hash");
     }
 
     @Test
-    void branchEmbeddingsOnlyReadThePinnedSnapshotAndNeverDefaultChunks() {
-        UUID repo = UUID.randomUUID(), snapshot = UUID.randomUUID(), chunk = UUID.randomUUID();
+    void branchEmbeddingsOnlyReadThePinnedContentVersionAndNeverDefaultChunks() {
+        UUID repo = UUID.randomUUID(), contentVersion = UUID.randomUUID(), chunk = UUID.randomUUID();
         when(llm.activeVectorModelName()).thenReturn("local-hash-64");
         when(llm.activeVectorModelDimension()).thenReturn(64);
         when(llm.activeRetrievalCapability()).thenReturn("CHARACTER_HASH");
-        when(mapper.missingBranchEmbeddings(repo, snapshot, "local-hash-64", 64, "CHARACTER_HASH"))
+        when(mapper.missingBranchEmbeddings(repo, contentVersion, "local-hash-64", 64, "CHARACTER_HASH"))
                 .thenReturn(
                         List.of(Map.of("id", chunk, "content", "source", "content_hash", "hash")));
         when(llm.vectorize("source"))
@@ -98,7 +98,7 @@ class IntelligenceServiceMultiTurnTest {
                         new LlmSettingsService.VectorEmbedding(
                                 "local-hash-64", 64, null, "CHARACTER_HASH"));
         Runnable checkpoint = mock(Runnable.class);
-        service.prepareBranchEmbeddings(repo, snapshot, checkpoint);
+        service.prepareBranchEmbeddings(repo, contentVersion, checkpoint);
         verify(checkpoint).run();
         verify(mapper)
                 .upsertEmbedding(
@@ -273,15 +273,15 @@ class IntelligenceServiceMultiTurnTest {
     }
 
     @Test
-    void heuristicGraphReportsItsSourceSnapshotAndLimitationsWithoutRebuilding() {
+    void heuristicGraphReportsItsSourceContentVersionAndLimitationsWithoutRebuilding() {
         UUID repositoryId = UUID.randomUUID();
-        UUID snapshotId = UUID.randomUUID();
-        when(mapper.currentSnapshotId(repositoryId)).thenReturn(snapshotId);
+        UUID contentVersion = UUID.randomUUID();
+        when(mapper.currentContentVersion(repositoryId)).thenReturn(contentVersion);
 
         IntelligenceService.GraphResult result = service.graph(repositoryId, "Example", 2, "BOTH");
 
         assertEquals("HEURISTIC_CALL_REFERENCE", result.relationSource());
-        assertEquals(snapshotId, result.snapshotId());
+        assertEquals(contentVersion, result.contentVersion());
         assertEquals("SYMBOL_TOKEN_FOLLOWED_BY_PARENTHESIS", result.algorithm());
         assertTrue(
                 result.limitations().stream().anyMatch(item -> item.contains("不是 CodeGraph CLI")));
@@ -320,11 +320,11 @@ class IntelligenceServiceMultiTurnTest {
     }
 
     @Test
-    void exposesSnapshotModelRecallTimingAndEnabledChannels() {
+    void exposesContentVersionModelRecallTimingAndEnabledChannels() {
         UUID repositoryId = UUID.randomUUID();
-        UUID snapshotId = UUID.randomUUID();
+        UUID contentVersion = UUID.randomUUID();
         Map<String, Object> evidence = vectorEvidence();
-        when(mapper.currentSnapshotId(repositoryId)).thenReturn(snapshotId);
+        when(mapper.currentContentVersion(repositoryId)).thenReturn(contentVersion);
         stubVectorModel("text-embedding-test", 3, "SEMANTIC_EMBEDDING", "[0.1,0.2,0.3]");
         when(mapper.searchCodeVector(
                         eq(repositoryId), anyString(), eq("text-embedding-test"), eq(3), anyInt()))
@@ -333,7 +333,7 @@ class IntelligenceServiceMultiTurnTest {
         IntelligenceService.SearchResponse response =
                 service.hybridSearchDetailed(repositoryId, "Example", 5);
 
-        assertEquals(snapshotId, response.retrieval().snapshotId());
+        assertEquals(contentVersion, response.retrieval().contentVersion());
         assertEquals("text-embedding-test", response.retrieval().vectorModel());
         assertEquals("SEMANTIC_EMBEDDING", response.retrieval().retrievalCapability());
         assertEquals(1, response.retrieval().recalledCount());
@@ -385,7 +385,7 @@ class IntelligenceServiceMultiTurnTest {
     private static Map<String, Object> vectorEvidence() {
         return Map.ofEntries(
                 Map.entry("id", UUID.randomUUID()),
-                Map.entry("snapshot_id", UUID.randomUUID()),
+                Map.entry("content_version", UUID.randomUUID()),
                 Map.entry("file_path", "src/Example.java"),
                 Map.entry("symbol_name", "Example"),
                 Map.entry("symbol_kind", "CLASS"),
@@ -400,7 +400,7 @@ class IntelligenceServiceMultiTurnTest {
         Map<String, Object> evidence =
                 Map.ofEntries(
                         Map.entry("id", UUID.randomUUID()),
-                        Map.entry("snapshot_id", UUID.randomUUID()),
+                        Map.entry("content_version", UUID.randomUUID()),
                         Map.entry("file_path", "src/Example.java"),
                         Map.entry("symbol_name", "Example"),
                         Map.entry("symbol_kind", "CLASS"),

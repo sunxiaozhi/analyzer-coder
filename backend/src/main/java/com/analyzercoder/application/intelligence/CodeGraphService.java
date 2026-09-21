@@ -39,17 +39,17 @@ public class CodeGraphService {
         return build(repoId, BuildControl.none());
     }
 
-    public Artifact buildSnapshot(
-            UUID repoId, UUID snapshotId, Path snapshotPath, BuildControl control) {
+    public Artifact buildContentVersion(
+            UUID repoId, UUID contentVersion, Path contentVersionPath, BuildControl control) {
         throw new IllegalStateException("分支图谱需要受管 CodeGraph 构建器");
     }
 
-    public Artifact latestSnapshot(UUID repoId, UUID snapshotId) {
-        return artifact(mapper.findLatest(repoId, snapshotId));
+    public Artifact latestContentVersion(UUID repoId, UUID contentVersion) {
+        return artifact(mapper.findLatest(repoId, contentVersion));
     }
 
-    public CodeGraphPropagation impactSnapshot(
-            UUID repoId, UUID snapshotId, String symbol, int depth) {
+    public CodeGraphPropagation impactContentVersion(
+            UUID repoId, UUID contentVersion, String symbol, int depth) {
         throw new IllegalStateException("分支影响分析需要受管 CodeGraph 查询器");
     }
 
@@ -71,22 +71,22 @@ public class CodeGraphService {
                 new CodeGraphArtifactRow(
                         id,
                         repoId,
-                        repo.snapshotId(),
+                        repo.contentVersion(),
                         cli,
                         "PUBLISHED",
                         marker.toString(),
                         nodes,
                         edges));
         return new Artifact(
-                id, repoId, repo.snapshotId(), cli, "PUBLISHED", marker.toString(), nodes, edges);
+                id, repoId, repo.contentVersion(), cli, "PUBLISHED", marker.toString(), nodes, edges);
     }
 
     public CodeGraphPropagation impact(UUID repoId, String symbol, int depth) {
         RepoVersion repo = version(repoId);
-        Artifact artifact = artifact(mapper.findPublished(repoId, repo.snapshotId()));
+        Artifact artifact = artifact(mapper.findPublished(repoId, repo.contentVersion()));
         if (artifact == null || !Files.isDirectory(Path.of(artifact.artifactPath()))) {
             throw new CodeGraphException(
-                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 Snapshot 尚未发布 CodeGraph 产物");
+                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 ContentVersion 尚未发布 CodeGraph 产物");
         }
         Path marker = Path.of(artifact.artifactPath()).toAbsolutePath().normalize();
         Path project = marker.getParent();
@@ -126,7 +126,7 @@ public class CodeGraphService {
         if (row == null) {
             throw new IllegalArgumentException("仓库不存在");
         }
-        return new RepoVersion(row.snapshotId(), Path.of(row.snapshotPath()));
+        return new RepoVersion(row.contentVersion(), Path.of(row.contentVersionPath()));
     }
 
     protected static Artifact artifact(CodeGraphArtifactRow row) {
@@ -135,7 +135,7 @@ public class CodeGraphService {
                 : new Artifact(
                         row.id(),
                         row.repositoryId(),
-                        row.snapshotId(),
+                        row.contentVersion(),
                         row.cliVersion(),
                         row.status(),
                         row.artifactPath(),
@@ -190,7 +190,7 @@ public class CodeGraphService {
         return m.find() ? Integer.parseInt(m.group(1).replace(",", "")) : 0;
     }
 
-    private record RepoVersion(UUID snapshotId, Path path) {}
+    private record RepoVersion(UUID contentVersion, Path path) {}
 
     public interface BuildControl {
         void checkpoint(String step);
@@ -202,19 +202,19 @@ public class CodeGraphService {
 
     public CodeGraphExplorer.View explore(UUID repoId, String module, String query) {
         RepoVersion repo = version(repoId);
-        return exploreSnapshot(repoId, repo.snapshotId(), module, query);
+        return exploreContentVersion(repoId, repo.contentVersion(), module, query);
     }
 
-    public CodeGraphExplorer.View exploreSnapshot(
-            UUID repoId, UUID snapshotId, String module, String query) {
-        Artifact current = artifact(mapper.findPublished(repoId, snapshotId));
+    public CodeGraphExplorer.View exploreContentVersion(
+            UUID repoId, UUID contentVersion, String module, String query) {
+        Artifact current = artifact(mapper.findPublished(repoId, contentVersion));
         if (current == null)
             throw new CodeGraphException(
-                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 Snapshot 尚未发布 CodeGraph 产物");
+                    "CODEGRAPH_ARTIFACT_NOT_AVAILABLE", "当前 ContentVersion 尚未发布 CodeGraph 产物");
         return CodeGraphExplorer.project(
                 CodeGraphDatabaseReader.read(json, Path.of(current.artifactPath())),
                 repoId,
-                snapshotId,
+                contentVersion,
                 module,
                 query);
     }
@@ -228,7 +228,7 @@ public class CodeGraphService {
     public record Artifact(
             UUID id,
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String cliVersion,
             String status,
             String artifactPath,

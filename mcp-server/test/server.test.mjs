@@ -25,7 +25,7 @@ test('exposes project search and branch context resolution', async () => {
   }
 });
 
-test('searches code and knowledge through the read-only HTTP endpoint', async () => {
+test('rejects project search without an explicit branch context', async () => {
   const repositoryId = '11111111-1111-4111-8111-111111111111';
   const received = {};
   const backend = createServer((request, response) => {
@@ -57,14 +57,8 @@ test('searches code and knowledge through the read-only HTTP endpoint', async ()
       params: { name: 'search_project', arguments: { repositoryId, query: '退款 幂等', limit: 10 } },
     });
     const called = await waitFor(session.messages, message => message.id === 2);
-    assert.equal(called.result.isError, undefined);
-    assert.equal(called.result.structuredContent.evidence.length, 2);
-    assert.equal(received.method, 'GET');
-    assert.equal(
-      received.url,
-      `/api/repositories/${repositoryId}/evidence-search?${new URLSearchParams({ query: '退款 幂等', limit: '10' })}`,
-    );
-    assert.equal(received.authorization, 'Bearer search-token');
+    assert.equal(called.result.isError, true);
+    assert.equal(received.method, undefined);
   } finally {
     session.child.kill();
     await new Promise(resolve => backend.close(resolve));

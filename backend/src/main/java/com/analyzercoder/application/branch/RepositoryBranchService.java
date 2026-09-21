@@ -7,11 +7,11 @@ import com.analyzercoder.domain.indexing.RepositoryScannerPort;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.GitRepositorySnapshot;
-import com.analyzercoder.domain.repository.ManagedRepositorySnapshot;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.GitRepositoryContentVersion;
+import com.analyzercoder.domain.repository.ManagedRepositoryContentVersion;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
-import com.analyzercoder.infrastructure.repository.GitBranchSnapshotFactory;
+import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.ApiSecurityException;
 import com.analyzercoder.security.AuthenticatedAccount;
@@ -29,14 +29,14 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Branch publication is independent of repositories.current_snapshot_id and legacy index jobs. */
+/** Branch is the durable code boundary; contentVersion is only a stale-work guard. */
 @Service
 public class RepositoryBranchService {
     private final JdbcTemplate db;
     private final CodeRepositoryStore repositories;
     private final AccessControlService access;
     private final BranchRemoteService remote;
-    private final GitBranchSnapshotFactory snapshots;
+    private final GitBranchContentVersionFactory contentVersions;
     private final RepositoryScannerPort scanner;
     private final CodeSymbolExtractor symbols;
     private final MarkdownKnowledgeSourceService markdown;
@@ -47,7 +47,7 @@ public class RepositoryBranchService {
             CodeRepositoryStore repositories,
             AccessControlService access,
             BranchRemoteService remote,
-            GitBranchSnapshotFactory snapshots,
+            GitBranchContentVersionFactory contentVersions,
             RepositoryScannerPort scanner,
             CodeSymbolExtractor symbols,
             MarkdownKnowledgeSourceService markdown,
@@ -56,7 +56,7 @@ public class RepositoryBranchService {
         this.repositories = repositories;
         this.access = access;
         this.remote = remote;
-        this.snapshots = snapshots;
+        this.contentVersions = contentVersions;
         this.scanner = scanner;
         this.symbols = symbols;
         this.markdown = markdown;
@@ -66,7 +66,7 @@ public class RepositoryBranchService {
     public record Branch(
             UUID id,
             String name,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String status,
             String error,
@@ -78,14 +78,13 @@ public class RepositoryBranchService {
         require(actor, repoId, RepositoryPermission.READ);
         return db.query(
                 """
-            SELECT b.*,s.commit_sha FROM repository_branches b LEFT JOIN branch_snapshots s ON s.id=b.published_snapshot_id
-            WHERE b.repo_id=? ORDER BY b.name
+            SELECT b.* FROM repository_branches b WHERE b.repo_id=? ORDER BY b.name
             """,
                 (r, n) ->
                         new Branch(
                                 r.getObject("id", UUID.class),
                                 r.getString("name"),
-                                r.getObject("published_snapshot_id", UUID.class),
+                                r.getObject("content_version", UUID.class),
                                 r.getString("commit_sha"),
                                 r.getString("preparation_status"),
                                 r.getString("preparation_error"),
@@ -99,7 +98,7 @@ public class RepositoryBranchService {
 
     public Branch track(AuthenticatedAccount actor, UUID repoId, String name) {
         require(actor, repoId, RepositoryPermission.MAINTAIN);
-        GitBranchSnapshotFactory.validateBranch(name);
+        GitBranchContentVersionFactory.validateBranch(name);
         Integer archived =
                 db.queryForObject(
                         "SELECT COUNT(*) FROM repository_branches WHERE repo_id=? AND name=? AND tracking_status='ARCHIVED'",
@@ -165,15 +164,13 @@ public class RepositoryBranchService {
         return db
                 .query(
                         """
-                        SELECT b.*,s.commit_sha FROM repository_branches b
-                        LEFT JOIN branch_snapshots s ON s.id=b.published_snapshot_id
-                        WHERE b.repo_id=? AND b.id=?
+                        SELECT b.* FROM repository_branches b WHERE b.repo_id=? AND b.id=?
                         """,
                         (r, n) ->
                                 new Branch(
                                         r.getObject("id", UUID.class),
                                         r.getString("name"),
-                                        r.getObject("published_snapshot_id", UUID.class),
+                                        r.getObject("content_version", UUID.class),
                                         r.getString("commit_sha"),
                                         r.getString("preparation_status"),
                                         r.getString("preparation_error"),
@@ -214,7 +211,7 @@ public class RepositoryBranchService {
                         branch.generation());
         if (claimed != 1) throw new ApiSecurityException(409, "BRANCH_BUSY", "该分支正在准备，请稍后刷新");
         long generation = branch.generation() + 1;
-        ManagedRepositorySnapshot unpublished = null;
+        ManagedRepositoryContentVersion unpublished = null;
         try {
             CodeRepository repository = repository(repoId);
             boolean remoteRepository =
@@ -225,16 +222,18 @@ public class RepositoryBranchService {
                             ? pinnedCommit
                             : remoteRepository
                                     ? remote.fetch(actor, repository, branch.name())
-                                    : snapshots.resolve(repository.path(), branch.name());
-            progress.accept("SNAPSHOT", commit);
-            ManagedRepositorySnapshot snapshot =
-                    snapshots.createLatest(repository.id(), branchId, repository.path(), commit);
-            unpublished = snapshot;
+                                    : repository.sourceType() == RepositorySourceType.ZIP
+                                            ? contentVersions.resolveWorkspace(repository.path())
+                                            : contentVersions.resolve(repository.path(), branch.name());
+            progress.accept("SYNC", commit);
+            ManagedRepositoryContentVersion contentVersion =
+                    contentVersions.createLatest(repository.id(), branchId, repository.path(), commit);
+            unpublished = contentVersion;
             CodeRepository source =
-                    repository.withManagedSnapshot(
-                            new GitRepositorySnapshot(
+                    repository.withManagedContentVersion(
+                            new GitRepositoryContentVersion(
                                     branch.name(), commit, commit, false, Instant.now()),
-                            snapshot);
+                            contentVersion);
             List<CodeChunk> chunks = new ArrayList<>();
             var scannedFiles = scanner.scan(source);
             progress.accept("INDEXING", commit);
@@ -245,7 +244,7 @@ public class RepositoryBranchService {
                     chunks.add(
                             CodeChunk.fileChunk(
                                     source.id(),
-                                    snapshot.id(),
+                                    contentVersion.id(),
                                     commit,
                                     file.relativePath(),
                                     file.language(),
@@ -266,7 +265,7 @@ public class RepositoryBranchService {
                     chunks.add(
                             CodeChunk.symbolChunk(
                                     source.id(),
-                                    snapshot.id(),
+                                    contentVersion.id(),
                                     commit,
                                     file.relativePath(),
                                     file.language(),
@@ -285,46 +284,57 @@ public class RepositoryBranchService {
             transaction.executeWithoutResult(
                     status -> {
                         complete.run();
-                        db.update(
-                                "INSERT INTO branch_snapshots(id,repo_id,branch_id,commit_sha,content_path) VALUES(?,?,?,?,?)",
-                                snapshot.id().value(),
-                                repoId,
-                                branchId,
-                                commit,
-                                snapshot.contentPath().toString());
                         markdown.synchronizeBranch(
-                                repoId, branchId, snapshot.id().value(), scannedFiles);
+                                repoId, branchId, contentVersion.id().value(), scannedFiles);
                         db.batchUpdate(
                                 """
-                    INSERT INTO code_chunks(id,repo_id,snapshot_id,commit_sha,file_path,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at,symbol_id,symbol_name,symbol_kind)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    INSERT INTO code_chunks(id,repo_id,branch_id,content_version,commit_sha,file_path,language,asset_type,chunk_type,start_line,end_line,content,content_hash,created_at,symbol_id,symbol_name,symbol_kind)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                                 chunks,
                                 250,
                                 (statement, c) -> {
                                     statement.setObject(1, c.id().value());
                                     statement.setObject(2, repoId);
-                                    statement.setObject(3, snapshot.id().value());
-                                    statement.setString(4, commit);
-                                    statement.setString(5, c.filePath());
-                                    statement.setString(6, c.language());
-                                    statement.setString(7, c.assetType().name());
-                                    statement.setString(8, c.chunkType().name());
-                                    statement.setInt(9, c.startLine());
-                                    statement.setInt(10, c.endLine());
-                                    statement.setString(11, c.content());
-                                    statement.setString(12, c.contentHash());
-                                    statement.setTimestamp(13, Timestamp.from(c.createdAt()));
-                                    statement.setString(14, c.symbolId());
-                                    statement.setString(15, c.symbolName());
-                                    statement.setString(16, c.symbolKind());
+                                    statement.setObject(3, branchId);
+                                    statement.setObject(4, contentVersion.id().value());
+                                    statement.setString(5, commit);
+                                    statement.setString(6, c.filePath());
+                                    statement.setString(7, c.language());
+                                    statement.setString(8, c.assetType().name());
+                                    statement.setString(9, c.chunkType().name());
+                                    statement.setInt(10, c.startLine());
+                                    statement.setInt(11, c.endLine());
+                                    statement.setString(12, c.content());
+                                    statement.setString(13, c.contentHash());
+                                    statement.setTimestamp(14, Timestamp.from(c.createdAt()));
+                                    statement.setString(15, c.symbolId());
+                                    statement.setString(16, c.symbolName());
+                                    statement.setString(17, c.symbolKind());
                                 });
+                        if (branch.contentVersion() != null
+                                && !branch.contentVersion().equals(contentVersion.id().value())) {
+                            db.update(
+                                    "DELETE FROM codegraph_artifacts WHERE repo_id=? AND content_version=?",
+                                    repoId,
+                                    branch.contentVersion());
+                            db.update(
+                                    "DELETE FROM code_chunks WHERE repo_id=? AND branch_id=? AND content_version=?",
+                                    repoId,
+                                    branchId,
+                                    branch.contentVersion());
+                        }
                         if (db.update(
                                         """
-                    UPDATE repository_branches SET published_snapshot_id=?,preparation_status='READY',updated_at=CURRENT_TIMESTAMP
+                    UPDATE repository_branches SET previous_content_version=NULL,
+                        content_version=?,commit_sha=?,content_path=?,
+                        published_at=CURRENT_TIMESTAMP,last_synced_at=CURRENT_TIMESTAMP,
+                        content_indexed_at=CURRENT_TIMESTAMP,preparation_status='READY',updated_at=CURRENT_TIMESTAMP
                     WHERE id=? AND repo_id=? AND generation=? AND preparation_status='BUILDING'
                     """,
-                                        snapshot.id().value(),
+                                        contentVersion.id().value(),
+                                        commit,
+                                        contentVersion.contentPath().toString(),
                                         branchId,
                                         repoId,
                                         generation)
@@ -332,9 +342,10 @@ public class RepositoryBranchService {
                             throw new ApiSecurityException(
                                     409, "BRANCH_BUILD_SUPERSEDED", "该次准备已被新的任务取代");
                     });
+            contentVersions.confirmPublished(contentVersion);
             unpublished = null;
         } catch (RuntimeException error) {
-            if (unpublished != null) snapshots.discardUnpublished(unpublished);
+            if (unpublished != null) contentVersions.discardUnpublished(unpublished);
             db.update(
                     "UPDATE repository_branches SET preparation_status='FAILED',preparation_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND generation=?",
                     "准备失败，请确认分支存在且仓库来源或凭据可用",
@@ -351,10 +362,10 @@ public class RepositoryBranchService {
             List<BranchReadContext> rows =
                     db.query(
                             """
-                SELECT c.*,b.name,s.commit_sha,s.content_path FROM branch_read_contexts c
-                JOIN repository_branches b ON b.id=c.branch_id JOIN branch_snapshots s ON s.id=c.snapshot_id
+                SELECT c.*,b.name,b.commit_sha,b.content_path FROM branch_read_contexts c
+                JOIN repository_branches b ON b.id=c.branch_id
                 WHERE c.id=? AND c.repo_id=? AND c.account_id=? AND c.expires_at>CURRENT_TIMESTAMP
-                  AND s.id=b.published_snapshot_id
+                  AND c.content_version=b.content_version AND b.tracking_status='ACTIVE'
                 """,
                             (r, n) ->
                                     new BranchReadContext(
@@ -362,7 +373,7 @@ public class RepositoryBranchService {
                                             repoId,
                                             r.getObject("branch_id", UUID.class),
                                             r.getString("name"),
-                                            r.getObject("snapshot_id", UUID.class),
+                                            r.getObject("content_version", UUID.class),
                                             r.getString("commit_sha"),
                                             Path.of(r.getString("content_path")),
                                             r.getTimestamp("expires_at").toInstant()),
@@ -382,9 +393,9 @@ public class RepositoryBranchService {
                     List<BranchReadContext> rows =
                             db.query(
                                     """
-                SELECT b.id,b.name,s.id snapshot_id,s.commit_sha,s.content_path FROM repository_branches b
-                JOIN branch_snapshots s ON s.id=b.published_snapshot_id
+                SELECT b.id,b.name,b.content_version,b.commit_sha,b.content_path FROM repository_branches b
                 WHERE b.repo_id=? AND b.id=? AND b.tracking_status='ACTIVE'
+                  AND b.content_version IS NOT NULL AND b.content_path IS NOT NULL
                 """,
                                     (r, n) ->
                                             new BranchReadContext(
@@ -392,7 +403,7 @@ public class RepositoryBranchService {
                                                     repoId,
                                                     branchId,
                                                     r.getString("name"),
-                                                    r.getObject("snapshot_id", UUID.class),
+                                                    r.getObject("content_version", UUID.class),
                                                     r.getString("commit_sha"),
                                                     Path.of(r.getString("content_path")),
                                                     Instant.now().plusSeconds(3600)),
@@ -403,19 +414,19 @@ public class RepositoryBranchService {
                                 409, "BRANCH_NOT_READY", "分支尚未准备，不会使用其他分支的数据");
                     BranchReadContext context = rows.get(0);
                     db.update(
-                            "INSERT INTO branch_read_contexts(id,account_id,repo_id,branch_id,snapshot_id,expires_at) VALUES(?,?,?,?,?,?)",
+                            "INSERT INTO branch_read_contexts(id,account_id,repo_id,branch_id,content_version,expires_at) VALUES(?,?,?,?,?,?)",
                             context.contextId(),
                             actor.id(),
                             repoId,
                             branchId,
-                            context.snapshotId(),
+                            context.contentVersion(),
                             Timestamp.from(context.expiresAt()));
                     db.update(
                             """
                 INSERT INTO branch_context_knowledge(context_id,card_id,revision)
-                SELECT ?,k.id,k.revision FROM knowledge_cards k JOIN knowledge_branch_scopes s ON s.card_id=k.id
+                SELECT ?,k.id,k.revision FROM knowledge_cards k
                 WHERE k.repo_id=? AND k.publication_status='PUBLISHED' AND k.review_status='APPROVED'
-                AND (s.mode='ALL_BRANCHES' OR ?=ANY(s.branch_ids))
+                AND k.branch_id=?
                 """,
                             context.contextId(),
                             repoId,
@@ -426,15 +437,15 @@ public class RepositoryBranchService {
 
     public CodeRepository repositoryFor(BranchReadContext context) {
         CodeRepository original = repository(context.repositoryId());
-        return original.withManagedSnapshot(
-                new GitRepositorySnapshot(
+        return original.withManagedContentVersion(
+                new GitRepositoryContentVersion(
                         context.branchName(),
                         context.commitSha(),
                         context.commitSha(),
                         false,
                         Instant.now()),
-                new ManagedRepositorySnapshot(
-                        RepositorySnapshotId.of(context.snapshotId()),
+                new ManagedRepositoryContentVersion(
+                        RepositoryContentVersion.of(context.contentVersion()),
                         original.id(),
                         context.contentPath(),
                         context.commitSha(),

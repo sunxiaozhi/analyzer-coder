@@ -61,10 +61,10 @@ public class BranchCodeOperationsController {
             if (body.contextId() != null) throw new IllegalArgumentException("同步操作不能指定历史阅读上下文");
             return jobs.submitOperation(actor, repositoryId, branchId, body.kind(), null);
         }
-        if (body.contextId() == null) throw new IllegalArgumentException("索引操作需要已同步的分支快照");
+        if (body.contextId() == null) throw new IllegalArgumentException("索引操作需要已同步的分支内容版本");
         var context = branches.resolve(actor, repositoryId, branchId, body.contextId());
         return jobs.submitOperation(
-                actor, repositoryId, branchId, body.kind(), context.snapshotId());
+                actor, repositoryId, branchId, body.kind(), context.contentVersion());
     }
 
     public record Operation(String kind, UUID contextId) {}

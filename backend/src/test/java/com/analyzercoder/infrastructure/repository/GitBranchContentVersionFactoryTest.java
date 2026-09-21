@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -18,7 +17,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-class GitBranchSnapshotFactoryTest {
+class GitBranchContentVersionFactoryTest {
     @TempDir Path temp;
 
     @AfterEach
@@ -42,10 +41,10 @@ class GitBranchSnapshotFactoryTest {
         Files.writeString(source.resolve("untracked.txt"), "keep me");
         String before = git(source, "status", "--porcelain");
         var factory =
-                new GitBranchSnapshotFactory(temp.resolve("snapshots").toString(), 100, 10000);
+                new GitBranchContentVersionFactory(temp.resolve("contentVersions").toString(), 100, 10000);
         var id = CodeRepositoryId.of(UUID.randomUUID());
-        var main = factory.create(id, source, factory.resolve(source, "main"));
-        var release = factory.create(id, source, factory.resolve(source, "release/1.0"));
+        var main = factory.createLatest(id, UUID.randomUUID(), source, factory.resolve(source, "main"));
+        var release = factory.createLatest(id, UUID.randomUUID(), source, factory.resolve(source, "release/1.0"));
         assertThat(main.id()).isNotEqualTo(release.id());
         assertThat(Files.readString(main.contentPath().resolve("README.md")))
                 .isEqualTo("new main version\n");
@@ -67,23 +66,22 @@ class GitBranchSnapshotFactoryTest {
         Files.writeString(source.resolve("large.txt"), "0123456789".repeat(100));
         git(source, "add", "large.txt");
         git(source, "commit", "-m", "large");
-        Path root = temp.resolve("snapshots");
-        var factory = new GitBranchSnapshotFactory(root.toString(), 10, 20);
+        Path root = temp.resolve("contentVersions");
+        var factory = new GitBranchContentVersionFactory(root.toString(), 10, 20);
         assertThatThrownBy(
                         () ->
-                                factory.create(
+                                factory.createLatest(
                                         CodeRepositoryId.of(UUID.randomUUID()),
+                                        UUID.randomUUID(),
                                         source,
                                         factory.resolve(source, "main")))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("大小限制");
-        try (var paths = Files.walk(root)) {
-            assertThat(paths.filter(Files::isRegularFile).toList()).isEmpty();
-        }
+        assertThat(root).doesNotExist();
     }
 
     @Test
-    void reusesLatestBranchWorkspaceAndUpdatesOnlyChangedFiles() throws Exception {
+    void publishesOneCurrentSlotAndRemovesTheSupersededSlot() throws Exception {
         Path source = repository();
         Files.writeString(source.resolve("keep.txt"), "keep\n");
         Files.writeString(source.resolve("change.txt"), "before\n");
@@ -92,16 +90,12 @@ class GitBranchSnapshotFactoryTest {
         git(source, "commit", "-m", "first");
 
         Path root = temp.resolve("latest-workspaces");
-        var factory = new GitBranchSnapshotFactory(root.toString(), 100, 10000);
+        var factory = new GitBranchContentVersionFactory(root.toString(), 100, 10000);
         var repositoryId = CodeRepositoryId.of(UUID.randomUUID());
         UUID branchId = UUID.randomUUID();
         String firstCommit = git(source, "rev-parse", "HEAD");
         var first = factory.createLatest(repositoryId, branchId, source, firstCommit);
-        Path marker = first.contentPath().resolve(".codegraph");
-        Files.createDirectories(marker);
-        Files.writeString(marker.resolve("state"), "graph-state");
-        FileTime unchangedTime = FileTime.fromMillis(946684800000L);
-        Files.setLastModifiedTime(first.contentPath().resolve("keep.txt"), unchangedTime);
+        factory.confirmPublished(first);
 
         Files.writeString(source.resolve("change.txt"), "after\n");
         Files.delete(source.resolve("delete.txt"));
@@ -112,17 +106,17 @@ class GitBranchSnapshotFactoryTest {
         var second = factory.createLatest(repositoryId, branchId, source, secondCommit);
 
         assertThat(second.id()).isNotEqualTo(first.id());
-        assertThat(second.contentPath()).isEqualTo(first.contentPath());
+        assertThat(second.contentPath()).isNotEqualTo(first.contentPath());
+        assertThat(first.contentPath()).exists();
         assertThat(second.contentPath().resolve("keep.txt")).hasContent("keep\n");
-        assertThat(Files.getLastModifiedTime(second.contentPath().resolve("keep.txt")))
-                .isEqualTo(unchangedTime);
         assertThat(second.contentPath().resolve("change.txt")).hasContent("after\n");
         assertThat(second.contentPath().resolve("new.txt")).hasContent("new\n");
         assertThat(second.contentPath().resolve("delete.txt")).doesNotExist();
-        assertThat(second.contentPath().resolve(".codegraph/state"))
-                .hasContent("graph-state");
         assertThat(second.contentPath().getParent().resolve("current-commit"))
                 .hasContent(secondCommit + System.lineSeparator());
+        factory.confirmPublished(second);
+        assertThat(first.contentPath()).doesNotExist();
+        assertThat(second.contentPath()).exists();
         assertThat(git(source, "rev-parse", "refs/analyzer/workspaces/" + branchId))
                 .isEqualTo(secondCommit);
     }
@@ -145,7 +139,7 @@ class GitBranchSnapshotFactoryTest {
                 "a?b"
             })
     void rejectsUnsafeBranchNames(String branch) {
-        assertThatThrownBy(() -> GitBranchSnapshotFactory.validateBranch(branch))
+        assertThatThrownBy(() -> GitBranchContentVersionFactory.validateBranch(branch))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

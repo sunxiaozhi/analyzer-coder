@@ -8,6 +8,7 @@ import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorD
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
 import { intelligenceApi } from '@/api/intelligence';
 import { branchesApi } from '@/api/branches';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 
 let repositories: {
   selectedRepositoryId: string;
@@ -21,7 +22,7 @@ vi.mock('vue-router', () => ({
 vi.mock('@/api/intelligence', () => ({
   intelligenceApi: { cards: vi.fn(), markdownSources: vi.fn(), sourceDrift: vi.fn() },
 }));
-vi.mock('@/api/branches', () => ({ branchesApi: { scopes: vi.fn() } }));
+vi.mock('@/api/branches', () => ({ branchesApi: { validations: vi.fn() } }));
 
 describe('knowledge evidence access', () => {
   beforeEach(() => {
@@ -35,10 +36,14 @@ describe('knowledge evidence access', () => {
       { id: 'card-1', title: 'Published rule', cardType: '规则', knowledgeKind: 'BUSINESS_RULE', tags: [] },
     ] as unknown as Awaited<ReturnType<typeof intelligenceApi.cards>>);
     vi.mocked(intelligenceApi.sourceDrift).mockResolvedValue(null);
+    vi.mocked(branchesApi.validations).mockResolvedValue([]);
     vi.mocked(intelligenceApi.markdownSources).mockResolvedValue({
-      snapshotId: 'snapshot', counts: { total: 0, pending: 0, current: 0, stale: 0 }, items: [],
+      contentVersion: 'contentVersion', counts: { total: 0, pending: 0, current: 0, stale: 0 }, items: [],
     });
-    vi.mocked(branchesApi.scopes).mockResolvedValue([]);
+    const branches = useBranchContextStore();
+    branches.repositoryId = 'repo-1';
+    branches.selectedBranchId = 'main';
+    branches.context = { contextId: 'ctx-main', repositoryId: 'repo-1', branchId: 'main', branchName: 'main', contentVersion: 'contentVersion', commitSha: 'abc', expiresAt: '' };
   });
 
   function mountView() {
@@ -56,8 +61,8 @@ describe('knowledge evidence access', () => {
   it('opens a published card and loads readable Markdown sources without maintenance tools', async () => {
     const wrapper = mountView();
     await flushPromises();
-    expect(intelligenceApi.cards).toHaveBeenCalledWith('repo-1');
-    expect(intelligenceApi.markdownSources).toHaveBeenCalledWith('repo-1');
+    expect(intelligenceApi.cards).toHaveBeenCalledWith('repo-1', 'ctx-main');
+    expect(intelligenceApi.markdownSources).toHaveBeenCalledWith('repo-1', 'ctx-main');
     expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('modelValue')).toBe(true);
     expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('card')?.id).toBe('card-1');
     expect(wrapper.findComponent(KnowledgeCardListItem).props('canMaintain')).toBe(false);
@@ -70,7 +75,7 @@ describe('knowledge evidence access', () => {
     repositories.selectedRepository.capabilities.canUpdate = true;
     const wrapper = mountView();
     await flushPromises();
-    expect(intelligenceApi.markdownSources).toHaveBeenCalledWith('repo-1');
+    expect(intelligenceApi.markdownSources).toHaveBeenCalledWith('repo-1', 'ctx-main');
     expect(wrapper.findComponent(KnowledgeCardListItem).props('canMaintain')).toBe(true);
     expect(wrapper.findComponent(KnowledgeCardEditorDialog).exists()).toBe(true);
     wrapper.unmount();

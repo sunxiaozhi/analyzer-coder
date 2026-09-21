@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ApiError } from '@/api/http';
-import { branchesApi, type BranchValidationCard, type BranchValidationState, type BranchScope } from '@/api/branches';
+import { branchesApi, type BranchValidationCard, type BranchValidationState } from '@/api/branches';
 import {
   intelligenceApi,
   type CardInput,
@@ -20,7 +20,6 @@ import {
 import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
-import KnowledgeBranchScopeDialog from '@/features/knowledge/KnowledgeBranchScopeDialog.vue';
 import MarkdownKnowledgeSourceList from '@/features/knowledge/MarkdownKnowledgeSourceList.vue';
 import { renderMarkdown } from '@/features/knowledge/markdown';
 import { useRepositoryStore } from '@/stores/repositoryStore';
@@ -38,7 +37,6 @@ const route = useRoute();
 type KnowledgeMode = 'cards' | 'markdown';
 const activeMode = shallowRef<KnowledgeMode>('cards');
 const cards = shallowRef<KnowledgeCard[]>([]);
-const branchScopes = shallowRef<BranchScope[]>([]);
 const branchValidations = shallowRef<BranchValidationCard[]>([]);
 const validationFilter = shallowRef<BranchValidationState | 'ALL'>('ALL');
 const validationLabels: Record<BranchValidationState, string> = { CURRENT: '已验证', UNVERIFIED: '未验证', REVIEW_REQUIRED: '待复核', INVALID: '不适用' };
@@ -53,8 +51,6 @@ const allSourceStatuses = '__ALL__';
 const selectedKnowledgeKind = shallowRef<KnowledgeCard['knowledgeKind'] | typeof allKnowledgeKinds>(allKnowledgeKinds);
 const selectedSourceStatus = shallowRef<MarkdownKnowledgeSourceStatus | typeof allSourceStatuses>(allSourceStatuses);
 const dialog = shallowRef(false);
-const scopeDialog = shallowRef(false);
-const scopeCard = shallowRef<KnowledgeCard | null>(null);
 const detailDialog = shallowRef(false);
 const historyDialog = shallowRef(false);
 const busy = shallowRef(false);
@@ -67,7 +63,7 @@ const editing = shallowRef<KnowledgeCard | null>(null);
 const initialReference = shallowRef<{
   filePath: string;
   symbolName: string | null;
-  snapshotId: string | null;
+  contentVersion: string | null;
 } | null>(null);
 const viewing = shallowRef<KnowledgeCard | null>(null);
 const driftEvent = shallowRef<KnowledgeDriftEvent | null>(null);
@@ -105,7 +101,7 @@ const cardEmptyDescription = computed(() => {
 const sourceEmptyDescription = computed(() => {
   if (!repositories.selectedRepositoryId) return '请先选择仓库';
   if (sourceLoadError.value) return sourceLoadError.value;
-  if (!markdownSources.value?.items.length) return '当前快照未发现 Markdown 文件，仓库重新扫描后会自动更新';
+  if (!markdownSources.value?.items.length) return '当前内容版本未发现 Markdown 文件，仓库重新扫描后会自动更新';
   return '没有符合筛选条件的 Markdown';
 });
 
@@ -122,19 +118,18 @@ async function loadCards() {
   const version=++cardsVersion;
   const identity=branchContext.identity;
   const repositoryId=repositories.selectedRepositoryId;
-  cards.value=[]; branchScopes.value=[]; branchValidations.value=[]; cardsLoading.value=false;
+  cards.value=[]; branchValidations.value=[]; cardsLoading.value=false;
   if(!repositoryId || readScope.blocked.value) return;
   const isCurrent=()=>version===cardsVersion && repositoryId===repositories.selectedRepositoryId && identity===branchContext.identity;
   cardsLoading.value=true;
   try {
     const contextId=branchContext.context?.contextId;
-    const [loadedCards,loadedScopes,loadedValidations]=await Promise.all([
+    const [loadedCards,loadedValidations]=await Promise.all([
       contextId?intelligenceApi.cards(repositoryId,contextId):intelligenceApi.cards(repositoryId),
-      branchesApi.scopes(repositoryId),
       branchContext.context ? branchesApi.validations(branchContext.context) : Promise.resolve([]),
     ]);
     if(!isCurrent())return;
-    cards.value=loadedCards; branchScopes.value=loadedScopes; branchValidations.value=loadedValidations;
+    cards.value=loadedCards; branchValidations.value=loadedValidations;
     syncRequestedCard(); syncRequestedCreate();
   }catch(error){
     if(isCurrent())ElMessage.error(error instanceof Error?error.message:'知识卡片加载失败');
@@ -178,24 +173,20 @@ function syncRequestedCard() {
 }
 function openCreate() { initialReference.value = null; editing.value = null; dialog.value = true; }
 function scopeLabel(card: KnowledgeCard) {
-  const scope = branchScopes.value.find(item => item.cardId === card.id);
-  if (!scope || scope.mode === 'ALL_BRANCHES') return '项目共享';
-  const names = scope.branchIds
-    .map(id => branchContext.branches.find(branch => branch.id === id)?.name)
-    .filter((name): name is string => Boolean(name));
-  return names.length === 1 ? `分支专属 · ${names[0]}` : `指定分支 · ${names.length || scope.branchIds.length}`;
+  void card;
+  return `分支 · ${branchContext.context?.branchName ?? '未选择'}`;
 }
 function openEdit(card: KnowledgeCard) { initialReference.value = null; editing.value = card; dialog.value = true; }
 function syncRequestedCreate() {
   const path = typeof route.query.path === 'string' ? route.query.path : null;
   if (route.query.create !== '1' || !path || !canMaintain.value) return;
-  const requestedSnapshot = typeof route.query.snapshotId === 'string' ? route.query.snapshotId : null;
+  const requestedContentVersion = typeof route.query.contentVersion === 'string' ? route.query.contentVersion : null;
   const requestedSymbol = typeof route.query.symbol === 'string' ? route.query.symbol : null;
-  const requestKey = `${repositories.selectedRepositoryId}:${path}:${requestedSnapshot}:${requestedSymbol}`;
+  const requestKey = `${repositories.selectedRepositoryId}:${path}:${requestedContentVersion}:${requestedSymbol}`;
   if (handledCreateRequest === requestKey) return;
   handledCreateRequest = requestKey;
   activeMode.value = 'cards';
-  initialReference.value = { filePath: path, symbolName: requestedSymbol, snapshotId: requestedSnapshot };
+  initialReference.value = { filePath: path, symbolName: requestedSymbol, contentVersion: requestedContentVersion };
   editing.value = null;
   dialog.value = true;
 }
@@ -234,7 +225,7 @@ function openDrift(event: KnowledgeDriftEvent) {
     query: {
       path: reason.filePath,
       startLine: reason.startLine ?? undefined,
-      snapshotId: event.toSnapshotId,
+      contentVersion: event.toContentVersion,
       branchId: branchContext.context?.branchId,
       contextId: branchContext.context?.contextId,
     },
@@ -248,7 +239,7 @@ async function sourceReview(action: 'CONFIRM_CURRENT' | 'MARK_STALE') {
   try {
     const prompt = await ElMessageBox.prompt(
       confirming
-        ? '说明你核对了哪些当前代码事实。确认后将绑定当前提交版本和快照。'
+        ? '说明你核对了哪些当前代码事实。确认后将绑定当前提交版本和内容版本。'
         : '说明知识的哪部分已经不再适用于当前代码。',
       confirming ? '确认知识仍然有效' : '确认知识已经失效',
       {
@@ -292,7 +283,7 @@ function openCode(reference: CodeReference) {
   void router.push({
     name: 'search',
     query: {
-      snapshotId: reference.snapshotId ?? undefined,
+      contentVersion: reference.contentVersion ?? undefined,
       path: reference.filePath,
       startLine: String(reference.startLine ?? 1),
       endLine: String(reference.endLine ?? reference.startLine ?? 1),
@@ -345,7 +336,7 @@ async function generateMarkdownCard(source: MarkdownKnowledgeSource) {
   try {
     const card = await intelligenceApi.generateMarkdownSource(repositoryId, {
       sourcePath: source.sourcePath,
-      expectedSnapshotId: source.sourceSnapshotId,
+      expectedContentVersion: source.sourceContentVersion,
       expectedContentHash: source.sourceContentHash,
     }, branchContext.context?.contextId);
     await Promise.all([loadCards(), loadMarkdownSources()]);
@@ -366,9 +357,9 @@ async function generateMarkdownCard(source: MarkdownKnowledgeSource) {
 
 async function generateAllPending() {
   const repositoryId = repositories.selectedRepositoryId;
-  const expectedSnapshotId = markdownSources.value?.snapshotId;
+  const expectedContentVersion = markdownSources.value?.contentVersion;
   const pending = markdownSources.value?.counts.pending ?? 0;
-  if (!repositoryId || !expectedSnapshotId || pending <= 0) return;
+  if (!repositoryId || !expectedContentVersion || pending <= 0) return;
   try {
     await ElMessageBox.confirm(
       `将 ${pending} 个待处理 Markdown 生成知识卡片草稿。已生成和已过期内容不会被修改。`,
@@ -380,7 +371,7 @@ async function generateAllPending() {
   }
   bulkGenerating.value = true;
   try {
-    const result = await intelligenceApi.generatePendingMarkdownSources(repositoryId, expectedSnapshotId, branchContext.context?.contextId);
+    const result = await intelligenceApi.generatePendingMarkdownSources(repositoryId, expectedContentVersion, branchContext.context?.contextId);
     await Promise.all([loadCards(), loadMarkdownSources()]);
     ElMessage.success(result.generated > 0
       ? result.remaining > 0
@@ -390,7 +381,7 @@ async function generateAllPending() {
   } catch (error) {
     if (error instanceof ApiError && error.status === 409) {
       await loadMarkdownSources();
-      ElMessage.warning('仓库快照已变化，列表已刷新，请确认最新待处理内容后重试');
+      ElMessage.warning('仓库内容版本已变化，列表已刷新，请确认最新待处理内容后重试');
     } else {
       ElMessage.error(error instanceof Error ? error.message : '批量生成失败');
     }
@@ -410,7 +401,7 @@ async function openGraph(reference: CodeReference) {
     await router.push({ name: 'search', query: {
       path: target.filePath || reference.filePath,
       startLine: String(target.startLine ?? reference.startLine ?? 1),
-      snapshotId: reference.snapshotId ?? undefined,
+      contentVersion: reference.contentVersion ?? undefined,
       symbol: target.symbol,
       depth: '3',
       relation: '1',
@@ -421,23 +412,13 @@ async function openGraph(reference: CodeReference) {
     ElMessage.error(error instanceof Error ? error.message : '无法解析图谱目标');
   }
 }
-async function save(input: CardInput, creationScope: 'CURRENT_BRANCH' | 'PROJECT_SHARED' = 'CURRENT_BRANCH') {
+async function save(input: CardInput) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   busy.value = true;
   try {
     if (editing.value) await intelligenceApi.updateCard(repositoryId, editing.value.id, input);
-    else {
-      const card = await intelligenceApi.createCard(repositoryId, input, branchContext.context?.contextId);
-      if (creationScope === 'PROJECT_SHARED') {
-        await branchesApi.scope(repositoryId, {
-          cardId: card.id,
-          revision: card.revision,
-          mode: 'ALL_BRANCHES',
-          branchIds: [],
-        });
-      }
-    }
+    else await intelligenceApi.createCard(repositoryId, input, branchContext.context?.contextId);
     dialog.value = false;
     await load();
     ElMessage.success(editing.value ? '新修订已保存' : '知识卡片已创建');
@@ -501,7 +482,7 @@ watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const
 });
 watch(() => route.query.cardId, syncRequestedCard);
 watch(
-  () => [route.query.create, route.query.path, route.query.snapshotId, route.query.symbol] as const,
+  () => [route.query.create, route.query.path, route.query.contentVersion, route.query.symbol] as const,
   syncRequestedCreate,
 );
 onMounted(() => void load());
@@ -512,7 +493,7 @@ onMounted(() => void load());
     <div v-if="!repositories.selectedRepositoryId" class="knowledge-gate">
       <BookOpenCheck :size="28" />
       <h1>先选择一个项目</h1>
-      <p>知识卡片必须归属明确仓库，才能绑定代码范围、负责人和当前快照。</p>
+      <p>知识卡片必须归属明确仓库，才能绑定代码范围、负责人和当前内容版本。</p>
       <el-button type="primary" @click="router.push('/repositories')">前往项目管理</el-button>
     </div>
     <div v-else class="surface knowledge-surface">
@@ -628,7 +609,6 @@ onMounted(() => void load());
             :validation-label="readScope.requiresContext.value ? validationLabels[validationState(card)] : undefined"
             @view="openDetail"
             @edit="openEdit"
-            @scope="card => { scopeCard = card; scopeDialog = true; }"
             @history="showHistory"
             @review="reviewCard"
             @publish="setPublication"
@@ -644,7 +624,7 @@ onMounted(() => void load());
         <MarkdownKnowledgeSourceList
           :items="sourceRows"
           :counts="markdownSources?.counts ?? emptySourceCounts"
-          :snapshot-id="markdownSources?.snapshotId ?? null"
+          :content-version="markdownSources?.contentVersion ?? null"
           :busy-path="sourceBusyPath"
           :bulk-busy="bulkGenerating"
           :can-generate="canMaintain"
@@ -655,7 +635,6 @@ onMounted(() => void load());
         />
       </div>
     </div>
-    <KnowledgeBranchScopeDialog v-model="scopeDialog" :repository-id="repositories.selectedRepositoryId ?? ''" :card="scopeCard" @saved="loadCards" />
     <KnowledgeCardDetailDialog
       v-model="detailDialog"
       :card="viewing"
@@ -675,7 +654,6 @@ onMounted(() => void load());
       :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy"
       :initial-reference="initialReference"
       :branch-name="branchContext.context?.branchName ?? null"
-      :allow-shared-scope="canManage"
       @submit="save" @open-code="openCode" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">

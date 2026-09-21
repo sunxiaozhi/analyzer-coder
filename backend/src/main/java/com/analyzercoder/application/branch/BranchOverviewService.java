@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** All overview statistics are pinned to the explicit branch snapshot. */
+/** All overview statistics are pinned to the explicit branch contentVersion. */
 @Service
 public class BranchOverviewService {
     private final RepositoryBranchService branches;
@@ -50,22 +50,22 @@ public class BranchOverviewService {
                 branches.resolve(
                         actor, context.repositoryId(), context.branchId(), context.contextId());
         var repository = branches.repositoryFor(context);
-        var snapshot = browser.list(repository);
-        var artifact = graph.findPublished(context.repositoryId(), context.snapshotId());
+        var contentVersion = browser.list(repository);
+        var artifact = graph.findPublished(context.repositoryId(), context.contentVersion());
         var knowledge = knowledge(context);
         var summary = summary(context, knowledge.trusted());
-        var profile = RepositoryPreparationService.profile(snapshot.files(), summary, artifact);
+        var profile = RepositoryPreparationService.profile(contentVersion.files(), summary, artifact);
         boolean content =
                 Boolean.TRUE.equals(
                         db.queryForObject(
-                                "SELECT content_indexed_at IS NOT NULL FROM branch_snapshots WHERE repo_id=? AND branch_id=? AND id=?",
+                                "SELECT content_indexed_at IS NOT NULL FROM repository_branches WHERE repo_id=? AND id=? AND content_version=?",
                                 Boolean.class,
                                 context.repositoryId(),
                                 context.branchId(),
-                                context.snapshotId()));
+                                context.contentVersion()));
         var stages =
                 List.of(
-                        stage("snapshot", "分支代码同步", true),
+                        stage("contentVersion", "分支代码同步", true),
                         stage("content", "内容索引", content),
                         stage(
                                 "vectors",
@@ -76,7 +76,7 @@ public class BranchOverviewService {
                                 "knowledge_drift",
                                 "分支知识验证",
                                 knowledge.suspect() + knowledge.stale() == 0 ? "READY" : "DEGRADED",
-                                "验证结果固定到此分支、快照与知识修订"));
+                                "验证结果固定到此分支、内容版本与知识修订"));
         var issues = new ArrayList<ProjectHealthOverviewService.HealthIssue>();
         if (!content)
             issues.add(issue("CONTENT_INDEX_NOT_READY", "BLOCKING", "当前分支内容索引未就绪", "PREPARATION"));
@@ -106,7 +106,7 @@ public class BranchOverviewService {
                         null,
                         null,
                         null,
-                        context.snapshotId(),
+                        context.contentVersion(),
                         context.commitSha(),
                         context.branchName(),
                         false,
@@ -114,7 +114,7 @@ public class BranchOverviewService {
         var health =
                 new ProjectHealthOverviewService.ProjectHealthOverview(
                         context.repositoryId(),
-                        context.snapshotId(),
+                        context.contentVersion(),
                         context.commitSha(),
                         !content ? "BLOCKED" : issues.isEmpty() ? "READY" : "DEGRADED",
                         content,
@@ -135,7 +135,7 @@ public class BranchOverviewService {
                     LEFT JOIN vector_model_configs vm ON vm.id=va.active_config_id
                 )
                 SELECT a.model,a.dimension,a.capability,COUNT(c.id) total,COUNT(e.chunk_id) vectorized
-                FROM active a LEFT JOIN code_chunks c ON c.repo_id=? AND c.snapshot_id=?
+                FROM active a LEFT JOIN code_chunks c ON c.repo_id=? AND c.content_version=?
                 LEFT JOIN chunk_embeddings e ON e.chunk_id=c.id AND e.content_hash=c.content_hash
                     AND e.model=a.model AND e.dimension=a.dimension AND e.retrieval_capability=a.capability
                 GROUP BY a.model,a.dimension,a.capability
@@ -143,7 +143,7 @@ public class BranchOverviewService {
                 (r, n) ->
                         new VectorIndexQueryService.Summary(
                                 c.repositoryId(),
-                                c.snapshotId(),
+                                c.contentVersion(),
                                 c.commitSha(),
                                 r.getLong("total"),
                                 r.getLong("vectorized"),
@@ -158,7 +158,7 @@ public class BranchOverviewService {
                                         : "语义检索",
                                 Instant.now()),
                 c.repositoryId(),
-                c.snapshotId());
+                c.contentVersion());
     }
 
     private ProjectKnowledgeHealthRow knowledge(BranchReadContext c) {
@@ -172,10 +172,10 @@ public class BranchOverviewService {
                     COUNT(*) FILTER(WHERE v.state='CURRENT' AND k.publication_status='PUBLISHED' AND k.review_status='APPROVED') trusted_count,
                     COUNT(*) FILTER(WHERE k.enforcement='REQUIRED' AND k.owner_account_id IS NULL) required_without_owner,
                     COUNT(*) FILTER(WHERE k.review_status='UNREVIEWED') unreviewed_count
-                FROM knowledge_cards k JOIN knowledge_branch_scopes s ON s.card_id=k.id
-                LEFT JOIN knowledge_branch_validations v ON v.card_id=k.id AND v.revision=k.revision AND v.branch_id=? AND v.snapshot_id=?
+                FROM knowledge_cards k
+                LEFT JOIN knowledge_branch_validations v ON v.card_id=k.id AND v.revision=k.revision AND v.branch_id=? AND v.content_version=?
                 WHERE k.repo_id=? AND k.publication_status<>'ARCHIVED'
-                    AND (s.mode='ALL_BRANCHES' OR ?=ANY(s.branch_ids))
+                    AND k.branch_id=?
                 """,
                 (r, n) ->
                         new ProjectKnowledgeHealthRow(
@@ -188,7 +188,7 @@ public class BranchOverviewService {
                                 r.getLong("required_without_owner"),
                                 r.getLong("unreviewed_count")),
                 c.branchId(),
-                c.snapshotId(),
+                c.contentVersion(),
                 c.repositoryId(),
                 c.branchId());
     }
@@ -196,12 +196,12 @@ public class BranchOverviewService {
     private static RepositoryPreparationService.PreparationStage stage(
             String key, String label, boolean ready) {
         return new RepositoryPreparationService.PreparationStage(
-                key, label, ready ? "READY" : "PENDING", ready ? "当前快照已就绪" : "在项目管理中构建此分支的索引");
+                key, label, ready ? "READY" : "PENDING", ready ? "当前内容版本已就绪" : "在项目管理中构建此分支的索引");
     }
 
     private static ProjectHealthOverviewService.HealthIssue issue(
             String code, String severity, String title, String target) {
         return new ProjectHealthOverviewService.HealthIssue(
-                code, severity, title, "仅针对当前分支快照", target);
+                code, severity, title, "仅针对当前分支内容版本", target);
     }
 }

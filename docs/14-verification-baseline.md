@@ -204,8 +204,8 @@
 - `ChunkController` 只有 `CodeChunkQueryService` 与 `AccessControlService` 两个依赖，
   方法签名中没有 `BranchRequestContext`，因此不会读取 `X-Branch-Context`
   （`backend/src/main/java/com/analyzercoder/interfaces/rest/ChunkController.java:26-44`）。
-- `CodeChunkMapper.xml` 的 `currentSnapshot` 片段把查询固定在
-  `repositories.current_snapshot_id`（默认版本）
+- `CodeChunkMapper.xml` 的 `currentContentVersion` 片段把查询固定在
+  `repositories.current_content_version`（默认版本）
   （`backend/src/main/resources/mappers/CodeChunkMapper.xml:37-41`）。
 - `BranchContextInterceptor` 的 GET 白名单只收录了 `/chunks/{uuid}/graph-target`，
   没有 `/chunks`，因此即便前端给它带上 `X-Branch-Context` 也会被拒绝为 409
@@ -230,7 +230,7 @@
   - `codegraph_affected` 的 `title`：目录为 `Analyze affected symbols`
     （mcp-tools.json:470），而源码为 `'Analyze affected tests'`（mcp-server/src/server.mjs:73）。
   - `search_project` 的 `description`：目录为
-    `Searches the current repository snapshot and published project knowledge in one ranked result set.`
+    `Searches the current repository contentVersion and published project knowledge in one ranked result set.`
     （mcp-tools.json:5），而源码为
     `'Returns one ranked result set containing current code and published project knowledge.'`
     （mcp-server/src/server.mjs:20）。
@@ -324,7 +324,7 @@
    随后确认 `mvn -pl backend -am test` 的 skipped 从 5 降到 2。
 3. **修正非默认分支上的知识卡代码关联（缺口 3）—— 会产生错误绑定。**
    动作：为 `/chunks` 接入分支上下文（在 `ChunkController` 注入 `BranchRequestContext`、
-   在映射层支持按快照查询、并把 `/chunks` 加入 `BranchContextInterceptor` 的 GET 白名单），
+   在映射层支持按内容版本查询、并把 `/chunks` 加入 `BranchContextInterceptor` 的 GET 白名单），
    或让知识卡编辑器改用已支持分支的接口；
    验收：在非默认分支上创建知识卡并确认代码关联指向该分支的片段。
 4. **统一 MCP 工具目录（缺口 4）—— 影响所有 MCP 客户端的工具契约。**

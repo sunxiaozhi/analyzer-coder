@@ -9,7 +9,7 @@ afterEach(() => { vi.useRealTimers(); vi.resetAllMocks(); });
 
 it('refreshes branch metadata on completion and stops polling after closing', async () => {
   vi.useFakeTimers();
-  const job: BranchPreparationJob = { id: 'job', branchId: 'branch', status: 'RUNNING', stage: 'INDEXING', error: null, kind: 'SNAPSHOT', snapshotId: null };
+  const job: BranchPreparationJob = { id: 'job', branchId: 'branch', status: 'RUNNING', stage: 'INDEXING', error: null, kind: 'PREPARE', contentVersion: null };
   vi.mocked(branchesApi.preparationJobs).mockResolvedValueOnce([job])
     .mockResolvedValue([{ ...job, status: 'SUCCEEDED', stage: 'COMPLETED' }]);
   const completed = vi.fn().mockResolvedValue(undefined);

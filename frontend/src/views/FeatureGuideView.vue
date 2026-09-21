@@ -17,10 +17,12 @@ import {
 } from 'lucide-vue-next';
 import { computed, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { getRepositoryProfile, type RepositoryPreparation } from '@/api/repositories';
+import { getBranchOverview, type RepositoryPreparation } from '@/api/repositories';
 import OptionalCapabilitiesGuide from '@/features/help/OptionalCapabilitiesGuide.vue';
 import { useAuthStore } from '@/stores/authStore';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
+import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
 
 type StatusTone = 'success' | 'warning' | 'danger' | 'neutral';
 type CardAccent = 'action' | 'evidence' | 'model' | 'warning' | 'success';
@@ -42,14 +44,16 @@ interface GuideCard {
 const router = useRouter();
 const auth = useAuthStore();
 const repositoryStore = useRepositoryStore();
+const branchContext = useBranchContextStore();
+const readScope = useBranchReadScope();
 const preparation = shallowRef<RepositoryPreparation | null>(null);
 const preparationLoading = shallowRef(false);
 const preparationError = shallowRef<string | null>(null);
 let requestVersion = 0;
 
 const repository = computed(() => repositoryStore.selectedRepository);
-const snapshotId = computed(() => preparation.value?.snapshotId ?? repository.value?.snapshotId ?? null);
-const hasEvidence = computed(() => Boolean(snapshotId.value));
+const contentVersion = computed(() => branchContext.context?.contentVersion ?? null);
+const hasEvidence = computed(() => Boolean(contentVersion.value));
 const canMaintainKnowledge = computed(() => (
   auth.isAdmin || Boolean(repository.value?.capabilities.canUpdate)
 ));
@@ -68,14 +72,14 @@ const preparationStatus = computed<{ label: string; tone: StatusTone }>(() => {
     case 'ACTION_REQUIRED':
       return { label: '需要处理', tone: 'danger' };
     default:
-      return { label: snapshotId.value ? '已有可用快照' : '尚未准备证据', tone: snapshotId.value ? 'success' : 'warning' };
+      return { label: contentVersion.value ? '已有可用内容版本' : '尚未准备证据', tone: contentVersion.value ? 'success' : 'warning' };
   }
 });
 
 const repositoryMeta = computed(() => {
-  if (!repository.value) return '选择后才能读取仓库快照、代码证据和知识数据';
-  const branch = preparation.value?.branch ?? repository.value.branch ?? '分支未知';
-  const commit = preparation.value?.commitSha ?? repository.value.commit;
+  if (!repository.value) return '选择后才能读取仓库内容版本、代码证据和知识数据';
+  const branch = branchContext.context?.branchName ?? '分支未知';
+  const commit = branchContext.context?.commitSha;
   return commit ? branch + ' · ' + commit.slice(0, 8) : branch;
 });
 
@@ -84,7 +88,7 @@ function evidenceAccess(readyLabel: string) {
     return { status: '需要选择项目', statusTone: 'warning' as const, action: '选择项目', target: '/repositories' };
   }
   if (!hasEvidence.value) {
-    return { status: '等待证据快照', statusTone: 'warning' as const, action: '先准备证据', target: '/overview' };
+    return { status: '等待证据内容版本', statusTone: 'warning' as const, action: '先准备证据', target: '/overview' };
   }
   return { status: readyLabel, statusTone: 'success' as const, action: '进入功能', target: '' };
 }
@@ -119,8 +123,8 @@ const workflowCards = computed<GuideCard[]>(() => {
       key: 'prepare',
       number: '02',
       title: '准备证据',
-      description: 'Git 项目先准备目标分支快照；代码片段用于检索，向量和图谱按需构建。',
-      source: '仓库 /profile、索引任务与当前快照',
+      description: 'Git 项目先准备目标分支内容版本；代码片段用于检索，向量和图谱按需构建。',
+      source: '分支总览、分支任务与当前发布令牌',
       status: preparationStatus.value.label,
       statusTone: preparationStatus.value.tone,
       action: repository.value ? '查看准备状态' : '选择项目',
@@ -146,7 +150,7 @@ const workflowCards = computed<GuideCard[]>(() => {
       number: '04',
       title: '联合检索',
       description: '用一个查询同时检索源码片段与项目知识，并回到原始文件和行号核对。',
-      source: '当前快照、code_chunks 与已发布知识',
+      source: '当前内容版本、code_chunks 与已发布知识',
       status: code.status,
       statusTone: code.statusTone,
       action: code.action,
@@ -230,11 +234,15 @@ async function loadPreparation(repositoryId: string | null) {
   preparation.value = null;
   preparationError.value = null;
   if (!repositoryId) return;
+  if (readScope.blocked.value || !branchContext.context) {
+    preparationError.value = readScope.reason.value;
+    return;
+  }
 
   preparationLoading.value = true;
   try {
-    const result = await getRepositoryProfile(repositoryId);
-    if (version === requestVersion) preparation.value = result;
+    const result = await getBranchOverview(repositoryId, branchContext.context.contextId);
+    if (version === requestVersion) preparation.value = result.preparation;
   } catch (error) {
     if (version === requestVersion) {
       preparationError.value = error instanceof Error ? error.message : '读取项目准备状态失败';
@@ -249,8 +257,8 @@ function navigate(target: string) {
 }
 
 watch(
-  () => repositoryStore.selectedRepositoryId,
-  repositoryId => void loadPreparation(repositoryId),
+  () => [repositoryStore.selectedRepositoryId, branchContext.identity] as const,
+  ([repositoryId]) => void loadPreparation(repositoryId),
   { immediate: true },
 );
 </script>

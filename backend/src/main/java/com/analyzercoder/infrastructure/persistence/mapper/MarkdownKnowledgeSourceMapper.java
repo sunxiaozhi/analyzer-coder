@@ -13,7 +13,7 @@ public interface MarkdownKnowledgeSourceMapper {
     int upsertSource(
             @Param("id") UUID id,
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("filePath") String filePath,
             @Param("contentHash") String contentHash,
             @Param("title") String title,
@@ -26,11 +26,11 @@ public interface MarkdownKnowledgeSourceMapper {
             @Param("repositoryId") UUID repositoryId, @Param("filePaths") List<String> filePaths);
 
     List<Map<String, Object>> listSources(
-            @Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId);
+            @Param("repositoryId") UUID repositoryId, @Param("contentVersion") UUID contentVersion);
 
     Map<String, Object> findSource(
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("filePath") String filePath);
 
     Map<String, Object> lockSource(
@@ -38,7 +38,7 @@ public interface MarkdownKnowledgeSourceMapper {
 
     List<UUID> findChunkIds(
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("filePath") String filePath,
             @Param("limit") int limit);
 
@@ -47,13 +47,13 @@ public interface MarkdownKnowledgeSourceMapper {
             @Param("revision") int revision,
             @Param("sourceId") UUID sourceId,
             @Param("repositoryId") UUID repositoryId,
-            @Param("sourceSnapshotId") UUID sourceSnapshotId,
+            @Param("sourceContentVersion") UUID sourceContentVersion,
             @Param("sourcePath") String sourcePath,
             @Param("sourceContentHash") String sourceContentHash);
 
     int reconcileLinkedCards(
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("commitSha") String commitSha,
             @Param("commitAvailable") boolean commitAvailable);
 
@@ -61,7 +61,7 @@ public interface MarkdownKnowledgeSourceMapper {
             @Param("id") UUID id,
             @Param("repositoryId") UUID repositoryId,
             @Param("branchId") UUID branchId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("filePath") String filePath,
             @Param("contentHash") String contentHash,
             @Param("title") String title,
@@ -78,12 +78,12 @@ public interface MarkdownKnowledgeSourceMapper {
     List<Map<String, Object>> listBranchSources(
             @Param("repositoryId") UUID repositoryId,
             @Param("branchId") UUID branchId,
-            @Param("snapshotId") UUID snapshotId);
+            @Param("contentVersion") UUID contentVersion);
 
     Map<String, Object> findBranchSource(
             @Param("repositoryId") UUID repositoryId,
             @Param("branchId") UUID branchId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("filePath") String filePath);
 
     Map<String, Object> lockBranchSource(
@@ -97,12 +97,12 @@ public interface MarkdownKnowledgeSourceMapper {
             @Param("sourceId") UUID sourceId,
             @Param("repositoryId") UUID repositoryId,
             @Param("sourceBranchId") UUID sourceBranchId,
-            @Param("sourceSnapshotId") UUID sourceSnapshotId,
+            @Param("sourceContentVersion") UUID sourceContentVersion,
             @Param("sourcePath") String sourcePath,
             @Param("sourceContentHash") String sourceContentHash);
 
     int reconcileBranchValidations(
             @Param("repositoryId") UUID repositoryId,
             @Param("branchId") UUID branchId,
-            @Param("snapshotId") UUID snapshotId);
+            @Param("contentVersion") UUID contentVersion);
 }

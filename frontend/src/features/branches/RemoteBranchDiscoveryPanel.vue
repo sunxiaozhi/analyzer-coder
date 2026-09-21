@@ -24,7 +24,7 @@ const shortCommit = (commitSha: string) => commitSha.slice(0, 12);
     <header class="remote-header">
       <div>
         <strong id="remote-branches-title"><CloudDownload :size="16" />远程分支</strong>
-        <p>只添加需要阅读的分支；发现操作不会自动创建快照。</p>
+        <p>只添加需要阅读的分支；发现操作不会自动创建版本。</p>
       </div>
       <el-button
         plain

@@ -61,6 +61,8 @@ class McpControllerTest {
     private String call() {
         return "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"search_project\",\"arguments\":{\"repositoryId\":\""
                 + UUID.randomUUID()
+                + "\",\"branchId\":\""
+                + UUID.randomUUID()
                 + "\",\"query\":\"订单超时\"}}}";
     }
 

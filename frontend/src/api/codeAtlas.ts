@@ -7,7 +7,7 @@ export interface AtlasNode {
 }
 export interface AtlasEdge { source: string; target: string; kind: string; count: number }
 export interface AtlasView {
-  repositoryId: string; snapshotId: string; level: 'MODULE' | 'SYMBOL';
+  repositoryId: string; contentVersion: string; level: 'MODULE' | 'SYMBOL';
   nodes: AtlasNode[]; edges: AtlasEdge[]; totalNodes: number; totalEdges: number; partial: boolean;
 }
 export function getCodeAtlas(repositoryId: string, module = '', query = '', contextId?: string | null) {

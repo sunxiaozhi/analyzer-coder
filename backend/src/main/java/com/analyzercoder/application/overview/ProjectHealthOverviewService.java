@@ -41,16 +41,16 @@ public class ProjectHealthOverviewService {
         }
         List<HealthIssue> issues = new ArrayList<>(issues(repository, preparationView, knowledge));
         boolean readyForSearch =
-                repository.currentSnapshotId() != null
+                repository.currentContentVersion() != null
                         && preparationView.profile().chunkCount() > 0
                         && !"ACTION_REQUIRED".equals(preparationView.state())
                         && !"PROCESSING".equals(preparationView.state());
         String state = state(preparationView.state(), issues);
         return new ProjectHealthOverview(
                 repositoryId.value(),
-                repository.currentSnapshotId() == null
+                repository.currentContentVersion() == null
                         ? null
-                        : repository.currentSnapshotId().value(),
+                        : repository.currentContentVersion().value(),
                 repository.currentCommit(),
                 state,
                 readyForSearch,
@@ -64,12 +64,12 @@ public class ProjectHealthOverviewService {
             RepositoryPreparationService.PreparationView preparation,
             ProjectKnowledgeHealthRow knowledge) {
         List<HealthIssue> issues = new ArrayList<>();
-        if (repository.currentSnapshotId() == null) {
+        if (repository.currentContentVersion() == null) {
             issues.add(
                     issue(
-                            "SNAPSHOT_NOT_READY",
+                            "CONTENT_VERSION_NOT_READY",
                             "BLOCKING",
-                            "尚无已发布代码快照",
+                            "尚无已发布代码内容版本",
                             "先准备项目，联合检索才能读取稳定的代码版本。",
                             "PREPARATION"));
         } else if (preparation.profile().chunkCount() == 0) {
@@ -77,7 +77,7 @@ public class ProjectHealthOverviewService {
                     issue(
                             "CONTENT_INDEX_NOT_READY",
                             "BLOCKING",
-                            "当前快照没有代码片段",
+                            "当前内容版本没有代码片段",
                             "内容索引完成后才能检索源码并建立知识关联。",
                             "PREPARATION"));
         }
@@ -90,7 +90,7 @@ public class ProjectHealthOverviewService {
                             preparation.profile().missingChunks() + " 个片段尚未向量化，检索会降级。",
                             "PREPARATION"));
         }
-        if (repository.currentSnapshotId() != null && preparation.profile().graphNodes() == 0) {
+        if (repository.currentContentVersion() != null && preparation.profile().graphNodes() == 0) {
             issues.add(
                     issue(
                             "CODEGRAPH_NOT_READY",
@@ -184,7 +184,7 @@ public class ProjectHealthOverviewService {
 
     public record ProjectHealthOverview(
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String state,
             boolean readyForSearch,

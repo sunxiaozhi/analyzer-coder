@@ -102,14 +102,10 @@
 | GET | /api/repositories/{repositoryId} | 单个仓库详情 | READ | - | `RepositoryResponse` | RepositoryController.java:95-101 |
 | GET | /api/repositories | 列出全部可见仓库 | 会话（按可见性过滤） | - | `List<RepositoryResponse>` | RepositoryController.java:103-112 |
 | POST | /api/repositories/{repositoryId}/rescan | 重新扫描本地工作区 | MAINTAIN + CSRF | - | `RescanRepositoryResponse{changed,repository}` | RepositoryController.java:114-123,205 |
-| POST | /api/repositories/{repositoryId}/sync | 远端同步并返回索引任务号 | MAINTAIN + CSRF | - | `RemoteSyncResponse{changed,repository,indexJobId}` | RepositoryController.java:125-131,207-208；RepositoryRemoteSyncService.java:40 |
-| GET | /api/repositories/{repositoryId}/profile | 读取仓库准备画像 | READ | - | `PreparationView` | RepositoryController.java:133-140 |
-| POST | /api/repositories/{repositoryId}/prepare | 执行仓库准备 | MAINTAIN + CSRF | - | `PreparationView` | RepositoryController.java:142-149 |
-| POST | /api/repositories/{repositoryId}/prepare/stages/{stageKey}/retry | 重试准备阶段 | MAINTAIN + CSRF | 路径变量 `stageKey` | `PreparationView` | RepositoryController.java:151-160 |
 | PATCH | /api/repositories/{repositoryId} | 修改名称/描述/默认分支 | MANAGE + CSRF | `UpdateRepositoryRequest{name(≤100),description(≤500),defaultBranch,version}` | `RepositoryResponse` | RepositoryController.java:162-177,199-203；RepositoryEditingService.java:44-45 |
 | DELETE | /api/repositories/{repositoryId} | 请求删除仓库 | 所有者（或超级管理员）+ CSRF | - | 无响应体 | RepositoryController.java:179-183；RepositoryGovernanceService.java:139-140 |
 
-`RepositoryResponse` 关键字段：`id,name,description,version,path,sourceType,branch,commit,worktreeDigest,dirty,snapshotId,snapshotCreatedAt,codeGraphPath,codeGraphDetected,lastScannedAt,ownerAccountId,ownerDisplayName,relationship,ownershipVersion,repositoryStatus,capabilities`
+`RepositoryResponse` 关键字段：`id,name,description,version,path,sourceType,branch,commit,worktreeDigest,dirty,contentVersion,contentVersionCreatedAt,codeGraphPath,codeGraphDetected,lastScannedAt,ownerAccountId,ownerDisplayName,relationship,ownershipVersion,repositoryStatus,capabilities`
 （RepositoryController.java:210-231）。
 
 ### 4.2 `/api/repository-imports`（RepositorySourceImportController.java:23）
@@ -158,23 +154,23 @@
 | DELETE | /governance/members/{accountId} | 撤销授权 | 所有者（或超级管理员）+ CSRF | `expectedOwnershipVersion`（查询参数，必填） | `VersionResponse` | RepositoryGovernanceController.java:61-74 |
 | POST | /governance/transfer | 转移仓库所有权 | 所有者（或超级管理员）+ CSRF | `TransferRequest{newOwnerAccountId,newName,previousOwnerPermission,expectedOwnershipVersion}` | `VersionResponse` | RepositoryGovernanceController.java:76-90,95-99；RepositoryGovernanceService.java:96 |
 
-## 5. 分支与快照
+## 5. 分支与内容版本
 
 ### 5.1 `/api/repositories/{repositoryId}`（RepositoryBranchController.java:26）
 
 | 方法 | 路径 | 用途 | 所需权限 | 请求要点 | 响应要点 | 来源 |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | /branches/discover | 探测远端分支 | MAINTAIN | - | `List<RemoteBranch{name,commitSha}>` | RepositoryBranchController.java:47-51；BranchRemoteService.java:36 |
-| GET | /branches | 列出受管分支 | READ | - | `List<Branch{id,name,snapshotId,commitSha,status,error,generation,trackingStatus,archivedAt}>` | RepositoryBranchController.java:53-57；RepositoryBranchService.java:66-78 |
+| GET | /branches | 列出受管分支 | READ | - | `List<Branch{id,name,contentVersion,commitSha,status,error,generation,trackingStatus,archivedAt}>` | RepositoryBranchController.java:53-57；RepositoryBranchService.java:66-78 |
 | POST | /branches | 跟踪分支 | MAINTAIN + CSRF；同名已归档分支存在时 409 `BRANCH_ARCHIVED` | `Track{name}` | `Branch` | RepositoryBranchController.java:59-63,117；RepositoryBranchService.java:100-120 |
 | POST | /branches/{branchId}/archive | 归档分支 | MANAGE + CSRF；存在进行中任务时 409 `BRANCH_HAS_ACTIVE_TASK` | - | `Branch` | RepositoryBranchController.java:65-71；RepositoryBranchService.java:122-147 |
 | POST | /branches/{branchId}/restore | 恢复已归档分支 | MANAGE + CSRF | - | `Branch` | RepositoryBranchController.java:73-79；RepositoryBranchService.java:149-162 |
-| POST | /branches/{branchId}/prepare | 提交分支快照准备任务 | MAINTAIN + CSRF | - | `Job`；HTTP 202 | RepositoryBranchController.java:81-88；BranchPreparationJobs.java:111-113,136 |
-| GET | /branch-preparation-jobs | 每个分支/类型的最新任务 | READ | - | `List<Job{id,branchId,status,stage,error,kind,snapshotId}>` | RepositoryBranchController.java:90-94；BranchPreparationJobs.java:49-54,77-78 |
-| POST | /branch-vector-jobs | 提交向量索引任务 | MAINTAIN + CSRF；快照须已有内容索引，否则 400 | `Context{branchId,contextId}`；`contextId` 为空时 400 | `Job`；HTTP 202 | RepositoryBranchController.java:96-106,119；BranchPreparationJobs.java:115-132 |
-| POST | /contexts | 解析或复用分支阅读上下文 | READ + CSRF | `Context{branchId,contextId}` | `BranchReadContext{contextId,repositoryId,branchId,branchName,snapshotId,commitSha,expiresAt}` | RepositoryBranchController.java:108-115；RepositoryBranchService.java:347-349 |
-| GET | /branches/{branchId}/snapshots/{snapshotId}/retention | 检查快照产物保留状态 | MANAGE | - | `Retention` | RepositoryBranchController.java:121-129；BranchArtifactRetentionService.java:44 |
-| DELETE | /branches/{branchId}/snapshots/{snapshotId} | 删除分支快照 | MANAGE + CSRF | - | `Retention` | RepositoryBranchController.java:131-139；BranchArtifactRetentionService.java:50 |
+| POST | /branches/{branchId}/prepare | 提交分支内容版本准备任务 | MAINTAIN + CSRF | - | `Job`；HTTP 202 | RepositoryBranchController.java:81-88；BranchPreparationJobs.java:111-113,136 |
+| GET | /branch-preparation-jobs | 每个分支/类型的最新任务 | READ | - | `List<Job{id,branchId,status,stage,error,kind,contentVersion}>` | RepositoryBranchController.java:90-94；BranchPreparationJobs.java:49-54,77-78 |
+| POST | /branch-vector-jobs | 提交向量索引任务 | MAINTAIN + CSRF；内容版本须已有内容索引，否则 400 | `Context{branchId,contextId}`；`contextId` 为空时 400 | `Job`；HTTP 202 | RepositoryBranchController.java:96-106,119；BranchPreparationJobs.java:115-132 |
+| POST | /contexts | 解析或复用分支阅读上下文 | READ + CSRF | `Context{branchId,contextId}` | `BranchReadContext{contextId,repositoryId,branchId,branchName,contentVersion,commitSha,expiresAt}` | RepositoryBranchController.java:108-115；RepositoryBranchService.java:347-349 |
+| GET | /branches/{branchId}/contentVersions/{contentVersion}/retention | 检查内容版本产物保留状态 | MANAGE | - | `Retention` | RepositoryBranchController.java:121-129；BranchArtifactRetentionService.java:44 |
+| DELETE | /branches/{branchId}/contentVersions/{contentVersion} | 删除分支内容版本 | MANAGE + CSRF | - | `Retention` | RepositoryBranchController.java:131-139；BranchArtifactRetentionService.java:50 |
 | GET | /knowledge/branch-scopes | 列出知识卡分支作用域 | READ | - | `List<Scope{cardId,revision,mode,branchIds}>` | RepositoryBranchController.java:141-145,180；BranchKnowledgeService.java:60-61 |
 | PUT | /knowledge/{cardId}/branch-scope | 设置分支作用域 | MANAGE + CSRF | `Scope{revision,mode,branchIds}` | 无响应体；HTTP 204 | RepositoryBranchController.java:147-161；BranchKnowledgeService.java:81 |
 | POST | /knowledge/{cardId}/branch-validation | 提交分支校验结论 | MANAGE + CSRF | `Validation{revision,contextId,state,note}` | 无响应体；HTTP 204 | RepositoryBranchController.java:163-178,182；BranchKnowledgeService.java:164-165 |
@@ -185,8 +181,8 @@
 
 | 方法 | 路径 | 用途 | 所需权限 | 请求要点 | 响应要点 | 来源 |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | /branch-index-statuses | 各分支索引就绪状态 | READ | - | `List<IndexStatus{branchId,snapshotId,syncedAt,contentReady,graphReady,vectorsReady}>` | BranchCodeOperationsController.java:36-40；BranchCodeOperationsService.java:205-215 |
-| GET | /branches/{branchId}/index-status | 单分支快照索引状态 | READ | `contextId`（必填） | `IndexStatus` | BranchCodeOperationsController.java:42-50；BranchCodeOperationsService.java:166,218-219 |
+| GET | /branch-index-statuses | 各分支索引就绪状态 | READ | - | `List<IndexStatus{branchId,contentVersion,syncedAt,contentReady,graphReady,vectorsReady}>` | BranchCodeOperationsController.java:36-40；BranchCodeOperationsService.java:205-215 |
+| GET | /branches/{branchId}/index-status | 单分支内容版本索引状态 | READ | `contextId`（必填） | `IndexStatus` | BranchCodeOperationsController.java:42-50；BranchCodeOperationsService.java:166,218-219 |
 | POST | /branches/{branchId}/code-jobs | 提交分支操作任务 | MAINTAIN + CSRF；`SYNC`/`PREPARE` 不得带 `contextId`，`CONTENT`/`GRAPH` 必须带 `contextId` | `Operation{kind,contextId}`，`kind` 限 `SYNC`/`CONTENT`/`GRAPH`/`PREPARE` | `Job`；HTTP 202 | BranchCodeOperationsController.java:52-68,70；BranchPreparationJobs.java:101-109,136 |
 
 ### 5.3 `/api/repositories/{repositoryId}/branch-overview`（BranchOverviewController.java:12）
@@ -199,7 +195,7 @@
 
 | 方法 | 路径 | 用途 | 所需权限 | 请求要点 | 响应要点 | 来源 |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | /api/repositories/{repositoryId}/files | 快照文件清单 | READ | 可选 `X-Branch-Context` | `SnapshotFiles`（`FileEntry{path,name,language,sizeBytes}`） | RepositoryCodeBrowserController.java:36-45；RepositoryCodeBrowserService.java:267-270 |
+| GET | /api/repositories/{repositoryId}/files | 内容版本文件清单 | READ | 可选 `X-Branch-Context` | `ContentVersionFiles`（`FileEntry{path,name,language,sizeBytes}`） | RepositoryCodeBrowserController.java:36-45；RepositoryCodeBrowserService.java:267-270 |
 | GET | /api/repositories/{repositoryId}/files/content | 读取单文件文本 | READ | `path`（必填）；可选 `X-Branch-Context` | `FileContent` | RepositoryCodeBrowserController.java:47-58；RepositoryCodeBrowserService.java:272 |
 | GET | /api/repositories/{repositoryId}/files/raw | 读取图片等二进制内容 | READ | `path`（必填）；可选 `X-Branch-Context` | 字节流；响应头 `X-Content-Type-Options: nosniff`、`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`、`Cache-Control: no-cache` | RepositoryCodeBrowserController.java:60-80 |
 | POST | /api/repositories/{repositoryId}/knowledge/attachments | 上传知识附件 | MAINTAIN + CSRF | multipart/form-data：`file` | `Attachment` | KnowledgeAttachmentController.java:37-45 |
@@ -207,13 +203,13 @@
 | GET | /api/repositories/{repositoryId}/chunks | 代码片段列举/检索 | READ | `q`、`limit`、`offset`；**不解析 `X-Branch-Context`** | `CodeChunkListResponse{total,limit,offset,chunks}`；片段字段见下 | ChunkController.java:34-44 |
 | GET | /api/repositories/{repositoryId}/code-evidence-context | 当前文件的可追溯证据上下文 | READ；草稿知识仅 MAINTAIN 可见 | `filePath`（必填）、`symbol`（可选）；可选 `X-Branch-Context` | `CodeEvidenceContext` | CodeEvidenceContextController.java:18,35-55 |
 
-`CodeChunkResponse` 关键字段：`id,repositoryId,snapshotId,commitSha,filePath,symbolId,symbolName,symbolKind,language,assetType,chunkType,startLine,endLine,content,contentHash,createdAt`
+`CodeChunkResponse` 关键字段：`id,repositoryId,contentVersion,commitSha,filePath,symbolId,symbolName,symbolKind,language,assetType,chunkType,startLine,endLine,content,contentHash,createdAt`
 （ChunkController.java:57-73）。
 
 `GET /api/repositories/{repositoryId}/code-evidence-context` 的权限细节：
 入口要求 READ，随后以 `access.canAccess(account, id, RepositoryPermission.MAINTAIN)`
 决定是否包含草稿知识（`CodeEvidenceContextController.java:41-44`）；
-携带 `X-Branch-Context` 时会改用分支快照仓库并叠加该分支的适用知识卡集合
+携带 `X-Branch-Context` 时会改用分支内容版本仓库并叠加该分支的适用知识卡集合
 （`CodeEvidenceContextController.java:45-54`）。该路径已被
 `BranchContextInterceptor` 的 GET 白名单收录，因此分支上下文可用
 （`backend/src/main/java/com/analyzercoder/security/BranchContextInterceptor.java:18`）。
@@ -298,8 +294,8 @@
 | 方法 | 路径 | 用途 | 所需权限 | 请求要点 | 响应要点 | 来源 |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | /markdown-sources | Markdown 来源清单 | READ | 可选 `X-Branch-Context` | `MarkdownSourceList` | MarkdownKnowledgeSourceController.java:38-44 |
-| POST | /markdown-sources/generate | 由 Markdown 生成知识卡 | MAINTAIN + CSRF | `GenerateRequest{sourcePath,expectedSnapshotId,expectedContentHash}`，摘要须匹配 `^[0-9a-fA-F]{64}$`；可选 `X-Branch-Context` | `KnowledgeCard` | MarkdownKnowledgeSourceController.java:46-59,80-84 |
-| POST | /markdown-sources/generate-pending | 批量生成待处理来源 | MAINTAIN + CSRF | `GeneratePendingRequest{expectedSnapshotId}`；可选 `X-Branch-Context` | `BatchGenerationResult` | MarkdownKnowledgeSourceController.java:61-71,86 |
+| POST | /markdown-sources/generate | 由 Markdown 生成知识卡 | MAINTAIN + CSRF | `GenerateRequest{sourcePath,expectedContentVersion,expectedContentHash}`，摘要须匹配 `^[0-9a-fA-F]{64}$`；可选 `X-Branch-Context` | `KnowledgeCard` | MarkdownKnowledgeSourceController.java:46-59,80-84 |
+| POST | /markdown-sources/generate-pending | 批量生成待处理来源 | MAINTAIN + CSRF | `GeneratePendingRequest{expectedContentVersion}`；可选 `X-Branch-Context` | `BatchGenerationResult` | MarkdownKnowledgeSourceController.java:61-71,86 |
 
 ## 10. 图谱
 
@@ -311,15 +307,6 @@
 | GET | /codegraph/latest | 读取最新图谱产物 | READ | 可选 `X-Branch-Context` | `Artifact` | CodeGraphController.java:54-64 |
 | GET | /codegraph/impact | 符号影响面分析 | READ | `symbol`（必填）、`depth=3`；可选 `X-Branch-Context` | `CodeGraphPropagation` | CodeGraphController.java:66-80 |
 | GET | /codegraph/explore | 图谱浏览 | READ；`query` 或 `module` 长度 > 500 时 400 | `module=""`、`query=""`；可选 `X-Branch-Context` | `CodeGraphExplorer.View` | CodeGraphController.java:82-98 |
-
-### 10.2 架构与工程画像
-
-| 方法 | 路径 | 用途 | 所需权限 | 请求要点 | 响应要点 | 来源 |
-| --- | --- | --- | --- | --- | --- | --- |
-| GET | /api/repositories/{repositoryId}/architecture-map | 项目架构地图 | READ | - | `ArchitectureMap` | ProjectArchitectureMapController.java:28-34 |
-| GET | /api/repositories/{repositoryId}/architecture-map/modules/symbols | 模块到真实符号下钻 | READ | `module`（必填）、`limit`（可选） | `ModuleSymbols` | ProjectArchitectureSymbolController.java:29-38 |
-| GET | /api/repositories/{repositoryId}/health-overview | 工程健康总览 | READ | - | `ProjectHealthOverview` | ProjectHealthOverviewController.java:28-34 |
-| GET | /api/repositories/{repositoryId}/code-facts | 代码事实画像 | READ | - | `CodeFacts` | ProjectCodeFactsController.java:28-34 |
 
 ## 11. MCP
 
@@ -381,8 +368,7 @@
 ## 13. 路径中带占位符的端点
 
 以下端点路径含 `{}` 占位符。占位符均为 UUID，唯一例外是
-`/api/repositories/{repositoryId}/prepare/stages/{stageKey}/retry` 的 `stageKey`
-（字符串）与 `/api/repositories/{repoId}/knowledge/{cardId}/history/{revision}/restore`
+`/api/repositories/{repoId}/knowledge/{cardId}/history/{revision}/restore`
 的 `revision`（int）。
 
 - 账号与令牌：`/api/accounts/{accountId}`、`/api/accounts/{accountId}/reset-password`、
@@ -391,9 +377,6 @@
   `/api/accounts/{accountId}/access-tokens`、`/api/accounts/{accountId}/access-tokens/{tokenId}`
   （AccountController.java:62-108；AccountAccessTokenController.java:20-58）。
 - 仓库与来源：`/api/repositories/{repositoryId}`、`/api/repositories/{repositoryId}/rescan`、
-  `/api/repositories/{repositoryId}/sync`、`/api/repositories/{repositoryId}/profile`、
-  `/api/repositories/{repositoryId}/prepare`、
-  `/api/repositories/{repositoryId}/prepare/stages/{stageKey}/retry`、
   `/api/repository-imports/jobs/{id}`、`/api/repository-imports/jobs/{id}/cancel`、
   `/api/repository-project-drafts/{id}/source`、`/api/repository-project-drafts/{id}/complete`、
   `/api/repository-credentials/{id}` 及其全部子路径、
@@ -402,10 +385,10 @@
   （RepositoryController.java:95-183；RepositorySourceImportController.java:58-68；
   RepositoryProjectDraftController.java:37-53；RepositoryCredentialController.java:39-76；
   RepositoryCredentialBindingController.java:19-50；RepositoryGovernanceController.java:45-74）。
-- 分支与快照：`/api/repositories/{repositoryId}/branches/{branchId}/archive`、
+- 分支与内容版本：`/api/repositories/{repositoryId}/branches/{branchId}/archive`、
   `/restore`、`/prepare`、`/index-status`、`/code-jobs`、
-  `/branches/{branchId}/snapshots/{snapshotId}/retention`、
-  `DELETE /branches/{branchId}/snapshots/{snapshotId}`、
+  `/branches/{branchId}/contentVersions/{contentVersion}/retention`、
+  `DELETE /branches/{branchId}/contentVersions/{contentVersion}`、
   `/knowledge/{cardId}/branch-scope`、`/knowledge/{cardId}/branch-validation`
   （RepositoryBranchController.java:65-178；BranchCodeOperationsController.java:42-68）。
 - 代码与知识：`/api/repositories/{repositoryId}/code-evidence-context`、
@@ -488,7 +471,6 @@
 | PUT | /api/accounts/{accountId}/permissions/{repositoryId} | 无调用方，且实现恒返回 409 | AuthService.java:411-419 直接抛 `USE_REPOSITORY_GOVERNANCE` |
 | GET | /api/accounts/{accountId}/permissions | 无调用方 | frontend/src/api/accounts.ts:7-19 无此方法 |
 | GET | /api/accounts | 无调用方：前端使用 `/api/accounts/page` | frontend/src/api/accounts.ts:8-12 |
-| POST | /api/repositories/{repositoryId}/sync | 无调用方：无同步入口 | frontend/src/api/repositories.ts:190-207 只有 rescan 与 index |
 | GET | /api/repositories/{repositoryId}/index/status | 无调用方：前端读 `/api/index-jobs/{jobId}` | frontend/src/api/repositories.ts:205-207 |
 | GET | /api/repositories/{repositoryId}/index-jobs | 无调用方 | frontend/src/api/indexJobs.ts:5-15 只用 `/page`、`/cancel`、`/retries` |
 | GET | /api/index-jobs | 无调用方（且要求超级管理员） | 同上 |
@@ -496,10 +478,6 @@
 | GET | /api/repository-imports/jobs | 无调用方 | frontend/src/api/sourceImports.ts:21-29 |
 | POST | /api/repository-imports/jobs/{id}/cancel | 无调用方 | 同上 |
 | POST | /api/repositories/{repositoryId}/branches/{branchId}/prepare | 无调用方：前端走 `code-jobs` 的 `PREPARE` | frontend/src/features/branches/BranchListTable.vue:64 发出 `operate(branchId,'PREPARE')`，经 frontend/src/api/branches.ts:47-48 打到 `/code-jobs` |
-| GET | /api/repositories/{repositoryId}/branches/{branchId}/snapshots/{snapshotId}/retention | 无调用方 | frontend/src 中无 `retention` 引用 |
-| DELETE | /api/repositories/{repositoryId}/branches/{branchId}/snapshots/{snapshotId} | 无调用方 | frontend/src 中无 `/snapshots/` 引用 |
-| GET | /api/repositories/{repositoryId}/architecture-map | 无调用方 | frontend/src 中无 `architecture-map` 引用 |
-| GET | /api/repositories/{repositoryId}/architecture-map/modules/symbols | 无调用方 | 同上 |
 | GET | /api/repositories/{repositoryId} | 无调用方：前端只有 PATCH 与 DELETE | frontend/src/api/repositories.ts:185,195 |
 | GET | /api/settings/llm/connectivity-checks/{checkId}/cancel | 无调用方 | frontend/src/api/llmSettings.ts:127-133 只发起与查询检测 |
 

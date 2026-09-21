@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 
 class ProvenanceTest {
     private final UUID repositoryId = UUID.randomUUID();
-    private final UUID snapshotId = UUID.randomUUID();
+    private final UUID contentVersion = UUID.randomUUID();
 
     @Test
     void requiresVersionForCodeFacts() {
@@ -46,15 +46,15 @@ class ProvenanceTest {
         Provenance provenance =
                 Provenance.graphInference(
                         repositoryId,
-                        snapshotId,
+                        contentVersion,
                         "a".repeat(40),
-                        snapshotId + ":architecture-map",
+                        contentVersion + ":architecture-map",
                         List.of("src/Auth.java", "backend/application"),
                         "src/Auth.java",
                         "module mapping");
 
         assertThat(provenance.sourceType()).isEqualTo(TruthSource.GRAPH_INFERENCE);
-        assertThat(provenance.graphArtifactId()).contains(snapshotId.toString());
+        assertThat(provenance.graphArtifactId()).contains(contentVersion.toString());
         assertThat(provenance.relationPath())
                 .containsExactly("src/Auth.java", "backend/application");
     }

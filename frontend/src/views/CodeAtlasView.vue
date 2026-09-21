@@ -114,7 +114,7 @@ async function load() {
   impactOpen.value = false; clearSelection(); data.value = null; error.value = ''; resetCamera();
   if (!id) { loading.value = false; return; }
   if (readScope.blocked.value) { loading.value = branchContext.loading; if (!branchContext.loading) error.value = readScope.reason.value; return; }
-  if (typeof route.query.snapshotId === 'string' && branchContext.context && route.query.snapshotId !== branchContext.context.snapshotId) { loading.value = false; error.value = '目标文件与当前分支快照不一致，请重新从联合检索打开。'; return; }
+  if (typeof route.query.contentVersion === 'string' && branchContext.context && route.query.contentVersion !== branchContext.context.contentVersion) { loading.value = false; error.value = '目标文件与当前分支内容版本不一致，请重新从联合检索打开。'; return; }
   loading.value = true;
   try {
     let result = branchContext.context?.contextId
@@ -128,8 +128,8 @@ async function load() {
         : await getCodeAtlas(id, module.value, targetPath);
     }
     if (version === revision && id === repositories.selectedRepositoryId) {
-      if (branchContext.context && result.snapshotId !== branchContext.context.snapshotId) throw new Error('图谱与当前分支快照不一致，请重新构建该分支图谱。');
-      if (typeof route.query.snapshotId === 'string' && result.snapshotId !== route.query.snapshotId) throw new Error('目标文件快照已更新，请重新从联合检索打开。');
+      if (branchContext.context && result.contentVersion !== branchContext.context.contentVersion) throw new Error('图谱与当前分支内容版本不一致，请重新构建该分支图谱。');
+      if (typeof route.query.contentVersion === 'string' && result.contentVersion !== route.query.contentVersion) throw new Error('目标文件内容版本已更新，请重新从联合检索打开。');
       data.value = result; resetCamera();
       const path = typeof route.query.path === 'string' ? route.query.path : '';
       const symbol = typeof route.query.symbol === 'string' ? route.query.symbol : '';
@@ -148,14 +148,14 @@ async function select(node: AtlasNode) {
   const position = byId.value.get(node.id);
   if (position) pan.value = { x: -(position.x - 600) * zoom.value, y: (400 - position.y) * zoom.value };
   if (!node.filePath || !data.value) return;
-  const version = ++sourceRevision, repoId = data.value.repositoryId, snapshot = data.value.snapshotId;
+  const version = ++sourceRevision, repoId = data.value.repositoryId, contentVersion = data.value.contentVersion;
   sourceLoading.value = true;
   try {
     const file = branchContext.context?.contextId
       ? await getRepositoryFile(repoId, node.filePath, branchContext.context.contextId)
       : await getRepositoryFile(repoId, node.filePath);
     if (version !== sourceRevision) return;
-    if (file.snapshotId !== snapshot) throw new Error('源码版本已更新，请刷新图谱后查看。');
+    if (file.contentVersion !== contentVersion) throw new Error('源码版本已更新，请刷新图谱后查看。');
     source.value = file.content;
   } catch (e) { if (version === sourceRevision) sourceError.value = e instanceof Error ? e.message : '源码读取失败'; }
   finally { if (version === sourceRevision) sourceLoading.value = false; }
@@ -163,11 +163,11 @@ async function select(node: AtlasNode) {
 function expand(node: AtlasNode) { if (node.kind === 'MODULE') { module.value = node.module; query.value = ''; void load(); } }
 function openImpactFile(path: string, startLine: number | null, endLine: number | null) {
   if (!data.value) return;
-  void router.push({ name: 'search', query: { path, snapshotId: data.value.snapshotId, startLine: String(startLine || 1), endLine: endLine ? String(endLine) : undefined, branchId: branchContext.context?.branchId, contextId: branchContext.context?.contextId } });
+  void router.push({ name: 'search', query: { path, contentVersion: data.value.contentVersion, startLine: String(startLine || 1), endLine: endLine ? String(endLine) : undefined, branchId: branchContext.context?.branchId, contextId: branchContext.context?.contextId } });
 }
 function openSource() {
   if (!selected.value || !data.value) return;
-  void router.push({ name: 'search', query: { path: selected.value.filePath, snapshotId: data.value.snapshotId, startLine: String(selected.value.startLine || 1), branchId: branchContext.context?.branchId, contextId: branchContext.context?.contextId } });
+  void router.push({ name: 'search', query: { path: selected.value.filePath, contentVersion: data.value.contentVersion, startLine: String(selected.value.startLine || 1), branchId: branchContext.context?.branchId, contextId: branchContext.context?.contextId } });
 }
 function pointerDown(event: PointerEvent) {
   if (event.button !== 0 || (event.target as Element).closest('[data-node]')) return;
@@ -181,7 +181,7 @@ function pointerMove(event: PointerEvent) {
   const factor = Math.max(1200 / rect.width, 800 / rect.height);
   pan.value = { x: dragging.px + (event.clientX - dragging.x) * factor, y: dragging.py + (event.clientY - dragging.y) * factor };
 }
-watch(() => [repositories.selectedRepositoryId, branchContext.identity, route.query.path, route.query.symbol, route.query.snapshotId] as const, () => { module.value = ''; query.value = typeof route.query.symbol === 'string' ? route.query.symbol : typeof route.query.path === 'string' ? route.query.path : ''; void load(); }, { immediate: true });
+watch(() => [repositories.selectedRepositoryId, branchContext.identity, route.query.path, route.query.symbol, route.query.contentVersion] as const, () => { module.value = ''; query.value = typeof route.query.symbol === 'string' ? route.query.symbol : typeof route.query.path === 'string' ? route.query.path : ''; void load(); }, { immediate: true });
 onMounted(() => { if (!repositories.repositories.length) void repositories.loadRepositories(); });
 onBeforeUnmount(() => { revision++; sourceRevision++; });
 </script>
@@ -229,7 +229,7 @@ onBeforeUnmount(() => { revision++; sourceRevision++; });
           </g>
         </g>
       </svg>
-      <div v-if="loading || error || !data?.nodes.length" class="atlas-empty"><Orbit :size="52" :class="{ spinning: loading }" /><h2>{{ loading ? '正在读取代码星图' : error ? '图谱暂不可用' : !repositories.selectedRepositoryId ? '选择一个项目，开始探索' : '当前范围没有符号' }}</h2><p>{{ error || (loading ? '读取当前快照中的符号与关系' : '需要当前快照已发布的 CodeGraph 产物。可以先准备项目，或调整检索范围。') }}</p><button v-if="error || (!loading && !data)" @click="router.push('/overview')">前往项目准备 <ArrowUpRight :size="14" /></button><button v-else-if="!loading" @click="overview">返回全景</button></div>
+      <div v-if="loading || error || !data?.nodes.length" class="atlas-empty"><Orbit :size="52" :class="{ spinning: loading }" /><h2>{{ loading ? '正在读取代码星图' : error ? '图谱暂不可用' : !repositories.selectedRepositoryId ? '选择一个项目，开始探索' : '当前范围没有符号' }}</h2><p>{{ error || (loading ? '读取当前内容版本中的符号与关系' : '需要当前内容版本已发布的 CodeGraph 产物。可以先准备项目，或调整检索范围。') }}</p><button v-if="error || (!loading && !data)" @click="router.push('/overview')">前往项目准备 <ArrowUpRight :size="14" /></button><button v-else-if="!loading" @click="overview">返回全景</button></div>
       <div class="camera-tools"><button title="缩小" @click="changeZoom(-.2)"><Minus :size="17" /></button><span>{{ mode === '3d' ? '3D' : Math.round(zoom * 100) + '%' }}</span><button title="放大" @click="changeZoom(.2)"><Plus :size="17" /></button><button title="重置视角" @click="resetCamera()"><Maximize :size="17" /></button><button title="适应全部节点" @click="resetCamera(true)">全景</button><button title="取消聚焦" @click="clearSelection"><Crosshair :size="17" /></button></div>
     </div>
       <aside v-if="selected" class="atlas-detail" aria-label="节点详情" @keydown.esc="clearSelection"><header><span>{{ selected.kind === 'MODULE' ? '模块' : selected.kind }}</span><button title="关闭详情" aria-label="关闭详情" @click="clearSelection"><X :size="17" /></button></header><h2>{{ selected.label }}</h2><p class="source-path">{{ selected.filePath || selected.module }}</p>
@@ -240,9 +240,9 @@ onBeforeUnmount(() => { revision++; sourceRevision++; });
         <section v-if="selected.filePath" class="source-section"><div class="source-heading"><b>源码摘录</b><button @click="openSource">打开文件 <ArrowUpRight :size="13" /></button></div><p v-if="sourceLoading">正在加载源码…</p><p v-else-if="sourceError" role="alert">{{ sourceError }}</p><pre v-else class="atlas-source" aria-label="源码摘录，长行自动换行"><span v-for="line in excerpt" :key="line.line" :class="{ marked: line.line >= selected.startLine && line.line <= selected.endLine }"><i aria-hidden="true">{{ line.line }}</i><code>{{ line.text || ' ' }}</code></span></pre></section>
       </aside>
     <el-drawer v-model="impactOpen" title="影响分析" size="860px" :with-header="false" destroy-on-close>
-      <GraphImpactPanel v-if="impactOpen && selected && data" :repository-id="data.repositoryId" :file-path="selected.filePath" :initial-symbol="selected.label" :snapshot-id="data.snapshotId" :context-id="branchContext.context?.contextId" :auto-analyze="true" :can-build-graph="repositories.selectedRepository?.capabilities?.canBuildCodeGraph ?? false" @close="impactOpen = false" @open-file="openImpactFile" />
+      <GraphImpactPanel v-if="impactOpen && selected && data" :repository-id="data.repositoryId" :file-path="selected.filePath" :initial-symbol="selected.label" :content-version="data.contentVersion" :context-id="branchContext.context?.contextId" :auto-analyze="true" :can-build-graph="repositories.selectedRepository?.capabilities?.canBuildCodeGraph ?? false" @close="impactOpen = false" @open-file="openImpactFile" />
     </el-drawer>
-    <footer class="atlas-status"><span v-if="data" :title="`快照 ${data.snapshotId} · 仅统计当前展示范围`">{{ data.nodes.length }} / {{ data.totalNodes }} 节点 · {{ visibleLinks.length }} 条连线</span><span v-if="data?.level === 'SYMBOL' && !selected && !showAllLinks">选中节点查看关联</span><span v-if="data?.partial" class="partial">当前为部分图谱，请缩小模块或搜索范围</span></footer>
+    <footer class="atlas-status"><span v-if="data" :title="`内容版本 ${data.contentVersion} · 仅统计当前展示范围`">{{ data.nodes.length }} / {{ data.totalNodes }} 节点 · {{ visibleLinks.length }} 条连线</span><span v-if="data?.level === 'SYMBOL' && !selected && !showAllLinks">选中节点查看关联</span><span v-if="data?.partial" class="partial">当前为部分图谱，请缩小模块或搜索范围</span></footer>
   </section>
 </template>
 

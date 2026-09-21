@@ -3,6 +3,7 @@ package com.analyzercoder.infrastructure.chunk;
 import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -32,7 +33,7 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
             CodeRepositoryId repositoryId,
             Collection<String> paths,
             Collection<CodeChunk> chunks,
-            com.analyzercoder.domain.repository.RepositorySnapshotId snapshotId,
+            com.analyzercoder.domain.repository.RepositoryContentVersion contentVersion,
             String commitSha) {
         List<CodeChunk> merged =
                 new ArrayList<>(
@@ -63,6 +64,16 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
     }
 
     @Override
+    public List<CodeChunk> findByRepositoryVersion(
+            CodeRepositoryId repositoryId, RepositoryContentVersion version, int limit, int offset) {
+        return findByRepositoryId(repositoryId).stream()
+                .filter(chunk -> chunk.contentVersion().equals(version))
+                .skip(offset)
+                .limit(limit)
+                .toList();
+    }
+
+    @Override
     public List<CodeChunk> findByRepositoryPath(CodeRepositoryId repositoryId, String filePath) {
         return findByRepositoryId(repositoryId).stream()
                 .filter(chunk -> chunk.filePath().equals(filePath))
@@ -89,8 +100,31 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
     }
 
     @Override
+    public List<CodeChunk> searchByRepositoryVersion(
+            CodeRepositoryId repositoryId,
+            RepositoryContentVersion version,
+            String query,
+            int limit,
+            int offset) {
+        String normalizedQuery = normalize(query);
+        return findByRepositoryId(repositoryId).stream()
+                .filter(chunk -> chunk.contentVersion().equals(version))
+                .filter(chunk -> matches(chunk, normalizedQuery))
+                .sorted(Comparator.comparingInt((CodeChunk chunk) -> score(chunk, normalizedQuery)).reversed()
+                        .thenComparing(CodeChunk::filePath))
+                .skip(offset).limit(limit).toList();
+    }
+
+    @Override
     public long countByRepositoryId(CodeRepositoryId repositoryId) {
         return findByRepositoryId(repositoryId).size();
+    }
+
+    @Override
+    public long countByRepositoryVersion(
+            CodeRepositoryId repositoryId, RepositoryContentVersion version) {
+        return findByRepositoryId(repositoryId).stream()
+                .filter(chunk -> chunk.contentVersion().equals(version)).count();
     }
 
     @Override
@@ -99,6 +133,15 @@ public class InMemoryCodeChunkStore implements CodeChunkStore {
         return findByRepositoryId(repositoryId).stream()
                 .filter(chunk -> matches(chunk, normalizedQuery))
                 .count();
+    }
+
+    @Override
+    public long countSearchByRepositoryVersion(
+            CodeRepositoryId repositoryId, RepositoryContentVersion version, String query) {
+        String normalizedQuery = normalize(query);
+        return findByRepositoryId(repositoryId).stream()
+                .filter(chunk -> chunk.contentVersion().equals(version))
+                .filter(chunk -> matches(chunk, normalizedQuery)).count();
     }
 
     @Override

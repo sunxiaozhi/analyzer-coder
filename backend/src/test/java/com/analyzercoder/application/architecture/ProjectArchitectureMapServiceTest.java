@@ -16,16 +16,16 @@ import org.junit.jupiter.api.Test;
 class ProjectArchitectureMapServiceTest {
 
     @Test
-    void abortsWhenSnapshotChangesBetweenListingAndReadingFiles() {
+    void abortsWhenContentVersionChangesBetweenListingAndReadingFiles() {
         RepositoryCodeBrowserService browser = mock(RepositoryCodeBrowserService.class);
         ProjectArchitectureMapService service = new ProjectArchitectureMapService(browser);
         CodeRepositoryId repositoryId = CodeRepositoryId.newId();
         String path = "src/Example.java";
-        String listedSnapshot = UUID.randomUUID().toString();
+        String listedContentVersion = UUID.randomUUID().toString();
         when(browser.list(repositoryId))
                 .thenReturn(
-                        new RepositoryCodeBrowserService.SnapshotFiles(
-                                listedSnapshot, "main", "abc123", List.of(file(path, "java"))));
+                        new RepositoryCodeBrowserService.ContentVersionFiles(
+                                listedContentVersion, "main", "abc123", List.of(file(path, "java"))));
         when(browser.read(repositoryId, path))
                 .thenReturn(
                         new RepositoryCodeBrowserService.FileContent(
@@ -39,8 +39,8 @@ class ProjectArchitectureMapServiceTest {
 
         assertThatThrownBy(() -> service.map(repositoryId))
                 .isInstanceOf(
-                        ProjectArchitectureMapService.ArchitectureSnapshotChangedException.class)
-                .hasMessageContaining("快照已切换");
+                        ProjectArchitectureMapService.ArchitectureContentVersionChangedException.class)
+                .hasMessageContaining("内容版本已切换");
     }
 
     @Test
@@ -69,17 +69,17 @@ class ProjectArchitectureMapServiceTest {
                         file(api, "typescript"),
                         file(stores, "typescript"),
                         file(config, "yaml"));
-        UUID snapshotId = UUID.randomUUID();
+        UUID contentVersion = UUID.randomUUID();
 
         ProjectArchitectureMapService.ArchitectureMap result =
                 ProjectArchitectureMapService.analyze(
                         CodeRepositoryId.newId(),
-                        new RepositoryCodeBrowserService.SnapshotFiles(
-                                snapshotId.toString(), "main", "abc123", files),
+                        new RepositoryCodeBrowserService.ContentVersionFiles(
+                                contentVersion.toString(), "main", "abc123", files),
                         contents::get,
                         Instant.parse("2026-08-21T00:00:00Z"));
 
-        assertThat(result.snapshotId()).isEqualTo(snapshotId.toString());
+        assertThat(result.contentVersion()).isEqualTo(contentVersion.toString());
         assertThat(result.nodes())
                 .extracting(ProjectArchitectureMapService.ArchitectureNode::id)
                 .contains(
@@ -112,7 +112,7 @@ class ProjectArchitectureMapServiceTest {
                 .flatExtracting(ProjectArchitectureMapService.ArchitectureEdge::evidenceSamples)
                 .allSatisfy(
                         sample -> {
-                            assertThat(sample.snapshotId()).isEqualTo(snapshotId.toString());
+                            assertThat(sample.contentVersion()).isEqualTo(contentVersion.toString());
                             assertThat(sample.contentHash()).matches("[0-9a-f]{64}");
                             assertThat(sample.filePath()).isNotBlank();
                         });

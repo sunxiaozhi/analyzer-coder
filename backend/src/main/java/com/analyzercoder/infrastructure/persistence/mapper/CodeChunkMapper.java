@@ -34,14 +34,14 @@ public interface CodeChunkMapper {
      *
      * @param repositoryId 目标对象的唯一标识
      * @param paths 相对于仓库根目录的文件路径集合
-     * @param snapshotId 目标对象的唯一标识
+     * @param contentVersion 目标对象的唯一标识
      * @param commitSha 代码片段所属的 Git 提交号
      * @return 本次操作影响的记录数
      */
     int rebaseUnchanged(
             @Param("repositoryId") UUID repositoryId,
             @Param("paths") java.util.Collection<String> paths,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("commitSha") String commitSha);
 
     /**
@@ -71,16 +71,19 @@ public interface CodeChunkMapper {
      */
     List<CodeChunkRow> find(
             @Param("repositoryId") UUID repositoryId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("query") String query,
             @Param("limit") Integer limit,
             @Param("offset") Integer offset);
 
     List<CodeChunkRow> findByPath(
-            @Param("repositoryId") UUID repositoryId, @Param("filePath") String filePath);
+            @Param("repositoryId") UUID repositoryId,
+            @Param("contentVersion") UUID contentVersion,
+            @Param("filePath") String filePath);
 
     List<ModuleSymbolRow> findModuleSymbols(
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("modulePrefix") String modulePrefix,
             @Param("layerSegment") String layerSegment,
             @Param("rootOnly") boolean rootOnly,
@@ -93,5 +96,8 @@ public interface CodeChunkMapper {
      * @param query 经过规范化的查询条件
      * @return 符合条件的记录数
      */
-    long count(@Param("repositoryId") UUID repositoryId, @Param("query") String query);
+    long count(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("contentVersion") UUID contentVersion,
+            @Param("query") String query);
 }

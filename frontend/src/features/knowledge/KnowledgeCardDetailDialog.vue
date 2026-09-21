@@ -63,7 +63,7 @@ const hasScope = computed(() => Boolean(props.card && (
       </div>
       <dl class="engineering-facts">
         <div><dt>负责人</dt><dd class="mono">{{ card.ownerAccountId || '未指定' }}</dd></div>
-        <div><dt>最近验证快照</dt><dd class="mono">{{ card.lastVerifiedSnapshotId || '尚未验证' }}</dd></div>
+        <div><dt>最近验证内容版本</dt><dd class="mono">{{ card.lastVerifiedContentVersion || '尚未验证' }}</dd></div>
         <div><dt>验证说明</dt><dd>{{ card.verificationNote || '暂无' }}</dd></div>
       </dl>
       <KnowledgeDriftPanel

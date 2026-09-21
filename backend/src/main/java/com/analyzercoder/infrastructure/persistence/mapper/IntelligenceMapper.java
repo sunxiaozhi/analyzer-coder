@@ -12,7 +12,7 @@ import org.apache.ibatis.annotations.Param;
 public interface IntelligenceMapper {
     List<Map<String, Object>> searchBranchCodeKeyword(
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("query") String query,
             @Param("terms") List<String> terms,
             @Param("termCount") int termCount,
@@ -20,7 +20,7 @@ public interface IntelligenceMapper {
 
     List<Map<String, Object>> searchBranchCodeVector(
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("vector") String vector,
             @Param("model") String model,
             @Param("dimension") int dimension,
@@ -28,7 +28,7 @@ public interface IntelligenceMapper {
 
     List<Map<String, Object>> searchBranchKnowledgeKeyword(
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("branchId") UUID branchId,
             @Param("contextId") UUID contextId,
             @Param("query") String query,
@@ -38,7 +38,7 @@ public interface IntelligenceMapper {
 
     List<Map<String, Object>> searchBranchKnowledgeVector(
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("branchId") UUID branchId,
             @Param("contextId") UUID contextId,
             @Param("vector") String vector,
@@ -122,7 +122,7 @@ public interface IntelligenceMapper {
      * @param accountId 目标对象的唯一标识
      * @param question 用户提交的自然语言问题
      * @param answer 待保存或校验的模型回答正文
-     * @param snapshotId 目标对象的唯一标识
+     * @param contentVersion 目标对象的唯一标识
      * @return 本次操作影响的记录数
      */
     int insertConversation(
@@ -135,7 +135,7 @@ public interface IntelligenceMapper {
             @Param("title") String title,
             @Param("question") String question,
             @Param("answer") String answer,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("branchId") UUID branchId,
             @Param("contextId") UUID contextId,
             @Param("branchName") String branchName,
@@ -260,7 +260,11 @@ public interface IntelligenceMapper {
      */
     List<Map<String, Object>> heuristicCallEdges(@Param("repositoryId") UUID repositoryId);
 
-    UUID currentSnapshotId(@Param("repositoryId") UUID repositoryId);
+    List<Map<String, Object>> heuristicCallEdgesAtContentVersion(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("contentVersion") UUID contentVersion);
+
+    UUID currentContentVersion(@Param("repositoryId") UUID repositoryId);
 
     /**
      * 删除符合给定条件的数据。
@@ -283,7 +287,7 @@ public interface IntelligenceMapper {
      *
      * @param id 目标对象的唯一标识
      * @param repositoryId 目标对象的唯一标识
-     * @param snapshotId 目标对象的唯一标识
+     * @param contentVersion 目标对象的唯一标识
      * @param sourceChunkId 目标对象的唯一标识
      * @param targetChunkId 目标对象的唯一标识
      * @param sourceSymbol 代码图谱边的起始符号标识
@@ -293,7 +297,7 @@ public interface IntelligenceMapper {
     int insertHeuristicCallEdge(
             @Param("id") UUID id,
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("sourceChunkId") UUID sourceChunkId,
             @Param("targetChunkId") UUID targetChunkId,
             @Param("sourceSymbol") String sourceSymbol,
@@ -324,6 +328,7 @@ public interface IntelligenceMapper {
     int insertCard(
             @Param("id") UUID id,
             @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
             @Param("actorId") UUID actorId,
             @Param("title") String title,
             @Param("cardType") String cardType,
@@ -387,10 +392,10 @@ public interface IntelligenceMapper {
     Map<String, Object> findChunk(
             @Param("repositoryId") UUID repositoryId, @Param("chunkId") UUID chunkId);
 
-    Map<String, Object> findChunkAtSnapshot(
+    Map<String, Object> findChunkAtContentVersion(
             @Param("repositoryId") UUID repositoryId,
             @Param("chunkId") UUID chunkId,
-            @Param("snapshotId") UUID snapshotId);
+            @Param("contentVersion") UUID contentVersion);
 
     /**
      * 查询知识内容关联的代码引用。
@@ -412,7 +417,7 @@ public interface IntelligenceMapper {
      * @param revision 知识内容的修订版本号
      * @param position 记录在稳定排序中的位置
      * @param repositoryId 目标对象的唯一标识
-     * @param snapshotId 目标对象的唯一标识
+     * @param contentVersion 目标对象的唯一标识
      * @param chunkId 目标对象的唯一标识
      * @param filePath 相对于仓库根目录的规范化文件路径
      * @param symbolName 代码符号的限定名称或显示名称
@@ -426,7 +431,7 @@ public interface IntelligenceMapper {
             @Param("revision") int revision,
             @Param("position") int position,
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("chunkId") UUID chunkId,
             @Param("filePath") String filePath,
             @Param("symbolName") String symbolName,
@@ -467,7 +472,7 @@ public interface IntelligenceMapper {
 
     List<Map<String, Object>> missingBranchEmbeddings(
             @Param("repositoryId") UUID repositoryId,
-            @Param("snapshotId") UUID snapshotId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("model") String model,
             @Param("dimension") int dimension,
             @Param("capability") String capability);

@@ -124,13 +124,13 @@ public class IndexJobProcessor {
                                             new IllegalArgumentException(
                                                     "Repository not found: "
                                                             + runningJob.repositoryId().value()));
-            if (repository.currentSnapshotId() == null) {
+            if (repository.currentContentVersion() == null) {
                 throw new IllegalStateException("仓库尚未发布可用的代码版本");
             }
 
             List<ScannedRepositoryFile> allFiles = repositoryScannerPort.scan(repository);
             if (allFiles.stream().noneMatch(file -> !file.content().isBlank())) {
-                throw new IllegalStateException("当前快照没有可索引的文本内容，请检查文件类型、大小限制和仓库路径");
+                throw new IllegalStateException("当前内容版本没有可索引的文本内容，请检查文件类型、大小限制和仓库路径");
             }
             String indexedCommit = codeChunkStore.latestIndexedCommit(repository.id());
             ExecutionPlan plan =
@@ -164,7 +164,7 @@ public class IndexJobProcessor {
                         repository.id(),
                         affectedPaths,
                         chunks,
-                        repository.currentSnapshotId(),
+                        repository.currentContentVersion(),
                         repository.currentCommit());
             } else {
                 codeChunkStore.replaceRepositoryChunks(repository.id(), chunks);
@@ -175,11 +175,11 @@ public class IndexJobProcessor {
             }
 
             // Compatibility: publish content readiness for a legacy default-version index too.
-            if (branchIndexState != null && repository.currentSnapshotId() != null) {
+            if (branchIndexState != null && repository.currentContentVersion() != null) {
                 branchIndexState.update(
-                        "UPDATE branch_snapshots SET content_indexed_at=CURRENT_TIMESTAMP WHERE repo_id=? AND id=?",
+                        "UPDATE repository_branches SET content_indexed_at=CURRENT_TIMESTAMP WHERE repo_id=? AND content_version=?",
                         repository.id().value(),
-                        repository.currentSnapshotId().value());
+                        repository.currentContentVersion().value());
             }
 
             boolean vectorsReady = true;
@@ -208,7 +208,7 @@ public class IndexJobProcessor {
                                     : ":fallback-" + plan.fallbackReason().toLowerCase())
                             + (vectorsReady ? ":vectors-ready" : ":vectors-degraded");
             indexJobStore.save(publishState.succeed(completion));
-            // CodeGraph reads the published source snapshot and does not depend on embeddings.
+            // CodeGraph reads the published source contentVersion and does not depend on embeddings.
             enqueueCodeGraph(repository);
             return true;
         } catch (Exception exception) {
@@ -225,12 +225,12 @@ public class IndexJobProcessor {
         try {
             CodeRepository current =
                     repositoryStore.findById(indexedRepository.id()).orElse(indexedRepository);
-            if (indexedRepository.currentSnapshotId() == null
-                    || !indexedRepository.currentSnapshotId().equals(current.currentSnapshotId())) {
+            if (indexedRepository.currentContentVersion() == null
+                    || !indexedRepository.currentContentVersion().equals(current.currentContentVersion())) {
                 return;
             }
             if (graphArtifacts.findPublished(
-                            current.id().value(), current.currentSnapshotId().value())
+                            current.id().value(), current.currentContentVersion().value())
                     == null) {
                 codeGraphTasks.start(current.id());
             }
@@ -301,7 +301,7 @@ public class IndexJobProcessor {
                         symbol == null
                                 ? CodeChunk.fileChunk(
                                         repository.id(),
-                                        repository.currentSnapshotId(),
+                                        repository.currentContentVersion(),
                                         repository.currentCommit(),
                                         scannedFile.relativePath(),
                                         scannedFile.language(),
@@ -311,7 +311,7 @@ public class IndexJobProcessor {
                                         content)
                                 : CodeChunk.symbolChunk(
                                         repository.id(),
-                                        repository.currentSnapshotId(),
+                                        repository.currentContentVersion(),
                                         repository.currentCommit(),
                                         scannedFile.relativePath(),
                                         scannedFile.language(),

@@ -27,7 +27,7 @@ function legacyCard(): KnowledgeCard {
       prohibitedPathPatterns: ['secrets/**'],
       knowledgeUpdateRequired: true,
     },
-    lastVerifiedSnapshotId: 'snapshot-1',
+    lastVerifiedContentVersion: 'contentVersion-1',
     verificationNote: null,
     publicationStatus: 'DRAFT',
     revision: 2,

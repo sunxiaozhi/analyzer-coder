@@ -6,6 +6,7 @@ import com.analyzercoder.domain.chunk.ChunkType;
 import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.indexing.RepositoryAssetType;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.RepositoryPermission;
 import com.analyzercoder.security.SecurityContext;
@@ -26,6 +27,9 @@ public class ChunkController {
     private final CodeChunkQueryService queryService;
     private final AccessControlService accessControl;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private BranchRequestContext branchContexts;
+
     public ChunkController(CodeChunkQueryService queryService, AccessControlService accessControl) {
         this.queryService = queryService;
         this.accessControl = accessControl;
@@ -40,7 +44,14 @@ public class ChunkController {
             HttpServletRequest request) {
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         accessControl.require(SecurityContext.account(request), id, RepositoryPermission.READ);
-        return CodeChunkListResponse.from(queryService.list(id, q, limit, offset));
+        var context = branchContexts.resolve(request, repositoryId);
+        return CodeChunkListResponse.from(
+                queryService.list(
+                        id,
+                        RepositoryContentVersion.of(context.contentVersion()),
+                        q,
+                        limit,
+                        offset));
     }
 
     public record CodeChunkListResponse(
@@ -57,7 +68,7 @@ public class ChunkController {
     public record CodeChunkResponse(
             UUID id,
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String filePath,
             String symbolId,
@@ -75,7 +86,7 @@ public class ChunkController {
             return new CodeChunkResponse(
                     chunk.id().value(),
                     chunk.repositoryId().value(),
-                    chunk.snapshotId().value(),
+                    chunk.contentVersion().value(),
                     chunk.commitSha(),
                     chunk.filePath(),
                     chunk.symbolId(),

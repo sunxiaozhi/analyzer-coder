@@ -4,6 +4,7 @@ import com.analyzercoder.domain.chunk.CodeChunk;
 import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -54,6 +55,34 @@ public class CodeChunkQueryService {
                 resolvedLimit,
                 resolvedOffset,
                 chunks);
+    }
+
+    public CodeChunkQueryResult list(
+            CodeRepositoryId repositoryId,
+            RepositoryContentVersion contentVersion,
+            String query,
+            Integer limit,
+            Integer offset) {
+        repositoryStore.findById(repositoryId).orElseThrow(
+                () -> new IllegalArgumentException("Repository not found: " + repositoryId.value()));
+        int resolvedLimit = resolveLimit(limit);
+        int resolvedOffset = resolveOffset(offset);
+        String normalizedQuery = query == null ? "" : query.trim();
+        if (normalizedQuery.isBlank()) {
+            return new CodeChunkQueryResult(
+                    codeChunkStore.countByRepositoryVersion(repositoryId, contentVersion),
+                    resolvedLimit,
+                    resolvedOffset,
+                    codeChunkStore.findByRepositoryVersion(
+                            repositoryId, contentVersion, resolvedLimit, resolvedOffset));
+        }
+        return new CodeChunkQueryResult(
+                codeChunkStore.countSearchByRepositoryVersion(
+                        repositoryId, contentVersion, normalizedQuery),
+                resolvedLimit,
+                resolvedOffset,
+                codeChunkStore.searchByRepositoryVersion(
+                        repositoryId, contentVersion, normalizedQuery, resolvedLimit, resolvedOffset));
     }
 
     private int resolveLimit(Integer limit) {

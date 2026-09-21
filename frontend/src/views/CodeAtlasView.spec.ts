@@ -13,14 +13,22 @@ vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => store }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => atlasRoute }));
 vi.mock('@/api/codeAtlas', () => ({ getCodeAtlas: vi.fn() }));
 vi.mock('@/api/repositories', () => ({ getRepositoryFile: vi.fn() }));
-const view = (repo = 'a'): AtlasView => ({ repositoryId: repo, snapshotId: 'snapshot', level: 'SYMBOL', nodes: [{ id: 'n', label: 'save', kind: 'method', filePath: 'src/a.ts', module: 'src', startLine: 1, endLine: 2, count: 1 }], edges: [], totalNodes: 1, totalEdges: 0, partial: false });
-beforeEach(() => { vi.resetAllMocks(); atlasRoute.query = {}; setActivePinia(createPinia()); store.selectedRepositoryId = 'a'; store.selectedRepository.sourceType = ''; });
+const view = (repo = 'a'): AtlasView => ({ repositoryId: repo, contentVersion: 'contentVersion', level: 'SYMBOL', nodes: [{ id: 'n', label: 'save', kind: 'method', filePath: 'src/a.ts', module: 'src', startLine: 1, endLine: 2, count: 1 }], edges: [], totalNodes: 1, totalEdges: 0, partial: false });
+beforeEach(() => {
+  vi.resetAllMocks(); atlasRoute.query = {}; setActivePinia(createPinia());
+  store.selectedRepositoryId = 'a'; store.selectedRepository.sourceType = '';
+  const branches = useBranchContextStore();
+  branches.repositoryId = 'a';
+  branches.selectedBranchId = 'main';
+  branches.context = { contextId: 'ctx-main', repositoryId: 'a', branchId: 'main', branchName: 'main', contentVersion: 'contentVersion', commitSha: 'abc', expiresAt: '' };
+});
 
 it('never loads default graph data while a Git context is missing or expired', async () => {
   store.selectedRepository.sourceType = 'LOCAL_GIT';
   const branches = useBranchContextStore();
   branches.repositoryId = 'a';
   branches.selectedBranchId = 'release';
+  branches.context = null;
   branches.error = 'CONTEXT_EXPIRED';
   const wrapper = mount(CodeAtlasView, { global: { stubs: { CodeAtlas3D: true } } });
   await flushPromises();
@@ -29,21 +37,21 @@ it('never loads default graph data while a Git context is missing or expired', a
   wrapper.unmount();
 });
 
-it('ignores an old branch response after switching to another pinned snapshot', async () => {
+it('ignores an old branch response after switching to another pinned contentVersion', async () => {
   store.selectedRepository.sourceType = 'LOCAL_GIT';
   const branches = useBranchContextStore();
   branches.repositoryId = 'a';
   branches.selectedBranchId = 'main';
-  branches.context = { contextId: 'ctx-main', repositoryId: 'a', branchId: 'main', branchName: 'main', snapshotId: 'snapshot', commitSha: 'abc', expiresAt: '' };
+  branches.context = { contextId: 'ctx-main', repositoryId: 'a', branchId: 'main', branchName: 'main', contentVersion: 'contentVersion', commitSha: 'abc', expiresAt: '' };
   let resolve!: (value: AtlasView) => void;
   vi.mocked(getCodeAtlas).mockImplementationOnce(() => new Promise(done => { resolve = done; }))
-    .mockResolvedValue({ ...view(), snapshotId: 'release-snapshot', nodes: [{ ...view().nodes[0], label: 'release-symbol' }] });
+    .mockResolvedValue({ ...view(), contentVersion: 'release-contentVersion', nodes: [{ ...view().nodes[0], label: 'release-symbol' }] });
   const wrapper = mount(CodeAtlasView, { global: { stubs: { CodeAtlas3D: true } } });
   await flushPromises();
   branches.selectedBranchId = 'release';
   branches.context = null;
   await flushPromises();
-  branches.context = { contextId: 'ctx-release', repositoryId: 'a', branchId: 'release', branchName: 'release', snapshotId: 'release-snapshot', commitSha: 'def', expiresAt: '' };
+  branches.context = { contextId: 'ctx-release', repositoryId: 'a', branchId: 'release', branchName: 'release', contentVersion: 'release-contentVersion', commitSha: 'def', expiresAt: '' };
   await flushPromises();
   resolve({ ...view(), nodes: [{ ...view().nodes[0], label: 'old-main-symbol' }] });
   await flushPromises();
@@ -99,7 +107,11 @@ it('ignores a graph response from a previous repository', async () => {
   vi.mocked(getCodeAtlas).mockImplementationOnce(() => new Promise(r => { resolve = r; })).mockResolvedValue(view('b'));
   const wrapper = mount(CodeAtlasView);
   await wrapper.get('[data-view-2d]').trigger('click');
+  const branches = useBranchContextStore();
   store.selectedRepositoryId = 'b';
+  branches.repositoryId = 'b';
+  branches.selectedBranchId = 'main-b';
+  branches.context = { contextId: 'ctx-b', repositoryId: 'b', branchId: 'main-b', branchName: 'main', contentVersion: 'contentVersion', commitSha: 'def', expiresAt: '' };
   await flushPromises();
   resolve({ ...view(), nodes: [{ ...view().nodes[0], label: 'stale-symbol' }] });
   await flushPromises();
@@ -108,9 +120,9 @@ it('ignores a graph response from a previous repository', async () => {
   wrapper.unmount();
 });
 
-it('rejects source content from a different snapshot', async () => {
+it('rejects source content from a different contentVersion', async () => {
   vi.mocked(getCodeAtlas).mockResolvedValue(view());
-  vi.mocked(getRepositoryFile).mockResolvedValue({ snapshotId: 'new-snapshot', content: 'wrong-source' } as Awaited<ReturnType<typeof getRepositoryFile>>);
+  vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'new-contentVersion', content: 'wrong-source' } as Awaited<ReturnType<typeof getRepositoryFile>>);
   const wrapper = mount(CodeAtlasView);
   await wrapper.get('[data-view-2d]').trigger('click');
   await flushPromises();
@@ -128,7 +140,7 @@ it('expands a module using its exact scope', async () => {
   await flushPromises();
   await wrapper.get('[data-node]').trigger('dblclick');
   await flushPromises();
-  expect(getCodeAtlas).toHaveBeenLastCalledWith('a', 'src', '');
+  expect(getCodeAtlas).toHaveBeenLastCalledWith('a', 'src', '', 'ctx-main');
   wrapper.unmount();
 });
 
@@ -152,7 +164,7 @@ it('keeps reading defaults quiet and shows local relations on selection', async 
 it('uses a full-height sibling panel with wrapped source cells and collapsible relations', async () => {
   vi.mocked(getCodeAtlas).mockResolvedValue(view());
   const longLine = 'const path = "' + '长路径/'.repeat(80) + '";';
-  vi.mocked(getRepositoryFile).mockResolvedValue({ snapshotId: 'snapshot', content: longLine + '\nreturn path;' } as Awaited<ReturnType<typeof getRepositoryFile>>);
+  vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: longLine + '\nreturn path;' } as Awaited<ReturnType<typeof getRepositoryFile>>);
   const wrapper = mount(CodeAtlasView);
   await wrapper.get('[data-view-2d]').trigger('click');
   await flushPromises();
@@ -182,34 +194,34 @@ it('lets module relations fill the unused source area', async () => {
 });
 
 it('locates the file and symbol passed from unified search', async () => {
-  atlasRoute.query = { path: 'src/a.ts', symbol: 'save', snapshotId: 'snapshot' };
+  atlasRoute.query = { path: 'src/a.ts', symbol: 'save', contentVersion: 'contentVersion' };
   vi.mocked(getCodeAtlas).mockResolvedValue(view());
-  vi.mocked(getRepositoryFile).mockResolvedValue({ snapshotId: 'snapshot', content: 'save()' } as any);
+  vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: 'save()' } as any);
   const wrapper = mount(CodeAtlasView, { global: { stubs: { CodeAtlas3D: true } } });
   await flushPromises();
-  expect(getCodeAtlas).toHaveBeenCalledWith('a', '', 'save');
+  expect(getCodeAtlas).toHaveBeenCalledWith('a', '', 'save', 'ctx-main');
   expect(wrapper.get('[aria-label="节点详情"]').text()).toContain('src/a.ts');
   expect(wrapper.text()).toContain('分析此符号的影响范围');
   wrapper.unmount();
 });
 
 it('falls back to the file when the search-result symbol is absent from the graph', async () => {
-  atlasRoute.query = { path: 'src/a.ts', symbol: 'unmappedSymbol', snapshotId: 'snapshot' };
+  atlasRoute.query = { path: 'src/a.ts', symbol: 'unmappedSymbol', contentVersion: 'contentVersion' };
   vi.mocked(getCodeAtlas).mockResolvedValueOnce({ ...view(), nodes: [] }).mockResolvedValueOnce(view());
-  vi.mocked(getRepositoryFile).mockResolvedValue({ snapshotId: 'snapshot', content: 'save()' } as any);
+  vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: 'save()' } as any);
   const wrapper = mount(CodeAtlasView, { global: { stubs: { CodeAtlas3D: true } } });
   await flushPromises();
-  expect(getCodeAtlas).toHaveBeenLastCalledWith('a', '', 'src/a.ts');
+  expect(getCodeAtlas).toHaveBeenLastCalledWith('a', '', 'src/a.ts', 'ctx-main');
   expect(wrapper.get('[aria-label="节点详情"]').text()).toContain('src/a.ts');
   wrapper.unmount();
 });
 
-it('rejects a graph from a different snapshot than the search-result link', async () => {
-  atlasRoute.query = { path: 'src/a.ts', symbol: 'save', snapshotId: 'old-snapshot' };
+it('rejects a graph from a different contentVersion than the search-result link', async () => {
+  atlasRoute.query = { path: 'src/a.ts', symbol: 'save', contentVersion: 'old-contentVersion' };
   vi.mocked(getCodeAtlas).mockResolvedValue(view());
   const wrapper = mount(CodeAtlasView, { global: { stubs: { CodeAtlas3D: true } } });
   await flushPromises();
-  expect(wrapper.text()).toContain('目标文件快照已更新');
+  expect(wrapper.text()).toContain('目标文件与当前分支内容版本不一致');
   expect(getRepositoryFile).not.toHaveBeenCalled();
   expect(wrapper.find('[aria-label="节点详情"]').exists()).toBe(false);
   wrapper.unmount();

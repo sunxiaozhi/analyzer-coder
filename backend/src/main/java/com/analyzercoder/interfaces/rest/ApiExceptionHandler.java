@@ -44,7 +44,7 @@ public class ApiExceptionHandler {
         HttpStatus status =
                 switch (e.code()) {
                     case "KNOWLEDGE_CARD_NOT_FOUND", "REPOSITORY_NOT_FOUND" -> HttpStatus.NOT_FOUND;
-                    case "KNOWLEDGE_REVISION_CONFLICT", "CURRENT_SNAPSHOT_REQUIRED" ->
+                    case "KNOWLEDGE_REVISION_CONFLICT", "CURRENT_CONTENT_VERSION_REQUIRED" ->
                             HttpStatus.CONFLICT;
                     default -> HttpStatus.BAD_REQUEST;
                 };

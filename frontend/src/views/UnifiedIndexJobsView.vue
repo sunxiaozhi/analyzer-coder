@@ -79,7 +79,7 @@ onMounted(async () => {
       <div class="split detail-split index-jobs-split">
         <div class="surface index-jobs-list">
           <div class="toolbar">
-            <span class="index-guidance">单版本索引、部分图谱构建和知识失效检查任务；由项目管理或项目总览发起</span>
+            <span class="index-guidance">分支内容索引、图谱构建和知识失效检查任务；由项目管理或项目总览发起</span>
             <span class="spacer" />
             <span class="muted">成功 {{ counts.SUCCEEDED }} · 已取消 {{ counts.CANCELED }}</span>
             <el-button :loading="loading" @click="refresh()">刷新</el-button>

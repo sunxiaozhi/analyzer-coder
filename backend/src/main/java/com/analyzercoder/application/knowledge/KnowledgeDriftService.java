@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 在当前快照索引完成后，用真实 Diff 精准识别需要重新验证的工程知识。 */
+/** 在当前内容版本索引完成后，用真实 Diff 精准识别需要重新验证的工程知识。 */
 @Service
 public class KnowledgeDriftService {
     private static final int MAX_REASONS_PER_CARD = 100;
@@ -142,7 +142,7 @@ public class KnowledgeDriftService {
                         request.expectedRevision(),
                         resultStatus,
                         repository.currentCommit(),
-                        repository.currentSnapshotId().value(),
+                        repository.currentContentVersion().value(),
                         note,
                         actorId)
                 != 1) {
@@ -159,7 +159,7 @@ public class KnowledgeDriftService {
                         null,
                         null,
                         action == SourceReviewAction.CONFIRM_CURRENT
-                                ? "维护者已核对当前代码快照与知识内容"
+                                ? "维护者已核对当前代码内容版本与知识内容"
                                 : "维护者确认知识内容已不适用于当前代码");
         KnowledgeDriftEventRow row =
                 eventRow(
@@ -211,7 +211,7 @@ public class KnowledgeDriftService {
                                 reference.startLine(),
                                 reference.endLine(),
                                 file == null ? null : file.type().name(),
-                                "知识绑定代码内容在当前快照中已不存在相同哈希"));
+                                "知识绑定代码内容在当前内容版本中已不存在相同哈希"));
             }
         }
 
@@ -296,8 +296,8 @@ public class KnowledgeDriftService {
                 repository.id().value(),
                 candidate.id(),
                 candidate.revision(),
-                candidate.lastVerifiedSnapshotId(),
-                repository.currentSnapshotId().value(),
+                candidate.lastVerifiedContentVersion(),
+                repository.currentContentVersion().value(),
                 candidate.verifiedCommit(),
                 repository.currentCommit(),
                 candidate.sourceVersionStatus(),
@@ -316,8 +316,8 @@ public class KnowledgeDriftService {
                     row.repositoryId(),
                     row.cardId(),
                     row.cardRevision(),
-                    row.fromSnapshotId(),
-                    row.toSnapshotId(),
+                    row.fromContentVersion(),
+                    row.toContentVersion(),
                     row.fromCommit(),
                     row.toCommit(),
                     row.previousStatus(),
@@ -397,9 +397,9 @@ public class KnowledgeDriftService {
 
     private static void requirePublished(CodeRepository repository) {
         if (repository == null
-                || repository.currentSnapshotId() == null
+                || repository.currentContentVersion() == null
                 || repository.currentCommit() == null) {
-            throw new KnowledgeDriftException("CURRENT_SNAPSHOT_REQUIRED", "仓库尚未发布可用于知识复核的代码快照");
+            throw new KnowledgeDriftException("CURRENT_CONTENT_VERSION_REQUIRED", "仓库尚未发布可用于知识复核的代码内容版本");
         }
     }
 
@@ -441,8 +441,8 @@ public class KnowledgeDriftService {
             UUID repositoryId,
             UUID cardId,
             int cardRevision,
-            UUID fromSnapshotId,
-            UUID toSnapshotId,
+            UUID fromContentVersion,
+            UUID toContentVersion,
             String fromCommit,
             String toCommit,
             String previousStatus,

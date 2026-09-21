@@ -91,8 +91,8 @@
   `Repository path is outside configured allowed roots`
   （`backend/src/main/java/com/analyzercoder/infrastructure/repository/RepositoryPathPolicy.java:20-39,47-66`）；
   导入暂存目录额外限制在受管数据根内（`.../RepositoryPathPolicy.java:52-55`）。
-- 快照复制拒绝符号链接与非普通文件，并校验目标路径不逃逸
-  （`backend/src/main/java/com/analyzercoder/infrastructure/repository/FileSystemRepositorySnapshotAdapter.java:128-148`）。
+- 分支工作区导出拒绝符号链接与子模块，并校验归档路径不逃逸
+  （`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchContentVersionFactory.java`）。
 - 远端仓库目标策略：仅 HTTPS、禁止 user-info、端口必须为 -1 或 443、拒绝
   `localhost`/`*.localhost`/`*.local`，DNS 解析后拒绝环回、链路本地、站点本地、组播、
   CGNAT 及内网地址段（`backend/src/main/java/com/analyzercoder/infrastructure/repository/RemoteRepositoryTargetPolicy.java:14-80`）。
@@ -176,10 +176,10 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 | 安全 | `app.security.cookie-secure` | `APP_SESSION_COOKIE_SECURE` | `false` | 否（HTTPS 须改 `true`） | yml:65 |
 | 仓库 | `app.repository.allowed-roots` | `APP_REPOSITORY_ALLOWED_ROOTS` | 无 | **是** | yml:67-68 |
 | 仓库 | `app.repository.managed-data-root` | `APP_MANAGED_DATA_ROOT` | 无 | **是** | yml:70 |
-| 仓库 | `app.repository.snapshot-root` | 无（派生） | `<managed-data-root>/repositories` | 否 | yml:72 |
+| 仓库 | `app.repository.workspace-root` | 无（派生） | `<managed-data-root>/repositories` | 否 | yml:72 |
 | 仓库 | `app.repository.import-root` | 无（派生） | `<managed-data-root>/staging/imports` | 否 | yml:73 |
-| 仓库 | `app.repository.snapshot-max-files` | `APP_REPOSITORY_SNAPSHOT_MAX_FILES` | 50000 | 否 | yml:79 |
-| 仓库 | `app.repository.snapshot-max-total-bytes` | `APP_REPOSITORY_SNAPSHOT_MAX_TOTAL_BYTES` | 2147483648 | 否 | yml:77 |
+| 仓库 | `app.repository.workspace-max-files` | `APP_REPOSITORY_WORKSPACE_MAX_FILES` | 50000 | 否 | yml:79 |
+| 仓库 | `app.repository.workspace-max-total-bytes` | `APP_REPOSITORY_WORKSPACE_MAX_TOTAL_BYTES` | 2147483648 | 否 | yml:77 |
 | 仓库 | `app.repository.browser-max-file-bytes` | `APP_REPOSITORY_BROWSER_MAX_FILE_BYTES` | 2097152 | 否 | yml:79 |
 | 索引 | `app.indexing.poll-interval-ms` | 无（固定） | 5000 | 否 | yml:82 |
 | 索引 | `app.indexing.max-file-bytes` | 无（固定） | 524288 | 否 | yml:84 |
@@ -215,12 +215,12 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 
 ## 4. 容量与性能边界
 
-### 4.1 快照、文件与索引
+### 4.1 分支工作区、文件与索引
 
-- 单个受管分支内容最大文件数 50000，超限抛文件数量限制错误
-  （`application.yml:75`；`backend/src/main/java/com/analyzercoder/infrastructure/repository/FileSystemRepositorySnapshotAdapter.java:41,116-118`）。
-- 单快照最大总字节数 2147483648（2 GiB），用 `Math.addExact` 累加后判定
-  （`application.yml:77`；`.../FileSystemRepositorySnapshotAdapter.java:42,135-138`）。
+- 单个受管分支工作区最大文件数 50000，超限抛文件数量限制错误
+  （`application.yml`；`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchContentVersionFactory.java`）。
+- 单个分支工作区最大总字节数 2147483648（2 GiB），用 `Math.addExact` 累加后判定
+  （`application.yml`；`GitBranchContentVersionFactory.java`）。
 - 源码预览单文件上限 2097152（2 MiB）
   （`application.yml:79`；`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCodeBrowserService.java:29`）。
 - 纳入索引的单文件上限 524288（512 KiB），固定不可配
@@ -230,7 +230,7 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
   单文件符号上限 `MAX_SYMBOLS_PER_FILE = 500`（`.../application/code/CodeSymbolExtractor.java:18`）。
 - 远端分支探测上限 `MAX_DISCOVERED_BRANCHES = 2000`；分支名长度上限 200
   （`.../application/repository/GitCredentialExecutor.java:18`；
-  `.../infrastructure/repository/GitBranchSnapshotFactory.java:41`）。
+  `.../infrastructure/repository/GitBranchContentVersionFactory.java:41`）。
 
 ### 4.2 图谱结果上限
 

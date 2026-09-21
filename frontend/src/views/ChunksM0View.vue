@@ -18,7 +18,7 @@ import {
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
-import type { RepositoryFileContent, RepositorySnapshotFiles } from '@/types/api';
+import type { RepositoryFileContent, RepositoryContentVersionFiles } from '@/types/api';
 
 type MobilePane = 'tree' | 'code' | 'results';
 type RightPane = 'results' | 'context' | null;
@@ -28,12 +28,12 @@ const branchContext = useBranchContextStore();
 const readScope = useBranchReadScope();
 const route = useRoute();
 const router = useRouter();
-const snapshot = shallowRef<RepositorySnapshotFiles | null>(null);
+const contentVersion = shallowRef<RepositoryContentVersionFiles | null>(null);
 const selectedPath = shallowRef<string | null>(null);
 const selectedFile = shallowRef<RepositoryFileContent | null>(null);
 const previewError = shallowRef<string | null>(null);
 const filesLoading = shallowRef(false);
-const snapshotError = shallowRef<string | null>(null);
+const contentVersionError = shallowRef<string | null>(null);
 const fileLoading = shallowRef(false);
 const query = shallowRef('');
 const hits = shallowRef<UnifiedSearchHit[]>([]);
@@ -49,13 +49,13 @@ const focusEndLine = shallowRef<number | null>(null);
 const focusVersion = shallowRef(0);
 const mobilePane = shallowRef<MobilePane>('tree');
 const fileCache = new Map<string, RepositoryFileContent>();
-let snapshotRequest = 0;
+let contentVersionRequest = 0;
 let fileRequest = 0;
 let searchRequest = 0;
 
 const repository = computed(() => repositories.selectedRepository);
 const workbenchReady = computed(() => Boolean(
-  repository.value && (filesLoading.value || snapshot.value),
+  repository.value && (filesLoading.value || contentVersion.value),
 ));
 const gateCopy = computed(() => {
   if (!repository.value) return {
@@ -65,31 +65,31 @@ const gateCopy = computed(() => {
     path: '/repositories',
   };
   if (readScope.blocked.value) return {
-    title: '当前分支快照未就绪',
+    title: '当前分支内容版本未就绪',
     detail: readScope.reason.value,
     action: '管理当前分支',
     path: '/repositories',
   };
-  if (snapshotError.value) return {
-    title: '代码快照加载失败',
-    detail: snapshotError.value,
+  if (contentVersionError.value) return {
+    title: '代码内容版本加载失败',
+    detail: contentVersionError.value,
     action: '重新加载',
     path: '',
   };
   return {
-    title: '项目还没有可浏览的代码快照',
+    title: '项目还没有可浏览的代码内容版本',
     detail: '先在项目总览完成扫描和内容索引，再回来检索代码与证据。',
     action: '去准备项目',
     path: '/overview',
   };
 });
-const shortCommit = computed(() => snapshot.value?.commit?.slice(0, 8) ?? '无提交');
+const shortCommit = computed(() => contentVersion.value?.commit?.slice(0, 8) ?? '无提交');
 const resultSummary = computed(() => {
   if (!searchPerformed.value) return '输入关键词，同时检索当前代码与项目知识';
   const codeCount = hits.value.filter(hit => hit.sourceType === 'CODE').length;
   const knowledgeCount = hits.value.filter(hit => hit.sourceType === 'KNOWLEDGE').length;
   const summary = `命中 ${codeCount} 个代码片段、${knowledgeCount} 条知识`;
-  return staleHits.value ? `${summary}，忽略旧快照 ${staleHits.value} 条` : summary;
+  return staleHits.value ? `${summary}，忽略旧内容版本 ${staleHits.value} 条` : summary;
 });
 const evidenceDrawerOpen = computed({
   get: () => rightPane.value === 'context',
@@ -99,8 +99,8 @@ const evidenceDrawerOpen = computed({
   },
 });
 
-async function loadSnapshot(repositoryId: string | null) {
-  const requestId = ++snapshotRequest;
+async function loadContentVersion(repositoryId: string | null) {
+  const requestId = ++contentVersionRequest;
   fileRequest++;
   searchRequest++;
   fileLoading.value = false;
@@ -108,8 +108,8 @@ async function loadSnapshot(repositoryId: string | null) {
   searchLoading.value = false;
   focusLine.value = null;
   focusEndLine.value = null;
-  snapshot.value = null;
-  snapshotError.value = null;
+  contentVersion.value = null;
+  contentVersionError.value = null;
   selectedPath.value = null;
   selectedFile.value = null;
   previewError.value = null;
@@ -123,27 +123,27 @@ async function loadSnapshot(repositoryId: string | null) {
   query.value = '';
   fileCache.clear();
   if (!repositoryId) return;
-  if (readScope.blocked.value) { snapshotError.value = readScope.reason.value; return; }
+  if (readScope.blocked.value) { contentVersionError.value = readScope.reason.value; return; }
   filesLoading.value = true;
   try {
     const result = branchContext.context?.contextId
       ? await listRepositoryFiles(repositoryId, branchContext.context.contextId)
       : await listRepositoryFiles(repositoryId);
-    if (requestId !== snapshotRequest) return;
-    if (branchContext.context && result.snapshotId !== branchContext.context.snapshotId) {
-      throw new Error('返回的文件列表与当前分支快照不一致，请刷新阅读上下文');
+    if (requestId !== contentVersionRequest) return;
+    if (branchContext.context && result.contentVersion !== branchContext.context.contentVersion) {
+      throw new Error('返回的文件列表与当前分支内容版本不一致，请刷新阅读上下文');
     }
-    snapshot.value = result;
-    if (typeof route.query.snapshotId === 'string' && route.query.snapshotId !== result.snapshotId) {
+    contentVersion.value = result;
+    if (typeof route.query.contentVersion === 'string' && route.query.contentVersion !== result.contentVersion) {
       selectedPath.value = typeof route.query.path === 'string' ? route.query.path : null;
-      previewError.value = '该证据来自历史快照，当前源码不能代表当时的内容。请返回来源查看保存的证据，或从目录选择当前文件。';
+      previewError.value = '该证据来自历史内容版本，当前源码不能代表当时的内容。请返回来源查看保存的证据，或从目录选择当前文件。';
       mobilePane.value = 'code';
       return;
     }
     const routePath = typeof route.query.path === 'string' ? route.query.path : null;
     if (routePath && !result.files.some(file => file.path === routePath)) {
       selectedPath.value = routePath;
-      previewError.value = '当前快照中找不到该文件，文件可能已删除或重命名。请从目录重新选择。';
+      previewError.value = '当前内容版本中找不到该文件，文件可能已删除或重命名。请从目录重新选择。';
       return;
     }
     const preferred = result.files.find(file => file.path === routePath) ?? result.files.find(file =>
@@ -153,24 +153,24 @@ async function loadSnapshot(repositoryId: string | null) {
     const endLine = routePath ? routeNumber(route.query.endLine) : null;
     const routeSymbol = typeof route.query.symbol === 'string' ? route.query.symbol : null;
     if (preferred) await openFile(preferred.path, startLine, endLine, Boolean(routePath), routeSymbol);
-    if (requestId !== snapshotRequest) return;
+    if (requestId !== contentVersionRequest) return;
     const routeQuery = typeof route.query.q === 'string' ? route.query.q : null;
     if (routeQuery) {
       query.value = routeQuery;
       await search();
     }
   } catch (error) {
-    if (requestId === snapshotRequest) {
-      snapshotError.value = error instanceof Error ? error.message : '代码快照加载失败';
+    if (requestId === contentVersionRequest) {
+      contentVersionError.value = error instanceof Error ? error.message : '代码内容版本加载失败';
     }
   } finally {
-    if (requestId === snapshotRequest) filesLoading.value = false;
+    if (requestId === contentVersionRequest) filesLoading.value = false;
   }
 }
 
 function resolveGate() {
   if (!gateCopy.value.path) {
-    void loadSnapshot(repositories.selectedRepositoryId);
+    void loadContentVersion(repositories.selectedRepositoryId);
     return;
   }
   void router.push(gateCopy.value.path);
@@ -184,7 +184,7 @@ async function openFile(
   symbolName?: string | null,
 ) {
   const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId || readScope.blocked.value || !snapshot.value) return;
+  if (!repositoryId || readScope.blocked.value || !contentVersion.value) return;
   const requestId = ++fileRequest;
   fileLoading.value = false;
   const changedFile = selectedPath.value !== path;
@@ -197,7 +197,7 @@ async function openFile(
   previewError.value = null;
   if (switchPane) mobilePane.value = 'code';
 
-  const cacheKey = `${snapshot.value?.snapshotId ?? ''}:${path}`;
+  const cacheKey = `${contentVersion.value?.contentVersion ?? ''}:${path}`;
   const cached = fileCache.get(cacheKey);
   if (cached) {
     selectedFile.value = cached;
@@ -211,8 +211,8 @@ async function openFile(
       ? await getRepositoryFile(repositoryId, path, branchContext.context.contextId)
       : await getRepositoryFile(repositoryId, path);
     if (requestId !== fileRequest || repositoryId !== repositories.selectedRepositoryId) return;
-    if (file.snapshotId !== snapshot.value?.snapshotId) {
-      previewError.value = '代码快照已更新，请重新加载页面后查看源码。';
+    if (file.contentVersion !== contentVersion.value?.contentVersion) {
+      previewError.value = '代码内容版本已更新，请重新加载页面后查看源码。';
       return;
     }
     fileCache.set(cacheKey, file);
@@ -230,22 +230,22 @@ async function search() {
   const repositoryId = repositories.selectedRepositoryId;
   const keyword = query.value.trim();
   if (!repositoryId) return ElMessage.warning('请先选择仓库');
-  if (readScope.blocked.value || !snapshot.value) return ElMessage.warning(readScope.reason.value);
+  if (readScope.blocked.value || !contentVersion.value) return ElMessage.warning(readScope.reason.value);
   if (!keyword) {
     clearSearch();
     return;
   }
   const requestId = ++searchRequest;
-  const snapshotId = snapshot.value?.snapshotId;
+  const pinnedVersion = contentVersion.value?.contentVersion;
   searchLoading.value = true;
   try {
     const result = branchContext.context?.contextId
       ? await intelligenceApi.unifiedSearch(repositoryId, keyword, 50, branchContext.context.contextId)
       : await intelligenceApi.unifiedSearch(repositoryId, keyword, 50);
-    if (requestId !== searchRequest || repositoryId !== repositories.selectedRepositoryId || snapshotId !== snapshot.value?.snapshotId) return;
+    if (requestId !== searchRequest || repositoryId !== repositories.selectedRepositoryId || pinnedVersion !== contentVersion.value?.contentVersion) return;
     retrieval.value = result.retrieval;
     const current = result.evidence.filter(hit => (
-      hit.sourceType === 'KNOWLEDGE' || hit.snapshotId === snapshot.value?.snapshotId
+      hit.sourceType === 'KNOWLEDGE' || hit.contentVersion === contentVersion.value?.contentVersion
     ));
     hits.value = current;
     totalHits.value = current.length;
@@ -302,8 +302,8 @@ function excerpt(content: string) {
 }
 
 watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const,
-  ([repositoryId]) => loadSnapshot(repositoryId), { immediate: true });
-onScopeDispose(() => { snapshotRequest++; fileRequest++; searchRequest++; });
+  ([repositoryId]) => loadContentVersion(repositoryId), { immediate: true });
+onScopeDispose(() => { contentVersionRequest++; fileRequest++; searchRequest++; });
 function routeNumber(value: unknown) {
   const parsed = typeof value === 'string' ? Number.parseInt(value, 10) : Number.NaN;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -327,7 +327,7 @@ function createKnowledgeForFile() {
     query: {
       create: '1',
       path: selectedPath.value,
-      snapshotId: snapshot.value?.snapshotId,
+      contentVersion: contentVersion.value?.contentVersion,
       symbol: selectedSymbol.value ?? undefined,
       branchId: branchContext.context?.branchId,
       contextId: branchContext.context?.contextId,
@@ -336,17 +336,17 @@ function createKnowledgeForFile() {
 }
 
 watch(
-  () => [route.query.path, route.query.startLine, route.query.endLine, route.query.q, route.query.symbol, route.query.snapshotId] as const,
+  () => [route.query.path, route.query.startLine, route.query.endLine, route.query.q, route.query.symbol, route.query.contentVersion] as const,
   ([path, startLine, endLine, routeQuery, routeSymbol]) => {
     if (typeof routeQuery === 'string' && routeQuery !== query.value) {
       query.value = routeQuery;
       void search();
     }
-    if (typeof route.query.snapshotId === 'string' && route.query.snapshotId !== snapshot.value?.snapshotId) {
-      void loadSnapshot(repositories.selectedRepositoryId);
+    if (typeof route.query.contentVersion === 'string' && route.query.contentVersion !== contentVersion.value?.contentVersion) {
+      void loadContentVersion(repositories.selectedRepositoryId);
       return;
     }
-    if (typeof path === 'string' && snapshot.value?.files.some(file => file.path === path)) {
+    if (typeof path === 'string' && contentVersion.value?.files.some(file => file.path === path)) {
       rightPane.value = 'context';
       void openFile(
         path,
@@ -355,12 +355,12 @@ watch(
         true,
         typeof routeSymbol === 'string' ? routeSymbol : undefined,
       );
-    } else if (typeof path === 'string' && snapshot.value) {
+    } else if (typeof path === 'string' && contentVersion.value) {
       fileRequest++;
       selectedPath.value = path;
       selectedFile.value = null;
       fileLoading.value = false;
-      previewError.value = '当前快照中找不到该文件，文件可能已删除或重命名。请从目录重新选择。';
+      previewError.value = '当前内容版本中找不到该文件，文件可能已删除或重命名。请从目录重新选择。';
       mobilePane.value = 'code';
     } else if (typeof routeSymbol === 'string' && selectedPath.value) {
       selectedSymbol.value = routeSymbol;
@@ -381,11 +381,11 @@ watch(
 
     <template v-else>
     <header class="workbench-command">
-      <div class="snapshot-context">
+      <div class="contentVersion-context">
         <strong>{{ repository?.name ?? '未选择仓库' }}</strong>
-        <span>{{ snapshot?.branch ?? repository?.branch ?? '无分支' }}</span>
+        <span>{{ contentVersion?.branch ?? repository?.branch ?? '无分支' }}</span>
         <span class="mono">{{ shortCommit }}</span>
-        <span>{{ snapshot?.files.length ?? 0 }} 个文件</span>
+        <span>{{ contentVersion?.files.length ?? 0 }} 个文件</span>
       </div>
       <div class="workbench-search">
         <el-input
@@ -415,7 +415,7 @@ watch(
         </el-button>
       </div>
       <div v-if="retrieval" class="retrieval-diagnostics" :data-degraded="retrieval.degraded">
-        <span>快照 {{ retrieval.snapshotId?.slice(0, 8) ?? '不可用' }}</span>
+        <span>内容版本 {{ retrieval.contentVersion?.slice(0, 8) ?? '不可用' }}</span>
         <span>{{ retrieval.retrievalCapability === 'SEMANTIC_EMBEDDING' ? '语义向量' : retrieval.retrievalCapability === 'CHARACTER_HASH' ? '字符相似度' : '无向量能力' }}</span>
         <span v-for="channel in retrieval.enabledChannels" :key="channel">{{ channelLabel(channel) }}</span>
         <strong v-if="retrieval.degraded">降级：{{ retrieval.degradationReasons.join('、') || retrieval.unavailableChannels.map(item => item.reason).join('、') }}</strong>
@@ -450,7 +450,7 @@ watch(
     >
       <RepositoryFileTree
         class="workbench-tree"
-        :files="snapshot?.files ?? []"
+        :files="contentVersion?.files ?? []"
         :selected-path="selectedPath"
         :loading="filesLoading"
         @select="openFile"
@@ -478,7 +478,7 @@ watch(
           <el-empty
             v-if="!searchLoading && !hits.length"
             :image-size="56"
-            description="当前快照没有匹配结果"
+            description="当前内容版本没有匹配结果"
           />
           <button
             v-for="hit in hits"
@@ -516,7 +516,7 @@ watch(
         :repository-id="repositories.selectedRepositoryId"
         :file-path="selectedPath"
         :initial-symbol="selectedSymbol"
-        :snapshot-id="snapshot?.snapshotId ?? null"
+        :content-version="contentVersion?.contentVersion ?? null"
         :context-id="branchContext.context?.contextId ?? null"
         :can-maintain-knowledge="repository?.capabilities.canUpdate ?? false"
         @close="evidenceDrawerOpen = false"
@@ -577,7 +577,7 @@ watch(
   border-radius: 7px 7px 0 0;
 }
 
-.snapshot-context {
+.contentVersion-context {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -587,7 +587,7 @@ watch(
   white-space: nowrap;
 }
 
-.snapshot-context strong {
+.contentVersion-context strong {
   max-width: 180px;
   overflow: hidden;
   color: #303036;
@@ -595,7 +595,7 @@ watch(
   text-overflow: ellipsis;
 }
 
-.snapshot-context span {
+.contentVersion-context span {
   padding-left: 8px;
   border-left: 1px solid #dedee3;
 }
@@ -816,7 +816,7 @@ watch(
 }
 
 @media (max-width: 1120px) {
-  .snapshot-context span:last-child {
+  .contentVersion-context span:last-child {
     display: none;
   }
 
@@ -831,7 +831,7 @@ watch(
     grid-template-columns: 1fr;
   }
 
-  .snapshot-context {
+  .contentVersion-context {
     display: none;
   }
 

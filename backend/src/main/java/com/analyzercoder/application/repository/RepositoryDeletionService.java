@@ -1,7 +1,7 @@
 package com.analyzercoder.application.repository;
 
 import com.analyzercoder.domain.repository.CodeRepositoryId;
-import com.analyzercoder.domain.repository.RepositorySnapshotPort;
+import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryGovernanceMapper;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -14,12 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class RepositoryDeletionService {
     private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryDeletionService.class);
     private final RepositoryGovernanceMapper mapper;
-    private final RepositorySnapshotPort managedFiles;
+    private final GitBranchContentVersionFactory workspaces;
 
     public RepositoryDeletionService(
-            RepositoryGovernanceMapper mapper, RepositorySnapshotPort managedFiles) {
+            RepositoryGovernanceMapper mapper, GitBranchContentVersionFactory workspaces) {
         this.mapper = mapper;
-        this.managedFiles = managedFiles;
+        this.workspaces = workspaces;
     }
 
     @Transactional
@@ -28,7 +28,7 @@ public class RepositoryDeletionService {
     }
 
     public void deleteManagedFiles(UUID repositoryId) {
-        managedFiles.deleteRepository(CodeRepositoryId.of(repositoryId));
+        workspaces.deleteRepository(CodeRepositoryId.of(repositoryId));
     }
 
     @Transactional

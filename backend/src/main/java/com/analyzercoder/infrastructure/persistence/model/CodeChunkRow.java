@@ -7,7 +7,7 @@ import java.util.UUID;
 public record CodeChunkRow(
         UUID id,
         UUID repositoryId,
-        UUID snapshotId,
+        UUID contentVersion,
         String commitSha,
         String filePath,
         String symbolId,

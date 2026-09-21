@@ -16,7 +16,7 @@ import com.analyzercoder.domain.chunk.CodeChunkStore;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.KnowledgeDriftMapper;
 import com.analyzercoder.infrastructure.persistence.model.KnowledgeDriftCandidateRow;
@@ -169,7 +169,7 @@ class KnowledgeDriftServiceTest {
                         4,
                         "CURRENT",
                         repository.currentCommit(),
-                        repository.currentSnapshotId().value(),
+                        repository.currentContentVersion().value(),
                         "已核对退款实现",
                         ACCOUNT_ID))
                 .thenReturn(1);
@@ -186,7 +186,7 @@ class KnowledgeDriftServiceTest {
         assertThat(event.previousStatus()).isEqualTo("SUSPECT");
         assertThat(event.resultStatus()).isEqualTo("CURRENT");
         assertThat(event.toCommit()).isEqualTo("current-commit");
-        assertThat(event.toSnapshotId()).isEqualTo(repository.currentSnapshotId().value());
+        assertThat(event.toContentVersion()).isEqualTo(repository.currentContentVersion().value());
     }
 
     @Test
@@ -264,7 +264,7 @@ class KnowledgeDriftServiceTest {
                 "current-commit",
                 "digest",
                 false,
-                RepositorySnapshotId.of(UUID.fromString("20000000-0000-0000-0000-000000000002")),
+                RepositoryContentVersion.of(UUID.fromString("20000000-0000-0000-0000-000000000002")),
                 path,
                 path.resolve(".codegraph"),
                 now,

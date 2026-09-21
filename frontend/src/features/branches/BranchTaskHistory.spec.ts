@@ -5,7 +5,7 @@ import BranchTaskHistory from './BranchTaskHistory.vue';
 import { branchesApi } from '@/api/branches';
 vi.mock('@/api/branches', () => ({ branchesApi: { preparationHistory: vi.fn() } }));
 beforeEach(() => vi.resetAllMocks());
-const history = (id: string) => ({ items: [{ id: 'j-' + id, branchId: id, kind: 'GRAPH' as const, status: 'FAILED' as const, stage: 'FAILED', snapshotId: 'old-' + id, error: id + ' graph build failed' }], total: 1, pageNum: 1, pageSize: 15, pages: 1 });
+const history = (id: string) => ({ items: [{ id: 'j-' + id, branchId: id, kind: 'GRAPH' as const, status: 'FAILED' as const, stage: 'FAILED', contentVersion: 'old-' + id, error: id + ' graph build failed' }], total: 1, pageNum: 1, pageSize: 15, pages: 1 });
 function panel() { return mount(BranchTaskHistory, { props: { repositoryId: 'p', branchId: 'release', revision: '' }, global: { stubs: { AppPagination: true, ElButton: true, ElAlert: true } } }); }
 it('loads paginated history for the dialog branch and displays its failure reason', async () => {
   vi.mocked(branchesApi.preparationHistory).mockResolvedValue(history('release'));

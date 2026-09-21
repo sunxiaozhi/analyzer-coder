@@ -17,7 +17,7 @@ import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/** 遍历受控仓库快照，按忽略规则、文件类型和大小限制生成待索引文件。 */
+/** 遍历受控仓库内容版本，按忽略规则、文件类型和大小限制生成待索引文件。 */
 @Component
 public class FileSystemRepositoryScanner implements RepositoryScannerPort {
 
@@ -88,7 +88,7 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
 
     @Override
     public List<ScannedRepositoryFile> scan(CodeRepository repository) {
-        Path root = repository.currentSnapshotPath();
+        Path root = repository.currentContentVersionPath();
         if (root == null || !Files.isDirectory(root)) {
             throw new IllegalStateException("仓库尚未发布可读取的代码版本");
         }
@@ -109,7 +109,7 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
     public List<ScannedRepositoryFile> scan(
             CodeRepository repository, Set<String> relativePaths) {
         if (relativePaths == null) return scan(repository);
-        Path root = repository.currentSnapshotPath();
+        Path root = repository.currentContentVersionPath();
         if (root == null || !Files.isDirectory(root)) {
             throw new IllegalStateException("仓库尚未发布可读取的代码版本");
         }
@@ -129,7 +129,7 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
 
     @Override
     public List<ScannedRepositoryFile> scanMarkdown(CodeRepository repository) {
-        Path root = repository.currentSnapshotPath();
+        Path root = repository.currentContentVersionPath();
         if (root == null || !Files.isDirectory(root)) {
             throw new IllegalStateException("仓库尚未发布可读取的代码版本");
         }

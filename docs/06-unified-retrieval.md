@@ -5,7 +5,7 @@
 
 ## 1 功能范围与角色
 
-- 范围：单一检索入口、查询分析、五个召回通道（代码关键词、字符向量 / 语义向量、知识关键词、知识向量、图谱相关通道）、候选去重与融合排序、结果字段与来源标注、快照与分支范围限定、知识可见性约束、降级与诊断、结果回到来源。
+- 范围：单一检索入口、查询分析、五个召回通道（代码关键词、字符向量 / 语义向量、知识关键词、知识向量、图谱相关通道）、候选去重与融合排序、结果字段与来源标注、内容版本与分支范围限定、知识可见性约束、降级与诊断、结果回到来源。
 - 角色与权限级别：`READ`、`MAINTAIN`、`MANAGE` 三级，另有仓库所有者（owner）关系与超级管理员角色。检索只要求仓库 `READ`；分支知识清单接口在 `MAINTAIN` 时额外可见草稿。
 - 消费者：网页代码检索工作台、证据问答、MCP 工具（`search_project`）。
 - 非范围：不构建索引、不生成回答文本、不做重排模型训练；相关度分数不是正确率。
@@ -88,7 +88,7 @@
   - 相似度定义为 `GREATEST(0, 1 - (embedding <=> 查询向量))`，即余弦距离转相似度。
   - 只召回与当前模型、当前维度匹配的向量记录，且要求向量记录的 `content_hash` 与片段当前 `content_hash` 一致。
   - 排序为向量距离升序，其次路径、起始行（空值优先）。
-  - 分支模式（有 `X-Branch-Context`）下若该快照没有任何匹配向量的记录，不启用该通道，而是登记 `BRANCH_VECTOR_NOT_READY`。
+  - 分支模式（有 `X-Branch-Context`）下若该内容版本没有任何匹配向量的记录，不启用该通道，而是登记 `BRANCH_VECTOR_NOT_READY`。
   - 向量化查询本身抛异常时不启用向量通道，登记 `VECTOR_RETRIEVAL_FAILED`（见 RET-023）。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:567`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:592`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:586`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:104`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:512`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1526`
 
@@ -122,7 +122,7 @@
 - 规则：
   - 通道名为 `HEURISTIC_CALL_REFERENCE`，权重 0.9，属词法通道；通道候选的固定 `lexical_score` 为 0.24。
   - 参与条件：当前是**默认模式**（没有 `X-Branch-Context`），且关键词通道已召回至少一个带符号名的片段；最多取前 8 个去重符号名作为种子。
-  - 关系数据来自索引阶段写入的 `heuristic_call_edges`，该表按仓库当前快照过滤。
+  - 关系数据来自索引阶段写入的 `heuristic_call_edges`，该表按仓库当前内容版本过滤。
   - 召回规则：种子符号作为边的目标符号时返回边的源片段，作为源符号时返回边的目标片段；每条边的关系固定为 `CALLS`。
   - 该数据不是静态分析结果：接口层对图谱结果显式声明算法为 `SYMBOL_TOKEN_FOLLOWED_BY_PARENTHESIS`，并声明无法可靠识别重载、动态分派、反射、别名与跨语言调用。
   - 分支模式不启用该通道，因此分支检索没有图谱相关候选。
@@ -170,7 +170,7 @@
 ### RET-016 代码结果字段
 
 - 需求：代码命中提供足以定位与展示的全部字段，并标注来源与匹配性质。
-- 规则字段：`sourceType = "CODE"`、`chunkId`、`snapshotId`、`filePath`、`symbolName`、`symbolKind`、`startLine`、`endLine`、`content`、`contentHash`、`score`、`lexicalScore`、`similarityScore`、`similarityKind`、`channels`。
+- 规则字段：`sourceType = "CODE"`、`chunkId`、`contentVersion`、`filePath`、`symbolName`、`symbolKind`、`startLine`、`endLine`、`content`、`contentHash`、`score`、`lexicalScore`、`similarityScore`、`similarityKind`、`channels`。
 - 规则：
   - 代码证据的 `title` 为符号名；符号名为空时退化为文件路径。
   - 代码证据不返回 `sourceScope`（为空），`codeReferences` 为空列表。
@@ -182,10 +182,10 @@
 
 - 需求：知识命中除定位信息外，还要标明知识标识、适用范围与关联代码位置。
 - 规则：
-  - `sourceType = "KNOWLEDGE"`，`knowledgeCardId` 为知识卡 id，`chunkId` 与 `snapshotId` 为空。
+  - `sourceType = "KNOWLEDGE"`，`knowledgeCardId` 为知识卡 id，`chunkId` 与 `contentVersion` 为空。
   - `title` 为知识标题，`filePath` 为伪路径 `knowledge://<cardId>`，`symbolName`/`symbolKind`/`startLine`/`endLine` 为空。
   - `sourceScope` 为知识适用范围文案：默认模式不返回该字段；分支模式返回 `项目共享`、`分支专属 · <分支名>` 或 `指定分支 · <数量>`。
-  - `codeReferences` 为该知识卡当前修订绑定的代码引用列表，含 `chunkId`、`snapshotId`、`filePath`、`symbolName`、`startLine`、`endLine`、`contentHash` 与 `stale` 标记。
+  - `codeReferences` 为该知识卡当前修订绑定的代码引用列表，含 `chunkId`、`contentVersion`、`filePath`、`symbolName`、`startLine`、`endLine`、`contentHash` 与 `stale` 标记。
   - 知识卡的 `contentHash` 是标题、正文与标签拼接串的 MD5，不是知识正文的 SHA-256。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:722`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1248`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:39`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:526`、`frontend/src/api/intelligence.ts:112`
 
@@ -199,15 +199,15 @@
   - 前端不展示 `score`、`lexicalScore`、`similarityScore` 数值，只展示命中通道；检索结果列表以“命中 N 个代码片段、M 条知识”概括。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/RetrievalRanker.java:89`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:106`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1562`、`frontend/src/views/ChunksM0View.vue:87`
 
-### RET-019 检索范围限定当前阅读上下文或默认快照
+### RET-019 检索范围限定当前阅读上下文或默认内容版本
 
-- 需求：检索必须落在单一快照上：有阅读上下文（`X-Branch-Context`）时用该上下文的快照，否则用仓库默认版本令牌。
+- 需求：检索必须落在单一内容版本上：有阅读上下文（`X-Branch-Context`）时用该上下文的内容版本，否则用仓库默认版本令牌。
 - 规则：
-  - 阅读上下文由请求头 `X-Branch-Context` 指定的 contextId 解析为 `BranchReadContext`，其快照、提交号、内容路径在上下文创建时即固定。
-  - 默认模式的快照取 `repositories.current_snapshot_id`；该字段是仓库的默认版本令牌，在多分支下不等于当前阅读分支的快照。
-  - 默认模式的代码通道在 SQL 中以子查询 `snapshot_id = (SELECT current_snapshot_id FROM repositories WHERE id = ?)` 限定；分支模式改为直接比较上下文快照 id。
+  - 阅读上下文由请求头 `X-Branch-Context` 指定的 contextId 解析为 `BranchReadContext`，其内容版本、提交号、内容路径在上下文创建时即固定。
+  - 默认模式的内容版本取 `repositories.current_content_version`；该字段是仓库的默认版本令牌，在多分支下不等于当前阅读分支的内容版本。
+  - 默认模式的代码通道在 SQL 中以子查询 `content_version = (SELECT current_content_version FROM repositories WHERE id = ?)` 限定；分支模式改为直接比较上下文内容版本 id。
   - 分支模式下若检索的仓库与上下文仓库不一致，直接报错，不会混用两个来源。
-  - 检索结果中的代码证据 `snapshotId` 即被检索的快照，前端据此判断结果是否属于当前快照。
+  - 检索结果中的代码证据 `contentVersion` 即被检索的内容版本，前端据此判断结果是否属于当前内容版本。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:476`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:89`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:497`、`backend/src/main/java/com/analyzercoder/interfaces/rest/BranchRequestContext.java:19`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:347`、`frontend/src/views/ChunksM0View.vue:247`
 
 ### RET-020 分支模式的知识版本固化
@@ -216,17 +216,17 @@
 - 规则：
   - 创建阅读上下文时，把当时满足“已发布 + 已审核 + 分支范围命中”的知识卡及其修订号写入 `branch_context_knowledge`。
   - 分支模式的知识查询必须 JOIN 该固化表，且要求 `revision` 与固化记录一致。
-  - 分支模式的知识追加适用范围与分支校验条件：`enforcement = 'REFERENCE'` 且无代码引用的知识可直接适用；其余需要该分支该快照下存在 `state = 'CURRENT'` 的分支校验记录；同时排除存在 `REVIEW_REQUIRED` 或 `INVALID` 校验记录的知识。
+  - 分支模式的知识追加适用范围与分支校验条件：`enforcement = 'REFERENCE'` 且无代码引用的知识可直接适用；其余需要该分支该内容版本下存在 `state = 'CURRENT'` 的分支校验记录；同时排除存在 `REVIEW_REQUIRED` 或 `INVALID` 校验记录的知识。
   - 默认模式不查该固化表，只按仓库默认分支范围与代码引用新鲜度判断。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:412`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:546`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:458`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:41`
 
 ### RET-021 召回阶段过滤而非截断后过滤
 
-- 需求：范围限定必须发生在召回 SQL 的过滤条件里，而不是先召回再截断，否则候选池会被无关快照占满。
+- 需求：范围限定必须发生在召回 SQL 的过滤条件里，而不是先召回再截断，否则候选池会被无关内容版本占满。
 - 规则：
-  - 各通道 SQL 都先按快照、模型、维度等条件过滤，再 `LIMIT` 通道上限；快照条件出现在 `WHERE` 子句中，位于 `LIMIT` 之前。
+  - 各通道 SQL 都先按内容版本、模型、维度等条件过滤，再 `LIMIT` 通道上限；内容版本条件出现在 `WHERE` 子句中，位于 `LIMIT` 之前。
   - 因此 `limit` 的收紧只影响返回条数，不影响候选池的正确性。
-  - 例外与补充：默认模式的前端在拿到结果后仍会再做一次客户端过滤——只保留 `sourceType = KNOWLEDGE` 或 `snapshotId` 与当前快照一致的代码证据，并把被丢弃的数量展示为“忽略旧快照 N 条”。这是对默认版本令牌可能在请求期间变更的兜底，不替代服务端召回阶段的过滤。
+  - 例外与补充：默认模式的前端在拿到结果后仍会再做一次客户端过滤——只保留 `sourceType = KNOWLEDGE` 或 `contentVersion` 与当前内容版本一致的代码证据，并把被丢弃的数量展示为“忽略旧内容版本 N 条”。这是对默认版本令牌可能在请求期间变更的兜底，不替代服务端召回阶段的过滤。
 - 证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:497`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:509`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:517`、`frontend/src/views/ChunksM0View.vue:247`、`frontend/src/views/ChunksM0View.vue:92`
 
 ### RET-022 仅返回已发布且已审核的知识
@@ -234,7 +234,7 @@
 - 需求：联合检索与知识向量统计只看到已经发布、已通过人工评审、来源版本未失效，且代码引用仍然有效的知识。
 - 规则：
   - 默认模式（SQL 片段 `validKnowledge`，`backend/src/main/resources/mappers/IntelligenceMapper.xml:41` 至 `:61`）逐条要求：`c.publication_status='PUBLISHED'`（`:42`）、`c.review_status='APPROVED'`（`:47`）、`c.source_version_status NOT IN ('SUSPECT','STALE')`（`:48`）。
-  - 默认模式还要求知识命中分支范围（`knowledge_branch_scopes`，`ALL_BRANCHES` 或包含仓库默认分支），并要求不存在“本修订引用了某个代码位置、但该位置在当前默认快照下已找不到同路径同行同摘要的片段”的情况（`:49`）；这一条通过 `knowledge_code_refs` 左连接 `code_chunks` 判定，是知识失效的兜底过滤。
+  - 知识必须直接属于当前 `branch_id`，并且不存在“本修订引用了某个代码位置、但该位置在当前分支内容下已找不到同路径同行同摘要的片段”的情况；这一条通过 `knowledge_code_refs` 左连接当前分支 `code_chunks` 判定，是知识失效的兜底过滤。
   - 分支模式（SQL 片段 `validBranchKnowledge`，`backend/src/main/resources/mappers/IntelligenceMapper.xml:458` 至 `:469`）使用 `live.publication_status='PUBLISHED'`（`:459`）与 `live.review_status='APPROVED'`；不再单独判 `SUSPECT/STALE`，改由分支校验状态表达失效。
   - 向量覆盖统计使用同一约束：`VectorIndexQueryMapper` 的 `validKnowledge` 片段同样包含 `PUBLISHED`、`APPROVED`、`SUSPECT/STALE` 与代码引用新鲜度四项，位置 `backend/src/main/resources/mappers/VectorIndexQueryMapper.xml:29` 至 `:53`。
   - 知识清单接口 `GET /api/repositories/{repoId}/knowledge` 在调用方不具备 `MAINTAIN` 时（`includeDraft = false`）追加同样的三项条件。
@@ -246,32 +246,32 @@
 - 规则：
   - 通道异常被捕获。代码类通道异常登记为 `CODE_KEYWORD_FAILED`、`CODE_VECTOR_QUERY_FAILED`、`HEURISTIC_RELATION_FAILED`；知识类通道异常登记为 `KNOWLEDGE_KEYWORD_FAILED`、`KNOWLEDGE_VECTOR_QUERY_FAILED`。
   - 向量化查询失败时统一登记 `CODE_VECTOR` / `KNOWLEDGE_VECTOR` + `VECTOR_RETRIEVAL_FAILED`，并尽力从模型配置读取当前模型名与能力；读取也失败时填 `unknown` / `UNKNOWN`。
-  - 默认快照查询失败登记 `CURRENT_SNAPSHOT` + `SNAPSHOT_LOOKUP_FAILED`。
-  - 分支模式下该快照没有匹配模型的向量时登记 `BRANCH_VECTOR_NOT_READY`，说明“使用关键词检索”。
+  - 默认内容版本查询失败登记 `CURRENT_CONTENT_VERSION` + `CONTENT_VERSION_LOOKUP_FAILED`。
+  - 分支模式下该内容版本没有匹配模型的向量时登记 `BRANCH_VECTOR_NOT_READY`，说明“使用关键词检索”。
   - 每条不可用记录含 `channel`、`reason`、`detail`；`detail` 为异常消息（为空时取异常类名），最长截断到 240 字符。
   - 只要存在任一不可用通道，诊断的 `degraded` 即为 `true`，`degradationReasons` 为 `通道:原因` 形式的列表。
-  - 诊断还包含 `enabledChannels`、每通道 `recalledCount` 与 `durationMs`、返回候选数 `recalledCount`（融合后的条数）与整体 `durationMs`，以及本次使用的 `snapshotId`、`vectorModel`、`retrievalCapability`。
+  - 诊断还包含 `enabledChannels`、每通道 `recalledCount` 与 `durationMs`、返回候选数 `recalledCount`（融合后的条数）与整体 `durationMs`，以及本次使用的 `contentVersion`、`vectorModel`、`retrievalCapability`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:503`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:631`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:669`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:648`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1585`、`backend/src/test/java/com/analyzercoder/application/intelligence/IntelligenceServiceMultiTurnTest.java:346`
 
 ### RET-024 前端展示检索范围与降级提示
 
-- 需求：前端必须让用户看到当前检索范围（快照与检索能力）以及降级原因。
+- 需求：前端必须让用户看到当前检索范围（内容版本与检索能力）以及降级原因。
 - 规则：
-  - 检索完成后，结果区上方展示诊断条：快照前 8 位（不可用时显示“不可用”）、检索能力（`SEMANTIC_EMBEDDING` → 语义向量，`CHARACTER_HASH` → 字符相似度，其余 → 无向量能力），以及每个启用通道的中文名。
+  - 检索完成后，结果区上方展示诊断条：内容版本前 8 位（不可用时显示“不可用”）、检索能力（`SEMANTIC_EMBEDDING` → 语义向量，`CHARACTER_HASH` → 字符相似度，其余 → 无向量能力），以及每个启用通道的中文名。
   - 降级时额外以醒目文本展示 `degradationReasons` 拼接串；为空时退化为不可用通道的 `reason` 列表。
   - 通道中文名映射只覆盖 `CODE_KEYWORD`、`CODE_SEMANTIC`、`CODE_CHARACTER_SIMILARITY`、`HEURISTIC_CALL_REFERENCE`；知识类通道名（`KNOWLEDGE_KEYWORD`、`KNOWLEDGE_SEMANTIC`、`KNOWLEDGE_CHARACTER_SIMILARITY`）未在映射表中，会原样展示英文标识。
-  - 结果摘要区分代码与知识数量，并在存在被忽略的旧快照结果时追加“忽略旧快照 N 条”。
+  - 结果摘要区分代码与知识数量，并在存在被忽略的旧内容版本结果时追加“忽略旧内容版本 N 条”。
   - 结果条目展示标题（知识标题或文件名）、类型（知识或符号种类）、起始行、路径或伪路径、正文摘要与命中通道。
 - 证据：`frontend/src/views/ChunksM0View.vue:417`、`frontend/src/views/ChunksM0View.vue:421`、`frontend/src/views/ChunksM0View.vue:291`、`frontend/src/views/ChunksM0View.vue:490`、`frontend/src/views/ChunksM0View.vue:495`
 
 ### RET-025 代码结果回到来源
 
-- 需求：点击代码命中应定位到对应文件与行号，并保持当前快照范围。
+- 需求：点击代码命中应定位到对应文件与行号，并保持当前内容版本范围。
 - 规则：
   - 点击代码命中会打开文件证据抽屉并调用文件打开逻辑，携带 `filePath`、`startLine`、`endLine` 与 `symbolName`。
-  - 文件内容按当前快照请求；返回文件的快照与页面快照不一致时拒绝展示，提示“代码快照已更新，请重新加载页面后查看源码”。
-  - 路由参数 `path`/`startLine`/`endLine`/`symbol` 会驱动同样的定位行为；若当前快照中找不到该文件，提示“文件可能已删除或重命名”。
-  - 若路由携带的 `snapshotId` 与当前快照不一致，提示该证据来自历史快照、当前源码不能代表当时内容。
+  - 文件内容按当前内容版本请求；返回文件的内容版本与页面内容版本不一致时拒绝展示，提示“代码内容版本已更新，请重新加载页面后查看源码”。
+  - 路由参数 `path`/`startLine`/`endLine`/`symbol` 会驱动同样的定位行为；若当前内容版本中找不到该文件，提示“文件可能已删除或重命名”。
+  - 若路由携带的 `contentVersion` 与当前内容版本不一致，提示该证据来自历史内容版本、当前源码不能代表当时内容。
   - 向量索引面板的代码行点击也会跳转到检索页并携带路径与行号。
 - 证据：`frontend/src/views/ChunksM0View.vue:277`、`frontend/src/views/ChunksM0View.vue:214`、`frontend/src/views/ChunksM0View.vue:137`、`frontend/src/views/ChunksM0View.vue:144`、`frontend/src/features/indexing/CurrentVectorIndexPanel.vue:33`
 
@@ -282,7 +282,7 @@
   - 知识命中跳转到知识页并携带 `cardId`，同时带上当前 `branchId` 与 `contextId`。
   - 代码结果侧边的文件证据面板同样可以打开知识卡，或把绑定位置回传到文件打开逻辑。
   - 文件证据面板展示的知识来自另一个接口 `code-evidence-context`（确定性匹配：直接绑定、路径范围、符号范围、仓库范围），并在界面文案中明确“不把关键词相似结果冒充适用规则”，与联合检索的关键词召回形成对照。
-  - 文件证据面板可跳转到代码图谱视图并携带路径、符号、快照与上下文。
+  - 文件证据面板可跳转到代码图谱视图并携带路径、符号、内容版本与上下文。
 - 证据：`frontend/src/views/ChunksM0View.vue:315`、`frontend/src/features/code/CodeEvidencePanel.vue:163`、`frontend/src/features/code/CodeEvidencePanel.vue:168`、`frontend/src/features/code/CodeEvidencePanel.vue:66`、`frontend/src/features/code/CodeEvidencePanel.vue:92`
 
 ### RET-027 证据问答复用联合检索
@@ -292,8 +292,8 @@
   - 提问时把“最近 3 轮问题的截断文本 + 当前问题”拼成检索查询；单轮问题截断到 600 字符。
   - 调用联合检索取前 10 条证据，并把检索诊断原样保存在回答中。
   - 无证据时不调用模型，回答固定为“未找到达到相关度门槛的证据”，`evidenceStatus = INSUFFICIENT`、`fallbackReason = NO_EVIDENCE`。
-  - 回答使用的快照优先取第一条证据的 `snapshotId`，否则取检索诊断的 `snapshotId`。
-  - 分支模式下，同一线程的历史轮次快照必须与当前上下文快照一致，否则拒绝追问并要求新建会话。
+  - 回答使用的内容版本优先取第一条证据的 `contentVersion`，否则取检索诊断的 `contentVersion`。
+  - 分支模式下，同一线程的历史轮次内容版本必须与当前上下文内容版本一致，否则拒绝追问并要求新建会话。
   - 引用落库时保存正文的 SHA-256 摘要与名次，可原样恢复。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:436`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:203`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:246`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:234`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:192`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:817`
 
@@ -311,11 +311,11 @@
 
 ### 3.1 参与检索的数据
 
-- `code_chunks`：代码片段来源，按 `snapshot_id` 与 `content_hash` 参与过滤。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:375`
+- `code_chunks`：代码片段来源，按 `content_version` 与 `content_hash` 参与过滤。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:375`
 - `chunk_embeddings` / `knowledge_card_embeddings`：向量来源，命中条件含模型、维度与摘要/修订一致性。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:421`
 - `knowledge_cards` 与其分支范围、分支校验、代码引用表：知识可见性来源。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:41`
 - `branch_context_knowledge`：分支模式下固化的知识修订清单。证据：`backend/src/main/resources/db/migration/V3__branch_contexts.sql:75`
-- `heuristic_call_edges`：图谱相关通道的关系来源，按仓库当前快照过滤。证据：`backend/src/main/java/com/analyzercoder/infrastructure/persistence/mapper/GraphRetrievalMapper.java:28`
+- `heuristic_call_edges`：图谱相关通道的关系来源，按仓库当前内容版本过滤。证据：`backend/src/main/java/com/analyzercoder/infrastructure/persistence/mapper/GraphRetrievalMapper.java:28`
 - `vector_model_configs` / `vector_model_activation`：决定通道名、查询向量与模型过滤条件。证据：`backend/src/main/resources/mappers/VectorIndexQueryMapper.xml:4`
 
 ### 3.2 状态字段
@@ -323,8 +323,8 @@
 - 证据来源类型：`CODE`、`KNOWLEDGE`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:722`
 - 相似度种类：`NONE`、`CHARACTER_HASH`、`SEMANTIC_EMBEDDING`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1562`
 - 检索能力：`CHARACTER_HASH`、`SEMANTIC_EMBEDDING`、`UNKNOWN`（仅向量化失败且读不到配置时出现）。证据：`frontend/src/api/intelligence.ts:52`
-- 通道名：`CODE_KEYWORD`、`CODE_SEMANTIC`、`CODE_CHARACTER_SIMILARITY`、`HEURISTIC_CALL_REFERENCE`、`KNOWLEDGE_KEYWORD`、`KNOWLEDGE_SEMANTIC`、`KNOWLEDGE_CHARACTER_SIMILARITY`，以及失败占位 `CODE_VECTOR`、`KNOWLEDGE_VECTOR`、`CURRENT_SNAPSHOT`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:568`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:639`、`frontend/src/views/ChunksM0View.vue:291`
-- 降级原因码：`EMPTY_QUERY`、`SNAPSHOT_LOOKUP_FAILED`、`CODE_KEYWORD_FAILED`、`HEURISTIC_RELATION_FAILED`、`KNOWLEDGE_KEYWORD_FAILED`、`CODE_VECTOR_QUERY_FAILED`、`KNOWLEDGE_VECTOR_QUERY_FAILED`、`VECTOR_RETRIEVAL_FAILED`、`BRANCH_VECTOR_NOT_READY`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:479`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:586`
+- 通道名：`CODE_KEYWORD`、`CODE_SEMANTIC`、`CODE_CHARACTER_SIMILARITY`、`HEURISTIC_CALL_REFERENCE`、`KNOWLEDGE_KEYWORD`、`KNOWLEDGE_SEMANTIC`、`KNOWLEDGE_CHARACTER_SIMILARITY`，以及失败占位 `CODE_VECTOR`、`KNOWLEDGE_VECTOR`、`CURRENT_CONTENT_VERSION`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:568`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:639`、`frontend/src/views/ChunksM0View.vue:291`
+- 降级原因码：`EMPTY_QUERY`、`CONTENT_VERSION_LOOKUP_FAILED`、`CODE_KEYWORD_FAILED`、`HEURISTIC_RELATION_FAILED`、`KNOWLEDGE_KEYWORD_FAILED`、`CODE_VECTOR_QUERY_FAILED`、`KNOWLEDGE_VECTOR_QUERY_FAILED`、`VECTOR_RETRIEVAL_FAILED`、`BRANCH_VECTOR_NOT_READY`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:479`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:586`
 
 ## 4 接口清单
 
@@ -360,9 +360,9 @@
 
 - 前端通道中文名映射缺少三个知识类通道（`KNOWLEDGE_KEYWORD`、`KNOWLEDGE_SEMANTIC`、`KNOWLEDGE_CHARACTER_SIMILARITY`），诊断条会把它们原样显示为英文标识。证据：`frontend/src/views/ChunksM0View.vue:291`
 - 诊断条只在检索成功返回后渲染；检索请求整体失败时只弹错误提示，用户看不到失败时的范围与降级信息。证据：`frontend/src/views/ChunksM0View.vue:256`
-- 前端结果列表对默认模式做了客户端快照过滤（丢弃非当前快照的代码证据），但分支模式下该过滤仍会保留 `KNOWLEDGE` 证据而只按 `snapshotId` 比较代码证据；由于知识证据的 `snapshotId` 本来就为空，分支模式下的知识证据不会被该过滤影响，判断逻辑依赖 `sourceType` 特例，可读性较差。证据：`frontend/src/views/ChunksM0View.vue:247`
+- 前端结果列表对默认模式做了客户端内容版本过滤（丢弃非当前内容版本的代码证据），但分支模式下该过滤仍会保留 `KNOWLEDGE` 证据而只按 `contentVersion` 比较代码证据；由于知识证据的 `contentVersion` 本来就为空，分支模式下的知识证据不会被该过滤影响，判断逻辑依赖 `sourceType` 特例，可读性较差。证据：`frontend/src/views/ChunksM0View.vue:247`
 - `RetrievalDiagnostics.recalledCount` 语义是“融合后返回的候选数”，与每通道 `recalledCount`（该通道召回条数）同名不同义，容易误读；是否有意为之需人工确认。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1581`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1592`
-- 默认模式的图谱相关通道依赖索引阶段生成的 `heuristic_call_edges`；该表按仓库当前快照过滤，因此当默认版本令牌变更而索引任务尚未运行时，该通道会因为没有当前快照的边而静默返回空，不登记为降级。证据：`backend/src/main/java/com/analyzercoder/infrastructure/persistence/mapper/GraphRetrievalMapper.java:40`
-- 检索没有结果缓存，也没有对相同 `(repositoryId, query, snapshotId)` 的复用；每次请求都会重新向量化查询文本并执行全通道查询。是否需要缓存需人工确认。
+- 默认模式的图谱相关通道依赖索引阶段生成的 `heuristic_call_edges`；该表按仓库当前内容版本过滤，因此当默认版本令牌变更而索引任务尚未运行时，该通道会因为没有当前内容版本的边而静默返回空，不登记为降级。证据：`backend/src/main/java/com/analyzercoder/infrastructure/persistence/mapper/GraphRetrievalMapper.java:40`
+- 检索没有结果缓存，也没有对相同 `(repositoryId, query, contentVersion)` 的复用；每次请求都会重新向量化查询文本并执行全通道查询。是否需要缓存需人工确认。
 - 关键词通道的打分公式与术语个数归一（除以 `termCount`）在术语很多时会把单术语命中权重稀释；实现如此，是否符合预期需人工确认。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:85`
-- 分支模式下该快照没有匹配向量时只登记 `BRANCH_VECTOR_NOT_READY` 并继续用关键词检索，没有提供“立即补建向量”的前端动作；补建需去分支任务页面另行提交（见 05 文档 IDX-022）。
+- 分支模式下该内容版本没有匹配向量时只登记 `BRANCH_VECTOR_NOT_READY` 并继续用关键词检索，没有提供“立即补建向量”的前端动作；补建需去分支任务页面另行提交（见 05 文档 IDX-022）。

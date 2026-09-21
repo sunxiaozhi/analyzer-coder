@@ -12,10 +12,10 @@
             <arg column="current_commit" javaType="java.lang.String"/>
             <arg column="worktree_digest" javaType="java.lang.String"/>
             <arg column="worktree_dirty" javaType="_boolean"/>
-            <arg column="current_snapshot_id" javaType="java.util.UUID"/>
-            <arg column="current_snapshot_path" javaType="java.lang.String"/>
+            <arg column="current_content_version" javaType="java.util.UUID"/>
+            <arg column="current_workspace_path" javaType="java.lang.String"/>
             <arg column="codegraph_path" javaType="java.lang.String"/>
-            <arg column="snapshot_created_at" javaType="java.time.Instant"/>
+            <arg column="content_published_at" javaType="java.time.Instant"/>
             <arg column="last_scanned_at" javaType="java.time.Instant"/>
             <arg column="owner_account_id" javaType="java.util.UUID"/>
             <arg column="ownership_version" javaType="_long"/>
@@ -28,13 +28,13 @@
     </resultMap>
 
     <sql id="columns">
-        id,name,normalized_name,path,source_type,default_branch,current_commit,worktree_digest,worktree_dirty,current_snapshot_id,current_snapshot_path,codegraph_path,snapshot_created_at,last_scanned_at,owner_account_id,ownership_version,repository_status,created_at,updated_at,description,repository_version
+        id,name,normalized_name,path,source_type,default_branch,current_commit,worktree_digest,worktree_dirty,current_content_version,current_workspace_path,codegraph_path,content_published_at,last_scanned_at,owner_account_id,ownership_version,repository_status,created_at,updated_at,description,repository_version
     </sql>
 
     <insert id="insertOwned">
         INSERT INTO repositories (<include refid="columns"/>)
         VALUES
-        (#{id},#{name},#{normalizedName},#{path},#{sourceType},#{defaultBranch},#{currentCommit},#{worktreeDigest},#{worktreeDirty},#{currentSnapshotId},#{currentSnapshotPath},#{codegraphPath},#{snapshotCreatedAt},#{lastScannedAt},#{ownerAccountId},#{ownershipVersion},#{repositoryStatus},#{createdAt},#{updatedAt},#{description},#{repositoryVersion})
+        (#{id},#{name},#{normalizedName},#{path},#{sourceType},#{defaultBranch},#{currentCommit},#{worktreeDigest},#{worktreeDirty},#{currentContentVersion},#{currentContentVersionPath},#{codegraphPath},#{contentVersionCreatedAt},#{lastScannedAt},#{ownerAccountId},#{ownershipVersion},#{repositoryStatus},#{createdAt},#{updatedAt},#{description},#{repositoryVersion})
     </insert>
 
     <update id="update">
@@ -42,9 +42,9 @@
         source_type=#{sourceType},
         default_branch=COALESCE(default_branch,#{defaultBranch}), current_commit=#{currentCommit},
         worktree_digest=#{worktreeDigest},
-        worktree_dirty=#{worktreeDirty}, current_snapshot_id=#{currentSnapshotId},
-        current_snapshot_path=#{currentSnapshotPath},
-        codegraph_path=#{codegraphPath}, snapshot_created_at=#{snapshotCreatedAt}, last_scanned_at=#{lastScannedAt},
+        worktree_dirty=#{worktreeDirty}, current_content_version=#{currentContentVersion},
+        current_workspace_path=#{currentContentVersionPath},
+        codegraph_path=#{codegraphPath}, content_published_at=#{contentVersionCreatedAt}, last_scanned_at=#{lastScannedAt},
         updated_at=#{updatedAt}
         WHERE id=#{id} AND deleted_at IS NULL
     </update>
@@ -59,8 +59,8 @@
     </select>
     <select id="findVisiblePage" resultMap="repositoryRow">
         SELECT DISTINCT r.id,r.name,r.normalized_name,r.path,r.source_type,r.default_branch,r.current_commit,
-        r.worktree_digest,r.worktree_dirty,r.current_snapshot_id,r.current_snapshot_path,r.codegraph_path,
-        r.snapshot_created_at,r.last_scanned_at,r.owner_account_id,r.ownership_version,r.repository_status,
+        r.worktree_digest,r.worktree_dirty,r.current_content_version,r.current_workspace_path,r.codegraph_path,
+        r.content_published_at,r.last_scanned_at,r.owner_account_id,r.ownership_version,r.repository_status,
         r.created_at,r.updated_at,r.description,r.repository_version
         FROM repositories r
         LEFT JOIN repository_permissions p ON p.repo_id=r.id AND p.account_id=#{accountId}

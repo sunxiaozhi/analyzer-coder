@@ -17,16 +17,16 @@ const visibleBranches = computed(() => props.branches.filter(branch => showArchi
 const statuses = computed(() => new Map(props.indexes.map(item => [item.branchId, item])));
 function status(branch: RepositoryBranch) {
   const value = statuses.value.get(branch.id);
-  return value?.snapshotId === branch.snapshotId ? value : undefined;
+  return value?.contentVersion === branch.contentVersion ? value : undefined;
 }
 function activeJob(branch: RepositoryBranch) { return props.jobs.find(job => job.branchId === branch.id && ['QUEUED', 'RUNNING'].includes(job.status)); }
 function unavailable(branch: RepositoryBranch) { return props.disabled || Boolean(activeJob(branch)) || branch.status === 'BUILDING' || branch.trackingStatus !== 'ACTIVE'; }
-function readable(branch: RepositoryBranch) { return branch.trackingStatus === 'ACTIVE' && branch.status === 'READY' && Boolean(branch.snapshotId) && Boolean(status(branch)?.contentReady); }
+function readable(branch: RepositoryBranch) { return branch.trackingStatus === 'ACTIVE' && branch.status === 'READY' && Boolean(branch.contentVersion) && Boolean(status(branch)?.contentReady); }
 function syncLabel(branch: RepositoryBranch) {
   if (branch.trackingStatus === 'ARCHIVED') return '已取消跟踪';
   if (branch.status === 'BUILDING') return '同步中';
   if (branch.status === 'FAILED') return '同步失败';
-  return branch.snapshotId ? '已同步' : '未同步';
+  return branch.contentVersion ? '已同步' : '未同步';
 }
 function indexLabel(branch: RepositoryBranch, kind: 'content' | 'graph') {
   const job = activeJob(branch);
@@ -42,7 +42,7 @@ function command(branch: RepositoryBranch, action: string) {
   if (unavailable(branch)) return;
   if (action === 'archive' && props.canManage) emit('archive', branch.id);
   else if (props.canMaintain && action === 'vectors' && status(branch)?.contentReady) emit('vectors', branch.id);
-  else if (props.canMaintain && ['SYNC', 'CONTENT', 'GRAPH'].includes(action) && (action === 'SYNC' || branch.snapshotId)) emit('operate', branch.id, action as BranchCodeOperation);
+  else if (props.canMaintain && ['SYNC', 'CONTENT', 'GRAPH'].includes(action) && (action === 'SYNC' || branch.contentVersion)) emit('operate', branch.id, action as BranchCodeOperation);
 }
 </script>
 <template>
@@ -56,7 +56,7 @@ function command(branch: RepositoryBranch, action: string) {
           <tr v-for="branch in visibleBranches" :key="branch.id" :class="{ 'branch-row-reading': readingBranchId === branch.id, 'branch-row-archived': branch.trackingStatus === 'ARCHIVED' }">
             <th scope="row" class="branch-name"><div><GitBranch :size="15" /><button type="button" class="branch-detail-link" :disabled="disabled" @click="emit('select', branch.id, 'status')">{{ branch.name }}</button></div><div class="branch-badges"><small v-if="branch.name === defaultBranch" class="default-badge">默认</small><small v-if="branch.id === readingBranchId" class="reading-badge">当前阅读</small><small v-if="activeJob(branch)" class="running-badge">任务执行中</small></div></th>
             <td><code>{{ branch.commitSha?.slice(0, 12) ?? '—' }}</code></td>
-            <td><button type="button" class="state-link" :data-tone="branch.status === 'FAILED' ? 'danger' : branch.snapshotId ? 'ready' : 'pending'" :disabled="disabled" @click="emit('select', branch.id, 'status')"><i></i>{{ syncLabel(branch) }}</button></td>
+            <td><button type="button" class="state-link" :data-tone="branch.status === 'FAILED' ? 'danger' : branch.contentVersion ? 'ready' : 'pending'" :disabled="disabled" @click="emit('select', branch.id, 'status')"><i></i>{{ syncLabel(branch) }}</button></td>
             <td><button type="button" class="state-link" :data-tone="status(branch)?.contentReady ? 'ready' : 'pending'" :disabled="disabled" @click="emit('select', branch.id, 'status')"><i></i>{{ indexLabel(branch, 'content') }}</button></td>
             <td><button type="button" class="state-link" :data-tone="status(branch)?.graphReady ? 'ready' : 'pending'" :disabled="disabled" @click="emit('select', branch.id, 'status')"><i></i>{{ indexLabel(branch, 'graph') }}</button></td>
             <td class="operation-cell"><div class="branch-actions">
@@ -69,7 +69,7 @@ function command(branch: RepositoryBranch, action: string) {
                   <template v-if="branch.trackingStatus === 'ACTIVE'">
                     <el-dropdown-item command="search" :disabled="!readable(branch)" divided>打开代码</el-dropdown-item>
                     <el-dropdown-item command="atlas" :disabled="branch.status !== 'READY' || !status(branch)?.graphReady">打开代码图谱</el-dropdown-item>
-                    <template v-if="canMaintain"><el-dropdown-item command="SYNC" :disabled="unavailable(branch)" divided>同步代码</el-dropdown-item><el-dropdown-item command="CONTENT" :disabled="unavailable(branch) || !branch.snapshotId">重建内容索引</el-dropdown-item><el-dropdown-item command="GRAPH" :disabled="unavailable(branch) || !branch.snapshotId">重建代码图谱</el-dropdown-item><el-dropdown-item command="vectors" :disabled="unavailable(branch) || !status(branch)?.contentReady">构建向量索引</el-dropdown-item></template>
+                    <template v-if="canMaintain"><el-dropdown-item command="SYNC" :disabled="unavailable(branch)" divided>同步代码</el-dropdown-item><el-dropdown-item command="CONTENT" :disabled="unavailable(branch) || !branch.contentVersion">重建内容索引</el-dropdown-item><el-dropdown-item command="GRAPH" :disabled="unavailable(branch) || !branch.contentVersion">重建代码图谱</el-dropdown-item><el-dropdown-item command="vectors" :disabled="unavailable(branch) || !status(branch)?.contentReady">构建向量索引</el-dropdown-item></template>
                     <el-dropdown-item v-if="canManage" command="archive" :disabled="unavailable(branch)" divided>取消跟踪</el-dropdown-item>
                   </template>
                   <el-dropdown-item v-else-if="canManage" command="restore" divided>恢复跟踪</el-dropdown-item>

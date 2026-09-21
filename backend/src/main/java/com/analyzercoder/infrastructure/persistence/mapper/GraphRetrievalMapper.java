@@ -21,11 +21,11 @@ public interface GraphRetrievalMapper {
     @Select(
             """
             <script>
-            SELECT DISTINCT c.id,c.snapshot_id,c.file_path,c.symbol_name,c.symbol_kind,
+            SELECT DISTINCT c.id,c.content_version,c.file_path,c.symbol_name,c.symbol_kind,
             c.start_line,c.end_line,c.content,c.content_hash,
             0.24 lexical_score,0.0 semantic_score
             FROM heuristic_call_edges g
-            JOIN repositories r ON r.id=g.repo_id AND g.snapshot_id=r.current_snapshot_id
+            JOIN repositories r ON r.id=g.repo_id AND g.content_version=r.current_content_version
             JOIN code_chunks c ON(
               (c.id=g.source_chunk_id AND g.target_symbol IN
                 <foreach collection="symbols" item="symbol" open="(" separator="," close=")">
@@ -37,7 +37,7 @@ public interface GraphRetrievalMapper {
                   #{symbol}
                 </foreach>)
             )
-            WHERE g.repo_id=#{repositoryId} AND c.snapshot_id=r.current_snapshot_id
+            WHERE g.repo_id=#{repositoryId} AND c.content_version=r.current_content_version
             ORDER BY c.id
             LIMIT #{limit}
             </script>

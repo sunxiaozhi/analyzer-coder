@@ -16,8 +16,7 @@ const sources = { LOCAL_GIT: '本地 Git', REMOTE_GIT: '远程 Git', GITLAB: 'Gi
         <span class="project-copy">
           <strong class="project-name">{{ project.name }}</strong>
           <span class="project-source">{{ sources[project.sourceType] }}</span>
-          <span v-if="project.sourceType !== 'ZIP'" class="project-branch"><GitBranch :size="12" />{{ project.id === selectedId ? '当前阅读' : '默认分支' }} · {{ project.id === selectedId ? readingBranchName || '尚未选择' : project.branch || '未设置' }}</span>
-          <span v-else class="project-branch">单版本代码源</span>
+          <span class="project-branch"><GitBranch :size="12" />{{ project.id === selectedId ? '当前阅读' : '默认分支' }} · {{ project.id === selectedId ? readingBranchName || '尚未选择' : project.branch || 'WORKSPACE' }}</span>
         </span>
       </button>
       <ProjectActionsMenu class="project-item-menu" :repository="project" compact :disabled="disabled || loading" @settings="emit('settings', project)" @govern="emit('govern', project)" @remove="emit('remove', project)" />

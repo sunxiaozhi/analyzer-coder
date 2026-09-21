@@ -15,7 +15,7 @@ import com.analyzercoder.domain.knowledge.KnowledgeSeverity;
 import com.analyzercoder.domain.repository.CodeRepository;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.domain.repository.CodeRepositoryStore;
-import com.analyzercoder.domain.repository.RepositorySnapshotId;
+import com.analyzercoder.domain.repository.RepositoryContentVersion;
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -43,7 +43,7 @@ class CodeEvidenceContextServiceTest {
         CodeEvidenceContextService.CodeEvidenceContext result =
                 service.context(repository.id(), filePath, "approveRefund", true);
 
-        assertThat(result.snapshotId()).isEqualTo(repository.currentSnapshotId().value());
+        assertThat(result.contentVersion()).isEqualTo(repository.currentContentVersion().value());
         assertThat(result.knowledgeReferences())
                 .singleElement()
                 .satisfies(
@@ -54,7 +54,7 @@ class CodeEvidenceContextServiceTest {
                                     .singleElement()
                                     .satisfies(
                                             binding -> {
-                                                assertThat(binding.currentSnapshot()).isTrue();
+                                                assertThat(binding.currentContentVersion()).isTrue();
                                                 assertThat(binding.contentHash()).isEqualTo("hash");
                                             });
                         });
@@ -109,7 +109,7 @@ class CodeEvidenceContextServiceTest {
                 UUID.randomUUID(),
                 KnowledgeScope.empty(),
                 KnowledgeObligations.empty(),
-                repository.currentSnapshotId().value(),
+                repository.currentContentVersion().value(),
                 "verified",
                 "PUBLISHED",
                 2,
@@ -126,7 +126,7 @@ class CodeEvidenceContextServiceTest {
                         new IntelligenceService.CodeReference(
                                 repository.id().value(),
                                 UUID.randomUUID(),
-                                repository.currentSnapshotId().value(),
+                                repository.currentContentVersion().value(),
                                 filePath,
                                 "approveRefund",
                                 10,
@@ -152,7 +152,7 @@ class CodeEvidenceContextServiceTest {
                 UUID.randomUUID(),
                 new KnowledgeScope(paths, symbols, List.of()),
                 KnowledgeObligations.empty(),
-                repository.currentSnapshotId().value(),
+                repository.currentContentVersion().value(),
                 "verified",
                 "PUBLISHED",
                 1,
@@ -179,9 +179,9 @@ class CodeEvidenceContextServiceTest {
                 "a".repeat(40),
                 "digest",
                 false,
-                RepositorySnapshotId.newId(),
-                Path.of("snapshot"),
-                Path.of("snapshot/.codegraph"),
+                RepositoryContentVersion.newId(),
+                Path.of("contentVersion"),
+                Path.of("contentVersion/.codegraph"),
                 now,
                 now,
                 now,

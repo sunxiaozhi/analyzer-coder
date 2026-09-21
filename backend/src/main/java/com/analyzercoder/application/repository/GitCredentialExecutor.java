@@ -63,7 +63,7 @@ public class GitCredentialExecutor {
                                     }
                                     String name =
                                             com.analyzercoder.infrastructure.repository
-                                                    .GitBranchSnapshotFactory.validateBranch(
+                                                    .GitBranchContentVersionFactory.validateBranch(
                                                     fields[1].substring(11));
                                     return new RemoteBranch(name, fields[0]);
                                 })
@@ -79,7 +79,7 @@ public class GitCredentialExecutor {
     /** Fetch into a generated private ref, never reset/checkout or rewrite a user's branch. */
     public String fetchBranch(
             Path worktree, String url, String branch, ResolvedCredential credential) {
-        com.analyzercoder.infrastructure.repository.GitBranchSnapshotFactory.validateBranch(branch);
+        com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory.validateBranch(branch);
         String localRef = "refs/analyzer/branches/" + java.util.UUID.randomUUID();
         try {
             run(
@@ -170,7 +170,7 @@ public class GitCredentialExecutor {
         run(List.of("reset", "--hard", remoteRef), worktree, credential, 60);
     }
 
-    /** 仅把 PR/MR Head 写入隔离的本地引用，不切换分支，也不改变当前工作区或发布快照。 */
+    /** 仅把 PR/MR Head 写入隔离的本地引用，不切换分支，也不改变当前工作区或发布内容版本。 */
     public String fetchReviewHead(
             Path worktree, String provider, long number, ResolvedCredential credential) {
         return fetchReviewHead(worktree, null, provider, number, credential);

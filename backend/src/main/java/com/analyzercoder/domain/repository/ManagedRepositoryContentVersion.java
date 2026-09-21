@@ -4,15 +4,15 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
 
-/** 描述仓库快照的领域数据及其不变量，不依赖接口层或基础设施实现。 */
-public record ManagedRepositorySnapshot(
-        RepositorySnapshotId id,
+/** 描述仓库内容版本的领域数据及其不变量，不依赖接口层或基础设施实现。 */
+public record ManagedRepositoryContentVersion(
+        RepositoryContentVersion id,
         CodeRepositoryId repositoryId,
         Path contentPath,
         String sourceCommit,
         String worktreeDigest,
         Instant createdAt) {
-    public ManagedRepositorySnapshot {
+    public ManagedRepositoryContentVersion {
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(repositoryId, "repositoryId must not be null");
         Objects.requireNonNull(contentPath, "contentPath must not be null");

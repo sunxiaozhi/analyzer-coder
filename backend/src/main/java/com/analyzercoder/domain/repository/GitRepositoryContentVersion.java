@@ -3,10 +3,10 @@ package com.analyzercoder.domain.repository;
 import java.time.Instant;
 import java.util.Objects;
 
-/** 描述仓库快照的领域数据及其不变量，不依赖接口层或基础设施实现。 */
-public record GitRepositorySnapshot(
+/** 描述仓库内容版本的领域数据及其不变量，不依赖接口层或基础设施实现。 */
+public record GitRepositoryContentVersion(
         String branch, String commit, String worktreeDigest, boolean dirty, Instant scannedAt) {
-    public GitRepositorySnapshot {
+    public GitRepositoryContentVersion {
         commit = requireText(commit, "commit");
         worktreeDigest = requireText(worktreeDigest, "worktreeDigest");
         Objects.requireNonNull(scannedAt, "scannedAt must not be null");

@@ -9,8 +9,8 @@ import org.apache.ibatis.annotations.Param;
 /** 定义代码图谱产物数据访问操作的 MyBatis 映射接口，集中维护持久化层查询边界。 */
 @Mapper
 public interface CodeGraphArtifactMapper {
-    int retireSnapshot(
-            @Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId);
+    int retireContentVersion(
+            @Param("repositoryId") UUID repositoryId, @Param("contentVersion") UUID contentVersion);
 
     /**
      * 按给定条件查询匹配数据。
@@ -40,19 +40,19 @@ public interface CodeGraphArtifactMapper {
      * 按给定条件查询匹配数据。
      *
      * @param repositoryId 目标对象的唯一标识
-     * @param snapshotId 目标对象的唯一标识
+     * @param contentVersion 目标对象的唯一标识
      * @return 接口约定的操作结果
      */
     CodeGraphArtifactRow findLatest(
-            @Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId);
+            @Param("repositoryId") UUID repositoryId, @Param("contentVersion") UUID contentVersion);
 
     /**
      * 按给定条件查询匹配数据。
      *
      * @param repositoryId 目标对象的唯一标识
-     * @param snapshotId 目标对象的唯一标识
+     * @param contentVersion 目标对象的唯一标识
      * @return 接口约定的操作结果
      */
     CodeGraphArtifactRow findPublished(
-            @Param("repositoryId") UUID repositoryId, @Param("snapshotId") UUID snapshotId);
+            @Param("repositoryId") UUID repositoryId, @Param("contentVersion") UUID contentVersion);
 }

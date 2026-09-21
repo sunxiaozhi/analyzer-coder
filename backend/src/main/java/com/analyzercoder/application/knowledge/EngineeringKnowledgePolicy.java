@@ -72,7 +72,7 @@ public class EngineeringKnowledgePolicy {
             throw new IllegalStateException("必须执行的工程知识尚未通过人工评审，不能发布");
         }
         if (!"CURRENT".equals(sourceVersionStatus)) {
-            throw new IllegalStateException("必须执行的工程知识需要在当前代码快照验证后才能发布");
+            throw new IllegalStateException("必须执行的工程知识需要在当前代码版本验证后才能发布");
         }
     }
 

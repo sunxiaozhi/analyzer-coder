@@ -14,7 +14,7 @@ function citationReference(citation: Citation): CodeReference | null {
   return {
     repositoryId: citation.repositoryId,
     chunkId: citation.chunkId,
-    snapshotId: citation.snapshotId,
+    contentVersion: citation.contentVersion,
     filePath: citation.filePath,
     symbolName: citation.symbolName,
     startLine: citation.startLine,

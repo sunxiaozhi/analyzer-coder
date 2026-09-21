@@ -26,7 +26,7 @@ public class VectorIndexQueryService {
         }
         return new Summary(
                 uuid(row, "repository_id"),
-                uuid(row, "snapshot_id"),
+                uuid(row, "content_version"),
                 string(row, "commit_sha"),
                 number(row, "total_chunks").longValue(),
                 number(row, "vectorized_chunks").longValue(),
@@ -70,7 +70,7 @@ public class VectorIndexQueryService {
     private ChunkItem chunkItem(Map<String, Object> row) {
         return new ChunkItem(
                 uuid(row, "id"),
-                uuid(row, "snapshot_id"),
+                uuid(row, "content_version"),
                 string(row, "commit_sha"),
                 string(row, "file_path"),
                 string(row, "symbol_name"),
@@ -173,7 +173,7 @@ public class VectorIndexQueryService {
 
     public record Summary(
             UUID repositoryId,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             long totalChunks,
             long vectorizedChunks,
@@ -188,7 +188,7 @@ public class VectorIndexQueryService {
 
     public record ChunkItem(
             UUID id,
-            UUID snapshotId,
+            UUID contentVersion,
             String commitSha,
             String filePath,
             String symbolName,

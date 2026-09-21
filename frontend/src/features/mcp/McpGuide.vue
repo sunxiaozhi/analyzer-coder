@@ -31,7 +31,7 @@ const errors = [
   ['连接失败', '确认 Java 后端已启动，地址以 /api/mcp 结尾，客户端携带 Bearer 令牌。'],
   ['CODEGRAPH_ARTIFACT_NOT_AVAILABLE', '所选分支还没有已发布图谱。到项目管理准备该分支并构建 CodeGraph，确认 codegraphReady 为 true。'],
   ['CONTEXT_EXPIRED / CONTEXT_MISMATCH', 'contextId 已过期或与分支不匹配；重新选择分支并获取新的上下文。'],
-  ['结果为空', '确认项目和分支正确、快照已准备，再用类名、函数名或业务术语查询。'],
+  ['结果为空', '确认项目和分支正确、版本已准备，再用类名、函数名或业务术语查询。'],
 ];
 </script>
 
@@ -40,13 +40,13 @@ const errors = [
     <header class="guide-header">
       <span class="eyebrow">只读代码、知识与图谱 · HTTP</span>
       <h1>MCP 接入</h1>
-      <p>让 AI 编程工具在同一服务中检索代码与知识，并按项目、分支查询 CodeGraph。结果保留快照与来源信息。</p>
-      <div class="flow">AI 客户端 → 账户权限校验 → 选择项目和分支 → 固定快照 → 代码、知识与图谱结果</div>
+      <p>让 AI 编程工具在同一服务中检索代码与知识，并按项目、分支查询 CodeGraph。结果保留版本与来源信息。</p>
+      <div class="flow">AI 客户端 → 账户权限校验 → 选择项目和分支 → 固定版本 → 代码、知识与图谱结果</div>
     </header>
 
     <section class="guide-section">
       <h2>1. 准备仓库</h2>
-      <p>先在 <RouterLink to="/repositories">项目管理</RouterLink> 接入仓库。联合检索需要已准备的代码快照；图谱查询还需要将目标 Git 分支准备好并发布 CodeGraph 产物。可在 <RouterLink to="/overview">项目总览</RouterLink> 查看准备状态。调用账户至少需要目标仓库的 READ 权限。</p>
+      <p>先在 <RouterLink to="/repositories">项目管理</RouterLink> 接入仓库。联合检索需要已准备的代码版本；图谱查询还需要将目标 Git 分支准备好并发布 CodeGraph 产物。可在 <RouterLink to="/overview">项目总览</RouterLink> 查看准备状态。调用账户至少需要目标仓库的 READ 权限。</p>
     </section>
 
     <section class="guide-section">
@@ -62,7 +62,7 @@ const errors = [
 
     <section class="guide-section">
       <h2>4. 搜索代码与知识</h2>
-      <p><code>search_project</code> 接受项目、检索词和可选的结果数量。只传 <code>repositoryId</code> 时读取项目默认快照；传入 <code>branchId</code> 或 <code>contextId</code> 时读取固定分支的代码和适用知识。</p>
+      <p><code>search_project</code> 接受项目、检索词和可选的结果数量。只传 <code>repositoryId</code> 时读取项目默认版本；传入 <code>branchId</code> 或 <code>contextId</code> 时读取固定分支的代码和适用知识。</p>
       <pre tabindex="0" aria-label="联合检索参数"><code>{{ searchExample }}</code></pre>
       <p v-if="!repositories.selectedRepositoryId" class="note">请先在顶部选择可访问的项目，示例中的 repositoryId 需要替换为真实 UUID。</p>
       <div class="tool-row"><code>search_project</code><span>repositoryId、query；可选 limit（1–50）、branchId 或 contextId</span></div>
@@ -70,7 +70,7 @@ const errors = [
 
     <section class="guide-section">
       <h2>5. 选择分支并查询图谱</h2>
-      <p>先调用 <code>list_codegraph_scopes</code>，从当前账户可访问的项目中选择 <code>codegraphReady: true</code> 的分支。首次图谱查询传 <code>repositoryId + branchId</code>，返回的 <code>context.contextId</code> 可用于后续调用，保持同一快照。</p>
+      <p>先调用 <code>list_codegraph_scopes</code>，从当前账户可访问的项目中选择 <code>codegraphReady: true</code> 的分支。首次图谱查询传 <code>repositoryId + branchId</code>，返回的 <code>context.contextId</code> 可用于后续调用，保持同一版本。</p>
       <pre tabindex="0" aria-label="项目与分支发现参数"><code>{{ scopesExample }}</code></pre>
       <p class="example-label">选定分支后调用 <code>codegraph_explore</code>：</p>
       <pre tabindex="0" aria-label="代码图谱探索参数"><code>{{ graphExample }}</code></pre>
@@ -78,7 +78,7 @@ const errors = [
       <div class="tool-row"><code>codegraph_explore · codegraph_node · codegraph_search</code><span>源码、符号和调用路径</span></div>
       <div class="tool-row"><code>codegraph_callers · codegraph_callees · codegraph_impact</code><span>调用关系与影响分析</span></div>
       <div class="tool-row"><code>codegraph_files · codegraph_status · codegraph_affected</code><span>文件、状态和受影响测试</span></div>
-      <p class="note">这些工具只读受管快照，不同步代码、不构建图谱，也不修改项目。ZIP 单版本项目仍可使用原有联合检索。</p>
+      <p class="note">这些工具只读受管分支，不同步代码、不构建图谱，也不修改项目。ZIP 项目通过固定的 WORKSPACE 分支使用相同能力。</p>
     </section>
 
     <section class="guide-section">

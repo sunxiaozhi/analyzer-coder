@@ -79,7 +79,7 @@ const searchActionLabel = computed(() => (
 ));
 const searchActionTitle = computed(() => (
   props.health?.readyForSearch
-    ? '同时检索当前快照中的代码片段和项目知识'
+    ? '同时检索当前内容版本中的代码片段和项目知识'
     : '请先处理右侧准备流程和当前问题'
 ));
 
@@ -127,8 +127,8 @@ function canResolveIssue(issue: ProjectHealthIssue) {
       <div class="version-line" aria-label="项目版本">
         <span><GitBranch :size="13" />{{ preparation?.branch ?? '—' }}</span>
         <span><GitCommit :size="13" />{{ short(preparation?.commitSha, 10) }}</span>
-        <span>快照 {{ short(preparation?.snapshotId, 8) }}</span>
-        <span v-if="preparation?.dirty" class="dirty-flag">快照采集时含未提交改动</span>
+        <span>内容版本 {{ short(preparation?.contentVersion, 8) }}</span>
+        <span v-if="preparation?.dirty" class="dirty-flag">内容版本采集时含未提交改动</span>
       </div>
 
       <div class="health-callout" :data-tone="healthCopy.tone">
@@ -198,7 +198,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
       <article data-accent="violet">
         <span><FileCode2 :size="17" />代码文件</span>
         <strong>{{ codeFacts?.codeFileCount ?? '—' }}</strong>
-        <small>{{ codeFacts ? codeTypes.length : '—' }} 种源码类型 · {{ profile?.fileCount ?? '—' }} 个快照文件</small>
+        <small>{{ codeFacts ? codeTypes.length : '—' }} 种源码类型 · {{ profile?.fileCount ?? '—' }} 个内容版本文件</small>
       </article>
     </section>
 

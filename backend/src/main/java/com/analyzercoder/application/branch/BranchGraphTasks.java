@@ -23,17 +23,17 @@ public class BranchGraphTasks {
         this.jobs = jobs;
     }
 
-    public record Target(UUID repoId, UUID branchId, UUID snapshotId, Path path) {}
+    public record Target(UUID repoId, UUID branchId, UUID contentVersion, Path path) {}
 
     public Optional<Target> target(UUID jobId) {
         return db
                 .query(
-                        "SELECT t.*,s.content_path FROM index_job_branch_targets t JOIN branch_snapshots s ON s.id=t.snapshot_id WHERE t.job_id=?",
+                        "SELECT t.*,b.content_path FROM index_job_branch_targets t JOIN repository_branches b ON b.repo_id=t.repo_id AND b.id=t.branch_id AND b.content_version=t.content_version WHERE t.job_id=?",
                         (r, n) ->
                                 new Target(
                                         r.getObject("repo_id", UUID.class),
                                         r.getObject("branch_id", UUID.class),
-                                        r.getObject("snapshot_id", UUID.class),
+                                        r.getObject("content_version", UUID.class),
                                         Path.of(r.getString("content_path"))),
                         jobId)
                 .stream()
@@ -46,7 +46,7 @@ public class BranchGraphTasks {
                 new Target(
                         context.repositoryId(),
                         context.branchId(),
-                        context.snapshotId(),
+                        context.contentVersion(),
                         context.contentPath()));
     }
 
@@ -69,7 +69,7 @@ public class BranchGraphTasks {
                         target.repoId());
         if (!active.isEmpty()) {
             var current = target(active.get(0));
-            if (current.isPresent() && current.get().snapshotId().equals(target.snapshotId()))
+            if (current.isPresent() && current.get().contentVersion().equals(target.contentVersion()))
                 return jobs.findById(IndexJobId.of(active.get(0))).orElseThrow();
             throw new ApiSecurityException(409, "BRANCH_GRAPH_BUSY", "仓库已有其他版本的活动任务，请等待其完成");
         }
@@ -78,11 +78,11 @@ public class BranchGraphTasks {
                         IndexJob.create(
                                 CodeRepositoryId.of(target.repoId()), IndexJobType.CODEGRAPH));
         db.update(
-                "INSERT INTO index_job_branch_targets(job_id,repo_id,branch_id,snapshot_id) VALUES(?,?,?,?)",
+                "INSERT INTO index_job_branch_targets(job_id,repo_id,branch_id,content_version) VALUES(?,?,?,?)",
                 job.id().value(),
                 target.repoId(),
                 target.branchId(),
-                target.snapshotId());
+                target.contentVersion());
         return job;
     }
 }

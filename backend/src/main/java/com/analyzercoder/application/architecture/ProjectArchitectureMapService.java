@@ -27,7 +27,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
-/** 从当前发布快照中提取模块级依赖，为项目总览提供无需关键词的确定性架构地图。 */
+/** 从当前发布内容版本中提取模块级依赖，为项目总览提供无需关键词的确定性架构地图。 */
 @Service
 public class ProjectArchitectureMapService {
     private static final int MAX_ANALYZED_FILES = 1000;
@@ -66,57 +66,57 @@ public class ProjectArchitectureMapService {
             List.of(".java", ".kt", ".kts", ".ts", ".tsx", ".js", ".jsx", ".vue", ".py");
 
     private final RepositoryCodeBrowserService browser;
-    private final Map<String, ArchitectureMap> snapshotCache = new ConcurrentHashMap<>();
+    private final Map<String, ArchitectureMap> contentVersionCache = new ConcurrentHashMap<>();
 
     public ProjectArchitectureMapService(RepositoryCodeBrowserService browser) {
         this.browser = browser;
     }
 
     public ArchitectureMap map(CodeRepositoryId repositoryId) {
-        RepositoryCodeBrowserService.SnapshotFiles snapshot = browser.list(repositoryId);
+        RepositoryCodeBrowserService.ContentVersionFiles contentVersion = browser.list(repositoryId);
         String repositoryPrefix = repositoryId.value() + ":";
-        String cacheKey = repositoryPrefix + snapshot.snapshotId();
-        snapshotCache
+        String cacheKey = repositoryPrefix + contentVersion.contentVersion();
+        contentVersionCache
                 .keySet()
                 .removeIf(key -> key.startsWith(repositoryPrefix) && !key.equals(cacheKey));
-        return snapshotCache.computeIfAbsent(
+        return contentVersionCache.computeIfAbsent(
                 cacheKey,
                 ignored ->
                         analyze(
                                 repositoryId,
-                                snapshot,
-                                path -> readSnapshotContent(repositoryId, snapshot, path),
+                                contentVersion,
+                                path -> readContentVersionContent(repositoryId, contentVersion, path),
                                 Instant.now()));
     }
 
     /** Analyze an immutable branch repository without consulting the default pointer. */
     public ArchitectureMap map(com.analyzercoder.domain.repository.CodeRepository repository) {
-        var snapshot = browser.list(repository);
+        var contentVersion = browser.list(repository);
         return analyze(
                 repository.id(),
-                snapshot,
+                contentVersion,
                 path -> browser.read(repository, path).content(),
                 Instant.now());
     }
 
-    private String readSnapshotContent(
+    private String readContentVersionContent(
             CodeRepositoryId repositoryId,
-            RepositoryCodeBrowserService.SnapshotFiles snapshot,
+            RepositoryCodeBrowserService.ContentVersionFiles contentVersion,
             String path) {
         RepositoryCodeBrowserService.FileContent file = browser.read(repositoryId, path);
-        if (!snapshot.snapshotId().equals(file.snapshotId())) {
-            throw new ArchitectureSnapshotChangedException("架构分析期间仓库快照已切换，请基于新快照重试");
+        if (!contentVersion.contentVersion().equals(file.contentVersion())) {
+            throw new ArchitectureContentVersionChangedException("架构分析期间仓库内容版本已切换，请基于新内容版本重试");
         }
         return file.content();
     }
 
     static ArchitectureMap analyze(
             CodeRepositoryId repositoryId,
-            RepositoryCodeBrowserService.SnapshotFiles snapshot,
+            RepositoryCodeBrowserService.ContentVersionFiles contentVersion,
             Function<String, String> contentReader,
             Instant generatedAt) {
         List<RepositoryCodeBrowserService.FileEntry> codeFiles =
-                snapshot.files().stream()
+                contentVersion.files().stream()
                         .filter(
                                 file ->
                                         RepositoryAssetClassifier.classify(
@@ -130,7 +130,7 @@ public class ProjectArchitectureMapService {
                         .toList();
 
         List<RepositoryCodeBrowserService.FileEntry> runtimeCandidates =
-                snapshot.files().stream()
+                contentVersion.files().stream()
                         .filter(
                                 file -> {
                                     RepositoryAssetType type =
@@ -147,7 +147,7 @@ public class ProjectArchitectureMapService {
         for (RepositoryCodeBrowserService.FileEntry file : candidates) {
             try {
                 contents.put(file.path(), contentReader.apply(file.path()));
-            } catch (ArchitectureSnapshotChangedException exception) {
+            } catch (ArchitectureContentVersionChangedException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
                 unreadable++;
@@ -159,7 +159,7 @@ public class ProjectArchitectureMapService {
             if (runtimeContents.containsKey(file.path())) continue;
             try {
                 runtimeContents.put(file.path(), contentReader.apply(file.path()));
-            } catch (ArchitectureSnapshotChangedException exception) {
+            } catch (ArchitectureContentVersionChangedException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
                 runtimeUnreadable++;
@@ -191,13 +191,13 @@ public class ProjectArchitectureMapService {
                                 evidenceSample(
                                         source.getKey(),
                                         targetPath,
-                                        snapshot.snapshotId(),
+                                        contentVersion.contentVersion(),
                                         source.getValue()));
             }
         }
 
         RuntimeGraph runtimeGraph =
-                runtimeGraph(runtimeContents, modules.keySet(), snapshot.snapshotId());
+                runtimeGraph(runtimeContents, modules.keySet(), contentVersion.contentVersion());
 
         List<ArchitectureNode> nodes = new ArrayList<>();
         nodes.add(
@@ -206,7 +206,7 @@ public class ProjectArchitectureMapService {
                         "当前项目",
                         "",
                         "PROJECT",
-                        snapshot.files().size(),
+                        contentVersion.files().size(),
                         codeFiles.size(),
                         primaryLanguage(codeFiles),
                         null));
@@ -247,7 +247,7 @@ public class ProjectArchitectureMapService {
                                 .count();
         int skippedByLimit = Math.max(0, codeFiles.size() - skippedLarge - candidates.size());
         List<String> notes = new ArrayList<>();
-        notes.add("依赖关系来自当前快照的静态 import/require 分析");
+        notes.add("依赖关系来自当前内容版本的静态 import/require 分析");
         notes.add(
                 "运行依赖扫描覆盖 "
                         + runtimeContents.size()
@@ -264,8 +264,8 @@ public class ProjectArchitectureMapService {
         }
         return new ArchitectureMap(
                 repositoryId.value().toString(),
-                snapshot.snapshotId(),
-                snapshot.commit(),
+                contentVersion.contentVersion(),
+                contentVersion.commit(),
                 generatedAt,
                 nodes,
                 edges,
@@ -281,7 +281,7 @@ public class ProjectArchitectureMapService {
     }
 
     private static RuntimeGraph runtimeGraph(
-            Map<String, String> runtimeContents, Set<String> moduleIds, String snapshotId) {
+            Map<String, String> runtimeContents, Set<String> moduleIds, String contentVersion) {
         Map<String, RuntimeDependencyDetector.DetectedResource> resources = new LinkedHashMap<>();
         Map<EdgeKey, EdgeAccumulator> links = new LinkedHashMap<>();
         Map<String, ArchitectureRisk> risks = new LinkedHashMap<>();
@@ -295,7 +295,7 @@ public class ProjectArchitectureMapService {
                         .add(
                                 source.getKey(),
                                 evidenceSample(
-                                        source.getKey(), null, snapshotId, source.getValue()));
+                                        source.getKey(), null, contentVersion, source.getValue()));
 
                 if (resource.insecure()) {
                     String riskId = "transport:" + sourceModule + ":" + resource.id();
@@ -378,9 +378,9 @@ public class ProjectArchitectureMapService {
     }
 
     private static ArchitectureEvidenceSample evidenceSample(
-            String filePath, String relatedFilePath, String snapshotId, String content) {
+            String filePath, String relatedFilePath, String contentVersion, String content) {
         return new ArchitectureEvidenceSample(
-                filePath, relatedFilePath, snapshotId, sha256(content));
+                filePath, relatedFilePath, contentVersion, sha256(content));
     }
 
     private static String sha256(String value) {
@@ -695,7 +695,7 @@ public class ProjectArchitectureMapService {
 
     public record ArchitectureMap(
             String repositoryId,
-            String snapshotId,
+            String contentVersion,
             String commitSha,
             Instant generatedAt,
             List<ArchitectureNode> nodes,
@@ -727,7 +727,7 @@ public class ProjectArchitectureMapService {
     }
 
     public record ArchitectureEvidenceSample(
-            String filePath, String relatedFilePath, String snapshotId, String contentHash) {}
+            String filePath, String relatedFilePath, String contentVersion, String contentHash) {}
 
     public record ArchitectureRisk(
             String id,
@@ -746,8 +746,8 @@ public class ProjectArchitectureMapService {
             boolean partial,
             List<String> notes) {}
 
-    public static final class ArchitectureSnapshotChangedException extends IllegalStateException {
-        public ArchitectureSnapshotChangedException(String message) {
+    public static final class ArchitectureContentVersionChangedException extends IllegalStateException {
+        public ArchitectureContentVersionChangedException(String message) {
             super(message);
         }
     }
