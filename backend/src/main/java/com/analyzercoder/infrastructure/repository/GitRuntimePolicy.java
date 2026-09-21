@@ -26,5 +26,9 @@ public final class GitRuntimePolicy {
         environment.put("GIT_TERMINAL_PROMPT", "0");
         environment.put("GIT_OPTIONAL_LOCKS", "0");
         environment.put("GIT_LFS_SKIP_SMUDGE", "1");
+        // ASKPASS prompts are parsed by the generated helper. Force a stable language so a
+        // localized Git installation cannot send the secret as the username by mistake.
+        environment.put("LC_ALL", "C");
+        environment.put("LANG", "C");
     }
 }

@@ -34,6 +34,8 @@ class GitRuntimePolicyTest {
                 .containsEntry("GIT_TERMINAL_PROMPT", "0")
                 .containsEntry("GIT_OPTIONAL_LOCKS", "0")
                 .containsEntry("GIT_LFS_SKIP_SMUDGE", "1")
+                .containsEntry("LC_ALL", "C")
+                .containsEntry("LANG", "C")
                 .doesNotContainKeys("GIT_DIR", "git_work_tree", "ANALYZER_GIT_SECRET");
     }
 }
