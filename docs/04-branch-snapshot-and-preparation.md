@@ -1,17 +1,17 @@
-# 分支、快照与准备
+# 分支、最新工作区与准备
 > 本文档由当前实现反推生成（2026-09-19）。描述已实现的需求，不是新设计。
 
 ## 1 功能范围与角色
 
-本文覆盖"项目内按分支隔离代码版本"这一领域：分支的发现、跟踪与归档；不可变快照（snapshot，`snapshotId`）的发布与保留清理；阅读上下文（reading context，`contextId`）的创建、绑定与过期；以及把分支代码准备成可检索状态的准备任务（preparation）。
+本文覆盖"项目内按分支隔离最新代码"这一领域。运行时只允许读取分支当前发布版本；`snapshotId` 暂时保留为数据库兼容令牌，不再对应一份永久独立的源码副本。
 
 术语与对象关系：
 
 - 分支（branch）：库表 `repository_branches`，稳定身份为 `branchId`，同一项目内按名称唯一。证据：`backend/src/main/resources/db/migration/V3__branch_contexts.sql:2`
-- 快照（snapshot）：库表 `branch_snapshots`，记录 `commit_sha` 与受管只读内容目录 `content_path`，发布后不可变。证据：`backend/src/main/resources/db/migration/V3__branch_contexts.sql:17`
+- 版本令牌（兼容字段仍名为 snapshot）：库表 `branch_snapshots` 记录 `commit_sha` 与内容路径；同一分支的连续版本共享固定工作区，只有 `published_snapshot_id` 指向的最新版本允许读取。
 - 提交（commitSha）：Git 提交标识，发布快照时必须匹配 `[0-9a-fA-F]{40,64}`。证据：`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:75`
-- 受管快照（managed snapshot）：平台在受管数据根下导出的只读代码副本，路径形如 `<snapshot-root>/<repositoryId>/branch-<snapshotId>/content`。证据：`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:78`
-- 阅读上下文（reading context）：库表 `branch_read_contexts`，把"账号 + 项目 + 分支 + 快照"绑定为一个可过期的读取坐标，绝不是可变的全局分支开关。证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchReadContext.java:8`
+- 受管分支工作区：路径形如 `<snapshot-root>/<repositoryId>/branches/<branchId>/content`；首次完整导出，后续根据 Git diff 只更新变化文件，并保留 `.codegraph`。
+- 阅读上下文（reading context）：库表 `branch_read_contexts` 保留兼容字段，但解析时必须仍指向分支当前发布版本，旧版本上下文会被拒绝。
 - 准备（preparation）：把某个快照推进到"可检索"的一串阶段与后台任务；分支级准备由 `branch_preparation_jobs` 驱动，项目级准备仍保留 `index_jobs` 路径。
 
 权限模型（不使用四级权限的说法）：权限级别只有 `READ` < `MAINTAIN` < `MANAGE`；所有者（owner）关系由 `owner_account_id` 表达，账号等于 owner 时按 `MANAGE` 处理，仅所有者动作走 `requireOwner`（403 `OWNER_REQUIRED`）；角色只有 `SUPER_ADMIN` 与普通用户 `NORMAL`，超级管理员绕过仓库级权限。证据：`backend/src/main/java/com/analyzercoder/security/RepositoryPermission.java:4`、`backend/src/main/java/com/analyzercoder/security/AccessControlService.java:30`、`backend/src/main/java/com/analyzercoder/security/AccessControlService.java:46`、`backend/src/main/java/com/analyzercoder/security/AccountRole.java:4`
@@ -65,17 +65,20 @@
   - 归档分支的快照、片段、问答与知识证据全部保留（见 BRN-021 的引用检查）。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:122`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:136`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:149`、`backend/src/main/resources/db/migration/V7__branch_lifecycle_and_provenance.sql:115`
 
-### BRN-006 快照发布与受管内容路径
+### BRN-006 最新分支工作区与兼容版本令牌
 
-- 需求：准备时把某个提交导出为只读受管副本，并登记一条不可变的 `branch_snapshots` 记录。
+- 需求：每个分支只维护一个物理源码工作区；数据库继续登记版本令牌，供现有索引表和接口兼容。
 - 规则：
-  - 导出使用 `git archive --format=zip <commit>`，绝不 checkout 或修改用户工作区。
-  - 导出前用 `git ls-tree -r -l` 预检：包含符号链接（模式 `120000`）或子模块（`160000`）直接拒绝；文件数超过 `snapshot-max-files`（默认 20000）或累计字节超过 `snapshot-max-total-bytes`（默认 2 GiB）拒绝。
+  - 首次构建使用 `git archive --format=zip <commit>`，绝不 checkout 或修改用户工作区。
+  - 后续构建使用 `git diff --name-status -z --no-renames <old> <new>`；只归档新增/修改文件、删除已移除文件，未变文件不重写。
+  - 为每个分支保留 `refs/analyzer/workspaces/<branchId>`，保证浅克隆环境中上次提交对象仍可用于差异比较。
+  - 变更超过 5000 个文件、路径参数过长或差异不可用时回退完整刷新；完整刷新仍保留已有 `.codegraph`。
+  - 导出前用 `git ls-tree -r -l` 预检：包含符号链接（模式 `120000`）或子模块（`160000`）直接拒绝；文件数超过 `snapshot-max-files`（默认 50000）或累计字节超过 `snapshot-max-total-bytes`（默认 2 GiB）拒绝。
   - 解压时拒绝越界路径、反斜杠、冒号、绝对路径与任何名为 `.git` 的路径段；解压后再次校验文件数与字节数。
-  - 导出完成后删除中间 `source.zip`，并把内容目录整棵置为不可写。
+  - 导出完成后删除中间 ZIP；固定工作区保持可写，以便 CodeGraph 原地维护 `.codegraph`。
   - 发布事务内依次写入 `branch_snapshots`、按分支同步 Markdown 来源清单、批量写入 `code_chunks`，最后以 `generation` + `preparation_status='BUILDING'` 为条件更新 `published_snapshot_id` 与 `preparation_status='READY'`；条件不满足时报 409 `BRANCH_BUILD_SUPERSEDED`。
   - 单个快照的片段数上限为 100000，空内容报错「分支没有可索引的文本文件」。
-  - 快照内容与片段不可改写或删除：数据库触发器禁止删除或更新属于有效快照的 `code_chunks`。
+  - 旧版本片段仍受数据库不可变触发器保护；新版本通过复制未变片段并重建变更路径生成。
 - 证据：`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:73`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:84`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:103`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:135`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:285`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:322`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:280`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:110`
 
 ### BRN-007 同一提交复用快照
@@ -93,7 +96,7 @@
 - 规则：
   - 失败时仅更新 `preparation_status='FAILED'` 与固定的中文 `preparation_error`，且更新条件带 `generation`，因此不会覆盖被新任务接管的记录。
   - `published_snapshot_id` 在整个失败路径中不被修改。
-  - 已创建但未发布的受管目录会被显式清理（`discardUnpublished`），且清理目标必须是该工厂生成的标准路径。
+  - 固定分支工作区不会因兼容版本令牌发布失败而删除，可供重试继续使用；旧式独立快照目录仍按原规则清理。
   - 分支级准备错误文案为「准备失败，请确认分支存在且仓库来源或凭据可用」；显式同步任务为「同步失败，请检查分支、代码源、权限或凭据」；后台作业记录为「任务失败，请检查分支、仓库权限、凭据或向量模型配置后重试」。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:336`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:338`、`backend/src/main/java/com/analyzercoder/application/branch/BranchCodeOperationsService.java:145`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:166`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:313`
 

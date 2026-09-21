@@ -50,6 +50,7 @@ public class RepositoryRemoteSyncService {
         var resolved = credentials.resolveBound(actor, repositoryId.value(), remoteUrl);
         git.syncRepository(
                 repository.path(),
+                remoteUrl,
                 repository.defaultBranch(),
                 resolved == null ? null : resolved.value());
         RepositoryScanResult scan = repositories.rescan(repositoryId);

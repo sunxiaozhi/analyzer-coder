@@ -274,7 +274,7 @@ public class RepositoryChangeService {
                 run(
                         root,
                         4_096,
-                        List.of("rev-parse", "--verify", "--end-of-options", ref + "^{commit}"));
+                        List.of("rev-parse", "--verify", ref + "^{commit}"));
         if (result.exitCode() != 0 || result.stdoutTruncated()) {
             throw new RepositoryChangeException("GIT_REF_NOT_FOUND", "Git Ref 不存在或不是提交对象");
         }

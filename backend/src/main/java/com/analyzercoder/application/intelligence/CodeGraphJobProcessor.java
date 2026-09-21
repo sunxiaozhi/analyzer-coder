@@ -27,7 +27,7 @@ public class CodeGraphJobProcessor {
             IndexJobStore jobs,
             CodeGraphService codeGraph,
             KnowledgeDriftTaskService driftTasks,
-            @Value("${app.codegraph.task-timeout-minutes:12}") long timeoutMinutes) {
+            @Value("${app.codegraph.task-timeout-minutes:35}") long timeoutMinutes) {
         this.jobs = jobs;
         this.codeGraph = codeGraph;
         this.driftTasks = driftTasks;
@@ -40,7 +40,7 @@ public class CodeGraphJobProcessor {
     }
 
     public boolean processNextQueuedJob() {
-        return jobs.claimNextQueued(IndexJobType.CODEGRAPH, "copy_snapshot", timeoutSeconds)
+        return jobs.claimNextQueued(IndexJobType.CODEGRAPH, "prepare_codegraph", timeoutSeconds)
                 .map(this::process)
                 .orElse(false);
     }

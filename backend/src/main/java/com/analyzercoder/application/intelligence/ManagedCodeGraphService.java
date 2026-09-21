@@ -22,7 +22,8 @@ import org.springframework.stereotype.Service;
 /**
  * 在受管副本上构建并查询 CodeGraph 产物。
  *
- * <p>分析过程复制已发布快照，且主动跳过符号链接和已有 {@code .codegraph} 目录，确保 CLI 不修改仓库快照， 同时避免通过符号链接越过受管目录边界。
+ * <p>仓库级构建仍复制已发布版本以保持兼容；分支构建直接复用其受管内容目录并原地维护 {@code .codegraph}，
+ * 避免大型分支在每次构建前再次复制全部源码。分支任务由上层分支锁串行化。
  */
 @Primary
 @Service
@@ -41,7 +42,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
             CodeGraphArtifactMapper mapper,
             ObjectMapper json,
             @Value("${app.codegraph.executable:codegraph}") String executable,
-            @Value("${app.codegraph.timeout-minutes:10}") long timeoutMinutes,
+            @Value("${app.codegraph.timeout-minutes:30}") long timeoutMinutes,
             @Value("${app.codegraph.artifact-root:${java.io.tmpdir}/analyzer-coder/codegraph}")
                     String root,
             CodeGraphArtifactPublisher publisher) {
@@ -75,17 +76,21 @@ public class ManagedCodeGraphService extends CodeGraphService {
             UUID repositoryId, Version version, BuildControl control, boolean immutableBranch) {
         UUID artifactId = UUID.randomUUID();
         Path project =
-                root.resolve(repositoryId.toString())
-                        .resolve("codegraph")
-                        .resolve(version.snapshotId().toString())
-                        .resolve(artifactId.toString())
-                        .resolve("project");
+                immutableBranch
+                        ? version.snapshotPath()
+                        : artifactProject(repositoryId, version, artifactId);
         try {
-            control.checkpoint("copy_snapshot");
-            copySnapshot(version.snapshotPath(), project, control);
+            if (immutableBranch) {
+                prepareBranchWorkspace(project);
+            } else {
+                control.checkpoint("copy_snapshot");
+                copySnapshot(version.snapshotPath(), project, control);
+            }
+            Path marker = project.resolve(".codegraph");
+            String operation = Files.isDirectory(marker) ? "index" : "init";
             String output =
                     run(
-                            List.of("init", project.toString()),
+                            List.of(operation, project.toString()),
                             timeoutMinutes * 60,
                             control,
                             "building_codegraph");
@@ -95,7 +100,6 @@ public class ManagedCodeGraphService extends CodeGraphService {
                 throw new IllegalStateException("CodeGraph 未生成可用节点，无法发布可用图谱");
             }
             String cliVersion = run(List.of("--version"), 30, control, "inspect_codegraph").trim();
-            Path marker = project.resolve(".codegraph");
             if (!Files.isDirectory(marker)) {
                 throw new IllegalStateException("CodeGraph 未生成预期产物目录");
             }
@@ -126,7 +130,24 @@ public class ManagedCodeGraphService extends CodeGraphService {
                     nodes,
                     edges);
         } catch (IOException exception) {
-            throw new IllegalStateException("无法创建 CodeGraph 分析副本", exception);
+            throw new IllegalStateException("无法准备 CodeGraph 工作目录：" + exception.getMessage(), exception);
+        }
+    }
+
+    private Path artifactProject(UUID repositoryId, Version version, UUID artifactId) {
+        return root.resolve(repositoryId.toString())
+                .resolve("codegraph")
+                .resolve(version.snapshotId().toString())
+                .resolve(artifactId.toString())
+                .resolve("project");
+    }
+
+    private static void prepareBranchWorkspace(Path project) throws IOException {
+        if (!Files.isDirectory(project)) {
+            throw new IOException("分支内容目录不存在");
+        }
+        if (!Files.isWritable(project) && !project.toFile().setWritable(true, false)) {
+            throw new IOException("分支内容目录不可写");
         }
     }
 

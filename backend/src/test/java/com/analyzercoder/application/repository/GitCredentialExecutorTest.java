@@ -15,6 +15,40 @@ class GitCredentialExecutorTest {
     @TempDir Path workspace;
 
     @Test
+    void scopesDisabledTlsVerificationToTheCurrentGitCommand() {
+        assertThat(
+                        GitCredentialExecutor.commandFor(
+                                List.of("ls-remote", "https://gitlab.internal/repo.git"),
+                                true))
+                .containsExactly(
+                        "git",
+                        "-c",
+                        "http.sslVerify=false",
+                        "ls-remote",
+                        "https://gitlab.internal/repo.git");
+    }
+
+    @Test
+    void reportsWhetherAnUntrustedCertificateHostMatchedTheTlsException() {
+        String output =
+                "fatal: unable to access 'https://gitlab.internal/repo.git/': "
+                        + "Peer's certificate issuer has been marked as not trusted by the user";
+
+        assertThat(GitCredentialExecutor.failureMessage(output, false))
+                .contains("未命中 insecure-tls-hosts");
+        assertThat(GitCredentialExecutor.failureMessage(output, true))
+                .contains("已关闭证书校验");
+    }
+
+    @Test
+    void keepsTheLastSanitizedGitErrorForUnknownFailures() {
+        assertThat(
+                        GitCredentialExecutor.failureMessage(
+                                "remote: gateway rejected request\nfatal: custom proxy failure", true))
+                .isEqualTo("Git 操作失败（已关闭证书校验）：fatal: custom proxy failure");
+    }
+
+    @Test
     void validatesReachableEmptyRepositoryWithoutRequiringHead() throws IOException {
         Path origin = workspace.resolve("empty-origin.git");
         git(workspace, "init", "--bare", origin.toString());

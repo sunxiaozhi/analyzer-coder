@@ -181,18 +181,18 @@
 ### GRAPH-003 后台任务状态、心跳与超时
 - 需求：构建必须在 Worker 中执行、持续上报心跳、可按请求取消、超时后判失败。
 - 规则：
-  - Worker 认领 `CODEGRAPH` 队列任务，初始步骤 `copy_snapshot`，总时限由 `app.codegraph.task-timeout-minutes` 决定（默认 12 分钟，最小 1 分钟）。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:30-34`、`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:42-46`。
+  - Worker 认领 `CODEGRAPH` 队列任务，初始步骤 `prepare_codegraph`，总时限由 `app.codegraph.task-timeout-minutes` 决定（默认 35 分钟，最小 1 分钟）。
   - 每个 checkpoint 都会更新心跳并检查：已请求取消则抛 `BuildCanceledException`；任务已失败则按错误消息中止；超过 `timeoutAt` 则抛「CodeGraph 后台任务执行超时」。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:107-116`。
   - 成功时任务落为 `SUCCEEDED`，步骤写成 `codegraph_published:<snapshotId>`；失败时 `failureCode` 为 `CODEGRAPH_TIMEOUT`（消息含「超时」）或 `CODEGRAPH_BUILD_FAILED`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:76`、`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:86-88`。
   - 非分支构建成功后自动排队知识失效检查。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:77`、`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:93-105`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:52-91`
 
-### GRAPH-004 在受管快照副本上构建
-- 需求：构建不得修改仓库快照本体，也不得越过受管目录边界。
+### GRAPH-004 在最新分支工作区增量构建
+- 需求：分支图谱直接复用固定工作区，避免每个提交重复复制和全量初始化。
 - 规则：
-  - 先复制快照到受管目录 `<artifact-root>/<repoId>/codegraph/<snapshotId>/<artifactId>/project`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:74-85`。
+  - 分支构建直接在固定受管分支内容目录生成 `.codegraph`，不再二次复制全部源码；首次使用 `init`，后续提交及重建使用增量 `index`。兼容的仓库级旧链路仍复制到独立产物目录。
   - 复制时跳过已有 `.codegraph` 目录与符号链接；越界路径抛「快照路径越界」。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:267-294`。
-  - 构建命令固定为 `init <project>`，超时为 `timeoutMinutes * 60` 秒；随后执行 `--version` 读取 CLI 版本。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:86-97`。
+  - 构建命令根据 `.codegraph` 是否存在选择 `init <project>` 或 `index <project>`，超时为 `timeoutMinutes * 60` 秒；随后执行 `--version` 读取 CLI 版本。
   - 节点数为 0 或未生成 `.codegraph` 目录时拒绝发布。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:94-101`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:22-26`
 

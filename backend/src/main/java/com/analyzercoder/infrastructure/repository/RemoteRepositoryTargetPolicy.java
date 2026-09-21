@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,10 +17,22 @@ import org.springframework.stereotype.Component;
 @Component
 public final class RemoteRepositoryTargetPolicy {
     private final Set<String> trustedPrivateHosts;
+    private final Set<String> insecureTlsHosts;
 
+    @Autowired
     public RemoteRepositoryTargetPolicy(
-            @Value("${app.repository.trusted-private-hosts:}") String configuredHosts) {
+            @Value("${app.repository.trusted-private-hosts:}") String configuredHosts,
+            @Value("${app.repository.insecure-tls-hosts:}") String configuredInsecureTlsHosts) {
         this.trustedPrivateHosts = parseTrustedHosts(configuredHosts);
+        this.insecureTlsHosts = parseTrustedHosts(configuredInsecureTlsHosts);
+        if (!trustedPrivateHosts.containsAll(insecureTlsHosts)) {
+            throw new IllegalArgumentException(
+                    "关闭 TLS 证书校验的仓库主机必须同时配置为受信任内网主机");
+        }
+    }
+
+    public RemoteRepositoryTargetPolicy(String configuredHosts) {
+        this(configuredHosts, "");
     }
 
     public void requireAllowed(String value) {
@@ -58,6 +71,23 @@ public final class RemoteRepositoryTargetPolicy {
             }
         } catch (UnknownHostException e) {
             throw new IllegalArgumentException("无法解析远程仓库域名");
+        }
+    }
+
+    /** 仅对显式配置且已受信任的精确 HTTPS 主机关闭 Git TLS 证书校验。 */
+    public boolean allowsInsecureTls(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(value);
+            return "https".equalsIgnoreCase(uri.getScheme())
+                    && uri.getHost() != null
+                    && uri.getUserInfo() == null
+                    && (uri.getPort() == -1 || uri.getPort() == 443)
+                    && insecureTlsHosts.contains(normalizeHost(uri.getHost()));
+        } catch (IllegalArgumentException exception) {
+            return false;
         }
     }
 

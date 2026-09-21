@@ -49,12 +49,11 @@ public class ProcessGitClient {
                                 "-c",
                                 "core.hooksPath=" + disabledHooksPath(),
                                 "-c",
-                                "protocol.ext.allow=never",
-                                "-C",
-                                root.toString()));
+                                "protocol.ext.allow=never"));
         command.addAll(safeArguments);
 
-        java.lang.ProcessBuilder builder = new java.lang.ProcessBuilder(command);
+        java.lang.ProcessBuilder builder =
+                new java.lang.ProcessBuilder(command).directory(root.toFile());
         GitRuntimePolicy.sanitizeEnvironment(builder.environment());
         try {
             Process process = builder.start();
@@ -107,7 +106,7 @@ public class ProcessGitClient {
                         run(
                                 repositoryRoot,
                                 DIGEST_METADATA_LIMIT_BYTES,
-                                List.of("status", "--porcelain=v1", "-z", "--untracked-files=all")),
+                                List.of("status", "--porcelain", "-z", "--untracked-files=all")),
                         "WORKTREE_DIGEST_FAILED");
         CommandResult rawDiff =
                 requireSuccess(

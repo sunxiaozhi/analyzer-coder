@@ -52,7 +52,7 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
                                         InspectionStep.STATUS,
                                         false,
                                         "status",
-                                        "--porcelain=v1",
+                                        "--porcelain",
                                         "-z",
                                         "--untracked-files=all")
                                 .stdout()
@@ -137,11 +137,9 @@ public class GitCliLocalGitInspector implements LocalGitInspector {
                                 "-c",
                                 "core.hooksPath=" + GitRuntimePolicy.disabledHooksPath(),
                                 "-c",
-                                "protocol.ext.allow=never",
-                                "-C",
-                                root.toString()));
+                                "protocol.ext.allow=never"));
         command.addAll(List.of(arguments));
-        ProcessBuilder builder = new ProcessBuilder(command);
+        ProcessBuilder builder = new ProcessBuilder(command).directory(root.toFile());
         GitRuntimePolicy.sanitizeEnvironment(builder.environment());
         try {
             Process process = builder.start();

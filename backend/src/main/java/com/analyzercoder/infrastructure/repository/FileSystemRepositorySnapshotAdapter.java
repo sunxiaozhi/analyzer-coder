@@ -38,7 +38,7 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
     public FileSystemRepositorySnapshotAdapter(
             @Value("${app.repository.snapshot-root:${java.io.tmpdir}/analyzer-coder/snapshots}")
                     String snapshotRoot,
-            @Value("${app.repository.snapshot-max-files:20000}") int maxFiles,
+            @Value("${app.repository.snapshot-max-files:50000}") int maxFiles,
             @Value("${app.repository.snapshot-max-total-bytes:2147483648}") long maxTotalBytes) {
         this.snapshotRoot = Path.of(snapshotRoot).toAbsolutePath().normalize();
         this.maxFiles = maxFiles;
@@ -173,13 +173,11 @@ public class FileSystemRepositorySnapshotAdapter implements RepositorySnapshotPo
                                 "core.hooksPath=" + GitRuntimePolicy.disabledHooksPath(),
                                 "-c",
                                 "protocol.ext.allow=never",
-                                "-C",
-                                root.toString(),
                                 "ls-files",
                                 "-co",
                                 "--exclude-standard",
                                 "-z"));
-        ProcessBuilder builder = new ProcessBuilder(command);
+        ProcessBuilder builder = new ProcessBuilder(command).directory(root.toFile());
         GitRuntimePolicy.sanitizeEnvironment(builder.environment());
         try {
             Process process = builder.start();

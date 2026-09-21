@@ -178,14 +178,14 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 | 仓库 | `app.repository.managed-data-root` | `APP_MANAGED_DATA_ROOT` | 无 | **是** | yml:70 |
 | 仓库 | `app.repository.snapshot-root` | 无（派生） | `<managed-data-root>/repositories` | 否 | yml:72 |
 | 仓库 | `app.repository.import-root` | 无（派生） | `<managed-data-root>/staging/imports` | 否 | yml:73 |
-| 仓库 | `app.repository.snapshot-max-files` | `APP_REPOSITORY_SNAPSHOT_MAX_FILES` | 20000 | 否 | yml:75 |
+| 仓库 | `app.repository.snapshot-max-files` | `APP_REPOSITORY_SNAPSHOT_MAX_FILES` | 50000 | 否 | yml:79 |
 | 仓库 | `app.repository.snapshot-max-total-bytes` | `APP_REPOSITORY_SNAPSHOT_MAX_TOTAL_BYTES` | 2147483648 | 否 | yml:77 |
 | 仓库 | `app.repository.browser-max-file-bytes` | `APP_REPOSITORY_BROWSER_MAX_FILE_BYTES` | 2097152 | 否 | yml:79 |
 | 索引 | `app.indexing.poll-interval-ms` | 无（固定） | 5000 | 否 | yml:82 |
 | 索引 | `app.indexing.max-file-bytes` | 无（固定） | 524288 | 否 | yml:84 |
 | 图谱 | `app.codegraph.executable` | `APP_CODEGRAPH_EXECUTABLE` | `codegraph` | 否（缺失时图谱阶段失败，检索仍可用） | yml:87 |
-| 图谱 | `app.codegraph.timeout-minutes` | `APP_CODEGRAPH_TIMEOUT_MINUTES` | 10 | 否 | yml:89 |
-| 图谱 | `app.codegraph.task-timeout-minutes` | `APP_CODEGRAPH_TASK_TIMEOUT_MINUTES` | 12 | 否 | yml:91 |
+| 图谱 | `app.codegraph.timeout-minutes` | `APP_CODEGRAPH_TIMEOUT_MINUTES` | 30 | 否 | yml:93 |
+| 图谱 | `app.codegraph.task-timeout-minutes` | `APP_CODEGRAPH_TASK_TIMEOUT_MINUTES` | 35 | 否 | yml:95 |
 | 图谱 | `app.codegraph.poll-interval-ms` | `APP_CODEGRAPH_POLL_INTERVAL_MS` | 2000 | 否 | yml:92 |
 | 图谱 | `app.codegraph.artifact-root` | 无（派生） | `<managed-data-root>/repositories` | 否 | yml:94 |
 | 模型 | `app.llm.master-key` | `APP_LLM_MASTER_KEY` | 无 | **是** | yml:96-97 |
@@ -217,7 +217,7 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 
 ### 4.1 快照、文件与索引
 
-- 单快照最大文件数 20000，超限抛 `仓库文件数量超过系统限制`
+- 单个受管分支内容最大文件数 50000，超限抛文件数量限制错误
   （`application.yml:75`；`backend/src/main/java/com/analyzercoder/infrastructure/repository/FileSystemRepositorySnapshotAdapter.java:41,116-118`）。
 - 单快照最大总字节数 2147483648（2 GiB），用 `Math.addExact` 累加后判定
   （`application.yml:77`；`.../FileSystemRepositorySnapshotAdapter.java:42,135-138`）。

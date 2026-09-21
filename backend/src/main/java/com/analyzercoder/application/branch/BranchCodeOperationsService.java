@@ -97,24 +97,29 @@ public class BranchCodeOperationsService {
                                     : snapshots.resolve(repository.path(), branch.name());
             progress.accept("SNAPSHOT", commit);
             if (branch.snapshotId() != null && commit.equals(branch.commitSha())) {
-                transaction.executeWithoutResult(
-                        status -> {
-                            checkpoint.run();
-                            if (db.update(
-                                            """
-                            UPDATE repository_branches SET preparation_status='READY',last_synced_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
-                            WHERE repo_id=? AND id=? AND generation=? AND tracking_status='ACTIVE'
-                            """,
-                                            repoId,
-                                            branchId,
-                                            generation)
-                                    != 1)
-                                throw new ApiSecurityException(
-                                        409, "BRANCH_BUILD_SUPERSEDED", "同步任务已被取代");
-                        });
-                return snapshotContext(actor, repoId, branchId, branch.snapshotId());
+                BranchReadContext current =
+                        snapshotContext(actor, repoId, branchId, branch.snapshotId());
+                if (snapshots.isLatestWorkspace(repository.id(), branchId, current.contentPath())) {
+                    transaction.executeWithoutResult(
+                            status -> {
+                                checkpoint.run();
+                                if (db.update(
+                                                """
+                                UPDATE repository_branches SET preparation_status='READY',last_synced_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+                                WHERE repo_id=? AND id=? AND generation=? AND tracking_status='ACTIVE'
+                                """,
+                                                repoId,
+                                                branchId,
+                                                generation)
+                                        != 1)
+                                    throw new ApiSecurityException(
+                                            409, "BRANCH_BUILD_SUPERSEDED", "同步任务已被取代");
+                            });
+                    return current;
+                }
             }
-            var snapshot = snapshots.create(repository.id(), repository.path(), commit);
+            var snapshot =
+                    snapshots.createLatest(repository.id(), branchId, repository.path(), commit);
             unpublished = snapshot;
             progress.accept("PUBLISHING", commit);
             transaction.executeWithoutResult(
@@ -171,6 +176,7 @@ public class BranchCodeOperationsService {
                 JOIN repository_branches b ON b.repo_id=s.repo_id AND b.id=s.branch_id
                 JOIN repositories r ON r.id=s.repo_id
                 WHERE s.repo_id=? AND s.branch_id=? AND s.id=? AND b.tracking_status='ACTIVE' AND r.deleted_at IS NULL
+                  AND s.id=b.published_snapshot_id
                 """,
                         (r, n) ->
                                 new BranchReadContext(

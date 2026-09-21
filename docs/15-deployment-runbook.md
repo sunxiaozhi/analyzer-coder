@@ -123,6 +123,8 @@ Windows：Copy-Item components/components.env.example components/.env。
 - YAML 中按 spring.datasource、server、app 等标准属性配置；无需 APP_ 环境变量或 dotenv 加载器。
 - 两个主密钥分别保存模型 Key 和 Git 凭据的加密能力，使用至少 32 字符的独立随机值，升级时必须保留。
 - 内网 GitLab 需在 `app.repository.trusted-private-hosts` 填写精确主机名，多个主机用逗号或分号分隔；不要配置通配符或 `localhost`。公网仓库无需加入白名单。
+- 内部 CA 暂时无法安装时，可在 `app.repository.insecure-tls-hosts` 填写同一个精确内网主机；该主机必须已位于 `trusted-private-hosts`，系统只为命中主机的单次 Git 命令关闭证书校验。
+- 后端 Git CLI 兼容基线为 1.8.3.1；代码已避开该版本不支持的 `git -C`、`--porcelain=v1`、`--end-of-options`、`--no-write-fetch-head` 和空 `credential.helper` 参数。生产环境仍建议升级到受安全维护的新版本。
 - 默认数据路径相对 backend；自定义仓库白名单目录必须预先存在且可读。Windows 的 YAML 路径建议使用 D:/data/repositories 形式。
 - HTTP 入口默认端口 18081，后端固定使用 18082，PG 宿主端口默认 18080。若再次更改后端端口，必须同步修改 YAML 的 `server.port`、Nginx 的 `proxy_pass` 和后端脚本的 `--port` / `-Port` 默认值。
 - 初始管理员密码必须同时包含大写字母、小写字母、数字和特殊字符。管理员仅在数据库没有账号时创建，第一次登录要求改密；修改配置里的初始密码不会重置已有账号。
@@ -436,3 +438,8 @@ docker-compose --env-file components/.env -f components/compose.yaml logs --tail
 | Linux `control.lock` 残留 | 确认没有其他控制命令运行后移除该空目录，再重试 |
 
 源码仓库的 `scripts/check-runtime.mjs` 面向开发环境，需要 Node/Maven 和终端环境变量，不读取发布包 YAML；部署诊断使用后端 status、Compose 状态、分层 HTTP 检查和组件日志。
+## 9. 最新分支工作区说明
+
+升级到固定分支工作区实现后，每个分支第一次同步会完整建立
+`<managed-data-root>/repositories/<repoId>/branches/<branchId>/content`；后续提交只更新 Git 变化文件，
+并在同一路径复用 `.codegraph` 执行增量索引。旧式 `branch-<snapshotId>` 目录不会自动迁移，确认新工作区稳定后可按保留策略清理。

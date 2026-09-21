@@ -9,7 +9,7 @@ Java 17 + Spring Boot 3.5 后端，承载账号、仓库、索引、检索、问
 - PostgreSQL 17、pgvector（内置 64 维字符哈希，外部模型维度可配置）
 - Flyway（当前源码保留合并后的 `V1` 基线；旧库升级需单独核验，见 `docs/11-data-model.md`）
 - Spring Scheduler + 数据库任务表
-- Git CLI、CodeGraph CLI
+- Git CLI（兼容基线为 1.8.3.1；生产环境仍建议使用受安全维护的新版本）、CodeGraph CLI
 - JDK `HttpClient` + OpenAI-compatible chat/embedding
 
 ## 发布运行

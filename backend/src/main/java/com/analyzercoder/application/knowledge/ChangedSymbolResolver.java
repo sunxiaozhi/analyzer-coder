@@ -462,7 +462,6 @@ public class ChangedSymbolResolver {
                                     "--no-ext-diff",
                                     "--no-textconv",
                                     "--format=",
-                                    "--end-of-options",
                                     object));
             if (result.exitCode() != 0) {
                 return ContentResult.unavailable("BASE_CONTENT_UNAVAILABLE", "无法从提交读取文件内容");

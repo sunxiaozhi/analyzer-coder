@@ -228,7 +228,7 @@ public class RepositoryBranchService {
                                     : snapshots.resolve(repository.path(), branch.name());
             progress.accept("SNAPSHOT", commit);
             ManagedRepositorySnapshot snapshot =
-                    snapshots.create(repository.id(), repository.path(), commit);
+                    snapshots.createLatest(repository.id(), branchId, repository.path(), commit);
             unpublished = snapshot;
             CodeRepository source =
                     repository.withManagedSnapshot(
@@ -354,6 +354,7 @@ public class RepositoryBranchService {
                 SELECT c.*,b.name,s.commit_sha,s.content_path FROM branch_read_contexts c
                 JOIN repository_branches b ON b.id=c.branch_id JOIN branch_snapshots s ON s.id=c.snapshot_id
                 WHERE c.id=? AND c.repo_id=? AND c.account_id=? AND c.expires_at>CURRENT_TIMESTAMP
+                  AND s.id=b.published_snapshot_id
                 """,
                             (r, n) ->
                                     new BranchReadContext(

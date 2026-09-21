@@ -314,7 +314,7 @@
   - 分支快照路径为 `<snapshot-root>/<repoId>/branch-<snapshotId>/`，内有 `source.zip` 与 `content`。
   - 知识附件路径为 `<managed-data-root>/repositories/<repoId>/knowledge/objects/<sha 前 2 位>/<sha>`，上传暂存为 `<managed-data-root>/staging/knowledge/<uuid>`；路径必须仍在受管根目录内。
   - 图谱产物路径为 `<artifact-root>/<repoId>/codegraph/<snapshotId>/<artifactId>/project/.codegraph`，其中 `app.codegraph.artifact-root` 默认等于 `${managed-data-root}/repositories`。
-  - 配额与上限：单快照最多 20000 个文件（`APP_REPOSITORY_SNAPSHOT_MAX_FILES`）、最多 2147483648 字节（2 GiB，`APP_REPOSITORY_SNAPSHOT_MAX_TOTAL_BYTES`）；源码预览单文件上限 2097152 字节（2 MiB）；代码索引纳入的单文件上限 524288 字节（512 KiB，硬编码默认值）。
+  - 配额与上限：单个受管分支内容最多 50000 个文件（`APP_REPOSITORY_SNAPSHOT_MAX_FILES`）、最多 2147483648 字节（2 GiB，`APP_REPOSITORY_SNAPSHOT_MAX_TOTAL_BYTES`）；源码预览单文件上限 2097152 字节（2 MiB）；代码索引纳入的单文件上限 524288 字节（512 KiB，硬编码默认值）。
   - 仓库路径与受管路径分别校验：仓库必须位于 `APP_REPOSITORY_ALLOWED_ROOTS` 白名单内，受管路径必须位于受管根目录内。
 - 证据：`backend/src/main/resources/application.yml:66`、`backend/src/main/resources/application.yml:70`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/FileSystemRepositorySnapshotAdapter.java:57`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/GitBranchSnapshotFactory.java:78`、`backend/src/main/java/com/analyzercoder/application/intelligence/KnowledgeAttachmentService.java:89`、`backend/src/main/java/com/analyzercoder/application/intelligence/ManagedCodeGraphService.java:77`、`backend/src/main/java/com/analyzercoder/infrastructure/repository/RepositoryPathPolicy.java:47`
 

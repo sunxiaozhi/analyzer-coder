@@ -46,7 +46,7 @@
 
 - 需求：发布受管快照时限制文件总数与总字节数，防止超大仓库拖垮平台；单文件预览与单文件索引入库分别设限。
 - 规则：
-  - 受管快照文件数上限 `app.repository.snapshot-max-files`，默认 20000。
+  - 受管分支内容文件数上限 `app.repository.snapshot-max-files`，默认 50000。
   - 受管快照总字节上限 `app.repository.snapshot-max-total-bytes`，默认 2147483648（2 GiB）。
   - 快照复制拒绝符号链接与非普通文件；只复制 `git ls-files -co --exclude-standard` 列出的文件。
   - 远程/分支快照导出前先用 `git ls-tree -r -l` 预检文件数与字节数，超出即拒绝；导出后再次累计校验。
@@ -133,6 +133,7 @@
   - `localhost`、`*.localhost` 始终拒绝；`*.local` 仅在命中受信任主机白名单时允许。
   - 解析该主机的全部地址，任一命中受保护网段即拒绝，受信任主机除外：任意本地地址、环回、链路本地、站点本地、组播；IPv4 额外拒绝 `0.0.0.0/8`、`10/8`、`127/8`、`>=224`、`169.254/16`、`172.16-31`、`192.168/16`、`100.64-127`、`192.0/16`、`198.18-19`、`198.51`、`203.0`；IPv6 额外拒绝 `fc00::/7`、`fe80::/10`、`::1`。
   - `app.repository.trusted-private-hosts` 可配置逗号或分号分隔的精确主机；只有命中该白名单的主机可解析到受保护网段。不支持通配符，`localhost` 始终拒绝，其余 HTTPS、443 和无内嵌凭据限制保持不变。
+  - 内部 CA 暂时无法部署时，可用 `app.repository.insecure-tls-hosts` 对精确内网主机关闭 Git TLS 证书校验；每个主机必须同时列入 `trusted-private-hosts`，该例外不会影响其他仓库。
   - 域名无法解析时以 400 拒绝。
   - 执行 `ls-remote`、`fetch`、`clone` 时使用 `http.followRedirects=false`，并设置 `GIT_TERMINAL_PROMPT=0`。
   - 异步导入入口直接要求 HTTPS；同步导入入口的地址解析允许 `http`/`https`，但控制器在调用前已执行目标安全策略，因此外部可观察行为同样是 HTTPS-only。
@@ -209,7 +210,8 @@
   - 创建后状态为 `ACTIVE`，记录创建人与更新人；审计 `REPOSITORY_CREDENTIAL_CREATED`。
   - 更新时若替换令牌则 `credential_version` 加一；更新后状态强制回到 `ACTIVE`；审计 `REPOSITORY_CREDENTIAL_UPDATED`。
   - 启用/停用分别写入状态 `ACTIVE` / `DISABLED`，停用时记录 `disabled_at`；审计事件为 `..._ENABLED` / `..._DISABLED`。
-  - 检测：先做目标地址策略校验，再校验主机/端口匹配，然后执行 `git ls-remote --exit-code <url> HEAD`（45 秒超时）；成功写 `ACTIVE` 与 `last_validated_at`，审计结果 `SUCCESS`；失败写 `INVALID`、脱敏错误（截断 240 字符），审计结果 `DENIED`，并把原始异常抛给调用方。
+  - 检测：先做目标地址策略校验，再校验主机/端口匹配，然后执行 `git ls-remote --heads <url>`（45 秒超时）；只验证传输、认证和读取分支能力，不要求远端已经存在 `HEAD`，因此空仓库也可以通过凭据检测。成功写 `ACTIVE` 与 `last_validated_at`，审计结果 `SUCCESS`；失败写 `INVALID`、脱敏错误（截断 240 字符），审计结果 `DENIED`，并把原始异常抛给调用方。
+  - `INVALID` 凭据允许再次执行检测以恢复为 `ACTIVE`；`DISABLED` 凭据必须先启用，不能直接检测或用于仓库操作。
   - 删除：仍被仓库绑定时拒绝（409「凭据仍被 N 个仓库使用，请先更换或解绑」）。
   - 解析凭据时非 `ACTIVE` 状态直接拒绝（「所选 Git 凭据当前不可用」）。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryCredentialController.java:29`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:42`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:64`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:88`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:119`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:150`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:165`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:210`、`backend/src/main/resources/mappers/RepositoryCredentialMapper.xml:9`、`backend/src/main/java/com/analyzercoder/application/repository/GitCredentialExecutor.java:119`
@@ -232,8 +234,10 @@
 - 规则：
   - 有凭据时创建临时目录写入 `askpass` 脚本：Windows 为 `.cmd`，类 Unix 为 `.sh` 且权限设为仅属主可读写执行。
   - 通过环境变量 `GIT_ASKPASS`、`ANALYZER_GIT_USERNAME`、`ANALYZER_GIT_SECRET` 传递，命令行不出现令牌；同时设置 `GIT_TERMINAL_PROMPT=0`。
+  - 有凭据时把子进程的 `HOME`、`XDG_CONFIG_HOME` 指向临时隔离目录并设置 `GIT_CONFIG_NOSYSTEM=1`，避免部署机上的凭据助手覆盖平台选中的身份；不使用旧版 Git 无法解析的空 `credential.helper` 命令行值。
+  - 兼容 Git 1.8.3.1：工作目录由子进程直接设置，不依赖 `git -C`；状态读取使用 `status --porcelain`；命令不使用 `--end-of-options`、`--no-write-fetch-head` 等新版本参数。
   - Git 输出写入临时文件，超过 2 MiB 直接判失败；执行结束后无论成败都删除输出文件与 askpass 目录，并强制结束仍在运行的进程。
-  - 失败信息按模式映射为中文提示（认证失败、仓库不存在、域名解析失败、证书失败、其它）。
+  - 失败信息按模式映射为中文提示（认证失败、仓库不存在、域名解析失败、证书失败、其它）；服务端日志记录退出码、是否提供凭据、是否关闭证书校验及脱敏后的 Git 输出，不记录令牌。
   - 每个 Git 调用都有显式超时：克隆 180 秒、拉取分支 180 秒、`ls-remote` 45 秒、`rev-parse` 30 秒。
 - 证据：`backend/src/main/java/com/analyzercoder/application/repository/GitCredentialExecutor.java:188`、`backend/src/main/java/com/analyzercoder/application/repository/GitCredentialExecutor.java:210`、`backend/src/main/java/com/analyzercoder/application/repository/GitCredentialExecutor.java:221`、`backend/src/main/java/com/analyzercoder/application/repository/GitCredentialExecutor.java:233`、`backend/src/main/java/com/analyzercoder/application/repository/GitCredentialExecutor.java:244`、`backend/src/main/java/com/analyzercoder/application/repository/GitCredentialExecutor.java:269`
 

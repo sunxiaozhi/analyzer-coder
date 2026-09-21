@@ -1,6 +1,7 @@
 package com.analyzercoder.application.intelligence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -84,6 +85,64 @@ class ManagedCodeGraphCliContractTest {
         verify(publisher).publish(row.capture());
         assertThat(row.getValue().snapshotId()).isEqualTo(snapshotId);
         verify(mapper, org.mockito.Mockito.atLeast(2)).findRepositoryVersion(repositoryId);
+    }
+
+    @Test
+    void buildsBranchInPlaceAndUsesIncrementalIndexOnRetry() throws Exception {
+        Path executable = temporaryDirectory.resolve("fake-codegraph-branch");
+        Files.writeString(
+                executable,
+                """
+                #!/usr/bin/env sh
+                set -eu
+                if [ "$1" = "--version" ]; then
+                  echo "codegraph-contract-1.0"
+                  exit 0
+                fi
+                if [ "$1" = "init" ] || [ "$1" = "index" ]; then
+                  printf '%s\n' "$1" >> "$(dirname "$0")/operations.log"
+                  mkdir -p "$2/.codegraph"
+                  printf '3 nodes\n2 edges\n'
+                  exit 0
+                fi
+                echo "unexpected arguments: $*" >&2
+                exit 23
+                """);
+        Files.setPosixFilePermissions(
+                executable,
+                Set.of(
+                        PosixFilePermission.OWNER_READ,
+                        PosixFilePermission.OWNER_WRITE,
+                        PosixFilePermission.OWNER_EXECUTE));
+        Path branch = temporaryDirectory.resolve("branch-content");
+        Files.createDirectories(branch);
+        Files.writeString(branch.resolve("Example.java"), "class Example {}\n");
+
+        UUID repositoryId = UUID.randomUUID();
+        UUID snapshotId = UUID.randomUUID();
+        CodeGraphArtifactPublisher publisher = mock(CodeGraphArtifactPublisher.class);
+        ManagedCodeGraphService service =
+                new ManagedCodeGraphService(
+                        mock(CodeGraphArtifactMapper.class),
+                        new ObjectMapper(),
+                        executable.toString(),
+                        1,
+                        temporaryDirectory.resolve("artifacts").toString(),
+                        publisher);
+
+        CodeGraphService.Artifact first =
+                service.buildSnapshot(
+                        repositoryId, snapshotId, branch, CodeGraphService.BuildControl.none());
+        CodeGraphService.Artifact second =
+                service.buildSnapshot(
+                        repositoryId, snapshotId, branch, CodeGraphService.BuildControl.none());
+
+        assertThat(first.artifactPath()).isEqualTo(branch.resolve(".codegraph").toString());
+        assertThat(second.artifactPath()).isEqualTo(branch.resolve(".codegraph").toString());
+        assertThat(temporaryDirectory.resolve("operations.log"))
+                .hasContent("init\nindex\n");
+        assertThat(temporaryDirectory.resolve("artifacts")).doesNotExist();
+        verify(publisher, org.mockito.Mockito.times(2)).publish(any(CodeGraphArtifactRow.class));
     }
 
     @Test

@@ -15,6 +15,8 @@ import com.analyzercoder.application.common.PageResult;
 import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -22,6 +24,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class BranchPreparationJobs {
+    private static final Logger log = LoggerFactory.getLogger(BranchPreparationJobs.class);
+    private static final String GENERIC_FAILURE =
+            "任务失败，请检查分支、仓库权限、凭据或向量模型配置后重试";
+
     private final JdbcTemplate db;
     private final DataSource dataSource;
     private final RepositoryBranchService branches;
@@ -305,12 +311,20 @@ public class BranchPreparationJobs {
                                         != 1) throw superseded();
                             });
                 } catch (RuntimeException failure) {
+                    log.error(
+                            "分支任务失败: taskId={}, repoId={}, branchId={}, kind={}, snapshotId={}",
+                            id,
+                            repoId,
+                            branchId,
+                            row.get("kind"),
+                            row.get("target_snapshot"),
+                            failure);
                     db.update(
                             """
-                            UPDATE branch_preparation_jobs SET status='FAILED',stage='FAILED',
+                            UPDATE branch_preparation_jobs SET status='FAILED',
                             error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'
                             """,
-                            "任务失败，请检查分支、仓库权限、凭据或向量模型配置后重试",
+                            failureMessage(failure),
                             id,
                             token);
                 }
@@ -322,6 +336,21 @@ public class BranchPreparationJobs {
             }
             return true;
         }
+    }
+
+    private static String failureMessage(RuntimeException failure) {
+        String message = failure.getMessage();
+        if (message == null || message.isBlank()) return GENERIC_FAILURE;
+        if (message.startsWith("CodeGraph")
+                || message.startsWith("未找到 CodeGraph")
+                || message.startsWith("无法创建 CodeGraph")
+                || message.startsWith("无法准备 CodeGraph")
+                || message.startsWith("分支文件数超过")
+                || message.startsWith("分支内容超过")
+                || message.startsWith("无法创建分支快照")) {
+            return message.length() <= 500 ? message : message.substring(0, 500);
+        }
+        return GENERIC_FAILURE;
     }
 
     private void performCodeOperation(

@@ -27,7 +27,7 @@ public class CodeGraphService {
             CodeGraphArtifactMapper mapper,
             ObjectMapper json,
             @Value("${app.codegraph.executable:codegraph}") String executable,
-            @Value("${app.codegraph.timeout-minutes:10}") long minutes) {
+            @Value("${app.codegraph.timeout-minutes:30}") long minutes) {
         this.mapper = mapper;
         this.json = json;
         this.executable = executable;

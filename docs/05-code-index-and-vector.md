@@ -319,6 +319,8 @@
 - 规则：
   - 同步条件：该分支的 `published_snapshot_id` 等于本次索引的快照。
   - 内容索引完成时间写入 `branch_snapshots.content_indexed_at`；该字段非空即视为“已索引”，重复任务直接短路返回。
+  - 固定分支工作区提供当前提交的变化路径清单；存在上一个已索引版本时，数据库直接复制未变化路径的片段，只读取并解析新增或修改文件，删除路径不再复制。
+  - Markdown 来源仍扫描完整 Markdown 清单，但不会读取其它未变化源码文件，防止删除或改名的文档残留。
   - 默认链路完成写入后也会顺带把仓库 `current_snapshot_id` 对应分支快照的 `content_indexed_at` 置为当前时间（兼容旧默认版本索引）。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:136`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:146`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:154`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:177`
 
@@ -330,7 +332,7 @@
   - `app.llm.master-key` 无默认值、必填，用于加密模型 API Key；`app.llm.allow-insecure-local` 默认 false。
   - `app.llm.connectivity-timeout-seconds` 默认 15（秒）；`app.llm.breaker-failure-threshold` 默认 3（连续失败熔断阈值）。
   - 向量模型标识、维度、检索能力**不在** `application.yml` 中，全部来自数据库表。
-  - 相邻但不同域的上限（快照复制与源码预览）：`app.repository.snapshot-max-files` 默认 20000、`snapshot-max-total-bytes` 默认 2147483648、`browser-max-file-bytes` 默认 2097152。
+  - 相邻但不同域的上限（分支内容准备与源码预览）：`app.repository.snapshot-max-files` 默认 50000、`snapshot-max-total-bytes` 默认 2147483648、`browser-max-file-bytes` 默认 2097152。
 - 证据：`backend/src/main/resources/application.yml:80`、`backend/src/main/resources/application.yml:95`、`backend/src/main/resources/application.yml:75`、`backend/src/main/resources/application.yml:79`、`backend/src/main/java/com/analyzercoder/infrastructure/indexing/FileSystemRepositoryScanner.java:84`
 
 ### IDX-031 前端：索引任务与向量索引界面

@@ -2,6 +2,7 @@ package com.analyzercoder.infrastructure.repository;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -43,6 +44,23 @@ class RemoteRepositoryTargetPolicyTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new RemoteRepositoryTargetPolicy("localhost"));
+    }
+
+    @Test
+    void allowsInsecureTlsOnlyForAnExactlyTrustedPrivateHost() {
+        var configured =
+                new RemoteRepositoryTargetPolicy(
+                        "gitlab.internal.example", "gitlab.internal.example");
+
+        assertTrue(
+                configured.allowsInsecureTls(
+                        "https://gitlab.internal.example/group/repository.git"));
+        assertFalse(
+                configured.allowsInsecureTls(
+                        "https://other.internal.example/group/repository.git"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new RemoteRepositoryTargetPolicy("", "gitlab.internal.example"));
     }
 
     @Test

@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -101,6 +102,47 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
                     .toList();
         } catch (IOException exception) {
             throw new IllegalStateException("扫描当前代码版本失败", exception);
+        }
+    }
+
+    @Override
+    public List<ScannedRepositoryFile> scan(
+            CodeRepository repository, Set<String> relativePaths) {
+        if (relativePaths == null) return scan(repository);
+        Path root = repository.currentSnapshotPath();
+        if (root == null || !Files.isDirectory(root)) {
+            throw new IllegalStateException("仓库尚未发布可读取的代码版本");
+        }
+        List<ScannedRepositoryFile> files = new ArrayList<>();
+        for (String relative : relativePaths) {
+            if (relative == null || relative.isBlank()) continue;
+            Path path = root.resolve(relative).normalize();
+            if (!path.startsWith(root)
+                    || !Files.isRegularFile(path)
+                    || isInExcludedDirectory(root, path)
+                    || !isSupportedFile(path)
+                    || !isWithinSizeLimit(path)) continue;
+            files.addAll(readFile(root, path));
+        }
+        return List.copyOf(files);
+    }
+
+    @Override
+    public List<ScannedRepositoryFile> scanMarkdown(CodeRepository repository) {
+        Path root = repository.currentSnapshotPath();
+        if (root == null || !Files.isDirectory(root)) {
+            throw new IllegalStateException("仓库尚未发布可读取的代码版本");
+        }
+        try (Stream<Path> paths = Files.walk(root)) {
+            return paths.filter(Files::isRegularFile)
+                    .filter(path -> !isInExcludedDirectory(root, path))
+                    .filter(path -> "markdown".equals(language(path)))
+                    .filter(this::isWithinSizeLimit)
+                    .map(path -> readFile(root, path))
+                    .flatMap(List::stream)
+                    .toList();
+        } catch (IOException exception) {
+            throw new IllegalStateException("扫描 Markdown 来源失败", exception);
         }
     }
 

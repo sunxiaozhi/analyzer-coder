@@ -178,14 +178,16 @@ class BranchCodeOperationsDatabaseTest {
             var factory = mock(GitBranchSnapshotFactory.class);
             when(factory.resolve(directory, "feature")).thenReturn("b".repeat(40));
             when(factory.resolve(directory, "main")).thenReturn("a".repeat(40));
-            when(factory.create(eq(repository.id()), eq(directory), anyString()))
+            when(factory.isLatestWorkspace(eq(repository.id()), eq(feature), any()))
+                    .thenReturn(true);
+            when(factory.createLatest(eq(repository.id()), eq(feature), eq(directory), anyString()))
                     .thenAnswer(
                             call ->
                                     new ManagedRepositorySnapshot(
                                             RepositorySnapshotId.newId(),
                                             repository.id(),
                                             directory.resolve(UUID.randomUUID().toString()),
-                                            call.getArgument(2),
+                                            call.getArgument(3),
                                             "digest",
                                             Instant.now()));
             var scanner = mock(RepositoryScannerPort.class);
@@ -283,7 +285,8 @@ class BranchCodeOperationsDatabaseTest {
             jobs.submitOperation(actor, repo, feature, "SYNC", null);
             jobs.processNext();
             assertThat(published(db, feature)).isEqualTo(first);
-            verify(factory, times(1)).create(eq(repository.id()), eq(directory), anyString());
+            verify(factory, times(1))
+                    .createLatest(eq(repository.id()), eq(feature), eq(directory), anyString());
 
             when(factory.resolve(directory, "feature")).thenReturn("c".repeat(40));
             jobs.submitOperation(actor, repo, feature, "PREPARE", null);
@@ -302,10 +305,10 @@ class BranchCodeOperationsDatabaseTest {
                                     .graphReady())
                     .isTrue();
 
-            // A pinned historical index does not replace current Markdown sources or code pointers.
+            // Latest-only branch mode rejects historical versions.
             clearInvocations(markdown);
-            operations.indexContent(
-                    actor, operations.snapshotContext(actor, repo, feature, first), () -> {});
+            assertThatThrownBy(() -> operations.snapshotContext(actor, repo, feature, first))
+                    .isInstanceOf(ApiSecurityException.class);
             verifyNoInteractions(markdown);
             assertThat(published(db, feature)).isEqualTo(second);
             assertThat(
@@ -329,7 +332,7 @@ class BranchCodeOperationsDatabaseTest {
                             () ->
                                     operations.indexContent(
                                             actor,
-                                            operations.snapshotContext(actor, repo, feature, first),
+                                            operations.snapshotContext(actor, repo, feature, second),
                                             () -> {}))
                     .isInstanceOf(ApiSecurityException.class);
             verifyNoInteractions(factory);
