@@ -122,6 +122,7 @@ Windows：Copy-Item components/components.env.example components/.env。
 - 已有数据库更换 `POSTGRES_DATA_SOURCE` 不会自动迁移数据；必须先停止写入、备份并按 PostgreSQL 流程迁移和验证。
 - YAML 中按 spring.datasource、server、app 等标准属性配置；无需 APP_ 环境变量或 dotenv 加载器。
 - 两个主密钥分别保存模型 Key 和 Git 凭据的加密能力，使用至少 32 字符的独立随机值，升级时必须保留。
+- 内网 GitLab 需在 `app.repository.trusted-private-hosts` 填写精确主机名，多个主机用逗号或分号分隔；不要配置通配符或 `localhost`。公网仓库无需加入白名单。
 - 默认数据路径相对 backend；自定义仓库白名单目录必须预先存在且可读。Windows 的 YAML 路径建议使用 D:/data/repositories 形式。
 - HTTP 入口默认端口 18081，后端固定使用 18082，PG 宿主端口默认 18080。若再次更改后端端口，必须同步修改 YAML 的 `server.port`、Nginx 的 `proxy_pass` 和后端脚本的 `--port` / `-Port` 默认值。
 - 初始管理员密码必须同时包含大写字母、小写字母、数字和特殊字符。管理员仅在数据库没有账号时创建，第一次登录要求改密；修改配置里的初始密码不会重置已有账号。

@@ -26,6 +26,8 @@ app:
     allow-insecure-local: false
   repository:
     allowed-roots: ./repositories
+    # Exact hosts only (DNS names recommended). Listed hosts may resolve to protected addresses.
+    trusted-private-hosts: ''
     managed-data-root: ./data
   codegraph:
     executable: codegraph # Optional; install separately for graph analysis.

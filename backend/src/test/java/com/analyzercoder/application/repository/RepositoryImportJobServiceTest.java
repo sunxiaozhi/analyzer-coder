@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.analyzercoder.domain.repository.RepositorySourceType;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryImportJobMapper;
+import com.analyzercoder.infrastructure.repository.RemoteRepositoryTargetPolicy;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,13 @@ class RepositoryImportJobServiceTest {
         RepositoryProjectDraftService drafts = mock(RepositoryProjectDraftService.class);
         RepositoryImportJobStateService jobState = mock(RepositoryImportJobStateService.class);
         RepositoryImportJobService service =
-                new RepositoryImportJobService(mapper, credentials, imports, drafts, jobState);
+                new RepositoryImportJobService(
+                        mapper,
+                        credentials,
+                        imports,
+                        drafts,
+                        jobState,
+                        new RemoteRepositoryTargetPolicy(""));
         UUID jobId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
         Map<String, Object> row =

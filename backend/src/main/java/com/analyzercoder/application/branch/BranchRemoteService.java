@@ -19,16 +19,19 @@ public class BranchRemoteService {
     private final RepositoryCredentialService credentials;
     private final GitCredentialExecutor git;
     private final AccessControlService access;
+    private final RemoteRepositoryTargetPolicy remoteTargets;
 
     public BranchRemoteService(
             RepositoryMapper repositories,
             RepositoryCredentialService credentials,
             GitCredentialExecutor git,
-            AccessControlService access) {
+            AccessControlService access,
+            RemoteRepositoryTargetPolicy remoteTargets) {
         this.repositories = repositories;
         this.credentials = credentials;
         this.git = git;
         this.access = access;
+        this.remoteTargets = remoteTargets;
     }
 
     public List<GitCredentialExecutor.RemoteBranch> discover(
@@ -52,7 +55,7 @@ public class BranchRemoteService {
         if (url == null || url.isBlank()) {
             throw new IllegalArgumentException("当前仓库未配置远程地址");
         }
-        RemoteRepositoryTargetPolicy.requireAllowed(url);
+        remoteTargets.requireAllowed(url);
         return url;
     }
 }

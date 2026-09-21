@@ -25,14 +25,17 @@ public class RepositorySourceImportController {
     private final RepositorySourceImportService service;
     private final AccessControlService accessControl;
     private final com.analyzercoder.application.repository.RepositoryImportJobService jobs;
+    private final RemoteRepositoryTargetPolicy remoteTargets;
 
     public RepositorySourceImportController(
             RepositorySourceImportService service,
             AccessControlService accessControl,
-            com.analyzercoder.application.repository.RepositoryImportJobService jobs) {
+            com.analyzercoder.application.repository.RepositoryImportJobService jobs,
+            RemoteRepositoryTargetPolicy remoteTargets) {
         this.service = service;
         this.accessControl = accessControl;
         this.jobs = jobs;
+        this.remoteTargets = remoteTargets;
     }
 
     @PostMapping("/remote-jobs")
@@ -71,7 +74,7 @@ public class RepositorySourceImportController {
     public RepositoryController.RepositoryResponse remote(
             @Valid @RequestBody RemoteInput input, HttpServletRequest request) {
         var account = SecurityContext.account(request);
-        RemoteRepositoryTargetPolicy.requireAllowed(input.url());
+        remoteTargets.requireAllowed(input.url());
         var repository =
                 service.importRemote(
                         input.name(),

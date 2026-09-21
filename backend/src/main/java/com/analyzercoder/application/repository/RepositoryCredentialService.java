@@ -22,16 +22,19 @@ public class RepositoryCredentialService {
     private final CredentialSecretCipher cipher;
     private final GitCredentialExecutor git;
     private final AuthService auth;
+    private final RemoteRepositoryTargetPolicy remoteTargets;
 
     public RepositoryCredentialService(
             RepositoryCredentialMapper mapper,
             CredentialSecretCipher cipher,
             GitCredentialExecutor git,
-            AuthService auth) {
+            AuthService auth,
+            RemoteRepositoryTargetPolicy remoteTargets) {
         this.mapper = mapper;
         this.cipher = cipher;
         this.git = git;
         this.auth = auth;
+        this.remoteTargets = remoteTargets;
     }
 
     public List<CredentialView> list(AuthenticatedAccount actor) {
@@ -87,8 +90,8 @@ public class RepositoryCredentialService {
 
     public CredentialView validate(
             AuthenticatedAccount actor, UUID id, String repositoryUrl, String sourceIp) {
-        RemoteRepositoryTargetPolicy.requireAllowed(repositoryUrl);
-        Resolved resolved = resolve(actor, id, repositoryUrl);
+        remoteTargets.requireAllowed(repositoryUrl);
+        Resolved resolved = resolveForValidation(actor, id, repositoryUrl);
         try {
             git.validate(repositoryUrl, resolved.value());
             mapper.updateValidation(id, "ACTIVE", Instant.now(), null);
@@ -117,7 +120,18 @@ public class RepositoryCredentialService {
     }
 
     private Resolved resolveRow(Map<String, Object> row, String repositoryUrl) {
-        if (!"ACTIVE".equals(string(row, "status"))) {
+        return resolveRow(row, repositoryUrl, false);
+    }
+
+    private Resolved resolveForValidation(
+            AuthenticatedAccount actor, UUID id, String repositoryUrl) {
+        return resolveRow(requireOwned(actor, id), repositoryUrl, true);
+    }
+
+    private Resolved resolveRow(
+            Map<String, Object> row, String repositoryUrl, boolean allowInvalid) {
+        String status = string(row, "status");
+        if (!"ACTIVE".equals(status) && !(allowInvalid && "INVALID".equals(status))) {
             throw new IllegalStateException("所选 Git 凭据当前不可用");
         }
         requireMatchingServer(string(row, "server_url"), repositoryUrl);

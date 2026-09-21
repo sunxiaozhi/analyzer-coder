@@ -66,6 +66,8 @@ app:
   repository:
     # 可接入仓库的本地根目录白名单，多个目录使用逗号或分号分隔；目录必须已存在且可读。
     allowed-roots: ${APP_REPOSITORY_ALLOWED_ROOTS}
+    # 逗号或分号分隔的精确主机（建议使用域名）；仅这些主机可解析到内网/受保护地址。
+    trusted-private-hosts: ${APP_REPOSITORY_TRUSTED_PRIVATE_HOSTS:}
     # 平台快照、导入暂存和知识附件的持久化根目录；容器部署必须挂载持久化卷。
     managed-data-root: ${APP_MANAGED_DATA_ROOT}
     # 以下两个目录由受管数据根目录派生，通常无需单独修改。

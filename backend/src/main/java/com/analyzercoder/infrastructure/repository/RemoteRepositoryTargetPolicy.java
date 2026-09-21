@@ -6,12 +6,23 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 /** 校验远程仓库地址和解析结果，阻止本地网络探测、非法协议及凭据注入。 */
+@Component
 public final class RemoteRepositoryTargetPolicy {
-    private RemoteRepositoryTargetPolicy() {}
+    private final Set<String> trustedPrivateHosts;
 
-    public static void requireAllowed(String value) {
+    public RemoteRepositoryTargetPolicy(
+            @Value("${app.repository.trusted-private-hosts:}") String configuredHosts) {
+        this.trustedPrivateHosts = parseTrustedHosts(configuredHosts);
+    }
+
+    public void requireAllowed(String value) {
         URI uri;
         try {
             uri = URI.create(value);
@@ -26,8 +37,12 @@ public final class RemoteRepositoryTargetPolicy {
         if (uri.getPort() != -1 && uri.getPort() != 443) {
             throw new IllegalArgumentException("远程仓库仅允许 HTTPS 标准端口 443");
         }
-        String host = uri.getHost().toLowerCase(Locale.ROOT);
-        if (host.equals("localhost") || host.endsWith(".localhost") || host.endsWith(".local")) {
+        String host = normalizeHost(uri.getHost());
+        boolean trustedPrivateHost = trustedPrivateHosts.contains(host);
+        if (host.equals("localhost") || host.endsWith(".localhost")) {
+            throw new IllegalArgumentException("远程仓库地址不能指向本机或本地域名");
+        }
+        if (host.endsWith(".local") && !trustedPrivateHost) {
             throw new IllegalArgumentException("远程仓库地址不能指向本机或本地域名");
         }
         try {
@@ -36,7 +51,7 @@ public final class RemoteRepositoryTargetPolicy {
                 throw new IllegalArgumentException("远程仓库域名没有可用地址");
             }
             for (InetAddress address : addresses) {
-                if (isBlocked(address)) {
+                if (isBlocked(address) && !trustedPrivateHost) {
                     throw new IllegalArgumentException(
                             "远程仓库地址解析到受保护网络: " + address.getHostAddress());
                 }
@@ -44,6 +59,41 @@ public final class RemoteRepositoryTargetPolicy {
         } catch (UnknownHostException e) {
             throw new IllegalArgumentException("无法解析远程仓库域名");
         }
+    }
+
+    private static Set<String> parseTrustedHosts(String configuredHosts) {
+        if (configuredHosts == null || configuredHosts.isBlank()) {
+            return Set.of();
+        }
+        return Stream.of(configuredHosts.split("[,;]"))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .map(RemoteRepositoryTargetPolicy::normalizeConfiguredHost)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static String normalizeConfiguredHost(String value) {
+        String host = normalizeHost(value);
+        if (host.isBlank()
+                || host.contains("/")
+                || host.contains(":")
+                || host.contains("@")
+                || host.contains("*")) {
+            throw new IllegalArgumentException(
+                    "受信任的内网仓库主机必须是不含协议、端口或通配符的精确主机名");
+        }
+        if (host.equals("localhost") || host.endsWith(".localhost")) {
+            throw new IllegalArgumentException("受信任的内网仓库主机不能是 localhost");
+        }
+        return host;
+    }
+
+    private static String normalizeHost(String value) {
+        String host = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        while (host.endsWith(".")) {
+            host = host.substring(0, host.length() - 1);
+        }
+        return host;
     }
 
     static boolean isBlocked(InetAddress address) {

@@ -30,18 +30,21 @@ public class RepositoryImportJobService {
     private final RepositorySourceImportService imports;
     private final RepositoryProjectDraftService drafts;
     private final RepositoryImportJobStateService jobState;
+    private final RemoteRepositoryTargetPolicy remoteTargets;
 
     public RepositoryImportJobService(
             RepositoryImportJobMapper mapper,
             RepositoryCredentialService credentials,
             RepositorySourceImportService imports,
             RepositoryProjectDraftService drafts,
-            RepositoryImportJobStateService jobState) {
+            RepositoryImportJobStateService jobState,
+            RemoteRepositoryTargetPolicy remoteTargets) {
         this.mapper = mapper;
         this.credentials = credentials;
         this.imports = imports;
         this.drafts = drafts;
         this.jobState = jobState;
+        this.remoteTargets = remoteTargets;
     }
 
     public JobView submit(
@@ -62,7 +65,7 @@ public class RepositoryImportJobService {
             RepositorySourceType type,
             UUID credentialId,
             UUID projectDraftId) {
-        RemoteRepositoryTargetPolicy.requireAllowed(url);
+        remoteTargets.requireAllowed(url);
         if (credentialId != null) {
             credentials.resolve(actor, credentialId, url);
         }

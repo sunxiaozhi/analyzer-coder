@@ -118,7 +118,19 @@ public class GitCredentialExecutor {
     }
 
     public void validate(String url, ResolvedCredential credential) {
-        run(List.of("ls-remote", "--exit-code", url, "HEAD"), null, credential, 45);
+        // Validate transport and authentication without requiring a default branch or HEAD.
+        // An empty GitLab repository is reachable and its credential can still be valid.
+        run(
+                List.of(
+                        "-c",
+                        "http.followRedirects=false",
+                        "ls-remote",
+                        "--heads",
+                        "--",
+                        url),
+                null,
+                credential,
+                45);
     }
 
     public void cloneRepository(
@@ -199,6 +211,13 @@ public class GitCredentialExecutor {
             }
             ArrayList<String> command = new ArrayList<>();
             command.add("git");
+            if (credential != null) {
+                // Do not allow a machine-level credential helper to override the credential
+                // selected in the application. An inline URL token naturally bypasses this,
+                // which otherwise makes manual ls-remote succeed while application checks fail.
+                command.add("-c");
+                command.add("credential.helper=");
+            }
             command.addAll(arguments);
             outputFile = Files.createTempFile("analyzer-git-output-", ".log");
             java.lang.ProcessBuilder builder =
@@ -211,6 +230,7 @@ public class GitCredentialExecutor {
             GitRuntimePolicy.sanitizeEnvironment(builder.environment());
             if (credential != null) {
                 builder.environment().put("GIT_ASKPASS", askPass.toString());
+                builder.environment().put("GIT_ASKPASS_REQUIRE", "force");
                 builder.environment().put("ANALYZER_GIT_USERNAME", credential.username());
                 builder.environment().put("ANALYZER_GIT_SECRET", credential.secret());
             }
@@ -271,9 +291,14 @@ public class GitCredentialExecutor {
         String text = output == null ? "" : output.toLowerCase();
         if (text.contains("authentication failed")
                 || text.contains("access denied")
+                || text.contains("http basic: access denied")
+                || text.contains("returned error: 401")
+                || text.contains("returned error: 403")
+                || text.contains("not allowed to download code")
                 || text.contains("could not read username")
+                || text.contains("could not read password")
                 || text.contains("permission denied")) {
-            return "远程仓库身份验证失败，请检查凭据权限和有效期";
+            return "远程仓库身份验证失败，请检查令牌有效期、read_repository 权限和项目访问权限";
         }
         if (text.contains("repository not found")) {
             return "远程仓库不存在，或当前凭据没有访问权限";

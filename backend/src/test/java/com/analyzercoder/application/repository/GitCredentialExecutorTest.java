@@ -15,6 +15,14 @@ class GitCredentialExecutorTest {
     @TempDir Path workspace;
 
     @Test
+    void validatesReachableEmptyRepositoryWithoutRequiringHead() throws IOException {
+        Path origin = workspace.resolve("empty-origin.git");
+        git(workspace, "init", "--bare", origin.toString());
+
+        new GitCredentialExecutor().validate(origin.toString(), null);
+    }
+
+    @Test
     void fetchesAnIsolatedReviewRefWithoutChangingTheCheckedOutBranch() throws IOException {
         Path origin = workspace.resolve("origin.git");
         Path seed = workspace.resolve("seed");

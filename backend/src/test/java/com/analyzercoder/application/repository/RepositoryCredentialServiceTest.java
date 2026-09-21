@@ -3,9 +3,11 @@ package com.analyzercoder.application.repository;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryCredentialMapper;
+import com.analyzercoder.infrastructure.repository.RemoteRepositoryTargetPolicy;
 import com.analyzercoder.security.AccountRole;
 import com.analyzercoder.security.AuthService;
 import com.analyzercoder.security.AuthenticatedAccount;
@@ -21,9 +23,12 @@ class RepositoryCredentialServiceTest {
     private final CredentialSecretCipher cipher =
             new CredentialSecretCipher("credential-master-key-for-tests-123456");
     private final RepositoryCredentialMapper mapper = mock(RepositoryCredentialMapper.class);
+    private final GitCredentialExecutor git = mock(GitCredentialExecutor.class);
+    private final AuthService auth = mock(AuthService.class);
+    private final RemoteRepositoryTargetPolicy remoteTargets =
+            mock(RemoteRepositoryTargetPolicy.class);
     private final RepositoryCredentialService service =
-            new RepositoryCredentialService(
-                    mapper, cipher, mock(GitCredentialExecutor.class), mock(AuthService.class));
+            new RepositoryCredentialService(mapper, cipher, git, auth, remoteTargets);
     private final AuthenticatedAccount actor =
             new AuthenticatedAccount(
                     actorId, "developer", "Developer", AccountRole.NORMAL, false, Instant.now());
@@ -47,6 +52,28 @@ class RepositoryCredentialServiceTest {
                 () ->
                         service.resolve(
                                 actor, credentialId, "https://evil.example.com/team/project.git"));
+    }
+
+    @Test
+    void allowsAnInvalidCredentialToBeValidatedAgain() {
+        Map<String, Object> row = row();
+        row.put("status", "INVALID");
+        when(mapper.find(credentialId)).thenReturn(row);
+        String repositoryUrl = "https://gitlab.example.com/team/project.git";
+
+        service.validate(actor, credentialId, repositoryUrl, "127.0.0.1");
+
+        verify(git)
+                .validate(
+                        repositoryUrl,
+                        new GitCredentialExecutor.ResolvedCredential(
+                                "oauth2", "glpat-secret-value"));
+        verify(mapper)
+                .updateValidation(
+                        org.mockito.ArgumentMatchers.eq(credentialId),
+                        org.mockito.ArgumentMatchers.eq("ACTIVE"),
+                        org.mockito.ArgumentMatchers.any(Instant.class),
+                        org.mockito.ArgumentMatchers.isNull());
     }
 
     private Map<String, Object> row() {

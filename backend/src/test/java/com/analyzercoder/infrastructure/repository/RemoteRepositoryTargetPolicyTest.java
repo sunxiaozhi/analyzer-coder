@@ -6,22 +6,43 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
 class RemoteRepositoryTargetPolicyTest {
+    private final RemoteRepositoryTargetPolicy policy = new RemoteRepositoryTargetPolicy("");
+
     @Test
     void rejectsLocalAndCredentialBearingTargets() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> RemoteRepositoryTargetPolicy.requireAllowed("https://localhost/repo.git"));
+                () -> policy.requireAllowed("https://localhost/repo.git"));
         assertThrows(
                 IllegalArgumentException.class,
                 () ->
-                        RemoteRepositoryTargetPolicy.requireAllowed(
-                                "https://user:secret@example.com/repo.git"));
+                        policy.requireAllowed("https://user:secret@example.com/repo.git"));
         assertThrows(
                 IllegalArgumentException.class,
-                () -> RemoteRepositoryTargetPolicy.requireAllowed("http://example.com/repo.git"));
+                () -> policy.requireAllowed("http://example.com/repo.git"));
         assertThrows(
                 IllegalArgumentException.class,
-                () -> RemoteRepositoryTargetPolicy.requireAllowed("https://127.0.0.1/repo.git"));
+                () -> policy.requireAllowed("https://127.0.0.1/repo.git"));
+    }
+
+    @Test
+    void allowsProtectedAddressOnlyWhenExactHostIsTrusted() {
+        var trusted = new RemoteRepositoryTargetPolicy("127.0.0.2");
+
+        trusted.requireAllowed("https://127.0.0.2/repo.git");
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> trusted.requireAllowed("https://127.0.0.3/repo.git"));
+    }
+
+    @Test
+    void rejectsWildcardAndLocalhostTrustEntries() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new RemoteRepositoryTargetPolicy("*.internal.example"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new RemoteRepositoryTargetPolicy("localhost"));
     }
 
     @Test
