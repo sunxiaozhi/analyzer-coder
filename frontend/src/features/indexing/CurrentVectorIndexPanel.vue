@@ -7,11 +7,18 @@ import VectorIndexSummary from '@/features/indexing/VectorIndexSummary.vue';
 import VectorIndexTable from '@/features/indexing/VectorIndexTable.vue';
 import { useCurrentVectorIndex } from '@/features/indexing/useCurrentVectorIndex';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 import type { VectorIndexChunk } from '@/api/vectorIndex';
 
 const router = useRouter();
 const repositoryStore = useRepositoryStore();
+const branchContextStore = useBranchContextStore();
 const repositoryId = computed(() => repositoryStore.selectedRepositoryId);
+const contextId = computed(() =>
+  branchContextStore.context?.repositoryId === repositoryId.value
+    ? branchContextStore.context.contextId
+    : null,
+);
 const {
   summary,
   source,
@@ -28,7 +35,7 @@ const {
   search,
   changePage,
   changePageSize,
-} = useCurrentVectorIndex(repositoryId);
+} = useCurrentVectorIndex(repositoryId, contextId);
 
 function openCode(item: VectorIndexChunk) {
   void router.push({

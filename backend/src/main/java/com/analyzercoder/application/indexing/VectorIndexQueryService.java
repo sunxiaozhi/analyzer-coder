@@ -1,6 +1,7 @@
 package com.analyzercoder.application.indexing;
 
 import com.analyzercoder.application.common.PageResult;
+import com.analyzercoder.application.branch.BranchReadContext;
 import com.analyzercoder.infrastructure.persistence.mapper.VectorIndexQueryMapper;
 import com.github.pagehelper.PageHelper;
 import java.time.Instant;
@@ -20,7 +21,19 @@ public class VectorIndexQueryService {
     }
 
     public Summary summary(UUID repositoryId) {
-        Map<String, Object> row = mapper.summary(repositoryId);
+        return summary(mapper.summary(repositoryId));
+    }
+
+    public Summary summary(BranchReadContext context) {
+        return summary(
+                mapper.summaryForBranch(
+                        context.repositoryId(),
+                        context.branchId(),
+                        context.contentVersion(),
+                        context.commitSha()));
+    }
+
+    private Summary summary(Map<String, Object> row) {
         if (row == null) {
             throw new IllegalArgumentException("仓库不存在");
         }
@@ -58,12 +71,50 @@ public class VectorIndexQueryService {
                 .map(this::chunkItem);
     }
 
+    public PageResult<ChunkItem> chunks(
+            BranchReadContext context,
+            String query,
+            String status,
+            String chunkType,
+            int pageNum,
+            int pageSize) {
+        PageResult.validate(pageNum, pageSize);
+        PageHelper.startPage(pageNum, pageSize);
+        return PageResult.fromPage(
+                        mapper.chunksForBranch(
+                                context.repositoryId(),
+                                context.branchId(),
+                                context.contentVersion(),
+                                normalized(query),
+                                status(status),
+                                normalized(chunkType)))
+                .map(this::chunkItem);
+    }
+
     public PageResult<KnowledgeItem> knowledge(
             UUID repositoryId, String query, String status, int pageNum, int pageSize) {
         PageResult.validate(pageNum, pageSize);
         PageHelper.startPage(pageNum, pageSize);
         return PageResult.fromPage(
                         mapper.knowledge(repositoryId, normalized(query), status(status)))
+                .map(this::knowledgeItem);
+    }
+
+    public PageResult<KnowledgeItem> knowledge(
+            BranchReadContext context,
+            String query,
+            String status,
+            int pageNum,
+            int pageSize) {
+        PageResult.validate(pageNum, pageSize);
+        PageHelper.startPage(pageNum, pageSize);
+        return PageResult.fromPage(
+                        mapper.knowledgeForBranch(
+                                context.repositoryId(),
+                                context.branchId(),
+                                context.contentVersion(),
+                                normalized(query),
+                                status(status)))
                 .map(this::knowledgeItem);
     }
 

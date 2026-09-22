@@ -21,6 +21,7 @@ public class BranchContextInterceptor implements HandlerInterceptor {
                     "/qa/records(?:/[0-9a-fA-F-]{36})?",
                     "/knowledge",
                     "/knowledge/markdown-sources",
+                    "/vector-index/(?:summary|chunks|knowledge)",
                     "/chunks/[0-9a-fA-F-]{36}/graph-target");
     private static final List<Pattern> POST =
             patterns(

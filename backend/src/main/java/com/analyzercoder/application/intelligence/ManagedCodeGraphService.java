@@ -94,15 +94,20 @@ public class ManagedCodeGraphService extends CodeGraphService {
                             timeoutMinutes * 60,
                             control,
                             "building_codegraph");
-            int nodes = metric(output, "nodes");
-            int edges = metric(output, "edges");
+            if (!Files.isDirectory(marker)) {
+                throw new IllegalStateException("CodeGraph 未生成预期产物目录");
+            }
+            CodeGraphDatabaseReader.Metrics metrics =
+                    Files.isRegularFile(marker.resolve("codegraph.db"))
+                            ? CodeGraphDatabaseReader.metrics(marker)
+                            : new CodeGraphDatabaseReader.Metrics(
+                                    metric(output, "nodes"), metric(output, "edges"));
+            int nodes = metrics.nodes();
+            int edges = metrics.edges();
             if (nodes == 0) {
                 throw new IllegalStateException("CodeGraph 未生成可用节点，无法发布可用图谱");
             }
             String cliVersion = run(List.of("--version"), 30, control, "inspect_codegraph").trim();
-            if (!Files.isDirectory(marker)) {
-                throw new IllegalStateException("CodeGraph 未生成预期产物目录");
-            }
 
             control.checkpoint("publish_codegraph");
             Version current = immutableBranch ? version : version(repositoryId);

@@ -1,4 +1,5 @@
 import { request } from '@/api/http';
+import { branchContextOptions } from '@/api/branchContext';
 import type { PageResult } from '@/types/pagination';
 
 export type VectorStatus = 'EMBEDDED' | 'MISSING';
@@ -76,14 +77,19 @@ function queryString(params: VectorIndexQuery) {
 }
 
 export const vectorIndexApi = {
-  summary: (repositoryId: string) =>
-    request<VectorIndexSummary>(`/api/repositories/${repositoryId}/vector-index/summary`),
-  chunks: (repositoryId: string, params: VectorIndexQuery) =>
+  summary: (repositoryId: string, contextId: string) =>
+    request<VectorIndexSummary>(
+      `/api/repositories/${repositoryId}/vector-index/summary`,
+      branchContextOptions(contextId),
+    ),
+  chunks: (repositoryId: string, contextId: string, params: VectorIndexQuery) =>
     request<PageResult<VectorIndexChunk>>(
       `/api/repositories/${repositoryId}/vector-index/chunks?${queryString(params)}`,
+      branchContextOptions(contextId),
     ),
-  knowledge: (repositoryId: string, params: VectorIndexQuery) =>
+  knowledge: (repositoryId: string, contextId: string, params: VectorIndexQuery) =>
     request<PageResult<VectorIndexKnowledge>>(
       `/api/repositories/${repositoryId}/vector-index/knowledge?${queryString(params)}`,
+      branchContextOptions(contextId),
     ),
 };

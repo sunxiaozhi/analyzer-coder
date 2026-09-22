@@ -23,17 +23,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class VectorIndexController {
     private final VectorIndexQueryService service;
     private final AccessControlService accessControl;
+    private final BranchRequestContext branchContexts;
 
     public VectorIndexController(
-            VectorIndexQueryService service, AccessControlService accessControl) {
+            VectorIndexQueryService service,
+            AccessControlService accessControl,
+            BranchRequestContext branchContexts) {
         this.service = service;
         this.accessControl = accessControl;
+        this.branchContexts = branchContexts;
     }
 
     @GetMapping("/summary")
     public Summary summary(@PathVariable UUID repositoryId, HttpServletRequest request) {
         requireRead(repositoryId, request);
-        return service.summary(repositoryId);
+        return service.summary(branchContexts.resolve(request, repositoryId));
     }
 
     @GetMapping("/chunks")
@@ -46,7 +50,13 @@ public class VectorIndexController {
             @RequestParam(defaultValue = "15") int pageSize,
             HttpServletRequest request) {
         requireRead(repositoryId, request);
-        return service.chunks(repositoryId, q, status, chunkType, pageNum, pageSize);
+        return service.chunks(
+                branchContexts.resolve(request, repositoryId),
+                q,
+                status,
+                chunkType,
+                pageNum,
+                pageSize);
     }
 
     @GetMapping("/knowledge")
@@ -58,7 +68,8 @@ public class VectorIndexController {
             @RequestParam(defaultValue = "15") int pageSize,
             HttpServletRequest request) {
         requireRead(repositoryId, request);
-        return service.knowledge(repositoryId, q, status, pageNum, pageSize);
+        return service.knowledge(
+                branchContexts.resolve(request, repositoryId), q, status, pageNum, pageSize);
     }
 
     private void requireRead(UUID repositoryId, HttpServletRequest request) {

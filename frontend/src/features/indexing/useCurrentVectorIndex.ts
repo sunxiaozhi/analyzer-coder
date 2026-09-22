@@ -8,7 +8,10 @@ import {
   type VectorStatus,
 } from '@/api/vectorIndex';
 
-export function useCurrentVectorIndex(repositoryId: ComputedRef<string | null>) {
+export function useCurrentVectorIndex(
+  repositoryId: ComputedRef<string | null>,
+  contextId: ComputedRef<string | null>,
+) {
   const summary = shallowRef<VectorIndexSummary | null>(null);
   const chunks = shallowRef<VectorIndexChunk[]>([]);
   const knowledge = shallowRef<VectorIndexKnowledge[]>([]);
@@ -26,15 +29,15 @@ export function useCurrentVectorIndex(repositoryId: ComputedRef<string | null>) 
   const items = computed(() => source.value === 'code' ? chunks.value : knowledge.value);
 
   async function loadSummary() {
-    if (!repositoryId.value) {
+    if (!repositoryId.value || !contextId.value) {
       summary.value = null;
       return;
     }
-    summary.value = await vectorIndexApi.summary(repositoryId.value);
+    summary.value = await vectorIndexApi.summary(repositoryId.value, contextId.value);
   }
 
   async function loadItems() {
-    if (!repositoryId.value) {
+    if (!repositoryId.value || !contextId.value) {
       chunks.value = [];
       knowledge.value = [];
       total.value = 0;
@@ -48,8 +51,8 @@ export function useCurrentVectorIndex(repositoryId: ComputedRef<string | null>) 
       pageSize: pageSize.value,
     };
     const result = source.value === 'code'
-      ? await vectorIndexApi.chunks(repositoryId.value, params)
-      : await vectorIndexApi.knowledge(repositoryId.value, params);
+      ? await vectorIndexApi.chunks(repositoryId.value, contextId.value, params)
+      : await vectorIndexApi.knowledge(repositoryId.value, contextId.value, params);
     if (source.value === 'code') chunks.value = result.items as VectorIndexChunk[];
     else knowledge.value = result.items as VectorIndexKnowledge[];
     total.value = result.total;
@@ -84,7 +87,7 @@ export function useCurrentVectorIndex(repositoryId: ComputedRef<string | null>) 
     await refresh();
   }
 
-  watch(repositoryId, () => {
+  watch([repositoryId, contextId], () => {
     pageNum.value = 1;
     void refresh();
   }, { immediate: true });

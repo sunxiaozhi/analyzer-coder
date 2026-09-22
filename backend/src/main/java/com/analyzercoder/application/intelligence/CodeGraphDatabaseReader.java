@@ -18,13 +18,22 @@ final class CodeGraphDatabaseReader {
 
     private CodeGraphDatabaseReader() {}
 
-    static ObjectNode read(ObjectMapper json, Path marker) {
-        Path database = marker.resolve("codegraph.db").toAbsolutePath().normalize();
-        if (!database.startsWith(marker.toAbsolutePath().normalize())
-                || !Files.isRegularFile(database)) {
+    static Metrics metrics(Path marker) {
+        Path database = database(marker);
+        String url = "jdbc:sqlite:" + database.toUri() + "?mode=ro";
+        try (Connection connection = DriverManager.getConnection(url)) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("PRAGMA query_only = ON");
+            }
+            return new Metrics(count(connection, "nodes"), count(connection, "edges"));
+        } catch (SQLException exception) {
             throw new CodeGraphException(
-                    "CODEGRAPH_DATABASE_NOT_AVAILABLE", "CodeGraph 产物中不存在可读取的图数据库");
+                    "CODEGRAPH_DATABASE_UNREADABLE", "无法读取 CodeGraph 图数据库统计", exception);
         }
+    }
+
+    static ObjectNode read(ObjectMapper json, Path marker) {
+        Path database = database(marker);
 
         ObjectNode graph = json.createObjectNode();
         ArrayNode nodes = graph.putArray("nodes");
@@ -40,6 +49,28 @@ final class CodeGraphDatabaseReader {
         } catch (SQLException exception) {
             throw new CodeGraphException(
                     "CODEGRAPH_DATABASE_UNREADABLE", "无法读取已发布的 CodeGraph 图数据库", exception);
+        }
+    }
+
+    private static Path database(Path marker) {
+        Path normalizedMarker = marker.toAbsolutePath().normalize();
+        Path database = normalizedMarker.resolve("codegraph.db").normalize();
+        if (!database.startsWith(normalizedMarker) || !Files.isRegularFile(database)) {
+            throw new CodeGraphException(
+                    "CODEGRAPH_DATABASE_NOT_AVAILABLE", "CodeGraph 产物中不存在可读取的图数据库");
+        }
+        return database;
+    }
+
+    private static int count(Connection connection, String table) throws SQLException {
+        try (Statement statement = connection.createStatement();
+                ResultSet row = statement.executeQuery("SELECT COUNT(*) AS total FROM " + table)) {
+            long total = row.next() ? row.getLong("total") : 0;
+            if (total > Integer.MAX_VALUE) {
+                throw new CodeGraphException(
+                        "CODEGRAPH_DATABASE_LIMIT_EXCEEDED", "CodeGraph 图数据库统计超过平台上限");
+            }
+            return (int) total;
         }
     }
 
@@ -94,4 +125,6 @@ final class CodeGraphDatabaseReader {
             }
         }
     }
+
+    record Metrics(int nodes, int edges) {}
 }

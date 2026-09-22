@@ -47,6 +47,28 @@ class BranchContextInterceptorTest {
     }
 
     @Test
+    void allowsPinnedVectorIndexReadsWithoutOpeningVectorWrites() {
+        var interceptor = new BranchContextInterceptor();
+        var request = new MockHttpServletRequest("GET", base + "/vector-index/summary");
+        request.addHeader("X-Branch-Context", "pinned");
+
+        for (var path :
+                new String[] {
+                    "/vector-index/summary",
+                    "/vector-index/chunks",
+                    "/vector-index/knowledge"
+                }) {
+            request.setRequestURI(base + path);
+            assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), null)).isTrue();
+        }
+
+        request.setMethod("POST");
+        assertThatThrownBy(
+                        () -> interceptor.preHandle(request, new MockHttpServletResponse(), null))
+                .isInstanceOf(ApiSecurityException.class);
+    }
+
+    @Test
     void doesNotBroadenBearerTokenPermissionsToBranchWrites() {
         assertThat(AccessTokenInterceptor.allowed("POST", base + "/contexts")).isTrue();
         assertThat(AccessTokenInterceptor.allowed("POST", base + "/branches")).isFalse();

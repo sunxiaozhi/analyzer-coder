@@ -17,6 +17,12 @@ public interface VectorIndexQueryMapper {
      */
     Map<String, Object> summary(@Param("repositoryId") UUID repositoryId);
 
+    Map<String, Object> summaryForBranch(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
+            @Param("contentVersion") UUID contentVersion,
+            @Param("commitSha") String commitSha);
+
     /**
      * 查询与指定条件匹配的代码片段。
      *
@@ -32,6 +38,14 @@ public interface VectorIndexQueryMapper {
             @Param("status") String status,
             @Param("chunkType") String chunkType);
 
+    List<Map<String, Object>> chunksForBranch(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
+            @Param("contentVersion") UUID contentVersion,
+            @Param("query") String query,
+            @Param("status") String status,
+            @Param("chunkType") String chunkType);
+
     /**
      * 查询可参与检索的知识内容。
      *
@@ -42,6 +56,13 @@ public interface VectorIndexQueryMapper {
      */
     List<Map<String, Object>> knowledge(
             @Param("repositoryId") UUID repositoryId,
+            @Param("query") String query,
+            @Param("status") String status);
+
+    List<Map<String, Object>> knowledgeForBranch(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("branchId") UUID branchId,
+            @Param("contentVersion") UUID contentVersion,
             @Param("query") String query,
             @Param("status") String status);
 }

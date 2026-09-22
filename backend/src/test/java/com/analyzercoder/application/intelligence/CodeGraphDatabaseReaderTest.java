@@ -45,6 +45,9 @@ class CodeGraphDatabaseReaderTest {
             }
         }
 
+        assertThat(CodeGraphDatabaseReader.metrics(marker))
+                .isEqualTo(new CodeGraphDatabaseReader.Metrics(2, 1));
+
         var graph = CodeGraphDatabaseReader.read(new ObjectMapper(), marker);
 
         assertThat(graph.path("nodes")).hasSize(2);
