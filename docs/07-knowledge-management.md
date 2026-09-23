@@ -44,7 +44,7 @@
   - 知识类型枚举固定为 11 项：REFERENCE、BUSINESS_RULE、ARCH_DECISION、API_CONTRACT、DATA_CONSTRAINT、TEST_OBLIGATION、SECURITY_POLICY、RUNBOOK、INCIDENT_LESSON、OWNERSHIP、TECH_DEBT（`backend/src/main/java/com/analyzercoder/domain/knowledge/KnowledgeKind.java:4-16`）。
   - 执行级别固定为 REFERENCE、ADVISORY、REQUIRED（`backend/src/main/java/com/analyzercoder/domain/knowledge/KnowledgeEnforcement.java:4-8`）。
   - 严重级别固定为 INFO、WARNING、CRITICAL（`backend/src/main/java/com/analyzercoder/domain/knowledge/KnowledgeSeverity.java:4-8`）。
-- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1374-1406`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:4-31`
+- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:4-31`
 
 ### KNO-002 知识卡正文与字段长度约束
 - 需求：创建或编辑知识卡时必须校验字段存在性与长度，超限或为空即拒绝。
@@ -72,7 +72,7 @@
   - 三字段构造器保留用于兼容历史 JSON，新规则必须使用五字段显式保存。
   - `isEmpty()` 在五个字段全部为空/为假时成立。
   - 数据库层以 JSONB 约束五个字段的类型，并设置完整默认值。
-- 证据：`backend/src/main/java/com/analyzercoder/domain/knowledge/KnowledgeObligations.java:8-40`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1601-1623`
+- 证据：`backend/src/main/java/com/analyzercoder/domain/knowledge/KnowledgeObligations.java:8-40`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### KNO-005 创建知识卡必然生成草稿
 - 需求：新建知识卡一律以草稿、未评审状态落库，并立即固化第 1 号修订。
@@ -96,8 +96,8 @@
   - 触发器在 `knowledge_cards` 插入后，或标题、卡片类型、正文、标签、发布状态、知识类型、严重级别、执行级别、负责人、适用范围、义务、最近验证内容版本、验证说明、修订号任一更新后，写入 `knowledge_card_revisions`。
   - 历史行按 `(card_id, revision)` 冲突时**更新同一修订的字段**，不新增重复修订。
   - 历史表保存的发布状态是该修订保存时的发布状态，表达"历史事实"而非当前状态。
-  - 留档是强制的，但**不是防篡改的不可变日志**：同一次写入按 `ON CONFLICT (card_id, revision) DO UPDATE` 覆盖既有历史行（`V1__init_schema.sql:1459-1467`），且 `knowledge_card_revisions` 自身没有 UPDATE/DELETE 保护触发器。因此在不递增 `revision` 的情况下修改上述受控列（例如仅切换发布状态）会改写该修订的历史行。详见 [11-data-model.md](11-data-model.md) 的已知缺口。
-- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1447-1476,1319`
+  - 留档是强制的，但**不是防篡改的不可变日志**：同一次写入按 `ON CONFLICT (card_id, revision) DO UPDATE` 覆盖既有历史行（`V1__init_schema.sql`），且 `knowledge_card_revisions` 自身没有 UPDATE/DELETE 保护触发器。因此在不递增 `revision` 的情况下修改上述受控列（例如仅切换发布状态）会改写该修订的历史行。详见 [11-data-model.md](11-data-model.md) 的已知缺口。
+- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### KNO-008 来源版本状态与人工评审状态相互独立
 - 需求：系统必须把"来源代码是否仍然匹配"和"人是否认可这条知识"拆成两个独立状态，任何一个都不得隐含另一个。
@@ -105,7 +105,7 @@
   - `source_version_status` 取值 UNVERIFIED、CURRENT、SUSPECT、STALE，表示未验证、当前、可疑或已过期，且不表示人工认可内容。
   - `review_status` 取值 UNREVIEWED、APPROVED、CHANGES_REQUESTED，与来源版本及发布状态独立。
   - 状态注释在数据库层显式声明这两个语义边界。
-- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1306-1318,1394-1396`
+- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### KNO-009 人工评审通过或要求修改
 - 需求：人工评审必须作为独立动作记录，且不自动改变发布状态。
@@ -150,7 +150,7 @@
   - 每个分支必须属于当前仓库，否则报"适用分支不属于当前仓库"。
   - 新建知识卡时触发器自动把范围初始化为该项目默认分支的 SELECTED_BRANCHES 单分支。
   - 数据库约束在表层面再次保证模式与分支列表的一致性。
-- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:73-96`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:41-47,93-106`、`backend/src/test/java/com/analyzercoder/application/branch/BranchKnowledgeServiceTest.java:52-70`
+- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:73-96`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/test/java/com/analyzercoder/application/branch/BranchKnowledgeServiceTest.java:52-70`
 
 ### KNO-014 分支范围编辑生成新修订并保留证据
 - 需求：修改分支范围必须是一次可审计的修订变更，且不得丢失代码引用与附件。
@@ -160,7 +160,7 @@
   - 修改范围会把修订号加 1，并把上一修订的代码引用与附件关联原样复制到新修订。
   - 修改范围不会复制分支验证结论。
   - 每次修订都在 `knowledge_card_revisions.branch_id` 中保留与卡片一致的分支身份。
-- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:73-136`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:52-91`、`backend/src/test/java/com/analyzercoder/application/branch/BranchKnowledgeServiceTest.java:32-50`
+- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:73-136`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/test/java/com/analyzercoder/application/branch/BranchKnowledgeServiceTest.java:32-50`
 
 ### KNO-015 适用范围载荷与匹配规则
 - 需求：适用范围必须支持路径 glob、符号与模块三种载荷，路径匹配使用受控、跨操作系统一致的 glob 语义。
@@ -229,7 +229,7 @@
   - 说明必填，不得为空或全空白，长度不超过 2000 个字符；结论或说明非法时报"请填写有效的分支验证状态和说明"。
   - 保存需要 MANAGE 权限。
   - 未产生验证记录的适用知识在列表中按 UNVERIFIED 展示。
-- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:164-170`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:62-74`、`frontend/src/views/KnowledgeView.vue:44-47,628`
+- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:164-170`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`frontend/src/views/KnowledgeView.vue:44-47,628`
 
 ### KNO-022 验证绑定知识修订、分支与内容版本
 - 需求：验证结论必须唯一绑定"知识修订 × 分支 × 内容版本"三元组，同三元组重复提交为更新而非新增。
@@ -238,7 +238,7 @@
   - 提交前校验该卡片修订仍然存在且其分支范围覆盖当前分支，否则报 409 `KNOWLEDGE_SCOPE_MISMATCH`（"知识修订已变化或不适用于该分支"）。
   - 知识修订变化、或分支内容版本变化后，旧结论不再被检索条件采用，必须重新验证。
   - Markdown 来源同步到新分支内容版本时自动为新内容版本写入占位结论：来源内容哈希未变写 UNVERIFIED 并说明"仍需独立确认适用性"，来源内容已变写 REVIEW_REQUIRED 并说明"请复核知识修订"。
-- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:171-196`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:62-74`、`backend/src/main/resources/mappers/MarkdownKnowledgeSourceMapper.xml:192-209`
+- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:171-196`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/mappers/MarkdownKnowledgeSourceMapper.xml:192-209`
 
 ### KNO-023 分支验证列表、展示与筛选
 - 需求：必须能按分支查看待验证知识清单，并在知识列表界面按验证状态筛选。
@@ -257,7 +257,7 @@
   - 来源按 `(repo_id, branch_id, file_path)` 唯一；唯一约束在分支化迁移中从仓库路径唯一改为分支路径唯一。
   - 来源保存完整 Markdown 原文、完整原文 SHA-256、标题、资产类型、行数与字节数。
   - 标题优先取第一个 Markdown 标题，无标题时取文件名去扩展名，超长截断到 200 字符，仍为空时使用"未命名 Markdown"。
-- 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/MarkdownKnowledgeSourceService.java:61-150,457-495`、`backend/src/main/resources/mappers/MarkdownKnowledgeSourceMapper.xml:4-59`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1102-1137`、`backend/src/main/resources/db/migration/V7__branch_lifecycle_and_provenance.sql:83-99,119-120`
+- 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/MarkdownKnowledgeSourceService.java:61-150,457-495`、`backend/src/main/resources/mappers/MarkdownKnowledgeSourceMapper.xml:4-59`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### KNO-025 来源状态：待生成、已生成、已过期
 - 需求：每个 Markdown 来源必须显示其是否已生成知识卡、生成时的内容是否与当前内容一致。
@@ -296,7 +296,7 @@
   - 路径与哈希在数据库层校验（哈希须为 64 位十六进制，路径不得为空白或含 `..` 段）。
   - 列表与详情通过来源侧的最新溯源记录展示关联卡片与卡片修订。
   - 来源内容未变化时，同步流程会重新校准关联卡片的来源版本状态、验证时间、最近验证内容版本与验证说明。
-- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1139-1168`、`backend/src/main/resources/mappers/MarkdownKnowledgeSourceMapper.xml:82-91,173-190,211-298`、`backend/src/main/resources/db/migration/V7__branch_lifecycle_and_provenance.sql:101-113`
+- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/mappers/MarkdownKnowledgeSourceMapper.xml:82-91,173-190,211-298`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### KNO-029 来源漂移检测的触发与指纹依据
 - 需求：知识来源失效检查必须由后台任务在索引完成后执行，并以真实 Git 差异与绑定内容哈希为依据，不得在 HTTP 请求线程内扫描。
@@ -318,7 +318,7 @@
   - 符号范围命中：变更符号解析结果不是文件级、且符号名或符号标识与 `symbols` 精确一致时成立。
   - 事件记录从内容版本/提交、到内容版本/提交、变更前状态、结果状态、触发类型、证据数组、说明与操作人。
   - 自动漂移事件按 `(card, revision, 目标内容版本, 触发类型)` 唯一，避免同一内容版本重复记录。
-- 证据：`backend/src/main/java/com/analyzercoder/application/knowledge/KnowledgeDriftService.java:35,185-260,286-310,354-388,406-454`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1545-1577`、`backend/src/test/java/com/analyzercoder/application/knowledge/KnowledgeDriftServiceTest.java:63-159`
+- 证据：`backend/src/main/java/com/analyzercoder/application/knowledge/KnowledgeDriftService.java:35,185-260,286-310,354-388,406-454`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/test/java/com/analyzercoder/application/knowledge/KnowledgeDriftServiceTest.java:63-159`
 
 ### KNO-031 来源复核动作与说明
 - 需求：人工必须能对漂移结论做出"确认仍然有效"或"标记已失效"的决定，并强制填写说明。
@@ -357,7 +357,7 @@
   - 内容必须与扩展名匹配：png、jpg/jpeg、gif、pdf 校验魔数，Office 三种格式校验 ZIP 头。
   - 内容按 SHA-256 计算摘要，落到受管根目录下 `repositories/<repoId>/knowledge/objects/<前两位>/<sha>`，相同摘要去重；临时文件写在 `staging/knowledge/<uuid>`，路径越界即拒绝。
   - 上传记录保存原始名、媒体类型、字节数、摘要、存储路径、上传账号与时间，扫描状态默认 READY。
-- 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/KnowledgeAttachmentService.java:27-130`、`backend/src/main/java/com/analyzercoder/interfaces/rest/KnowledgeAttachmentController.java:37-45`、`backend/src/main/resources/db/migration/V1__init_schema.sql:736-763`
+- 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/KnowledgeAttachmentService.java:27-130`、`backend/src/main/java/com/analyzercoder/interfaces/rest/KnowledgeAttachmentController.java:37-45`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### KNO-035 附件下载
 - 需求：附件下载必须按仓库鉴权，并以附件方式返回，禁止浏览器嗅探内容类型。
@@ -376,7 +376,7 @@
   - 请求指定的附件必须属于当前仓库，否则报"附件不存在或不属于当前仓库"。
   - 请求未给出附件列表时沿用上一修订的附件集合，用于保持既有证据。
   - 编辑知识卡、恢复历史修订、修改分支范围都会为新修订重建附件关联。
-- 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/KnowledgeAttachmentService.java:132-189`、`backend/src/main/resources/mappers/KnowledgeAttachmentMapper.xml:13-33`、`backend/src/main/resources/db/migration/V1__init_schema.sql:765-779`、`frontend/src/features/knowledge/KnowledgeCardContentSection.vue:87`
+- 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/KnowledgeAttachmentService.java:132-189`、`backend/src/main/resources/mappers/KnowledgeAttachmentMapper.xml:13-33`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`frontend/src/features/knowledge/KnowledgeCardContentSection.vue:87`
 
 ### KNO-037 正文中的附件引用渲染
 - 需求：Markdown 正文必须能引用知识附件，且渲染结果需要清理脚本注入与不安全的链接目标。
@@ -405,29 +405,28 @@
 
 | 表 | 用途 | 关键约束 | 证据 |
 | --- | --- | --- | --- |
-| `knowledge_cards` | 知识卡当前内容与治理字段 | 主键 `id`；发布状态、来源版本状态、评审状态、知识类型、严重级别、执行级别均有 CHECK；范围与义务为 JSONB 且逐字段校验类型 | `backend/src/main/resources/db/migration/V1__init_schema.sql:600-640,1304-1313,1394-1442,1606-1626` |
-| `knowledge_card_revisions` | 修订历史（仅保存知识内容历史） | 主键 `(card_id, revision)`；由触发器写入 | `backend/src/main/resources/db/migration/V1__init_schema.sql:642-669,1447-1476` |
-| `knowledge_code_refs` | 知识修订与代码片段的绑定 | 主键 `(card_id, revision, position)`；外键指向修订；`chunk_id` 在片段删除后置空 | `backend/src/main/resources/db/migration/V1__init_schema.sql:701-734` |
-| `knowledge_card_embeddings` | 知识卡当前修订的检索向量 | `card_id` 主键；维度 1 到 4096 且与向量维度一致；`retrieval_capability` 区分字符哈希与语义向量 | `backend/src/main/resources/db/migration/V1__init_schema.sql:675-699,1218-1250` |
-| `knowledge_attachments` | 附件元数据 | `(repo_id, id)` 唯一；字节数大于 0 | `backend/src/main/resources/db/migration/V1__init_schema.sql:736-763` |
-| `knowledge_card_attachment_refs` | 修订与附件关联 | 主键 `(card_id, revision, attachment_id)` | `backend/src/main/resources/db/migration/V1__init_schema.sql:765-779` |
-| `knowledge_cards.branch_id` | 知识卡的唯一分支归属 | 与 `(repo_id,branch_id)` 分支外键一致 | `backend/src/main/resources/db/migration/V3__branch_contexts.sql` |
-| `knowledge_card_revisions.branch_id` | 修订的分支归属 | 由修订触发器从卡片复制 | `backend/src/main/resources/db/migration/V3__branch_contexts.sql` |
-| `knowledge_branch_validations` | 分支验证结论 | 主键 `(card_id, revision, branch_id, content_version)`；状态四值 CHECK | `backend/src/main/resources/db/migration/V3__branch_contexts.sql:62-74` |
-| `branch_context_knowledge` | 分支阅读上下文钉住的知识修订 | 主键 `(context_id, card_id)` | `backend/src/main/resources/db/migration/V3__branch_contexts.sql:75-80` |
-| `repository_markdown_sources` | Markdown 来源清单 | `(repo_id, branch_id, file_path)` 唯一；哈希格式与路径安全 CHECK | `backend/src/main/resources/db/migration/V1__init_schema.sql:1102-1137`、`V7__branch_lifecycle_and_provenance.sql:83-99` |
-| `knowledge_card_markdown_source_links` | 知识修订与来源精确版本的溯源 | 主键 `(card_id, revision)`；分支外键 | `backend/src/main/resources/db/migration/V1__init_schema.sql:1139-1168`、`V7__branch_lifecycle_and_provenance.sql:101-113` |
-| `knowledge_drift_events` | 漂移与复核审计 | 触发类型与前后状态 CHECK；证据必须为数组；自动事件按目标内容版本唯一 | `backend/src/main/resources/db/migration/V1__init_schema.sql:1545-1577` |
+| `knowledge_cards` | 知识卡当前内容与治理字段 | 主键 `id`；发布状态、来源版本状态、评审状态、知识类型、严重级别、执行级别均有 CHECK；范围与义务为 JSONB 且逐字段校验类型 | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `knowledge_card_revisions` | 修订历史（仅保存知识内容历史） | 主键 `(card_id, revision)`；由触发器写入 | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `knowledge_code_refs` | 知识修订与代码片段的绑定 | 主键 `(card_id, revision, position)`；外键指向修订；`chunk_id` 在片段删除后置空 | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `knowledge_card_embeddings` | 知识卡当前修订的检索向量 | `card_id` 主键；维度 1 到 4096 且与向量维度一致；`retrieval_capability` 区分字符哈希与语义向量 | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `knowledge_attachments` | 附件元数据 | `(repo_id, id)` 唯一；字节数大于 0 | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `knowledge_card_attachment_refs` | 修订与附件关联 | 主键 `(card_id, revision, attachment_id)` | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `knowledge_cards.branch_id` | 知识卡的唯一分支归属 | 与 `(repo_id,branch_id)` 分支外键一致 | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `knowledge_card_revisions.branch_id` | 修订的分支归属 | 由修订触发器从卡片复制 | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `knowledge_branch_validations` | 分支验证结论 | 主键 `(card_id, revision, branch_id, content_version)`；状态四值 CHECK | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `branch_context_knowledge` | 分支阅读上下文钉住的知识修订 | 主键 `(context_id, card_id)` | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
+| `repository_markdown_sources` | Markdown 来源清单 | `(repo_id, branch_id, file_path)` 唯一；哈希格式与路径安全 CHECK | `backend/src/main/resources/db/migration/V1__init_schema.sql`、`V1__init_schema.sql` |
+| `knowledge_card_markdown_source_links` | 知识修订与来源精确版本的溯源 | 主键 `(card_id, revision)`；分支外键 | `backend/src/main/resources/db/migration/V1__init_schema.sql`、`V1__init_schema.sql` |
+| `knowledge_drift_events` | 漂移与复核审计 | 触发类型与前后状态 CHECK；证据必须为数组；自动事件按目标内容版本唯一 | `backend/src/main/resources/db/migration/V1__init_schema.sql` |
 
 ### 3.2 状态枚举
 
-- 发布状态 `publication_status`：`DRAFT`、`PUBLISHED`、`ARCHIVED`（`V1__init_schema.sql:1304-1305`）。
-- 人工评审状态 `review_status`：`UNREVIEWED`、`APPROVED`、`CHANGES_REQUESTED`（`V1__init_schema.sql:1308-1309`）。
-- 来源版本状态 `source_version_status`：`UNVERIFIED`、`CURRENT`、`SUSPECT`、`STALE`（`V1__init_schema.sql:1394-1396`）。
-- 漂移事件前置状态：`UNVERIFIED`、`CURRENT`、`SUSPECT`、`STALE`；结果状态：`CURRENT`、`SUSPECT`、`STALE`；触发类型：`AUTOMATIC_DIFF`、`MANUAL_CONFIRM_CURRENT`、`MANUAL_MARK_STALE`（`V1__init_schema.sql:1561-1566`）。
-- 分支验证结论 `state`：`CURRENT`、`UNVERIFIED`、`REVIEW_REQUIRED`、`INVALID`（`V3__branch_contexts.sql:67`）。
+- 发布状态 `publication_status`：`DRAFT`、`PUBLISHED`、`ARCHIVED`（`V1__init_schema.sql`）。
+- 人工评审状态 `review_status`：`UNREVIEWED`、`APPROVED`、`CHANGES_REQUESTED`（`V1__init_schema.sql`）。
+- 来源版本状态 `source_version_status`：`UNVERIFIED`、`CURRENT`、`SUSPECT`、`STALE`（`V1__init_schema.sql`）。
+- 漂移事件前置状态：`UNVERIFIED`、`CURRENT`、`SUSPECT`、`STALE`；结果状态：`CURRENT`、`SUSPECT`、`STALE`；触发类型：`AUTOMATIC_DIFF`、`MANUAL_CONFIRM_CURRENT`、`MANUAL_MARK_STALE`（`V1__init_schema.sql`）。
+- 分支验证结论 `state`：`CURRENT`、`UNVERIFIED`、`REVIEW_REQUIRED`、`INVALID`（`V1__init_schema.sql`）。
 - Markdown 来源状态（由查询派生，非持久列）：`PENDING`、`CURRENT`、`STALE`（`MarkdownKnowledgeSourceMapper.xml:71-75`）。
-- 分支范围模式 `mode`：`ALL_BRANCHES`、`SELECTED_BRANCHES`（`V3__branch_contexts.sql:44`）。
 
 ### 3.3 状态流转
 
@@ -483,9 +482,8 @@
 2. **不存在 `KnowledgeScopeMatcher`。** 实际匹配由 `RepositoryGlobMatcher` 与各调用点自行组合完成，路径匹配、符号匹配分别散落在漂移检测与代码证据上下文两处，规则重复；需人工确认是否要收敛为单一匹配组件。
 3. **无删除知识卡的接口。** 只有发布状态到 `ARCHIVED` 的软退出，没有删除知识卡或删除来源的端点；`knowledge_card_revisions` 与 `knowledge_drift_events` 都随卡片级联删除，一旦提供删除接口就会丢失审计历史。
 4. **草稿知识卡的列表过滤只按账号权限判定仓库级 MAINTAIN**（`IntelligenceController.java:179-184`），因此对具备 MAINTAIN 的账号，其他人的未发布草稿同样可见；需人工确认这是否是有意的协作语义。
-5. **来源列表的 `branchId` 依赖分支化迁移后的结构。** `MarkdownSource` 的 `branchId`、来源唯一约束与索引都来自 `V7__branch_lifecycle_and_provenance.sql`，而 `V1__init_schema.sql` 中的 `repository_markdown_sources` 定义仍是无分支的旧版本；直接按 V1 建库的环境需要确认迁移链完整。
-6. **前端类型存在后端不产出的可选字段。** `MarkdownKnowledgeSource` 声明了 `excerpt`、`cardTitle`、`cardStatus`（`frontend/src/api/intelligence.ts:377,382-383`），但后端 `MarkdownSource` 记录不包含这些字段，界面相应位置会回落为占位文案（`frontend/src/features/knowledge/MarkdownKnowledgeSourceList.vue:90,104`）。需人工确认是待实现还是残留声明。
-7. **知识检索可用性取决于向量索引就绪。** 已发布知识的向量补齐在发布时执行，但失败被静默吞掉（`IntelligenceService.java:1265-1271`），只保留关键词通道；没有重试或状态提示接口，需人工确认运维预期。
+5. **前端类型存在后端不产出的可选字段。** `MarkdownKnowledgeSource` 声明了 `excerpt`、`cardTitle`、`cardStatus`（`frontend/src/api/intelligence.ts:377,382-383`），但后端 `MarkdownSource` 记录不包含这些字段，界面相应位置会回落为占位文案（`frontend/src/features/knowledge/MarkdownKnowledgeSourceList.vue:90,104`）。需人工确认是待实现还是残留声明。
+6. **知识检索可用性取决于向量索引就绪。** 已发布知识的向量补齐在发布时执行，但失败被静默吞掉（`IntelligenceService.java:1265-1271`），只保留关键词通道；没有重试或状态提示接口，需人工确认运维预期。
 8. **没有知识卡与仓库成员的一致性校验。** `ownerAccountId` 只要求非空（当执行级别为 REQUIRED 时），不校验该账号是否为仓库成员或是否可访问该仓库（`EngineeringKnowledgePolicy.java:65-67`）。
 9. **附件的 `scan_status` 没有写入路径。** 表默认 `READY`，上传流程从不更新该字段（`KnowledgeAttachmentMapper.xml:4-8`），安全扫描是未实现能力。
 10. **缺少对漂移证据的定位能力说明。** 只有部分证据（路径范围、符号范围、代码引用）携带文件路径与行号，手动复核事件不带文件位置，前端会提示无法定位（`frontend/src/views/KnowledgeView.vue:225-231`）；这是有意设计还是信息缺失需人工确认。

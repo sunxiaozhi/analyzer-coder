@@ -31,7 +31,7 @@
 ### QA-002 客户端幂等请求标识
 - 需求：携带相同 `clientRequestId` 的重复提问不重复生成回答，直接返回已保存的那一轮。
 - 规则：
-  - 命中 `(repo_id, account_id, client_request_id)` 唯一约束的既有记录时，从 `answer_payload` 还原整轮回答返回。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:160-169`、`backend/src/main/resources/db/migration/V1__init_schema.sql:555-557`。
+  - 命中 `(repo_id, account_id, client_request_id)` 唯一约束的既有记录时，从 `answer_payload` 还原整轮回答返回。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:160-169`、`backend/src/main/resources/db/migration/V1__init_schema.sql`。
   - 若该标识已用于其他分支内容版本，抛 `IllegalArgumentException`（HTTP 400），提示发起新请求。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:165-167`。
   - 前端在重试同一问题时复用原 `clientRequestId`，发送成功后清空。证据：`frontend/src/features/ask/useAskConversation.ts:50`、`frontend/src/features/ask/useAskConversation.ts:66`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:160-169`
@@ -94,10 +94,10 @@
 - 需求：每轮回答必须带一个证据状态枚举值，并单独暴露未引用事实段的数量与非法引用清单。
 - 规则：
   - 实现实际写入的状态值：`INSUFFICIENT`、`CITATION_COMPLETE`、`CITATION_INCOMPLETE`、`MODEL_OUTPUT_REJECTED`、`DEGRADED`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:248`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:264`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:280`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:287`。
-  - 数据库约束额外允许历史值 `SUPPORTED` 与 `UNKNOWN`；`SUPPORTED` 仅为历史行的可读性保留。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1181-1195`。
+  - 数据库约束额外允许历史值 `SUPPORTED` 与 `UNKNOWN`；`SUPPORTED` 仅为历史行的可读性保留。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`。
   - 无引用段落通过 `CitationAssessment.uncitedBlockCount` 标记，非法引用通过 `invalidReferences` 列出。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/CitationAssessment.java:6-12`。
   - 前端把状态映射为中文标签，并对未引用段数与非法引用单独提示。证据：`frontend/src/features/ask/AskConversationPanel.vue:49-58`、`frontend/src/features/ask/AskConversationPanel.vue:93-108`。
-- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1181-1195`
+- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### QA-010 检索与证据组装
 - 需求：回答的准确性依赖混合检索结果，检索需可诊断（哪些通道可用、是否降级）。
@@ -112,7 +112,7 @@
 - 规则：
   - 首轮以新生成的 `conversationId` 同时作为 `threadId`；指定 `threadId` 时必须是当前账户在本仓库（分支）下存在的会话，否则报「问答会话不存在」。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:171-184`。
   - 续问时先对线程加锁（`FOR UPDATE`），再读取历史轮次。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:185`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:220-224`。
-  - `turnNo` 取线程内 `MAX(turn_no)+1`，并由唯一约束 `(thread_id, turn_no)` 兜底。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:225-227`、`backend/src/main/resources/db/migration/V1__init_schema.sql:560-561`。
+  - `turnNo` 取线程内 `MAX(turn_no)+1`，并由唯一约束 `(thread_id, turn_no)` 兜底。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:225-227`、`backend/src/main/resources/db/migration/V1__init_schema.sql`。
   - 首轮标题取问题前 30 个码点、折叠空白；空问题标题为「未命名问题」。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1515-1524`。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:171-199`
 
@@ -120,8 +120,8 @@
 - 需求：每轮回答必须持久化足以原样恢复的证据内容版本、分支身份与代码版本。
 - 规则：
   - 落库字段：`id`、`thread_id`、`turn_no`、`repo_id`、`account_id`、`client_request_id`、`title`、`question`、`answer`、`content_version`、`branch_id`、`context_id`、`branch_name`、`commit_sha`、`provider`、`evidence_status`、`fallback_reason`、`answer_payload`（JSONB 完整内容版本）、`status='COMPLETED'`、`finished_at`。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:158-168`。
-  - 引用内容版本单独写入 `qa_citations`，含来源类型、`chunk_id`、`knowledge_card_id`、文件路径、符号、行列、内容 SHA-256、排序与完整引用 JSON；引用随会话级联删除。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:282-285`、`backend/src/main/resources/db/migration/V1__init_schema.sql:567-569`。
-  - 分支字段为后加：`branch_id`、`context_id`、`branch_name`、`commit_sha`，其中旧的默认版本问答允许 `branch_id` 为空。证据：`backend/src/main/resources/db/migration/V7__branch_lifecycle_and_provenance.sql:64-79`、`backend/src/main/resources/db/migration/V7__branch_lifecycle_and_provenance.sql:117-118`。
+  - 引用内容版本单独写入 `qa_citations`，含来源类型、`chunk_id`、`knowledge_card_id`、文件路径、符号、行列、内容 SHA-256、排序与完整引用 JSON；引用随会话级联删除。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:282-285`、`backend/src/main/resources/db/migration/V1__init_schema.sql`。
+  - 分支字段包括：`branch_id`、`context_id`、`branch_name`、`commit_sha`，其中旧的默认版本问答允许 `branch_id` 为空。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`。
   - `contentVersion` 优先取本轮证据携带的内容版本，其次取检索诊断内容版本。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:234-239`。
   - 知识类证据保存 `knowledge_card_id`，并按知识检索行的 `revision` 关联知识修订。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:722-745`。
 - 证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:158-168`
@@ -300,11 +300,11 @@
 ### GRAPH-016 启发式符号图与 CodeGraph 产物相互独立
 - 需求：索引阶段的符号串匹配关系与 CodeGraph CLI 产物必须分开存储、分开标注来源，避免被误认为真实调用图。
 - 规则：
-  - 启发式关系存放在 `heuristic_call_edges` 表，原 `code_graph_edges` 已重命名以与 CLI 产物区分。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1200-1206`。
+  - 启发式关系存放在 `heuristic_call_edges` 表，原 `code_graph_edges` 已重命名以与 CLI 产物区分。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`。
   - 启发式边来自「内容包含『符号名 + (』」的字符串匹配，受 `LIMIT 500` 约束。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1273-1301`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:287-292`。
   - `GET /api/repositories/{repoId}/graph` 返回的 `relationSource` 为 `HEURISTIC_CALL_REFERENCE`，算法标注 `SYMBOL_TOKEN_FOLLOWED_BY_PARENTHESIS`，并附三条限制说明（非 CLI 结果、无法识别重载/动态分派/反射/别名/跨语言、结果绑定当前已发布内容版本）。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1016-1027`。
   - 该接口的 `depth` 收敛到 1–5，`direction` 取值影响遍历方向（`UPSTREAM`/`DOWNSTREAM` 之外视为双向）；风险等级按去重边数分为 `HIGH`(>20)/`MEDIUM`(>5)/`LOW`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:978-1020`。
-- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1200-1206`
+- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### GRAPH-017 图谱可视化页面（/atlas）
 - 需求：前端提供 `/atlas` 只读图谱页，支持模块聚合与符号视图、3D 与平面两种渲染、以及可回退的渲染降级。
@@ -330,18 +330,18 @@
 
 问答数据：
 
-- `qa_conversations`：一轮问答 = 一行；`answer_payload` 保存完整回答内容版本；唯一约束 `(account_id, repo_id, client_request_id)` 与 `(thread_id, turn_no)`；`evidence_status` 受 CHECK 约束；`turn_no > 0`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:503-565`。
-- `qa_citations`：一轮回答的多条引用，随会话级联删除，含 `evidence_hash` 与 `citation_payload`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:567-598`。
-- 分支字段后加：`branch_id`、`context_id`、`branch_name`、`commit_sha`，并对 `branch_id`、`context_id` 建外键。证据：`backend/src/main/resources/db/migration/V7__branch_lifecycle_and_provenance.sql:64-81`。
-- 状态值集合（实现写入）：`INSUFFICIENT`、`CITATION_COMPLETE`、`CITATION_INCOMPLETE`、`MODEL_OUTPUT_REJECTED`、`DEGRADED`；历史兼容值 `SUPPORTED`、`UNKNOWN`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1181-1195`。
+- `qa_conversations`：一轮问答 = 一行；`answer_payload` 保存完整回答内容版本；唯一约束 `(account_id, repo_id, client_request_id)` 与 `(thread_id, turn_no)`；`evidence_status` 受 CHECK 约束；`turn_no > 0`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`。
+- `qa_citations`：一轮回答的多条引用，随会话级联删除，含 `evidence_hash` 与 `citation_payload`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`。
+- 分支字段包括：`branch_id`、`context_id`、`branch_name`、`commit_sha`，并对 `branch_id`、`context_id` 建外键。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`。
+- 状态值集合（实现写入）：`INSUFFICIENT`、`CITATION_COMPLETE`、`CITATION_INCOMPLETE`、`MODEL_OUTPUT_REJECTED`、`DEGRADED`；历史兼容值 `SUPPORTED`、`UNKNOWN`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`。
 - `fallbackReason` 取值：`NO_EVIDENCE`、`LOCAL_EVIDENCE_MODE`、`MODEL_UNAVAILABLE`、`CITATION_VALIDATION_FAILED`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:249`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:281`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:288-289`。
 - 引用校验结果 `CitationAssessment` 的字段定义与「`entailmentVerified` 恒为 false」见 QA-008。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/CitationAssessment.java:6-20`。
 
 图谱数据：
 
-- `codegraph_artifacts`：`id`、`repo_id`、`content_version`、`cli_version`、`status`、`artifact_path`、`node_count`、`edge_count`、`created_at`、`published_at`；索引 `(repo_id, content_version, created_at DESC)`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:471-497`。
+- `codegraph_artifacts`：`id`、`repo_id`、`content_version`、`cli_version`、`status`、`artifact_path`、`node_count`、`edge_count`、`created_at`、`published_at`；索引 `(repo_id, content_version, created_at DESC)`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`。
 - 状态取值：写入恒为 `PUBLISHED`，被替换时置 `RETIRED`。证据：`backend/src/main/resources/mappers/CodeGraphArtifactMapper.xml:4-5`、`backend/src/main/resources/mappers/CodeGraphArtifactMapper.xml:31-34`。
-- `heuristic_call_edges`：索引阶段生成的启发式关系，与 CLI 产物分离。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1200-1206`。
+- `heuristic_call_edges`：索引阶段生成的启发式关系，与 CLI 产物分离。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`。
 - `index_job_branch_targets`：把 `CODEGRAPH` 任务绑定到 `(repo_id, branch_id, content_version)`。证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchGraphTasks.java:28-41`、`backend/src/main/java/com/analyzercoder/application/branch/BranchGraphTasks.java:80-86`。
 - 图谱构建任务状态：`QUEUED`、`RUNNING`、`CANCEL_REQUESTED`、`SUCCEEDED`、`FAILED`、`CANCELED`；失败码 `CODEGRAPH_TIMEOUT`、`CODEGRAPH_BUILD_FAILED`。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphJobProcessor.java:70-88`。
 - 产物存储根目录由 `app.codegraph.artifact-root` 决定，默认位于受管数据根目录下；CLI 可执行文件与超时分别由 `app.codegraph.executable`、`app.codegraph.timeout-minutes`、`app.codegraph.task-timeout-minutes` 配置。证据：`backend/src/main/resources/application.yml:85-94`。
@@ -393,6 +393,6 @@
 - `direction` 参数在前端被忽略（形参命名为 `_direction`，固定传 `BOTH`）。证据：`frontend/src/api/intelligence.ts:477-481`。
 - `/codegraph/latest` 使用不带状态过滤的 `findLatest`，可能返回已 `RETIRED` 的产物行；前端只校验 `contentVersion` 而不校验 `status`，会把该行显示为「当前内容版本图谱已发布」。需人工确认是否需要在接口层过滤状态。证据：`backend/src/main/resources/mappers/CodeGraphArtifactMapper.xml:35-39`、`frontend/src/features/graph/GraphImpactPanel.vue:110`、`frontend/src/features/graph/GraphImpactPanel.vue:229-232`。
 - 提问长度没有服务端上限（只有 `@NotBlank`）；提示词会截断到 1200 字符，但检索词由未截断的问题与历史拼装。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/IntelligenceController.java:257-258`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:436-444`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:867`。
-- `qa_conversations.status`、`stop_requested`、`started_at`、`finished_at` 等列存在，但当前实现恒写 `COMPLETED`，没有流式生成或停止生成的能力。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:166`、`backend/src/main/resources/db/migration/V1__init_schema.sql:518-521`。
+- `qa_conversations.status`、`started_at`、`finished_at` 等列存在，当前实现恒写 `COMPLETED`；未使用的 `stop_requested` 已从基线移除。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:166`、`backend/src/main/resources/db/migration/V1__init_schema.sql`。
 - 图谱 CLI 契约测试 `ManagedCodeGraphCliContractTest` 带类级 `@EnabledOnOs(OS.LINUX)`，在 Windows 上整类跳过，本地无法覆盖真实 CLI 解析路径。证据：`backend/src/test/java/com/analyzercoder/application/intelligence/ManagedCodeGraphCliContractTest.java:24`。
 - `GET /api/repositories/{repoId}/codegraph/impact` 与 `/explore` 无分页参数，模块/符号视图的截断只能靠 `partial` 与节点/边上限感知。证据：`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphExplorer.java:91`、`backend/src/main/java/com/analyzercoder/application/intelligence/CodeGraphExplorer.java:107`。

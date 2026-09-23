@@ -306,6 +306,61 @@ public class LlmSettingsService {
         return row == null ? "CHARACTER_HASH" : retrievalCapability(string(row, "provider_type"));
     }
 
+    @FunctionalInterface
+    public interface ExternalVectorizer {
+        VectorEmbedding vectorize(String input);
+
+        default List<VectorEmbedding> vectorizeBatch(List<String> inputs) {
+            return inputs.stream().map(this::vectorize).toList();
+        }
+    }
+
+    /** Captures one external vector configuration and secret for a single indexing pass. */
+    public ExternalVectorizer openExternalVectorizer() {
+        Map<String, Object> row = mapper.activeVectorModel();
+        if (row == null || "LOCAL_HASH".equals(string(row, "provider_type"))) {
+            throw new IllegalStateException("当前未启用外部向量模型");
+        }
+        String baseUrl = string(row, "base_url");
+        String model = string(row, "model");
+        String apiKey = readSecret(uuid(row, "secret_version_id"));
+        int dimension = integer(row, "dimension", 64);
+        int requestTimeoutMs = integer(row, "request_timeout_ms", 30000);
+        return new ExternalVectorizer() {
+            private boolean batchSupported = true;
+
+            @Override
+            public VectorEmbedding vectorize(String input) {
+                return new VectorEmbedding(
+                        model,
+                        dimension,
+                        client.embed(baseUrl, model, apiKey, input, dimension, requestTimeoutMs),
+                        "SEMANTIC_EMBEDDING");
+            }
+
+            @Override
+            public List<VectorEmbedding> vectorizeBatch(List<String> inputs) {
+                if (inputs.size() < 2 || !batchSupported) {
+                    return ExternalVectorizer.super.vectorizeBatch(inputs);
+                }
+                try {
+                    return client
+                            .embedBatch(baseUrl, model, apiKey, inputs, dimension, requestTimeoutMs)
+                            .stream()
+                            .map(
+                                    vector ->
+                                            new VectorEmbedding(
+                                                    model, dimension, vector, "SEMANTIC_EMBEDDING"))
+                            .toList();
+                } catch (LlmConnectionException exception) {
+                    if (!"LLM_BATCH_UNSUPPORTED".equals(exception.code())) throw exception;
+                    batchSupported = false;
+                    return ExternalVectorizer.super.vectorizeBatch(inputs);
+                }
+            }
+        };
+    }
+
     public VectorEmbedding vectorize(String input) {
         Map<String, Object> row = mapper.activeVectorModel();
         if (row == null || "LOCAL_HASH".equals(string(row, "provider_type"))) {

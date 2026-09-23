@@ -99,7 +99,7 @@ class CurrentContentVersionSqlContractTest {
 
         assertThat(migration)
                 .contains("publication_status", "source_version_status", "review_status")
-                .contains("DROP TRIGGER IF EXISTS trg_confirm_knowledge_code_version");
+                .doesNotContain("trg_confirm_knowledge_code_version");
         assertThat(intelligence)
                 .contains("publication_status='DRAFT',")
                 .contains("review_status='UNREVIEWED'")
@@ -123,7 +123,7 @@ class CurrentContentVersionSqlContractTest {
                         "obligations_payload",
                         "last_verified_content_version",
                         "verification_note")
-                .contains("'UNVERIFIED','CURRENT','SUSPECT','STALE'")
+                .contains("'UNVERIFIED'", "'CURRENT'", "'SUSPECT'", "'STALE'")
                 .contains("NEW.scope_payload", "NEW.obligations_payload");
         assertThat(intelligence)
                 .contains("CAST(#{scopePayload} AS jsonb)")
@@ -144,10 +144,10 @@ class CurrentContentVersionSqlContractTest {
         String mapper = resource("mappers/KnowledgeDriftMapper.xml");
 
         assertThat(migration)
-                .contains("DROP TRIGGER IF EXISTS trg_repository_knowledge_stale")
+                .doesNotContain("trg_repository_knowledge_stale")
                 .contains("CREATE TABLE knowledge_drift_events")
-                .contains("reasons_payload JSONB")
-                .contains("uq_knowledge_drift_automatic_contentVersion");
+                .contains("reasons_payload jsonb")
+                .contains("uq_knowledge_drift_automatic_contentversion");
         assertThat(mapper)
                 .contains("source_version_status='SUSPECT'")
                 .contains("source_version_status='CURRENT'")
@@ -156,15 +156,13 @@ class CurrentContentVersionSqlContractTest {
     }
 
     @Test
-    void ciKnowledgeObligationsAreBackfilledAndVersioned() throws Exception {
+    void ciKnowledgeObligationsAreDefinedAndVersioned() throws Exception {
         String migration = resource(BASELINE_MIGRATION);
 
         assertThat(migration)
-                .contains("UPDATE knowledge_cards")
-                .contains("UPDATE knowledge_card_revisions")
                 .contains("prohibitedPathPatterns")
                 .contains("knowledgeUpdateRequired")
-                .contains("jsonb_typeof(obligations_payload->'knowledgeUpdateRequired')='boolean'")
+                .contains("jsonb_typeof((obligations_payload -> 'knowledgeUpdateRequired'::text))")
                 .contains("chk_knowledge_revision_obligations_payload");
     }
 
@@ -193,7 +191,7 @@ class CurrentContentVersionSqlContractTest {
 
         assertThat(migration)
                 .contains("execution_mode", "fallback_reason")
-                .contains("'FULL','INCREMENTAL'");
+                .contains("'FULL'", "'INCREMENTAL'");
         assertThat(mapper)
                 .contains("execution_mode", "fallback_reason")
                 .contains("#{executionMode}", "#{fallbackReason}");

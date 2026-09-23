@@ -55,7 +55,7 @@
   - 成功可从 `RUNNING` 或 `CANCEL_REQUESTED` 进入；失败同理；终态不被改写，重试创建新任务。
   - 每仓库同时只允许一个活动任务（数据库部分唯一索引）。
   - 观察到的阶段值包括 `scan_repository`、`write_chunks`、`build_embeddings`、`cancel_requested`、`canceled`、`timed_out`、`codegraph_failed` 及 `full:completed:<块数>:vectors-ready`、`codegraph_published:<contentVersion>`、`knowledge_drift_completed:<contentVersion>:ready|degraded` 等终态摘要。
-- 证据：`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJobStatus.java:4`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJob.java:24,196,217`、`backend/src/main/resources/mappers/IndexJobMapper.xml:64`、`backend/src/main/resources/db/migration/V1__init_schema.sql:372`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:160,202`
+- 证据：`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJobStatus.java:4`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJob.java:24,196,217`、`backend/src/main/resources/mappers/IndexJobMapper.xml:64`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:160,202`
 ### TSK-006 取消任务的适用状态
 
 - 需求：只有排队中或运行中的任务可以提交取消请求。
@@ -82,7 +82,7 @@
   - `execution_mode` 仅允许 `FULL`/`INCREMENTAL` 且允许为空；只能在 `RUNNING` 时写入。
   - 回退判定顺序：缺索引基线 `BASELINE_MISSING`、工作区脏 `DIRTY_WORKTREE`、Git 差异失败 `GIT_DIFF_FAILED`、变更比例超阈值 `CHANGE_RATIO_EXCEEDED`。
   - 阈值：变更文件数 / 当前文件总数 > 0.35 即回退全量。
-- 证据：`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:32,245`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJob.java:113`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1361`
+- 证据：`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:32,245`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJob.java:113`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 ### TSK-009 失败代码、错误信息与内容版本绑定
 
 - 需求：失败任务同时保留稳定失败代码与人类可读信息；任务详情的内容版本绑定是已知缺口。
@@ -130,7 +130,7 @@
   - 目标内容令牌约束：`SYNC`/`PREPARE` 可空，`CONTENT`/`GRAPH`/`VECTORS` 必须非空。
   - 同分支同 `kind` 只允许一个 `QUEUED`/`RUNNING` 任务（部分唯一索引）；重复提交复用既有活动任务；若活动任务的目标内容版本不同则返回 409 `BRANCH_VECTOR_BUSY`。
   - 提交时对分支行加锁（`FOR UPDATE OF b`）并要求分支 `tracking_status='ACTIVE'` 且仓库未删除；失败统一写"任务失败，请检查分支、仓库权限、凭据或向量模型配置后重试"。
-- 证据：`backend/src/main/resources/db/migration/V8__branch_code_operations.sql:12`、`backend/src/main/resources/db/migration/V5__branch_preparation_jobs.sql:19`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:134,181,307`、`frontend/src/features/indexing/BranchTasksPanel.vue:28,30`
+- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:134,181,307`、`frontend/src/features/indexing/BranchTasksPanel.vue:28,30`
 ### TSK-014 分支任务提交与查询接口
 
 - 需求：分支操作提供三类提交入口与两类查询入口，其中一类提交入口为旧版兼容。
@@ -150,7 +150,7 @@
   - 阅读上下文由 `branch_read_contexts` 表达，绑定账号、仓库、分支、内容版本，有效期 1 小时；解析校验归属账号与过期时间，过期返回 409 `CONTEXT_EXPIRED`，分支不一致返回 409 `CONTEXT_MISMATCH`。
   - 未提供 `contextId` 时按已发布内容版本新建上下文；分支尚未准备返回 409 `BRANCH_NOT_READY`（"不会使用其他分支的数据"），同时把该分支范围内已发布且评审通过的知识固化进 `branch_context_knowledge`。
   - 分支发布用 `generation` 乐观并发：不匹配返回 409 `BRANCH_BUSY`，被新任务取代返回 409 `BRANCH_BUILD_SUPERSEDED`。
-- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:202,317,391`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:347,379,404,412`、`backend/src/main/java/com/analyzercoder/application/branch/BranchCodeOperationsService.java:74`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:30`
+- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:202,317,391`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:347,379,404,412`、`backend/src/main/java/com/analyzercoder/application/branch/BranchCodeOperationsService.java:74`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 ### TSK-016 分支索引状态与向量就绪判定
 
 - 需求：按分支与内容版本分别报告内容索引、图谱与向量三类就绪状态。
@@ -194,7 +194,7 @@
   - 每次新增从序列 `llm_provider_config_version_seq` 取递增版本号并生成新配置标识，同时插入一条运行状态记录（可用性 `UNTESTED`、熔断 `CLOSED`）。
   - 配置指纹 = 名称、协议、地址、模型、连接超时、请求超时、最大输出、温度、流式开关与密钥摘要拼接后的 SHA-256。
   - 表注释将该表定义为"LLM Provider 不可变配置版本"。
-- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/LlmSettingsController.java:45`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:126,844`、`backend/src/main/resources/mappers/LlmSettingsMapper.xml:32,53`、`backend/src/main/resources/db/migration/V1__init_schema.sql:881`
+- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/LlmSettingsController.java:45`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:126,844`、`backend/src/main/resources/mappers/LlmSettingsMapper.xml:32,53`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 ### CFG-002 Provider 配置的就地更新与运行状态重置
 
 - 需求：已保存配置可就地更新，更新后必须重新检测。
@@ -212,7 +212,7 @@
   - 连接超时默认 5000（1000–10000）；请求超时默认 60000（3000–120000）；最大输出默认 2048（1–32768）；温度默认 0.2（0–2）；流式开关缺省为真。
   - 服务地址必须通过端点策略校验。
   - 数据库检查约束：`chk_llm_provider_type`、`chk_llm_connect_timeout`、`chk_llm_request_timeout`、`chk_llm_max_output_tokens`、`chk_llm_temperature`。
-- 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:585`、`backend/src/main/resources/db/migration/V1__init_schema.sql:874`、`backend/src/main/java/com/analyzercoder/application/llm/LlmEndpointPolicy.java:41`
+- 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:585`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/java/com/analyzercoder/application/llm/LlmEndpointPolicy.java:41`
 ### CFG-004 Provider 列表与旧版兼容接口
 
 - 需求：提供版本列表，并保留旧版单配置读写接口。
@@ -242,15 +242,16 @@
   - `CLEAR` 把密钥版本置空，摘要按字面量 `none` 参与指纹计算；未保存的候选配置不允许 `KEEP`。
   - 前端规则：填写了密钥则按 `REPLACE` 提交；编辑已配置密钥且未填写时保留 `KEEP`；新建未填写时按 `CLEAR` 提交。
 - 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:525,548,569`、`frontend/src/views/SystemSettingsView.vue:112`
-### CFG-007 模型端点策略与 APP_LLM_ALLOW_INSECURE_LOCAL
+### CFG-007 模型端点精确地址例外
 
-- 需求：模型服务地址默认只允许 HTTPS，且禁止解析到受保护网络。
+- 需求：默认拦截解析到受保护网络的模型端点并校验 HTTPS 证书；仅按完整基础地址配置例外。
 - 规则：
-  - 地址必须含主机名，不得含用户凭据、查询参数或片段；端口必须合法（非 0、≤ 65535）；末尾斜杠被去除；默认必须 `https`。
-  - `APP_LLM_ALLOW_INSECURE_LOCAL`（缺省 false）为真时，允许 `localhost`、`*.localhost`、`127.0.0.1`、`::1` 使用 `http` 并允许其解析到回环地址。
-  - 其他本机、链路本地、站点本地、组播、CGNAT（100.64.0.0/10）、169.254/16 及 IPv6 唯一本地/链路本地地址一律拒绝（`LLM_NETWORK_BLOCKED`）；DNS 失败为 `LLM_DNS_FAILED`。
-  - HTTP 客户端不跟随重定向。
-- 证据：`backend/src/main/resources/application.yml:99`、`backend/src/main/java/com/analyzercoder/application/llm/LlmEndpointPolicy.java:22,41,56,77`、`backend/src/main/java/com/analyzercoder/application/llm/OpenAiCompatibleClient.java:55`
+  - `app.llm.endpoint-exceptions` 默认为空。每项使用 `base-url` 精确匹配协议、主机、端口和路径；末尾斜杠归一化，不支持通配符或重复地址。
+  - `allow-private-network` 与 `skip-tls-verification` 均默认 false，互不隐式开启。前者允许该端点解析到受保护地址及使用内网 HTTP；后者仅适用于 HTTPS，为该端点的连通性检测、生成和向量请求关闭证书与主机名校验。
+  - 未匹配的端点保持原规则：公网必须 HTTPS，私有、环回、链路本地等地址被拒绝。`APP_LLM_ALLOW_INSECURE_LOCAL`（缺省 false）的现有本机开发例外继续有效。
+  - 地址仍必须含主机名，禁止用户凭据、查询参数和片段；端口必须合法。DNS 失败返回 `LLM_DNS_FAILED`，HTTP 客户端不跟随重定向。
+- 配置示例：在后端 `application.yml` 的 `app.llm.endpoint-exceptions` 中为目标 `base-url` 添加两个按需开启的布尔选项。
+- 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmEndpointPolicy.java`、`backend/src/main/java/com/analyzercoder/application/llm/OpenAiCompatibleClient.java`、`deploy/backend/config/application.yml`
 ### CFG-008 连通性检测的创建、查询、取消与单飞复用
 
 - 需求：检测以异步任务创建，同一账号同一配置指纹同时只存在一个在途检测。
@@ -297,7 +298,7 @@
   - 外部模型必须提供 `baseUrl`（经端点策略校验）与 API Key；本地哈希不保存密钥。
   - 请求超时缺省 30000（3000–120000）；`vector_model_configs.model` 全表唯一。
   - 检索能力由协议推导：`LOCAL_HASH` → `CHARACTER_HASH`（标签"字符相似度"，限制"基于字符哈希投影与余弦距离""不理解同义词、业务含义或代码语义"）；外部 → `SEMANTIC_EMBEDDING`（标签"语义检索"）。
-- 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:671,764,772`、`backend/src/main/resources/db/migration/V1__init_schema.sql:819,825`、`frontend/src/api/llmSettings.ts:47`
+- 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:671,764,772`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`frontend/src/api/llmSettings.ts:47`
 ### CFG-013 向量模型连通性检测
 
 - 需求：向量模型提供同步检测接口，返回可用性、维度、检索能力与耗时。
@@ -316,7 +317,7 @@
   - 更新条件为 `activation_version = expectedActivationVersion`；影响 0 行返回 409 `VECTOR_MODEL_ACTIVATION_CONFLICT`。
   - 成功使 `activation_version` 自增并记录启用人与时间；数据库以 `singleton_id = 1` 保证单例。
   - 内置种子模型 `local-hash-64`（`LOCAL_HASH`，64 维）初始化即启用；前端提示"已切换到 <名称>，后续检索会重建不匹配的向量"，只对非当前启用模型显示"切换使用"。
-- 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:222,235`、`backend/src/main/resources/mappers/LlmSettingsMapper.xml:177`、`backend/src/main/resources/db/migration/V1__init_schema.sql:845,1071`、`frontend/src/views/SystemSettingsView.vue:216,326`
+- 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:222,235`、`backend/src/main/resources/mappers/LlmSettingsMapper.xml:177`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`frontend/src/views/SystemSettingsView.vue:216,326`
 ### CFG-015 向量模型编辑限制
 
 - 需求：当前启用的向量模型不允许就地编辑。
@@ -332,7 +333,7 @@
   - `GET /api/settings` 与 `PUT /api/settings` 均需管理员权限。
   - `sensitive` 为真的项读取时统一返回 `******`；写入为按主键 upsert 并记录最后修改账号与时间。
   - 种子值只有 `externalModelEnabled = false`，且代码中没有任何位置读取该键（见第 6 节）。
-- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/IntelligenceController.java:233,243`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1145,1153`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:403`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1066`
+- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/IntelligenceController.java:233,243`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1145,1153`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:403`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 ### CFG-017 模型配置前端界面
 
 - 需求：模型配置页按"问答模型 / 向量模型"两个分区管理配置。
@@ -371,7 +372,7 @@
 
 - `llm_provider_configs`（不可变版本 + 唯一 `config_version`）与 `llm_provider_runtime_states`（可用性 `UNTESTED`/`AVAILABLE`/`DEGRADED`/`UNAVAILABLE`、熔断 `CLOSED`/`OPEN`、连续失败数、最近成功/失败时间、最近错误码）。
 - `llm_connectivity_checks`：状态 `QUEUED`/`RUNNING`/`SUCCEEDED`/`FAILED`/`CANCELED`，阶段明细以 JSON 数组保存。
-- `vector_model_configs` + `vector_model_activation`（`singleton_id = 1` 单例，`activation_version` 乐观锁）；`llm_provider_activation` 同样使用 `singleton_id = 1`。
+- `vector_model_configs` + `vector_model_activation`（`singleton_id = 1` 单例，`activation_version` 乐观锁）；未使用的 `llm_provider_activation` 已从基线移除。
 - `encrypted_secret_versions`：密文、IV、HMAC 摘要与算法。
 ### 前端可观察状态
 
@@ -435,11 +436,11 @@
 1. **FULL/INCREMENTAL 索引任务缺少崩溃恢复与超时**：`claimNextQueued` 只领取 `QUEUED` 且不写 `timeout_at`，`expireTimedOut` 仅处理 `CODEGRAPH`/`KNOWLEDGE_DRIFT`。执行期间 worker 崩溃会留下永久 `RUNNING` 记录，部分唯一索引阻止该仓库新建任务，而 `start` 会返回该活动任务而非报错。
    - 证据：`backend/src/main/resources/mappers/IndexJobMapper.xml:64,86`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java:26`
 2. **任务详情不暴露内容版本绑定**：`index_job_branch_targets` 已记录分支与内容版本，但 `IndexJobResponse` 未包含该字段。
-   - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:123`、`backend/src/main/resources/db/migration/V4__branch_graph_tasks.sql:1`
+   - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:123`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 3. **连通性检测取消无前端入口**：后端提供取消接口，但 `frontend/src/api/llmSettings.ts` 未封装，界面也无按钮。
    - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/LlmSettingsController.java:121`、`frontend/src/api/llmSettings.ts:115`
 4. **系统键值配置无业务消费方**：`GET/PUT /api/settings` 可读写 `system_settings`，但代码中没有任何位置读取具体键值（含种子键 `externalModelEnabled`）。
-   - 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:1066`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1145`
+   - 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1145`
 5. **界面状态计数是页内计数**：任务中心的"成功 / 已取消"取自当前页集合，且接口不支持状态筛选。
    - 证据：`frontend/src/features/indexing/useIndexJobs.ts:16`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:65`
 6. **分支任务失败原因不可区分**：所有异常写入同一段固定文本，无法区分分支缺失、凭据失效或向量模型配置问题。
@@ -447,4 +448,4 @@
 7. **超时收敛依赖 worker 开启**：`app.workers.enabled=false` 时超时记录不会被收敛；该开关的运维语义需人工确认。
    - 证据：`backend/src/main/java/com/analyzercoder/config/WorkerConfig.java:10`
 8. **分支任务阶段取值未约束**：`stage` 为自由文本，数据库未约束取值，前端仅做映射；新增阶段会直接显示原始字符串，是否需要约束需人工确认。
-   - 证据：`backend/src/main/resources/db/migration/V5__branch_preparation_jobs.sql:7`、`frontend/src/features/indexing/BranchTasksPanel.vue:30`
+   - 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`frontend/src/features/indexing/BranchTasksPanel.vue:30`

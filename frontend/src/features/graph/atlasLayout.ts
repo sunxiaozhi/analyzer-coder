@@ -1,7 +1,7 @@
 import type { AtlasNode, AtlasEdge } from '@/api/codeAtlas';
 
-// Deeper variants of the application's semantic palette: legible on a light canvas.
-export const atlasColors = ['#08768a', '#6650a4', '#16734e', '#9a6010', '#af443c', '#2467ae'];
+// Module colors stay distinct against the graph's deep-blue canvas.
+export const atlasColors = ['#5ccdd4', '#b4a1f2', '#73d5a7', '#efbd84', '#ed91a4', '#83b7ed'];
 export function layoutAtlas(nodes: AtlasNode[], edges: AtlasEdge[]) {
   const degree = new Map<string, number>();
   edges.forEach(e => {

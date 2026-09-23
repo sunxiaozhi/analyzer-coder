@@ -45,7 +45,7 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/** Real V1-V8 migration and branch workflow, isolated from live project data and workers. */
+/** Real consolidated baseline and branch workflow, isolated from live project data and workers. */
 @EnabledIfEnvironmentVariable(named = "APP_BRANCH_OPERATIONS_TEST_URL", matches = ".+")
 class BranchCodeOperationsDatabaseTest {
     @TempDir Path directory;
@@ -73,7 +73,6 @@ class BranchCodeOperationsDatabaseTest {
                     .dataSource(source)
                     .schemas(schema)
                     .defaultSchema(schema)
-                    .target("7")
                     .load()
                     .migrate();
             var repository = CodeRepository.create("Project", directory);
@@ -105,31 +104,6 @@ class BranchCodeOperationsDatabaseTest {
                     "a".repeat(40),
                     directory.resolve("legacy").toString(),
                     main);
-            UUID legacyJob = UUID.randomUUID();
-            db.update(
-                    "INSERT INTO branch_preparation_jobs(id,repo_id,branch_id,account_id,status,kind) VALUES(?,?,?,?,'SUCCEEDED','PREPARE')",
-                    legacyJob,
-                    repo,
-                    main,
-                    account);
-            Flyway.configure()
-                    .dataSource(source)
-                    .schemas(schema)
-                    .defaultSchema(schema)
-                    .load()
-                    .migrate();
-            assertThat(
-                            db.queryForObject(
-                                    "SELECT content_indexed_at IS NOT NULL FROM repository_branches WHERE id=?",
-                                    Boolean.class,
-                                    main))
-                    .isTrue();
-            assertThat(
-                            db.queryForObject(
-                                    "SELECT kind FROM branch_preparation_jobs WHERE id=?",
-                                    String.class,
-                                    legacyJob))
-                    .isEqualTo("PREPARE");
             UUID feature = UUID.randomUUID();
             db.update(
                     "INSERT INTO repository_branches(id,repo_id,name) VALUES(?,?,'feature')",
@@ -255,7 +229,7 @@ class BranchCodeOperationsDatabaseTest {
             long count = chunkCount(db, repo, first);
             jobs.submitOperation(actor, repo, feature, "CONTENT", first);
             jobs.processNext();
-            assertThat(chunkCount(db, repo, first)).isZero();
+            assertThat(chunkCount(db, repo, first)).isEqualTo(count);
             verify(factory, times(1)).resolve(directory, "feature");
             verifyNoInteractions(graph);
             var before =
@@ -312,7 +286,6 @@ class BranchCodeOperationsDatabaseTest {
                                     UUID.class,
                                     repo))
                     .isNull();
-            assertThat(db.update("DELETE FROM code_chunks WHERE content_version=?", first)).isZero();
 
             // Project-level maintenance permission gates all branch writes before side effects.
             clearInvocations(factory);

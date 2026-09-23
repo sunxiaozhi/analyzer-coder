@@ -89,16 +89,29 @@ it('starts in 3D and falls back to planar interaction when WebGL fails', async (
   wrapper.unmount();
 });
 
-it('stays in 3D when the renderer activates compatibility mode', async () => {
+it('switches to the lightweight view when automatic WebGL compatibility is needed', async () => {
   vi.mocked(getCodeAtlas).mockResolvedValue(view());
   const wrapper = mount(CodeAtlasView, { global: { stubs: {
     CodeAtlas3D: { template: '<button data-compatible @click="$emit(\'degraded\', \'WebGL 创建失败\')">Compatible</button>' },
   } } });
   await flushPromises();
   await wrapper.get('[data-compatible]').trigger('click');
+  expect(wrapper.find('[data-view-2d]').attributes('aria-pressed')).toBe('true');
+  expect(wrapper.get('[role="status"]').text()).toContain('已切换到轻量平面');
+  expect(wrapper.text()).toContain('WebGL 不可用');
+  wrapper.unmount();
+});
+
+it('keeps the manually chosen compatibility 3D mode available', async () => {
+  vi.mocked(getCodeAtlas).mockResolvedValue(view());
+  const wrapper = mount(CodeAtlasView, { global: { stubs: {
+    CodeAtlas3D: { template: '<button data-compatible @click="$emit(\'degraded\', \'已选择兼容渲染\')">Compatible</button>' },
+  } } });
+  await flushPromises();
+  await wrapper.get('[data-render-compatible]').trigger('click');
+  await wrapper.get('[data-compatible]').trigger('click');
   expect(wrapper.find('[data-view-2d]').attributes('aria-pressed')).toBe('false');
   expect(wrapper.get('[role="status"]').text()).toContain('已启用兼容 3D');
-  expect(wrapper.text()).toContain('兼容 3D');
   wrapper.unmount();
 });
 

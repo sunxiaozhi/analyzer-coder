@@ -42,7 +42,7 @@ mvn -pl backend spring-boot:run
 
 健康检查：`GET /actuator/health`。
 
-跨仓工程项目已退役。`V9__remove_cross_repository_projects.sql` 移除空跨仓表和知识范围中的空扩展字段；保留路径、符号、模块范围及项目共享/分支专属知识。迁移前请备份数据库；若存在跨仓项目记录或非空跨仓知识范围，迁移会停止，需要先导出/迁移这些记录，避免丢失数据或扩大适用范围。
+Flyway 仅保留合并后的 `V1__init_schema.sql`，只支持空库初始化。旧版 V1–V9 数据库须先停止后端、按需备份并重新建库，再启动后端执行迁移。跨仓工程项目与变更评审旧表不再创建。
 
 运行诊断：在加载上述环境变量的终端执行 `node scripts/check-runtime.mjs`。
 

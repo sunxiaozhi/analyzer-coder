@@ -36,7 +36,7 @@ Analyzer Coder（界面上称"代码知识平台"）是一个面向开发者的*
 | `MAINTAIN` | 维护 | 在 READ 基础上：同步/准备分支、构建内容索引与图谱、创建与编辑知识、上传附件、记录来源复核与分支验证 |
 | `MANAGE` | 管理 | 在 MAINTAIN 基础上：编辑仓库资料、配置模型与凭据、治理成员 |
 
-此外存在**所有者（owner）关系**，它不是权限级别：所有权记录在 `repositories.owner_account_id`（`backend/src/main/resources/db/migration/V1__init_schema.sql:72`），成员权限表 `repository_permissions` 明确不含 OWNER（`V1__init_schema.sql:179`）。账号等于所有者时按 MANAGE 处理，并可执行仅所有者动作（转移所有权、删除仓库、授予权限、管理凭据），错误码 `OWNER_REQUIRED`（`AccessControlService.java:46-54`）。
+此外存在**所有者（owner）关系**，它不是权限级别：所有权记录在 `repositories.owner_account_id`（`backend/src/main/resources/db/migration/V1__init_schema.sql`），成员权限表 `repository_permissions` 明确不含 OWNER（`V1__init_schema.sql`）。账号等于所有者时按 MANAGE 处理，并可执行仅所有者动作（转移所有权、删除仓库、授予权限、管理凭据），错误码 `OWNER_REQUIRED`（`AccessControlService.java:46-54`）。
 
 前端展示用的能力位由 `AccessControlService.describe`（`:62-95`）计算，字段定义在 `RepositoryAccess.Capabilities`（`RepositoryAccess.java:13-23`）：`canRead`、`canEditRepository`、`canUpdate`、`canIndex`、`canBuildCodeGraph`、`canConfigure`、`canGrant`、`canManageCredential`、`canTransferOwnership`、`canDelete`。
 
@@ -69,7 +69,7 @@ Analyzer Coder（界面上称"代码知识平台"）是一个面向开发者的*
 | 证据问答与代码图谱 | [08-qa-and-codegraph.md](08-qa-and-codegraph.md) | 问答与引用校验、会话历史、图谱构建与查询、Atlas 可视化 |
 | MCP 接入 | [09-mcp-integration.md](09-mcp-integration.md) | 12 个只读工具、令牌认证与权限、分支上下文、错误码、stdio 适配器 |
 | 任务中心与系统配置 | [10-tasks-settings-audit.md](10-tasks-settings-audit.md) | 索引/向量/分支任务、取消与重试、模型配置与连通性检测 |
-| 数据模型 | [11-data-model.md](11-data-model.md) | Flyway 迁移 V1–V9、核心表与约束、触发器、受管目录布局 |
+| 数据模型 | [11-data-model.md](11-data-model.md) | Flyway 单一 V1 基线、核心表与约束、触发器、受管目录布局 |
 | 接口目录 | [12-api-catalog.md](12-api-catalog.md) | 全部 HTTP 端点、权限与死接口清单 |
 | 非功能与部署运维 | [13-nonfunctional-and-operations.md](13-nonfunctional-and-operations.md) | 安全约束、配置项、容量边界、部署形态、脚本 |
 | 验证基线 | [14-verification-baseline.md](14-verification-baseline.md) | 测试资产、验证命令、实测结果、未验收项 |
@@ -142,7 +142,7 @@ Analyzer Coder（界面上称"代码知识平台"）是一个面向开发者的*
 - PR/MR Webhook 与审查型 CI。
 - 测试要求执行、审批判定与任务结果回报。
 - 任何基于检索结果自动阻断发布的能力。
-- 跨仓工程项目、跨仓服务契约与跨仓知识聚合（`V9__remove_cross_repository_projects.sql` 已移除相关结构与知识范围字段）。
+- 跨仓工程项目、跨仓服务契约与跨仓知识聚合（当前 V1 基线不创建相关结构与知识范围字段）。
 - 平台自动修改代码、提交、执行测试或修改仓库。
 
 平台可以提供**静态关系与影响线索**（代码图谱），但静态关系不代表运行时真实调用链，也不构成审查结论。

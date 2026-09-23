@@ -7,9 +7,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -18,6 +20,7 @@ import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.infrastructure.persistence.mapper.GraphRetrievalMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,7 +72,9 @@ class IntelligenceServiceMultiTurnTest {
 
     @Test
     void reusesMatchingRepositoryVectorsWithoutCallingTheModel() {
-        UUID repo = UUID.randomUUID(), contentVersion = UUID.randomUUID(), chunk = UUID.randomUUID();
+        UUID repo = UUID.randomUUID(),
+                contentVersion = UUID.randomUUID(),
+                chunk = UUID.randomUUID();
         when(llm.activeVectorModelName()).thenReturn("model");
         when(llm.activeVectorModelDimension()).thenReturn(3);
         when(llm.activeRetrievalCapability()).thenReturn("SEMANTIC_EMBEDDING");
@@ -80,26 +85,104 @@ class IntelligenceServiceMultiTurnTest {
                 .thenReturn("[1,0,0]");
         service.prepareBranchEmbeddings(repo, contentVersion, () -> {});
         verify(llm, never()).vectorize(anyString());
+        verify(llm, never()).openExternalVectorizer();
         verify(mapper)
                 .upsertEmbedding(chunk, repo, "model", 3, "SEMANTIC_EMBEDDING", "[1,0,0]", "hash");
     }
 
     @Test
+    void reusesOneExternalVectorConfigurationAcrossAllMissingChunks() {
+        UUID repo = UUID.randomUUID(), contentVersion = UUID.randomUUID();
+        UUID first = UUID.randomUUID(), second = UUID.randomUUID();
+        when(llm.activeVectorModelName()).thenReturn("model");
+        when(llm.activeVectorModelDimension()).thenReturn(3);
+        when(llm.activeRetrievalCapability()).thenReturn("SEMANTIC_EMBEDDING");
+        when(mapper.missingBranchEmbeddings(repo, contentVersion, "model", 3, "SEMANTIC_EMBEDDING"))
+                .thenReturn(
+                        List.of(
+                                Map.of("id", first, "content", "first", "content_hash", "hash-1"),
+                                Map.of(
+                                        "id",
+                                        second,
+                                        "content",
+                                        "second",
+                                        "content_hash",
+                                        "hash-2")));
+        LlmSettingsService.ExternalVectorizer vectorizer =
+                input ->
+                        new LlmSettingsService.VectorEmbedding(
+                                "model", 3, "[0.1,0.2,0.3]", "SEMANTIC_EMBEDDING");
+        when(llm.openExternalVectorizer()).thenReturn(vectorizer);
+
+        service.prepareBranchEmbeddings(repo, contentVersion, () -> {});
+
+        verify(llm, times(1)).openExternalVectorizer();
+        verify(llm, never()).vectorize(anyString());
+        verify(mapper)
+                .upsertEmbedding(
+                        first, repo, "model", 3, "SEMANTIC_EMBEDDING", "[0.1,0.2,0.3]", "hash-1");
+        verify(mapper)
+                .upsertEmbedding(
+                        second, repo, "model", 3, "SEMANTIC_EMBEDDING", "[0.1,0.2,0.3]", "hash-2");
+    }
+
+    @Test
+    void groupsExternalCodeEmbeddingsIntoBatchesOfSixteen() {
+        UUID repo = UUID.randomUUID(), contentVersion = UUID.randomUUID();
+        when(llm.activeVectorModelName()).thenReturn("model");
+        when(llm.activeVectorModelDimension()).thenReturn(2);
+        when(llm.activeRetrievalCapability()).thenReturn("SEMANTIC_EMBEDDING");
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int index = 0; index < 17; index++) {
+            rows.add(
+                    Map.of(
+                            "id", UUID.randomUUID(),
+                            "content", "content-" + index,
+                            "content_hash", "hash-" + index));
+        }
+        when(mapper.missingBranchEmbeddings(repo, contentVersion, "model", 2, "SEMANTIC_EMBEDDING"))
+                .thenReturn(rows);
+        LlmSettingsService.ExternalVectorizer vectorizer =
+                mock(LlmSettingsService.ExternalVectorizer.class);
+        when(vectorizer.vectorizeBatch(anyList()))
+                .thenAnswer(
+                        invocation -> {
+                            List<String> inputs = invocation.getArgument(0);
+                            return inputs.stream()
+                                    .map(
+                                            input ->
+                                                    new LlmSettingsService.VectorEmbedding(
+                                                            "model",
+                                                            2,
+                                                            "[1.0,0.0]",
+                                                            "SEMANTIC_EMBEDDING"))
+                                    .toList();
+                        });
+        when(llm.openExternalVectorizer()).thenReturn(vectorizer);
+
+        service.prepareBranchEmbeddings(repo, contentVersion, () -> {});
+
+        verify(vectorizer).vectorizeBatch(argThat(inputs -> inputs.size() == 16));
+        verify(vectorizer).vectorizeBatch(argThat(inputs -> inputs.size() == 1));
+        verify(llm, times(1)).openExternalVectorizer();
+    }
+
+    @Test
     void branchEmbeddingsOnlyReadThePinnedContentVersionAndNeverDefaultChunks() {
-        UUID repo = UUID.randomUUID(), contentVersion = UUID.randomUUID(), chunk = UUID.randomUUID();
+        UUID repo = UUID.randomUUID(),
+                contentVersion = UUID.randomUUID(),
+                chunk = UUID.randomUUID();
         when(llm.activeVectorModelName()).thenReturn("local-hash-64");
         when(llm.activeVectorModelDimension()).thenReturn(64);
         when(llm.activeRetrievalCapability()).thenReturn("CHARACTER_HASH");
-        when(mapper.missingBranchEmbeddings(repo, contentVersion, "local-hash-64", 64, "CHARACTER_HASH"))
+        when(mapper.missingBranchEmbeddings(
+                        repo, contentVersion, "local-hash-64", 64, "CHARACTER_HASH"))
                 .thenReturn(
                         List.of(Map.of("id", chunk, "content", "source", "content_hash", "hash")));
-        when(llm.vectorize("source"))
-                .thenReturn(
-                        new LlmSettingsService.VectorEmbedding(
-                                "local-hash-64", 64, null, "CHARACTER_HASH"));
         Runnable checkpoint = mock(Runnable.class);
         service.prepareBranchEmbeddings(repo, contentVersion, checkpoint);
         verify(checkpoint).run();
+        verify(llm, never()).vectorize(anyString());
         verify(mapper)
                 .upsertEmbedding(
                         eq(chunk),
@@ -225,6 +308,160 @@ class IntelligenceServiceMultiTurnTest {
     }
 
     @Test
+    void expandsRelevantCodeIntoCallChainBeforeModelAnalysis() {
+        UUID repositoryId = UUID.randomUUID();
+        UUID version = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID modelConfigId = UUID.randomUUID();
+        Map<String, Object> source =
+                Map.ofEntries(
+                        Map.entry("id", sourceId),
+                        Map.entry("content_version", version),
+                        Map.entry("file_path", "src/Checkout.java"),
+                        Map.entry("symbol_name", "checkout"),
+                        Map.entry("symbol_kind", "METHOD"),
+                        Map.entry("start_line", 10),
+                        Map.entry("end_line", 20),
+                        Map.entry("content", "void checkout() { charge(); }"),
+                        Map.entry("content_hash", "source-hash"),
+                        Map.entry("lexical_score", 1.0d));
+        Map<String, Object> target =
+                Map.ofEntries(
+                        Map.entry("id", targetId),
+                        Map.entry("content_version", version),
+                        Map.entry("file_path", "src/Payment.java"),
+                        Map.entry("symbol_name", "charge"),
+                        Map.entry("symbol_kind", "METHOD"),
+                        Map.entry("start_line", 5),
+                        Map.entry("end_line", 12),
+                        Map.entry("content", "void charge() { gateway.pay(); }"),
+                        Map.entry("content_hash", "target-hash"),
+                        Map.entry("source_chunk_id", sourceId),
+                        Map.entry("target_chunk_id", targetId),
+                        Map.entry("source_symbol", "checkout"),
+                        Map.entry("target_symbol", "charge"),
+                        Map.entry("relation", "CALLS"));
+        when(mapper.currentContentVersion(repositoryId)).thenReturn(version);
+        when(mapper.searchCodeKeyword(eq(repositoryId), anyString(), anyList(), anyInt(), anyInt()))
+                .thenReturn(List.of(source));
+        when(graphRetrievalMapper.callNeighbors(
+                        eq(repositoryId), eq(version), eq(List.of(sourceId)), eq(24)))
+                .thenReturn(List.of(target));
+        when(llm.generate(eq(modelConfigId), anyString()))
+                .thenReturn(
+                        Optional.of(
+                                new LlmSettingsService.GenerationResult(
+                                        "结账调用支付。[S1][S2]", "test-model")));
+
+        var answer =
+                service.ask(
+                        repositoryId,
+                        UUID.randomUUID(),
+                        "结账如何支付",
+                        UUID.randomUUID(),
+                        null,
+                        modelConfigId);
+
+        assertEquals(2, answer.citations().size());
+        assertEquals(targetId, answer.citations().get(1).chunkId());
+        verify(llm)
+                .generate(
+                        eq(modelConfigId),
+                        argThat(
+                                prompt ->
+                                        prompt.contains("[S1] checkout -> [S2] charge")
+                                                && prompt.contains("gateway.pay()")
+                                                && prompt.contains("启发式调用关系只能作为线索")));
+    }
+
+    @Test
+    void followsCurrentKnowledgeCodeReferenceIntoCallChain() {
+        UUID repositoryId = UUID.randomUUID();
+        UUID version = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID modelConfigId = UUID.randomUUID();
+        when(mapper.currentContentVersion(repositoryId)).thenReturn(version);
+        when(mapper.searchKnowledgeKeyword(
+                        eq(repositoryId), anyString(), anyList(), anyInt(), anyInt()))
+                .thenReturn(
+                        List.of(
+                                Map.of(
+                                        "id", cardId,
+                                        "revision", 1,
+                                        "title", "结账功能",
+                                        "content", "结账由支付模块处理",
+                                        "content_hash", "card-hash",
+                                        "card_type", "FEATURE",
+                                        "lexical_score", 1.0d)));
+        when(mapper.codeReferences(repositoryId, cardId, 1))
+                .thenReturn(
+                        List.of(
+                                Map.of(
+                                        "chunk_id", sourceId,
+                                        "content_version", version,
+                                        "file_path", "src/Checkout.java",
+                                        "symbol_name", "checkout",
+                                        "start_line", 10,
+                                        "end_line", 20,
+                                        "content_hash", "source-hash",
+                                        "stale", false)));
+        when(mapper.findChunkAtContentVersion(repositoryId, sourceId, version))
+                .thenReturn(
+                        Map.of(
+                                "id", sourceId,
+                                "content_version", version,
+                                "file_path", "src/Checkout.java",
+                                "symbol_name", "checkout",
+                                "start_line", 10,
+                                "end_line", 20,
+                                "content", "void checkout() { charge(); }",
+                                "content_hash", "source-hash"));
+        when(graphRetrievalMapper.callNeighbors(
+                        eq(repositoryId), eq(version), eq(List.of(sourceId)), eq(24)))
+                .thenReturn(
+                        List.of(
+                                Map.ofEntries(
+                                        Map.entry("id", targetId),
+                                        Map.entry("content_version", version),
+                                        Map.entry("file_path", "src/Payment.java"),
+                                        Map.entry("symbol_name", "charge"),
+                                        Map.entry("start_line", 5),
+                                        Map.entry("end_line", 12),
+                                        Map.entry("content", "void charge() { gateway.pay(); }"),
+                                        Map.entry("content_hash", "target-hash"),
+                                        Map.entry("source_chunk_id", sourceId),
+                                        Map.entry("target_chunk_id", targetId),
+                                        Map.entry("source_symbol", "checkout"),
+                                        Map.entry("target_symbol", "charge"),
+                                        Map.entry("relation", "CALLS"))));
+        when(llm.generate(eq(modelConfigId), anyString()))
+                .thenReturn(
+                        Optional.of(
+                                new LlmSettingsService.GenerationResult(
+                                        "结账功能调用支付。[S1][S2][S3]", "test-model")));
+
+        var answer =
+                service.ask(
+                        repositoryId,
+                        UUID.randomUUID(),
+                        "结账功能如何实现",
+                        UUID.randomUUID(),
+                        null,
+                        modelConfigId);
+
+        assertEquals(3, answer.citations().size());
+        assertEquals(sourceId, answer.citations().get(1).chunkId());
+        assertEquals(targetId, answer.citations().get(2).chunkId());
+        verify(llm)
+                .generate(
+                        eq(modelConfigId),
+                        argThat(prompt -> prompt.contains("[S2] checkout -> [S3] charge")));
+    }
+
+    @Test
     void localEvidenceModeAnswersWithoutCallingAChatProvider() {
         UUID repositoryId = UUID.randomUUID();
         stubSingleEvidence(repositoryId);
@@ -260,6 +497,128 @@ class IntelligenceServiceMultiTurnTest {
         assertEquals("CITATION_INCOMPLETE", answer.evidenceStatus());
         assertEquals(0.5d, answer.citationAssessment().coverageRate());
         assertEquals(1, answer.citationAssessment().uncitedBlockCount());
+    }
+
+    @Test
+    void builtInModelIndexesCodeAndKnowledgeWithoutPerItemModelLookups() {
+        UUID repositoryId = UUID.randomUUID();
+        UUID firstChunk = UUID.randomUUID();
+        UUID secondChunk = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        when(llm.activeVectorModelName()).thenReturn("local-hash-64");
+        when(llm.activeVectorModelDimension()).thenReturn(64);
+        when(llm.activeRetrievalCapability()).thenReturn("CHARACTER_HASH");
+        when(mapper.missingEmbeddings(repositoryId, "local-hash-64", 64, "CHARACTER_HASH"))
+                .thenReturn(
+                        List.of(
+                                Map.of(
+                                        "id",
+                                        firstChunk,
+                                        "content",
+                                        "first",
+                                        "content_hash",
+                                        "hash-1"),
+                                Map.of(
+                                        "id",
+                                        secondChunk,
+                                        "content",
+                                        "second",
+                                        "content_hash",
+                                        "hash-2")));
+        when(mapper.missingKnowledgeEmbeddings(repositoryId, "local-hash-64", 64, "CHARACTER_HASH"))
+                .thenReturn(List.of(Map.of("id", cardId, "content", "knowledge", "revision", 1)));
+
+        assertTrue(service.prepareRepositoryEmbeddings(repositoryId));
+
+        verify(llm, never()).vectorize(anyString());
+        verify(mapper)
+                .upsertEmbedding(
+                        eq(firstChunk),
+                        eq(repositoryId),
+                        eq("local-hash-64"),
+                        eq(64),
+                        eq("CHARACTER_HASH"),
+                        anyString(),
+                        eq("hash-1"));
+        verify(mapper)
+                .upsertEmbedding(
+                        eq(secondChunk),
+                        eq(repositoryId),
+                        eq("local-hash-64"),
+                        eq(64),
+                        eq("CHARACTER_HASH"),
+                        anyString(),
+                        eq("hash-2"));
+        verify(mapper)
+                .upsertKnowledgeEmbedding(
+                        eq(cardId),
+                        eq(repositoryId),
+                        eq(1),
+                        eq("local-hash-64"),
+                        eq(64),
+                        eq("CHARACTER_HASH"),
+                        anyString(),
+                        anyString());
+    }
+
+    @Test
+    void heuristicCallScanKeepsOverlappingMatchesWithoutDuplicateEdges() {
+        UUID repositoryId = UUID.randomUUID();
+        UUID contentVersion = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        UUID fooId = UUID.randomUUID();
+        UUID ooId = UUID.randomUUID();
+        when(mapper.graphChunks(repositoryId))
+                .thenReturn(
+                        List.of(
+                                Map.of(
+                                        "id",
+                                        sourceId,
+                                        "content_version",
+                                        contentVersion,
+                                        "symbol_name",
+                                        "caller",
+                                        "content",
+                                        "foo( foo("),
+                                Map.of(
+                                        "id",
+                                        fooId,
+                                        "content_version",
+                                        contentVersion,
+                                        "symbol_name",
+                                        "foo",
+                                        "content",
+                                        ""),
+                                Map.of(
+                                        "id",
+                                        ooId,
+                                        "content_version",
+                                        contentVersion,
+                                        "symbol_name",
+                                        "oo",
+                                        "content",
+                                        "")));
+
+        assertTrue(service.prepareRepositoryEmbeddings(repositoryId));
+
+        verify(mapper)
+                .insertHeuristicCallEdge(
+                        any(),
+                        eq(repositoryId),
+                        eq(contentVersion),
+                        eq(sourceId),
+                        eq(fooId),
+                        eq("caller"),
+                        eq("foo"));
+        verify(mapper)
+                .insertHeuristicCallEdge(
+                        any(),
+                        eq(repositoryId),
+                        eq(contentVersion),
+                        eq(sourceId),
+                        eq(ooId),
+                        eq("caller"),
+                        eq("oo"));
     }
 
     @Test

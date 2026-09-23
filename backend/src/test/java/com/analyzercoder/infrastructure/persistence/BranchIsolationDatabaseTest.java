@@ -4,12 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
 import com.analyzercoder.infrastructure.persistence.type.PostgresUuidTypeHandler;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import org.apache.ibatis.builder.xml.XMLMapperBuilder;
 import org.apache.ibatis.session.Configuration;
@@ -32,26 +30,19 @@ class BranchIsolationDatabaseTest {
                         System.getenv("APP_BRANCH_JDBC_PASSWORD"))) {
             connection.setAutoCommit(false);
             try {
-                try (var input =
-                        getClass()
-                                .getClassLoader()
-                                .getResourceAsStream("db/migration/V3__branch_contexts.sql")) {
-                    connection
-                            .createStatement()
-                            .execute(
-                                    new String(
-                                            Objects.requireNonNull(input).readAllBytes(),
-                                            StandardCharsets.UTF_8));
-                }
                 JdbcTemplate db =
                         new JdbcTemplate(new SingleConnectionDataSource(connection, true));
-                UUID repo =
-                        db.queryForObject(
-                                "SELECT id FROM repositories WHERE deleted_at IS NULL ORDER BY id LIMIT 1",
-                                UUID.class);
-                UUID account =
-                        db.queryForObject(
-                                "SELECT id FROM accounts ORDER BY id LIMIT 1", UUID.class);
+                UUID repo = UUID.randomUUID(), account = UUID.randomUUID();
+                db.update(
+                        "INSERT INTO accounts(id,username,display_name,password_hash,account_role,created_at,updated_at) VALUES(?,?,?,'test','SUPER_ADMIN',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+                        account,
+                        "branch-isolation-" + account,
+                        "Branch isolation test");
+                db.update(
+                        "INSERT INTO repositories(id,name,normalized_name,path,owner_account_id,created_at,updated_at) VALUES(?,'Branch isolation','branch-isolation',?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+                        repo,
+                        "test://" + repo,
+                        account);
                 UUID main = UUID.randomUUID(),
                         release = UUID.randomUUID(),
                         s1 = UUID.randomUUID(),

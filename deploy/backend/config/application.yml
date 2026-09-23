@@ -24,6 +24,12 @@ app:
   llm:
     master-key: 'replace-with-random-secret-at-least-32-characters'
     allow-insecure-local: false
+    # Add exact model base URLs only when required. Both flags default to false.
+    endpoint-exceptions: []
+    # endpoint-exceptions:
+    #   - base-url: https://model.internal.example/v1
+    #     allow-private-network: true
+    #     skip-tls-verification: true
   repository:
     allowed-roots: ./repositories
     # Exact hosts only (DNS names recommended). Listed hosts may resolve to protected addresses.

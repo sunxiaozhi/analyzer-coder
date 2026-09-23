@@ -113,8 +113,7 @@
     <delete id="deleteCodeChunks">DELETE FROM code_chunks WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteIndexJobs">DELETE FROM index_jobs WHERE repo_id=#{repositoryId}</delete>
     <delete id="deleteRepositoryGrants">DELETE FROM repository_permissions WHERE repo_id=#{repositoryId}</delete>
-    <delete id="deleteRepositoryCredentials">DELETE FROM repository_credentials WHERE repo_id=#{repositoryId}</delete>
-    <delete id="deleteGovernanceLock">DELETE FROM repository_governance_locks WHERE repo_id=#{repositoryId}</delete>
+    <delete id="deleteRepositoryCredentials">DELETE FROM repository_credential_bindings WHERE repository_id=#{repositoryId}</delete>
     <update id="finalizeDeletion">
         UPDATE repositories SET repository_status='DELETED',path=CONCAT('[deleted]/',id),current_content_version=NULL,
         current_workspace_path=NULL,codegraph_path=NULL,worktree_digest=NULL,updated_at=CURRENT_TIMESTAMP WHERE

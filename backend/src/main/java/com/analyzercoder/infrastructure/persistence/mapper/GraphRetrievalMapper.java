@@ -46,4 +46,32 @@ public interface GraphRetrievalMapper {
             @Param("repositoryId") UUID repositoryId,
             @Param("symbols") List<String> symbols,
             @Param("limit") int limit);
+
+    /** Read one-hop call neighbors for concrete chunks in the same content version. */
+    @Select(
+            """
+            <script>
+            SELECT c.id,c.content_version,c.file_path,c.symbol_name,c.symbol_kind,
+                   c.start_line,c.end_line,c.content,c.content_hash,
+                   g.source_chunk_id,g.target_chunk_id,g.source_symbol,g.target_symbol,g.relation
+            FROM heuristic_call_edges g
+            JOIN code_chunks c ON c.id = CASE
+              WHEN g.source_chunk_id IN
+                <foreach collection="chunkIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+              THEN g.target_chunk_id ELSE g.source_chunk_id END
+              AND c.repo_id=g.repo_id AND c.content_version=g.content_version
+            WHERE g.repo_id=#{repositoryId} AND g.content_version=#{contentVersion}
+              AND (g.source_chunk_id IN
+                <foreach collection="chunkIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+                OR g.target_chunk_id IN
+                <foreach collection="chunkIds" item="id" open="(" separator="," close=")">#{id}</foreach>)
+            ORDER BY g.source_symbol,g.target_symbol,c.id
+            LIMIT #{limit}
+            </script>
+            """)
+    List<Map<String, Object>> callNeighbors(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("contentVersion") UUID contentVersion,
+            @Param("chunkIds") List<UUID> chunkIds,
+            @Param("limit") int limit);
 }

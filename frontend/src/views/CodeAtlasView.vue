@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
+import { computed, ref, shallowRef, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Search, Orbit, ArrowLeft, Plus, Minus, Maximize, RefreshCw, X, ArrowUpRight, Crosshair } from 'lucide-vue-next';
 import { getCodeAtlas, type AtlasView, type AtlasNode } from '@/api/codeAtlas';
@@ -9,13 +9,17 @@ import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
 import { layoutAtlas } from '@/features/graph/atlasLayout';
 import { atlasFileType, fileIconUrl } from '@/features/graph/atlasFileType';
+import { browserAtlasDisplayRecommendation } from '@/features/graph/atlasPerformance';
 
 const GraphImpactPanel = defineAsyncComponent(() => import('@/features/graph/GraphImpactPanel.vue'));
 const impactOpen = ref(false);
 const route = useRoute();
 const CodeAtlas3D = defineAsyncComponent(() => import('@/features/graph/CodeAtlas3D.vue'));
 const threeView = ref<{ home: () => void; zoomBy: (factor: number) => void }>();
-const mode = ref<'3d' | '2d'>('3d'), autoRotate = ref(false), threeError = ref('');
+const recommendedDisplay = browserAtlasDisplayRecommendation();
+const mode = shallowRef<'3d' | '2d'>(recommendedDisplay.mode);
+const automaticModeReason = shallowRef(recommendedDisplay.reason);
+const autoRotate = shallowRef(false), threeError = shallowRef('');
 const compatibility3d = ref(false), forceCompatibility = ref(false), diagnosticReason = ref('');
 const rendererVersion = ref(0);
 function ready3d(engine: 'webgl' | 'compatible') {
@@ -23,10 +27,16 @@ function ready3d(engine: 'webgl' | 'compatible') {
   if (engine === 'webgl') { threeError.value = ''; diagnosticReason.value = ''; }
 }
 function degraded3d(reason: string) {
-  compatibility3d.value = true;
-  forceCompatibility.value = true;
-  threeError.value = '已启用兼容 3D，可继续旋转、缩放和查看关系。';
-  if (reason !== '已选择兼容渲染' || !diagnosticReason.value) diagnosticReason.value = reason;
+  diagnosticReason.value = reason;
+  if (forceCompatibility.value) {
+    compatibility3d.value = true;
+    threeError.value = '已启用兼容 3D，可继续旋转、缩放和查看关系。';
+    return;
+  }
+  compatibility3d.value = false;
+  automaticModeReason.value = 'WebGL 不可用';
+  threeError.value = 'WebGL 不可用，已切换到轻量平面。';
+  mode.value = '2d';
 }
 function fallback3d(reason = '') {
   compatibility3d.value = false;
@@ -37,11 +47,12 @@ function changeRenderer(compatible: boolean) {
   forceCompatibility.value = compatible;
   compatibility3d.value = compatible;
   threeError.value = ''; diagnosticReason.value = '';
-  mode.value = '3d'; rendererVersion.value++;
+  mode.value = '3d'; automaticModeReason.value = ''; rendererVersion.value++;
 }
 function chooseMode(value: '3d' | '2d') {
   if (mode.value === value) return;
   mode.value = value;
+  automaticModeReason.value = '';
 }
 const repositories = useRepositoryStore();
 const branchContext = useBranchContextStore();
@@ -52,9 +63,16 @@ const loading = ref(false), error = ref(''), query = ref(''), module = ref('');
 const selected = ref<AtlasNode | null>(null), source = ref(''), sourceError = ref(''), sourceLoading = ref(false);
 const zoom = ref(1), pan = ref({ x: 0, y: 0 });
 const direction = ref('both');
-const relief = ref(true), showAllLinks = ref(false);
-const visibleLinks = computed(() => selected.value ? related.value : (showAllLinks.value || data.value?.level === 'MODULE') ? links.value : []);
-function showLabel(node: AtlasNode) { return zoom.value >= .6 || selected.value?.id === node.id; }
+const showAllLinks = shallowRef(false);
+const requestedLinks = computed(() => selected.value ? related.value : (showAllLinks.value || data.value?.level === 'MODULE') ? links.value : []);
+const visibleLinks = computed(() => requestedLinks.value.slice(0, mode.value === '2d' ? 160 : 450));
+const hiddenLinkCount = computed(() => requestedLinks.value.length - visibleLinks.value.length);
+const firstLabelIds = computed(() => new Set(nodes.value.slice(0, 72).map(node => node.id)));
+function showLabel(node: AtlasNode) {
+  if (selected.value?.id === node.id) return true;
+  if (zoom.value < .6) return false;
+  return mode.value !== '2d' || nodes.value.length <= 72 || firstLabelIds.value.has(node.id);
+}
 function compactLabel(label: string) {
   let width = 0, result = '';
   for (const char of label) {
@@ -187,11 +205,11 @@ onBeforeUnmount(() => { revision++; sourceRevision++; });
 </script>
 
 <template>
-  <section class="atlas" :class="{ relief, 'has-detail': selected }">
+  <section class="atlas" :class="{ 'has-detail': selected, 'is-lightweight': mode === '2d' }">
     <header class="atlas-toolbar">
-      <div class="view-switch" aria-label="节点显示方式"><button :aria-pressed="mode === '3d'" @click="chooseMode('3d')">3D 空间</button><button data-view-2d :aria-pressed="mode === '2d'" @click="chooseMode('2d')">平面阅读</button></div>
+      <div class="view-switch" aria-label="节点显示方式"><button :aria-pressed="mode === '3d'" @click="chooseMode('3d')">空间视图</button><button data-view-2d :aria-pressed="mode === '2d'" @click="chooseMode('2d')">轻量平面</button></div>
       <label v-if="mode === '3d'"><input v-model="autoRotate" type="checkbox" /> 自动环绕</label>
-      <label v-if="data?.level !== 'MODULE'"><input v-model="showAllLinks" type="checkbox" :disabled="!!selected" /> 全部连线</label>
+      <label v-if="data?.level !== 'MODULE'"><input v-model="showAllLinks" type="checkbox" :disabled="!!selected" /> 显示连线</label>
       <form class="atlas-search" @submit.prevent="load"><Search :size="16" /><input v-model="query" aria-label="搜索符号或文件" placeholder="搜索类、方法或文件…" maxlength="500" /><button type="submit" :disabled="loading">定位</button></form>
       <button class="tool" :disabled="loading" title="刷新图谱" @click="load"><RefreshCw :size="16" /></button>
       <details class="render-diagnostics">
@@ -200,28 +218,29 @@ onBeforeUnmount(() => { revision++; sourceRevision++; });
           <p>拖动旋转 · 滚轮缩放 · 右键平移 · 双击模块展开。选中节点查看关联，关闭详情返回原视角。</p>
           <p>区域表示模块归属，空间高度不代表架构层级。连线来自静态解析，不代表实际运行轨迹。</p>
           <div v-if="fileTypes.length" class="file-type-legend" aria-label="当前图谱文件类型图例"><span v-for="type in fileTypes" :key="type.id"><img :src="fileIconUrl(type)" alt="" />{{ type.label }}</span></div>
-          <p>当前模式：{{ mode === '2d' ? '平面阅读' : compatibility3d ? '兼容 3D（无需 WebGL）' : '自动选择 WebGL 2' }}</p>
+          <p>当前模式：{{ mode === '2d' ? '轻量平面（无需 WebGL）' : compatibility3d ? '兼容 3D（无需 WebGL）' : 'WebGL 2 空间视图' }}</p>
           <p v-if="diagnosticReason" class="diagnostic-reason">{{ diagnosticReason }}</p>
           <p>有 GPU 仍需要浏览器允许 WebGL 2。可检查浏览器“使用图形加速”设置；Chrome 的 chrome://gpu 或 Edge 的 edge://gpu 中可查看 WebGL 状态。</p>
           <div><button data-render-auto @click="changeRenderer(false)">重新检测 WebGL</button><button data-render-compatible @click="changeRenderer(true)">使用兼容 3D</button></div>
         </div>
       </details>
     </header>
-    <div class="atlas-caption"><button v-if="module || query" @click="overview"><ArrowLeft :size="14" /> 项目全景</button><span v-else>项目全景</span><strong>{{ module || (query ? '检索结果' : repositories.selectedRepository?.name) }}</strong><span v-if="selected" class="relation-legend"><span class="incoming">↙ 入向</span><span class="outgoing">↗ 出向</span></span><span v-if="threeError" role="status" class="render-notice" :title="threeError">{{ mode === '2d' ? threeError : '已启用兼容 3D' }}</span></div>
+    <div class="atlas-caption"><button v-if="module || query" @click="overview"><ArrowLeft :size="14" /> 项目全景</button><span v-else>项目全景</span><strong>{{ module || (query ? '检索结果' : repositories.selectedRepository?.name) }}</strong><span v-if="selected" class="relation-legend"><span class="incoming">↙ 入向</span><span class="outgoing">↗ 出向</span></span><span v-if="automaticModeReason && mode === '2d'" class="performance-note">已自动启用轻量平面 · {{ automaticModeReason }}</span><span v-if="threeError" role="status" class="render-notice" :title="threeError">{{ mode === '2d' ? threeError : '已启用兼容 3D' }}</span></div>
     <div class="atlas-stage" :class="{ 'is-three': mode === '3d' }">
+      <div v-if="data?.nodes.length" class="atlas-stage-index" aria-hidden="true"><span>CODE / ATLAS</span><strong>{{ data.level === 'MODULE' ? '模块版图' : '符号脉络' }}</strong><small>{{ mode === '2d' ? '轻量视图' : compatibility3d ? '兼容空间' : '空间视图' }} · {{ data.nodes.length }} 节点</small></div>
       <CodeAtlas3D v-if="mode === '3d' && data?.nodes.length" :key="rendererVersion" ref="threeView" :force-compatibility="forceCompatibility" :nodes="data.nodes" :edges="visibleLinks" :selected-id="selected?.id" :connected="connected" :auto-rotate="autoRotate" @select="select" @expand="expand" @ready="ready3d" @degraded="degraded3d" @unavailable="fallback3d" />
       <svg v-if="mode === '2d' && data?.nodes.length" class="atlas-svg" viewBox="0 0 1200 800" aria-label="交互式代码关系图谱" @wheel.prevent="changeZoom($event.deltaY > 0 ? -.1 : .1)" @pointerdown="pointerDown" @pointermove="pointerMove" @pointerup="dragging = null" @pointercancel="dragging = null">
-        <defs><radialGradient id="atlas-sphere" cx="30%" cy="22%" r="80%"><stop offset="0" stop-color="#fff" stop-opacity=".5" /><stop offset=".4" stop-color="#fff" stop-opacity=".05" /><stop offset="1" stop-color="#10283f" stop-opacity=".5" /></radialGradient><radialGradient id="atlas-halo"><stop offset="0" stop-color="currentColor" stop-opacity=".2" /><stop offset="1" stop-color="currentColor" stop-opacity="0" /></radialGradient><marker id="atlas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--app-text-subtle)" /></marker></defs>
+        <defs><radialGradient id="atlas-sphere" cx="30%" cy="22%" r="80%"><stop offset="0" stop-color="#fff" stop-opacity=".5" /><stop offset=".4" stop-color="#fff" stop-opacity=".05" /><stop offset="1" stop-color="#10283f" stop-opacity=".5" /></radialGradient><radialGradient id="atlas-halo"><stop offset="0" stop-color="currentColor" stop-opacity=".2" /><stop offset="1" stop-color="currentColor" stop-opacity="0" /></radialGradient><marker id="atlas-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#80afc5" /></marker></defs>
         <g class="atlas-camera" :transform="`translate(${600 + pan.x},${400 + pan.y}) scale(${zoom}) translate(-600,-400)`">
           <g v-for="link in visibleLinks" :key="`${link.source}-${link.target}-${link.kind}`" class="atlas-link" :class="{ dim: selected && !related.includes(link), active: selected && related.includes(link) }">
-            <path :d="link.path" fill="none" :stroke="selected ? link.target === selected.id ? '#08768a' : '#2467ae' : 'var(--app-text-muted)'" :stroke-width="Math.min(4, 1 + Math.log2(link.count + 1) / 3)" marker-end="url(#atlas-arrow)" />
+            <path :d="link.path" fill="none" :stroke="selected ? link.target === selected.id ? '#f0b878' : '#59d6d0' : '#83b4ca'" :stroke-width="Math.min(4, 1 + Math.log2(link.count + 1) / 3)" marker-end="url(#atlas-arrow)" />
           </g>
           <g v-for="node in nodes" :key="node.id" data-node class="atlas-node" :class="{ dim: selected && !connected.has(node.id), selected: selected?.id === node.id }" :transform="`translate(${node.x},${node.y})`" :style="{ color: node.color }" tabindex="0" role="button" :aria-label="`${node.label}，${node.kind === 'MODULE' ? '模块，按回车展开' : '查看源码'}`" @click="select(node)" @dblclick="expand(node)" @keydown.enter.prevent="node.kind === 'MODULE' ? expand(node) : select(node)" @keydown.space.prevent="select(node)">
             <title>{{ node.label }} · {{ atlasFileType(node).label }} · {{ node.filePath || `${node.count} 个符号` }}</title>
-            <ellipse v-if="relief" :cy="node.radius + 9" :rx="node.radius * 1.05" :ry="node.radius * .25" fill="#17324d" opacity=".16" />
+            <ellipse v-if="mode !== '2d'" :cy="node.radius + 9" :rx="node.radius * 1.05" :ry="node.radius * .25" fill="#071929" opacity=".26" />
             <image :href="fileIconUrl(atlasFileType(node))" :x="-node.radius - 8" :y="-node.radius - 8" :width="(node.radius + 8) * 2" :height="(node.radius + 8) * 2" />
             <circle v-if="selected?.id === node.id" :r="node.radius + 7" class="focus-ring" />
-            <text v-if="node.kind === 'MODULE'" text-anchor="middle" y="14" fill="#9a6010" font-size="14" font-weight="600">{{ node.count }}</text>
+            <text v-if="node.kind === 'MODULE'" text-anchor="middle" y="14" fill="#f0b878" font-size="14" font-weight="600">{{ node.count }}</text>
             <g v-if="showLabel(node)" class="node-caption">
               <rect x="-118" :y="node.radius + 17" width="236" height="30" rx="6" />
               <text text-anchor="middle" :y="node.radius + 37" class="node-label">{{ compactLabel(node.label) }}</text>
@@ -242,7 +261,7 @@ onBeforeUnmount(() => { revision++; sourceRevision++; });
     <el-drawer v-model="impactOpen" title="影响分析" size="860px" :with-header="false" destroy-on-close>
       <GraphImpactPanel v-if="impactOpen && selected && data" :repository-id="data.repositoryId" :file-path="selected.filePath" :initial-symbol="selected.label" :content-version="data.contentVersion" :context-id="branchContext.context?.contextId" :auto-analyze="true" :can-build-graph="repositories.selectedRepository?.capabilities?.canBuildCodeGraph ?? false" @close="impactOpen = false" @open-file="openImpactFile" />
     </el-drawer>
-    <footer class="atlas-status"><span v-if="data" :title="`内容版本 ${data.contentVersion} · 仅统计当前展示范围`">{{ data.nodes.length }} / {{ data.totalNodes }} 节点 · {{ visibleLinks.length }} 条连线</span><span v-if="data?.level === 'SYMBOL' && !selected && !showAllLinks">选中节点查看关联</span><span v-if="data?.partial" class="partial">当前为部分图谱，请缩小模块或搜索范围</span></footer>
+    <footer class="atlas-status"><span v-if="data" :title="`内容版本 ${data.contentVersion} · 仅统计当前展示范围`">{{ data.nodes.length }} / {{ data.totalNodes }} 节点 · {{ visibleLinks.length }} 条连线</span><span v-if="data?.level === 'SYMBOL' && !selected && !showAllLinks">选中节点查看关联</span><span v-if="hiddenLinkCount" class="partial">为保持流畅，暂藏 {{ hiddenLinkCount }} 条连线；选中节点查看关系</span><span v-if="data?.partial" class="partial">当前为部分图谱，请缩小模块或搜索范围</span></footer>
   </section>
 </template>
 
@@ -311,4 +330,218 @@ onBeforeUnmount(() => { revision++; sourceRevision++; });
 @media(max-width:1100px){.atlas.has-detail{grid-template-columns:minmax(0,1fr) minmax(360px,48%)}.atlas-toolbar{padding:10px 12px}.atlas-detail{padding:12px 16px}}
 @media(max-width:800px){.atlas.has-detail{grid-template-columns:minmax(0,1fr)}.atlas-detail{grid-column:auto;grid-row:auto;position:absolute;inset:0 0 0 auto;width:min(520px,100%);z-index:12;box-shadow:-12px 0 36px #17324d20}.atlas-search{max-width:none}.atlas{min-height:480px}}
 @media(prefers-reduced-motion:reduce){.atlas *{animation:none!important;transition:none!important}}
+
+/* A code cartography surface: the luminous path appears only when a node is in focus. */
+.atlas {
+  --ink: #e9f4fa;
+  --muted: #a8bfce;
+  --line: #315069;
+  background: #0b2033;
+  border-color: #315069;
+  color: var(--ink);
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+.atlas-toolbar {
+  padding: 12px 18px;
+  background: linear-gradient(115deg, #102e46 0%, #10283d 72%, #182c49 100%);
+  border-bottom-color: #35556d;
+  box-shadow: inset 0 3px #67c6d3;
+}
+.atlas-toolbar > label { color: #b7ceda; }
+.view-switch {
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid #41617a;
+  border-radius: 9px;
+  background: #0a1f33;
+}
+.view-switch button {
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 6px;
+  color: #adc6d5;
+  background: transparent;
+}
+.view-switch button[aria-pressed=true] {
+  color: #071b2b;
+  background: #6ed8d7;
+  border: 0;
+  box-shadow: 0 2px 10px #51c7d33d;
+}
+.atlas-search {
+  background: #092036;
+  border-color: #45667c;
+  border-radius: 8px;
+  color: #9dc6d4;
+}
+.atlas-search input { color: #f1f8fb; }
+.atlas-search input::placeholder { color: #8fabba; }
+.atlas-search button {
+  background: #64d4d0;
+  color: #092338;
+  font-weight: 700;
+  border-radius: 5px;
+}
+.tool { border-color: #45667c; background: #102b42; color: #c5e3ec; }
+.render-diagnostics summary { color: #b4d1df; }
+.render-panel {
+  background: #f5f9fc;
+  border-color: #c5d8e5;
+  color: #233e53;
+  box-shadow: 0 20px 52px #020c19a6;
+}
+.render-panel button { color: #164d62; background: #e1f2f4; border-color: #aed6dc; }
+.atlas-caption {
+  padding: 9px 18px;
+  background: #102a40;
+  border-bottom-color: #35536b;
+}
+.atlas-caption strong {
+  color: #f0f8fb;
+  font-family: "Bahnschrift", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+  letter-spacing: .025em;
+}
+.atlas-caption button { color: #83dcda; }
+.performance-note, .render-notice {
+  margin-left: auto;
+  color: #f1c68d !important;
+  font-size: 11px;
+}
+.atlas-stage {
+  background:
+    radial-gradient(circle at 53% 43%, #28638a38 0, transparent 48%),
+    radial-gradient(circle at 86% 12%, #706dbb23 0, transparent 36%),
+    linear-gradient(#a0d4e012 1px, transparent 1px),
+    linear-gradient(90deg, #a0d4e012 1px, transparent 1px),
+    #091d30;
+  background-size: auto, auto, 32px 32px, 32px 32px, auto;
+}
+.atlas-stage :deep(.atlas-three) {
+  background: radial-gradient(ellipse at 50% 44%, #214c694f 0, #0d2940 65%, #091c2e 100%);
+}
+.atlas-stage-index {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 15px 12px;
+  pointer-events: none;
+  color: #e9f6fa;
+  background: #0c2b43d9;
+  border: 1px solid #4c7f96;
+  border-left: 3px solid #f2bd82;
+  border-radius: 7px;
+  box-shadow: 0 12px 28px #0413205c;
+}
+.atlas-stage-index span {
+  color: #8ed9df;
+  font: 700 10px "Cascadia Code", Consolas, monospace;
+  letter-spacing: .2em;
+}
+.atlas-stage-index strong {
+  font: 600 20px "Bahnschrift", "Microsoft YaHei", sans-serif;
+  letter-spacing: .03em;
+}
+.atlas-stage-index small {
+  color: #aecbd8;
+  font: 11px "Cascadia Code", "Microsoft YaHei", monospace;
+}
+.atlas-link { opacity: .38; }
+.atlas-link.active {
+  opacity: 1;
+  filter: drop-shadow(0 0 5px #6ed8d766);
+}
+.atlas-node.dim { opacity: .15; }
+.atlas-node.selected { filter: drop-shadow(0 0 11px #74d7dfad); }
+.node-caption rect {
+  fill: #102e45ee;
+  stroke: currentColor;
+  stroke-width: 1.25;
+}
+.atlas-node.selected .node-caption rect,
+.atlas-node:focus-visible .node-caption rect {
+  fill: #1a4861;
+  stroke: #f1bd82;
+  stroke-width: 2;
+}
+.node-label {
+  fill: #eaf7fb;
+  font: 13px "Cascadia Code", "Microsoft YaHei", monospace;
+}
+.focus-ring { stroke: #f5c58e; stroke-width: 2; }
+.atlas-empty { color: #b8ced8; }
+.atlas-empty > svg { color: #78d7de; }
+.atlas-empty h2 { color: #f0f9fc; }
+.atlas-empty button {
+  color: #0d293c;
+  background: #6ed8d7;
+  border-color: #6ed8d7;
+}
+.camera-tools {
+  bottom: 18px;
+  left: 18px;
+  padding: 5px;
+  color: #e8f6fa;
+  background: #0d2a43e8;
+  border-color: #52768b;
+  border-radius: 9px;
+  box-shadow: 0 12px 30px #04132180;
+}
+.camera-tools button:hover { color: #73dfdd; background: #21465a; border-radius: 5px; }
+.camera-tools span { color: #9fc8d4; font-family: "Cascadia Code", Consolas, monospace; }
+.atlas-status {
+  background: #10283c;
+  border-top-color: #35556d;
+  color: #b3cbd8;
+}
+.atlas-status .partial { color: #f2c289; }
+.atlas-detail {
+  --muted: #647d90;
+  --line: #d5e2eb;
+  background: #f7fbfd;
+  color: #1c354a;
+  border-left: 1px solid #486e81;
+  box-shadow: -16px 0 36px #0313214d;
+}
+.atlas-detail > header { color: #267688; }
+.atlas-detail h2 {
+  color: #132e44;
+  font-family: "Bahnschrift", "Microsoft YaHei", sans-serif;
+  font-size: 22px;
+}
+.atlas-detail .expand-button {
+  color: #175266;
+  background: #e3f3f4;
+  border-color: #b5d8de;
+}
+.atlas-detail .direction { background: #e8f0f5; }
+.atlas-detail .direction button.chosen { color: #13576c; background: #ccebee; }
+.atlas-detail .atlas-source {
+  color: #d7edf7;
+  background: #10283d;
+  border-color: #31536b;
+}
+.atlas-source i { color: #88a9bc; border-right-color: #31536b; }
+.atlas-source .marked { background: #23516a; }
+.atlas-detail .source-heading button { color: #167084; }
+.atlas.is-lightweight .atlas-stage {
+  background:
+    linear-gradient(#a0d4e00f 1px, transparent 1px),
+    linear-gradient(90deg, #a0d4e00f 1px, transparent 1px),
+    #0d2639;
+  background-size: 36px 36px, 36px 36px, auto;
+}
+.atlas.is-lightweight .atlas-link.active { animation: none; filter: none; }
+.atlas.is-lightweight .atlas-node.selected { filter: none; }
+.atlas.is-lightweight .atlas-stage-index { box-shadow: none; }
+@media (max-width: 700px) {
+  .atlas-stage-index { top: 12px; left: 12px; padding: 8px 10px; }
+  .atlas-stage-index strong { font-size: 15px; }
+  .atlas-toolbar { padding: 9px 10px; }
+  .performance-note { margin-left: 0; }
+}
 </style>

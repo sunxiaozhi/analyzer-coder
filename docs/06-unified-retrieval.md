@@ -311,10 +311,10 @@
 
 ### 3.1 参与检索的数据
 
-- `code_chunks`：代码片段来源，按 `content_version` 与 `content_hash` 参与过滤。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:375`
-- `chunk_embeddings` / `knowledge_card_embeddings`：向量来源，命中条件含模型、维度与摘要/修订一致性。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:421`
+- `code_chunks`：代码片段来源，按 `content_version` 与 `content_hash` 参与过滤。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
+- `chunk_embeddings` / `knowledge_card_embeddings`：向量来源，命中条件含模型、维度与摘要/修订一致性。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
 - `knowledge_cards` 与其分支范围、分支校验、代码引用表：知识可见性来源。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:41`
-- `branch_context_knowledge`：分支模式下固化的知识修订清单。证据：`backend/src/main/resources/db/migration/V3__branch_contexts.sql:75`
+- `branch_context_knowledge`：分支模式下固化的知识修订清单。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
 - `heuristic_call_edges`：图谱相关通道的关系来源，按仓库当前内容版本过滤。证据：`backend/src/main/java/com/analyzercoder/infrastructure/persistence/mapper/GraphRetrievalMapper.java:28`
 - `vector_model_configs` / `vector_model_activation`：决定通道名、查询向量与模型过滤条件。证据：`backend/src/main/resources/mappers/VectorIndexQueryMapper.xml:4`
 

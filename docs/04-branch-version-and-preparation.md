@@ -67,7 +67,7 @@
 
 ## 关键实现
 
-- 表结构：`backend/src/main/resources/db/migration/V3__branch_contexts.sql`、`V7__branch_lifecycle_and_provenance.sql`、`V8__branch_code_operations.sql`
+- 表结构：`backend/src/main/resources/db/migration/V1__init_schema.sql`
 - 分支发布与阅读：`RepositoryBranchService`
 - 分阶段操作：`BranchCodeOperationsService`、`BranchPreparationJobs`
 - 工作区更新：`GitBranchContentVersionFactory`

@@ -77,7 +77,7 @@
 - 模型 API Key：AES/GCM/NoPadding，密钥为 `SHA-256("encrypt:" + app.llm.master-key)`
   （`backend/src/main/java/com/analyzercoder/application/llm/LlmSecretCipher.java:26,35,43-50,58-62`）。
 - 密文/IV/摘要持久化，算法列默认 `'AES-256-GCM'`
-  （`backend/src/main/resources/db/migration/V1__init_schema.sql:213`；
+  （`backend/src/main/resources/db/migration/V1__init_schema.sql`；
   `backend/src/main/resources/mappers/RepositoryCredentialMapper.xml:5-6,28-29`；
   `.../LlmSettingsMapper.xml:37-41`）。
 - `app.credentials.master-key` 未单独配置时回退到 `APP_LLM_MASTER_KEY`
@@ -100,10 +100,11 @@
   （`.../RepositoryImportJobService.java:60`；`.../RepositoryCredentialService.java:90`；
   `.../branch/BranchRemoteService.java:55`；
   `backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:74`）。
-- 模型端点 SSRF 策略：默认要求 HTTPS；仅当 `app.llm.allow-insecure-local=true` 且主机为
-  localhost/127.0.0.1/::1 时允许 HTTP；禁止 user-info/query/fragment；拒绝端口 0 与 >65535；
-  解析地址不得为私有/环回/链路本地/组播
-  （`backend/src/main/java/com/analyzercoder/application/llm/LlmEndpointPolicy.java:18,22-39,41-67,69-104`）。
+- 模型端点策略：默认拒绝受保护网络并校验 HTTPS 证书。`app.llm.endpoint-exceptions`
+  按完整基础地址分别配置内网访问和 TLS 例外；未列出的地址继续按默认规则处理。
+  公网仍必须使用 HTTPS，禁止 user-info/query/fragment 和 HTTP 重定向
+  （`backend/src/main/java/com/analyzercoder/application/llm/LlmEndpointPolicy.java`；
+  `backend/src/main/java/com/analyzercoder/application/llm/OpenAiCompatibleClient.java`）。
 
 ### 2.7 输出安全响应头
 
@@ -149,8 +150,7 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 | 数据源 | `spring.datasource.username` | `APP_DATASOURCE_USERNAME` | `codebase_kb` | 否 | yml:11 |
 | 数据源 | `spring.datasource.password` | `APP_DATASOURCE_PASSWORD` | 无 | **是** | yml:12-13 |
 | Flyway | `spring.flyway.enabled` | `APP_FLYWAY_ENABLED` | `true` | 否 | yml:16 |
-| Flyway | `spring.flyway.baseline-on-migrate` | 无 | `true` | 否 | yml:17 |
-| Flyway | `spring.flyway.baseline-version` | 无 | `0` | 否 | yml:18 |
+| Flyway | `spring.flyway.baseline-on-migrate` | 无 | `false` | 否 | yml:18 |
 | Flyway | `spring.flyway.default-schema` | 无 | `public` | 否 | yml:19 |
 | Flyway | `spring.flyway.schemas` | 无 | `public` | 否 | yml:20 |
 | Flyway | `spring.flyway.create-schemas` | 无 | `true` | 否 | yml:21 |
@@ -189,7 +189,8 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 | 图谱 | `app.codegraph.poll-interval-ms` | `APP_CODEGRAPH_POLL_INTERVAL_MS` | 2000 | 否 | yml:92 |
 | 图谱 | `app.codegraph.artifact-root` | 无（派生） | `<managed-data-root>/repositories` | 否 | yml:94 |
 | 模型 | `app.llm.master-key` | `APP_LLM_MASTER_KEY` | 无 | **是** | yml:96-97 |
-| 模型 | `app.llm.allow-insecure-local` | `APP_LLM_ALLOW_INSECURE_LOCAL` | `false` | 否 | yml:99 |
+| 模型 | `app.llm.allow-insecure-local` | `APP_LLM_ALLOW_INSECURE_LOCAL` | `false` | 否 | yml:103 |
+| 模型 | `app.llm.endpoint-exceptions` | 无（外部 YAML 列表） | 空列表；两项开关均为 `false` | 否 | yml:105 |
 | 模型 | `app.llm.connectivity-timeout-seconds` | `APP_LLM_CONNECTIVITY_TIMEOUT_SECONDS` | 15（运行时钳制 5–30） | 否 | yml:101 |
 | 模型 | `app.llm.breaker-failure-threshold` | `APP_LLM_BREAKER_FAILURE_THRESHOLD` | 3 | 否 | yml:103 |
 
@@ -334,32 +335,9 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 - 审计日志的范围与事件类型见账号与权限文档；唯一读取端点为 `GET /api/accounts/audit`，
   要求超级管理员（`.../AccountController.java:110-117`）。
 
-## 8. 升级与数据迁移
+## 8. 数据库初始化与重建
 
-- Flyway 默认启用，`baseline-on-migrate=true`、`baseline-version=0`、
-  `default-schema=public`、`schemas=public`、`create-schemas=true`
-  （`backend/src/main/resources/application.yml:14-21`）。
-- 现有迁移为 V1–V9（`backend/src/main/resources/db/migration/`）：
-  V1 初始化结构、V2 移除变更评审、V3 分支上下文、V4 分支图谱任务、V5 分支准备任务、
-  V6 分支向量复用、V7 分支生命周期与溯源、V8 分支代码操作、
-  V9 移除跨仓库项目。
-- V1 执行 `CREATE EXTENSION IF NOT EXISTS vector`
-  （`backend/src/main/resources/db/migration/V1__init_schema.sql:6`），
-  因此数据库角色需有权创建扩展；`pgvector/pgvector:pg17` 镜像已提供该扩展
-  （deploy/components/components.env.example）。
-- `V9` 的数据守卫（升级前置条件，来自
-  `backend/src/main/resources/db/migration/V9__remove_cross_repository_projects.sql`）：
-  - 迁移全程对 `engineering_projects`、`engineering_project_repositories`、
-    `engineering_project_contracts`、`knowledge_cards`、`knowledge_card_revisions`
-    取 `ACCESS EXCLUSIVE` 锁（V9:2-3），期间相关表不可读写，应在停机窗口执行。
-  - 三张 `engineering_project*` 表中只要存在任意一行，迁移抛
-    `Cross-repository project data must be exported/migrated before V9` 并失败（V9:6-11）。
-  - 任一 `knowledge_cards` 或 `knowledge_card_revisions` 行的
-    `scope_payload->repositoryIds|serviceNames|contractIds` 非空时，迁移抛
-    `Cross-repository knowledge scopes must be migrated before V9` 并失败（V9:12-24）。
-  - 因此**带历史跨仓库项目或跨仓库知识作用域的库必须先导出/迁移数据，再执行 V9**，
-    否则升级会中断在迁移阶段。
-  - 守卫通过后，迁移清理这三类键、重置列默认值、加上更严格的 CHECK 约束，
-    最后删除三张 `engineering_project*` 表（V9:27-59,63-65）。
-- 备份要求：V9 会 DROP 三张表并重写知识卡作用域载荷，属不可逆结构变更，
-  升级前必须完成数据库全量备份；备份流程本身未在仓库中脚本化（需人工确认）。
+- Flyway 默认启用，当前只保留 `backend/src/main/resources/db/migration/V1__init_schema.sql`。该基线一次创建当前业务结构和必要的初始配置；`baseline-on-migrate=false`，只接受空库初始化。
+- V1 执行 `CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public`，数据库角色须有权创建扩展；部署镜像 `pgvector/pgvector:pg17` 已包含扩展文件。
+- 从旧版 V1–V9 切换时，先停止后端，并按需要备份旧数据；删除并重建应用数据库后再启动后端。旧 Flyway 校验和与合并后的 V1 不兼容，不能直接在原库上启动。
+- 新建库后由 Flyway 自动执行 V1。确认 `flyway_schema_history` 仅有 V1，且内置向量模型和 `externalModelEnabled` 初始设置已写入。

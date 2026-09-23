@@ -149,7 +149,7 @@
   - 读取单条作业仅提交账号或超级管理员可见，否则 403 `FORBIDDEN`；作业不存在报 400。
   - 取消接口置 `cancel_requested=true`；仅 `QUEUED`/`RUNNING` 状态可请求，否则 409「任务当前不能取消」。
   - 后台 Worker 每 2 秒（`app.repository.import-poll-interval-ms`）串行认领一条 `QUEUED` 作业（`FOR UPDATE SKIP LOCKED`）：置 `RUNNING`/`validating` → 若已请求取消则置 `CANCELED` 并让草稿进入 `FAILED` → 否则 `current_step='cloning'` 执行导入 → 成功置 `SUCCEEDED`、回填 `result_repository_id` 并完成草稿；异常置 `FAILED`、`current_step='failed'`、错误信息截断 500 字符，并让草稿进入 `FAILED`。
-- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:38`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:51`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:58`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:64`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:52`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:104`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:138`、`backend/src/main/java/com/analyzercoder/worker/RepositoryImportJobWorker.java:17`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:7`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:8`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:16`、`backend/src/main/resources/db/migration/V1__init_schema.sql:266`
+- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:38`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:51`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:58`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:64`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:52`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:104`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:138`、`backend/src/main/java/com/analyzercoder/worker/RepositoryImportJobWorker.java:17`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:7`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:8`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:16`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### REP-012 ZIP 上传导入与 WORKSPACE 分支
 
@@ -176,7 +176,7 @@
   - 失败重试语义：草稿只要仍处于 `SOURCE_CONFIGURED` 或 `FAILED` 就可重新配置来源或重新提交导入；失败写入 `FAILED` 与错误文本（截断 500 字符），且不会覆盖已 `READY` 的草稿。
   - 草稿内保存的 `credentialId` 仅做外键引用，不校验该凭据的归属与状态（需人工确认是否预期）。
   - 当前实现不提供删除草稿的接口。
-- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryProjectDraftController.java:26`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:27`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:41`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:67`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:82`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:111`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:127`、`backend/src/main/resources/db/migration/V7__branch_lifecycle_and_provenance.sql:126`
+- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryProjectDraftController.java:26`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:27`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:41`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:67`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:82`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:111`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:127`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### REP-014 凭据类型与字段校验
 
@@ -188,7 +188,7 @@
   - 令牌在创建或替换时至少 8 个字符；更新时不传或传空白表示保留原令牌。
   - 用户名允许为空；为空时按类型取默认值：`GITLAB_PAT` 取 `oauth2`，其它取 `git`。
   - 校验（validate）要求所选凭据与目标地址的 host 与端口（缺省按 443）完全一致，否则报「所选凭据与远程仓库主机不匹配」。
-- 证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:222`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:238`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:245`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:126`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:251`、`backend/src/main/resources/db/migration/V1__init_schema.sql:221`
+- 证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:222`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:238`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:245`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:126`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:251`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### REP-015 凭据密钥加密与明文不可回读
 
@@ -226,7 +226,7 @@
   - 绑定流程：解析远程地址 → 对所选凭据执行完整检测（归属、状态、主机匹配、真实 `ls-remote`）→ 写入绑定 → 审计 `REPOSITORY_CREDENTIAL_BOUND`。
   - 解绑：写入解绑并审计 `REPOSITORY_CREDENTIAL_UNBOUND`；未绑定时为幂等空操作。
   - 由导入流程内部写入的绑定不带检测步骤（导入本身已完成克隆验证）；凭据解析对未绑定仓库返回 `null`，即允许匿名访问。
-- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryCredentialBindingController.java:27`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialBindingService.java:35`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialBindingService.java:40`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialBindingService.java:77`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:135`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:197`、`backend/src/main/resources/mappers/RepositoryCredentialMapper.xml:55`、`backend/src/main/resources/db/migration/V1__init_schema.sql:251`
+- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryCredentialBindingController.java:27`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialBindingService.java:35`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialBindingService.java:40`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialBindingService.java:77`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:135`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:197`、`backend/src/main/resources/mappers/RepositoryCredentialMapper.xml:55`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### REP-018 凭据在 Git 操作中的使用
 
@@ -264,7 +264,7 @@
   - 清理失败时墓碑置 `FAILED`、`retry_count+1`，等待下一轮重试。
   - 状态变为 `DELETED` 时数据库触发器删除该仓库的全部分支记录。
   - 所有仓库读取路径都带 `deleted_at IS NULL` 条件，因此软删除后仓库立即从列表、详情与所有权限查询中消失。
-- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryController.java:179`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:138`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryDeletionService.java:35`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:84`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:99`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:118`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:128`、`backend/src/main/java/com/analyzercoder/worker/RepositoryDeletionWorker.java:17`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:124`、`backend/src/main/resources/mappers/RepositoryMapper.xml:52`
+- 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryController.java:179`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:138`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryDeletionService.java:35`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:84`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:99`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:118`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:128`、`backend/src/main/java/com/analyzercoder/worker/RepositoryDeletionWorker.java:17`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/mappers/RepositoryMapper.xml:52`
 
 ### REP-021 前端仓库接入与来源凭据界面
 
@@ -292,16 +292,16 @@
 | `repository_project_drafts` | 项目草稿 | `lifecycle_status IN ('DRAFT','SOURCE_CONFIGURED','IMPORTING','READY','FAILED')`；`owner_account_id` 外键级联删除 |
 | `repository_deletion_tombstones` | 删除后的物理清理任务 | `cleanup_status` 默认 `PENDING`，另有 `RUNNING`/`COMPLETE`/`FAILED`；`retry_count` |
 
-证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:55`、`backend/src/main/resources/db/migration/V1__init_schema.sql:168`、`backend/src/main/resources/db/migration/V1__init_schema.sql:199`、`backend/src/main/resources/db/migration/V1__init_schema.sql:251`、`backend/src/main/resources/db/migration/V1__init_schema.sql:266`、`backend/src/main/resources/db/migration/V1__init_schema.sql:294`、`backend/src/main/resources/db/migration/V7__branch_lifecycle_and_provenance.sql:126`
+证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### 3.2 状态枚举
 
 - 项目来源类型：`LOCAL_GIT`、`REMOTE_GIT`、`GITLAB`、`ZIP`。证据：`backend/src/main/java/com/analyzercoder/domain/repository/RepositorySourceType.java:4`
 - 仓库生命周期状态 `repository_status`：新库为 `READY`；删除申请后 `DELETING`；物理清理完成后 `DELETED`。实现中还会读取 `AUTH_ERROR`（所有权转移的前置条件），但当前代码没有任何写入 `AUTH_ERROR` 的路径。证据：`backend/src/main/java/com/analyzercoder/infrastructure/persistence/model/RepositoryRow.java:60`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:85`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:118`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:82`
-- 凭据状态：`ACTIVE`、`DISABLED`、`INVALID`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:223`
+- 凭据状态：`ACTIVE`、`DISABLED`、`INVALID`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
 - 导入作业状态：`QUEUED` → `RUNNING` → `SUCCEEDED` / `FAILED` / `CANCELED`；取消通过 `cancel_requested` 先请求、再由 Worker 落状态。证据：`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:8`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:16`
 - 草稿状态：`DRAFT` → `SOURCE_CONFIGURED` → `IMPORTING` → `READY`；任一阶段失败可进入 `FAILED`，`FAILED` 可回到 `SOURCE_CONFIGURED` 或 `IMPORTING`。证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:54`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:74`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:91`
-- 删除清理状态：`PENDING`/`RUNNING`/`COMPLETE`/`FAILED`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:298`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:100`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:125`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:129`
+- 删除清理状态：`PENDING`/`RUNNING`/`COMPLETE`/`FAILED`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:100`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:125`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:129`
 
 ### 3.3 状态流转
 
@@ -364,7 +364,6 @@
 
 ## 6 已知缺口
 
-- `RepositoryGovernanceMapper.deleteRepositoryCredentials` 删除的是 `repository_credentials` 表，但现有迁移链（V1–V9）没有创建该表（V1 只创建了 `git_credentials` 与 `repository_credential_bindings`）。因此仓库删除的物理清理步骤会在此语句处失败，被记为墓碑 `FAILED` 并反复重试，`repository_status` 可能长期停留在 `DELETING`。需人工确认该语句的预期目标表。证据：`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:116`、`backend/src/main/resources/db/migration/V1__init_schema.sql:199`、`backend/src/main/resources/db/migration/V1__init_schema.sql:251`
 - 仓库生命周期状态 `AUTH_ERROR` 只在所有权转移的前置条件与成员权限查询中被读取，没有任何代码写入该状态。证据：`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:82`
 - 异步导入的取消只在 Worker 认领作业的那一刻被检查；对于已经处于 `RUNNING` 的作业，`cancel_requested` 不会再被读取，作业仍会走到 `SUCCEEDED` 或 `FAILED`，取消请求实际不生效。证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:113`、`backend/src/main/resources/mappers/RepositoryImportJobMapper.xml:16`
 - 同步导入接口接收 `projectDraftId` 但未使用，因此通过该接口接入不会回填草稿状态。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:98`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:76`

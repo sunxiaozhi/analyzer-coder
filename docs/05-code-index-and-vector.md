@@ -49,7 +49,7 @@
   - 配置：扩展名属于 `yml`、`yaml`、`json`、`xml`、`properties`、`toml`、`ini`、`conf`、`env`，或文件名是 `dockerfile`、`makefile`、`gradlew`、`mvnw`，或语言是 yaml/json/properties。
   - 文档：语言为 `markdown` 或扩展名属于 `md`、`mdx`、`rst`、`txt`、`adoc`。
   - 该枚举受数据库约束限制为这五个取值。
-- 证据：`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetClassifier.java:23`、`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetClassifier.java:49`、`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetClassifier.java:57`、`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetClassifier.java:67`、`backend/src/main/resources/db/migration/V1__init_schema.sql:392`
+- 证据：`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetClassifier.java:23`、`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetClassifier.java:49`、`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetClassifier.java:57`、`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetClassifier.java:67`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### IDX-005 默认索引链路的文件片段窗口与重叠
 
@@ -159,7 +159,7 @@
   - 领取语句使用 `FOR UPDATE SKIP LOCKED` 原子地把 `QUEUED` 任务置为 `RUNNING`。
   - 心跳只在 `RUNNING` / `CANCEL_REQUESTED` 状态下更新，只表示进程仍在处理；固定超时截止时间不会因心跳而延长。
   - 超时回收按任务类型扫描并把 `RUNNING` / `CANCEL_REQUESTED` 置为 `FAILED`。
-- 证据：`backend/src/main/java/com/analyzercoder/worker/IndexJobWorker.java:17`、`backend/src/main/resources/application.yml:82`、`backend/src/main/resources/mappers/IndexJobMapper.xml:64`、`backend/src/main/resources/mappers/IndexJobMapper.xml:82`、`backend/src/main/resources/mappers/IndexJobMapper.xml:86`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1264`
+- 证据：`backend/src/main/java/com/analyzercoder/worker/IndexJobWorker.java:17`、`backend/src/main/resources/application.yml:82`、`backend/src/main/resources/mappers/IndexJobMapper.xml:64`、`backend/src/main/resources/mappers/IndexJobMapper.xml:82`、`backend/src/main/resources/mappers/IndexJobMapper.xml:86`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### IDX-015 取消与重试
 
@@ -170,7 +170,7 @@
   - 若该仓库已有活跃任务（`QUEUED`/`RUNNING`/`CANCEL_REQUESTED`），启动或重试都直接返回该活跃任务，不新建。
   - 若该任务其实是分支准备任务，重试委托给分支准备任务通道。
   - 数据库以唯一索引保证每个仓库最多一个活跃任务。
-- 证据：`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:116`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:155`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:197`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:270`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJob.java:42`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java:27`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java:89`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java:100`、`backend/src/main/resources/db/migration/V1__init_schema.sql:372`
+- 证据：`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:116`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:155`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:197`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:270`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJob.java:42`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java:27`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java:89`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobService.java:100`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### IDX-016 增量执行计划与全量回退判定
 
@@ -205,7 +205,7 @@
   - 片段使用仓库当前的内容版本与提交号构造；增量写入也显式传入这两个值。
   - 分支内容索引要求来源仓库内容版本与阅读上下文内容版本、内容路径三者一致，否则拒绝执行。
   - 数据库触发器禁止改写或删除属于分支内容版本的片段。
-- 证据：`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:104`、`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:123`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:127`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:163`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:39`、`backend/src/main/resources/db/migration/V3__branch_contexts.sql:110`
+- 证据：`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:104`、`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:123`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:127`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:163`、`backend/src/main/java/com/analyzercoder/application/branch/BranchContentIndexService.java:39`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### IDX-019 片段内容摘要
 
@@ -214,7 +214,7 @@
   - 摘要在构造片段时按 UTF-8 计算 SHA-256 十六进制字符串。
   - 摘要与正文同源写入，不单独接口修改。
   - 数据库层面 `content_hash` 非空。
-- 证据：`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:119`、`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:136`、`backend/src/main/resources/db/migration/V1__init_schema.sql:390`
+- 证据：`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:119`、`backend/src/main/java/com/analyzercoder/domain/chunk/CodeChunk.java:136`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### IDX-020 向量模型配置：模型、维度与检索能力
 
@@ -226,7 +226,7 @@
   - 内置默认模型为 `local-hash-64`（LOCAL_HASH，64 维），并在迁移中写成初始启用项；无启用记录时代码回退同一组默认值（模型名 `local-hash-64`、维度 64、能力 `CHARACTER_HASH`）。
   - 启用前先探测：`LOCAL_HASH` 直接视为可用；外部模型发送一次 `connection probe` 嵌入请求，失败则拒绝启用并返回错误码。启用使用乐观并发，`expectedActivationVersion` 不匹配返回 `VECTOR_MODEL_ACTIVATION_CONFLICT`。
   - 当前已启用的模型不允许直接编辑，必须先切换。
-- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:819`、`backend/src/main/resources/db/migration/V1__init_schema.sql:845`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1071`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:671`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:223`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:250`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:294`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:764`、`backend/src/main/resources/mappers/LlmSettingsMapper.xml:177`
+- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:671`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:223`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:250`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:294`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:764`、`backend/src/main/resources/mappers/LlmSettingsMapper.xml:177`
 
 ### IDX-021 向量记录表与维度约束
 
@@ -237,7 +237,7 @@
   - 两表都约束维度在 1–4096 且 `vector_dims(embedding) = dimension`；都有 `retrieval_capability` 列，非空，取值只能是 `CHARACTER_HASH` 或 `SEMANTIC_EMBEDDING`。
   - 写入为 upsert：命中主键则覆盖模型、维度、能力、向量与摘要并刷新 `created_at`。
   - 未为向量列建立 HNSW/IVFFlat 近邻索引；迁移注释说明原因是矢量维度可变，因此使用精确余弦扫描。
-- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:421`、`backend/src/main/resources/db/migration/V1__init_schema.sql:429`、`backend/src/main/resources/db/migration/V1__init_schema.sql:675`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1218`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1242`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:445`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:419`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1084`
+- 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:445`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:419`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### IDX-022 缺失向量的识别与补建
 
@@ -247,6 +247,7 @@
   - 默认链路补建入口：`prepareRepositoryEmbeddings`，内部顺序为重建启发式调用关系 → 补片段向量 → 补知识向量；任一环节抛异常则整体返回 `false`（不向上抛），索引任务据此把完成串标为 `:vectors-degraded`。
   - 分支链路补建入口：`prepareBranchEmbeddings(repositoryId, contentVersion, checkpoint)`，内容版本为空直接拒绝；只处理该内容版本自己的片段。
   - 分支向量任务要求先完成该内容版本的内容索引，否则拒绝入队；同一分支同一内容版本只允许一个向量任务，目标内容版本不同则返回冲突。
+  - 内置字符向量在索引任务内直接计算；外部语义向量按最多 16 条片段组成一批调用 `/embeddings`，并在一次补建中复用模型配置、密钥和 HTTP 客户端。兼容服务拒绝批量输入时，当前补建自动改为逐条调用。
   - 知识卡向量只在“转为 PUBLISHED”这一步顺带补齐；该补齐失败被吞掉，已发布知识仍可通过关键词通道检索。
 - 证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:428`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:412`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:446`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:905`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:115`、`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:181`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1265`、`backend/src/main/java/com/analyzercoder/application/indexing/IndexJobProcessor.java:209`
 
@@ -258,7 +259,7 @@
   - 复用只发生在分支向量补建路径（有明确 contentVersion 时）；默认链路不查复用表。
   - 复用命中时直接写 upsert，不调用模型。
   - 数据库为该复用查询建立了 `(repo_id, content_hash, model, dimension, retrieval_capability)` 索引。
-- 证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:452`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:920`、`backend/src/main/resources/db/migration/V6__branch_embedding_reuse.sql:2`、`backend/src/test/java/com/analyzercoder/application/intelligence/IntelligenceServiceMultiTurnTest.java:71`
+- 证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:452`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:920`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/test/java/com/analyzercoder/application/intelligence/IntelligenceServiceMultiTurnTest.java:71`
 
 ### IDX-024 模型切换后旧向量不得混用
 
@@ -300,7 +301,7 @@
   - 结果中的 `similarityKind` 由通道名推导：含 `_SEMANTIC` → `SEMANTIC_EMBEDDING`；含 `_CHARACTER_SIMILARITY` → `CHARACTER_HASH`；否则 `NONE`。
   - 配置界面给出的能力限制文案：字符相似度“基于字符哈希投影与余弦距离”“不理解同义词、业务含义或代码语义”；语义能力“取决于外部 embedding 模型及其训练覆盖”。
   - 迁移注释与列注释明确：只有 `SEMANTIC_EMBEDDING` 才表示外部模型语义向量。
-- 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1526`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:567`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1562`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:772`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1215`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1247`、`backend/src/test/java/com/analyzercoder/application/intelligence/IntelligenceServiceMultiTurnTest.java:292`
+- 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1526`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:567`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1562`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:772`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/test/java/com/analyzercoder/application/intelligence/IntelligenceServiceMultiTurnTest.java:292`
 
 ### IDX-028 索引阶段构建启发式调用关系
 
@@ -329,7 +330,7 @@
 - 需求：索引与向量相关配置集中在 `application.yml` 的 `app.indexing` 与 `app.llm` 两段；片段窗口、重叠、符号上限等目前是代码常量而非配置项。
 - 规则：
   - `app.indexing.poll-interval-ms` 默认 5000（毫秒）、`app.indexing.max-file-bytes` 默认 524288（字节），两者均无环境变量占位符；代码侧 `@Value` 默认值同为 524288。
-  - `app.llm.master-key` 无默认值、必填，用于加密模型 API Key；`app.llm.allow-insecure-local` 默认 false。
+  - `app.llm.master-key` 无默认值、必填，用于加密模型 API Key；`app.llm.allow-insecure-local` 默认 false，`app.llm.endpoint-exceptions` 默认空列表。
   - `app.llm.connectivity-timeout-seconds` 默认 15（秒）；`app.llm.breaker-failure-threshold` 默认 3（连续失败熔断阈值）。
   - 向量模型标识、维度、检索能力**不在** `application.yml` 中，全部来自数据库表。
   - 相邻但不同域的上限（分支工作区与源码预览）：`app.repository.workspace-max-files` 默认 50000、`workspace-max-total-bytes` 默认 2147483648、`browser-max-file-bytes` 默认 2097152。
@@ -353,17 +354,17 @@
 
 ### 3.1 主要数据表
 
-- `code_chunks`：片段表。字段含 `repo_id`、`content_version`、`commit_sha`、`file_path`、`symbol_id/name/kind`、`language`、`chunk_type`、`asset_type`、`start_line`、`end_line`、`content`、`content_hash`、`created_at`；`content_version` 与 `commit_sha` 非空，`asset_type` 受 CHECK 约束。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:375`
-- `chunk_embeddings` / `knowledge_card_embeddings`：片段向量与知识卡向量，主键分别为 `chunk_id`、`card_id`，均含 `model`、`dimension`、`embedding`、`content_hash`、`retrieval_capability`、`created_at`（知识卡另含 `revision`）。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:421`、`backend/src/main/resources/db/migration/V1__init_schema.sql:675`
-- `vector_model_configs` / `vector_model_activation`：向量模型备案（协议、模型标识、维度、超时、密钥版本）与单例启用记录（含 `activation_version`）。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:819`、`backend/src/main/resources/db/migration/V1__init_schema.sql:845`
-- `index_jobs`：任务表，含 `job_type`、`status`、`current_step`、`execution_mode`、`fallback_reason`、`failure_code`、`error_message`、`started_at`、`heartbeat_at`、`timeout_at`、`finished_at`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql:348`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1256`
+- `code_chunks`：片段表。字段含 `repo_id`、`content_version`、`commit_sha`、`file_path`、`symbol_id/name/kind`、`language`、`chunk_type`、`asset_type`、`start_line`、`end_line`、`content`、`content_hash`、`created_at`；`content_version` 与 `commit_sha` 非空，`asset_type` 受 CHECK 约束。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
+- `chunk_embeddings` / `knowledge_card_embeddings`：片段向量与知识卡向量，主键分别为 `chunk_id`、`card_id`，均含 `model`、`dimension`、`embedding`、`content_hash`、`retrieval_capability`、`created_at`（知识卡另含 `revision`）。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
+- `vector_model_configs` / `vector_model_activation`：向量模型备案（协议、模型标识、维度、超时、密钥版本）与单例启用记录（含 `activation_version`）。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
+- `index_jobs`：任务表，含 `job_type`、`status`、`current_step`、`execution_mode`、`fallback_reason`、`failure_code`、`error_message`、`started_at`、`heartbeat_at`、`timeout_at`、`finished_at`。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 - `heuristic_call_edges`：索引阶段生成的启发式调用候选。证据：`backend/src/main/resources/mappers/IntelligenceMapper.xml:306`
-- `repository_branches` / `branch_read_contexts`：分支当前工作区与阅读上下文。证据：`backend/src/main/resources/db/migration/V3__branch_contexts.sql`
+- `repository_branches` / `branch_read_contexts`：分支当前工作区与阅读上下文。证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### 3.2 状态与枚举
 
 - 任务状态：`QUEUED`、`RUNNING`、`CANCEL_REQUESTED`、`SUCCEEDED`、`FAILED`、`CANCELED`；任务类型：`FULL`、`INCREMENTAL`、`CODEGRAPH`、`KNOWLEDGE_DRIFT`。证据：`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJobStatus.java:4`、`backend/src/main/java/com/analyzercoder/domain/indexing/IndexJobType.java:4`
-- 向量状态（统计接口视角）：`EMBEDDED`、`MISSING`；检索能力：`CHARACTER_HASH`、`SEMANTIC_EMBEDDING`。证据：`backend/src/main/java/com/analyzercoder/application/indexing/VectorIndexQueryService.java:114`、`backend/src/main/resources/db/migration/V1__init_schema.sql:1242`
+- 向量状态（统计接口视角）：`EMBEDDED`、`MISSING`；检索能力：`CHARACTER_HASH`、`SEMANTIC_EMBEDDING`。证据：`backend/src/main/java/com/analyzercoder/application/indexing/VectorIndexQueryService.java:114`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 - 片段类型：`FILE`、`SYMBOL`、`DOC_SECTION`、`TEST_CASE`、`CONFIG`、`KNOWLEDGE_CARD`（后两者中 `TEST_CASE`、`KNOWLEDGE_CARD` 当前不会被写入）；资产类型：`CODE`、`DOCUMENT`、`RULE`、`TASK`、`CONFIG`。证据：`backend/src/main/java/com/analyzercoder/domain/chunk/ChunkType.java:4`、`backend/src/main/java/com/analyzercoder/domain/indexing/RepositoryAssetType.java:4`
 
 ### 3.3 内容版本语义

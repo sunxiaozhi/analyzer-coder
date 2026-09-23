@@ -14,8 +14,8 @@ spring:
   flyway:
     # 启动时自动执行数据库结构迁移；正常部署建议保持 true。
     enabled: ${APP_FLYWAY_ENABLED:true}
-    baseline-on-migrate: true
-    baseline-version: 0
+    # V1 is a fresh-install baseline; reject non-empty schemas without Flyway history.
+    baseline-on-migrate: false
     default-schema: public
     schemas: public
     create-schemas: true
@@ -101,6 +101,8 @@ app:
     master-key: ${APP_LLM_MASTER_KEY}
     # 是否允许 localhost/127.0.0.1/::1 模型服务使用 HTTP；生产环境建议保持 false。
     allow-insecure-local: ${APP_LLM_ALLOW_INSECURE_LOCAL:false}
+    # 按完整服务地址精确匹配；未列出的模型服务不放行内网或跳过 TLS 校验。
+    endpoint-exceptions: []
     # 模型连通性检测的总超时（秒），不同于模型管理中的单次请求超时。
     connectivity-timeout-seconds: ${APP_LLM_CONNECTIVITY_TIMEOUT_SECONDS:15}
     # 模型运行时连续失败达到该次数后熔断，后续问答降级为本地证据模式。

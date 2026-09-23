@@ -1,6 +1,9 @@
 package com.analyzercoder.application.llm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,6 +11,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -19,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 class OpenAiCompatibleClientTest {
     private HttpServer server;
+    private final AtomicBoolean batchAccepted = new AtomicBoolean();
 
     @BeforeEach
     void startServer() throws IOException {
@@ -56,6 +61,27 @@ class OpenAiCompatibleClientTest {
         server.createContext(
                 "/v1/embeddings",
                 exchange -> {
+                    String request =
+                            new String(
+                                    exchange.getRequestBody().readAllBytes(),
+                                    StandardCharsets.UTF_8);
+                    if (request.contains("\"input\":[")) {
+                        if (!batchAccepted.get()) {
+                            respond(
+                                    exchange,
+                                    400,
+                                    "application/json",
+                                    "{\"error\":\"array unsupported\"}");
+                            return;
+                        }
+                        respond(
+                                exchange,
+                                200,
+                                "application/json",
+                                "{\"data\":[{\"index\":1,\"embedding\":[0.0,1.0]},"
+                                        + "{\"index\":0,\"embedding\":[1.0,0.0]}]}");
+                        return;
+                    }
                     StringBuilder values = new StringBuilder();
                     for (int index = 0; index < 64; index++) {
                         if (index > 0) {
@@ -80,7 +106,9 @@ class OpenAiCompatibleClientTest {
     @Test
     void verifiesModelGenerationAndStreaming() {
         OpenAiCompatibleClient client =
-                new OpenAiCompatibleClient(new ObjectMapper(), new LlmEndpointPolicy(true));
+                new OpenAiCompatibleClient(
+                        new ObjectMapper(),
+                        new LlmEndpointPolicy(true, new LlmEndpointExceptionProperties(List.of())));
         LlmProviderSpec spec =
                 new LlmProviderSpec(
                         null,
@@ -114,7 +142,9 @@ class OpenAiCompatibleClientTest {
     @Test
     void readsOpenAiCompatibleEmbeddingWithRequiredDimension() {
         OpenAiCompatibleClient client =
-                new OpenAiCompatibleClient(new ObjectMapper(), new LlmEndpointPolicy(true));
+                new OpenAiCompatibleClient(
+                        new ObjectMapper(),
+                        new LlmEndpointPolicy(true, new LlmEndpointExceptionProperties(List.of())));
 
         String vector =
                 client.embed(
@@ -127,6 +157,56 @@ class OpenAiCompatibleClientTest {
 
         assertTrue(vector.startsWith("[0.0,0.015625"));
         assertEquals(64, vector.substring(1, vector.length() - 1).split(",").length);
+    }
+
+    @Test
+    void readsBatchEmbeddingsInInputOrder() {
+        batchAccepted.set(true);
+        OpenAiCompatibleClient client =
+                new OpenAiCompatibleClient(
+                        new ObjectMapper(),
+                        new LlmEndpointPolicy(true, new LlmEndpointExceptionProperties(List.of())));
+        List<String> vectors =
+                client.embedBatch(
+                        "http://localhost:" + server.getAddress().getPort() + "/v1",
+                        "embedding-model",
+                        "test-key",
+                        List.of("first", "second"),
+                        2,
+                        5000);
+        assertEquals(List.of("[1.0,0.0]", "[0.0,1.0]"), vectors);
+    }
+
+    @Test
+    void identifiesUnsupportedBatchInputForFallback() {
+        OpenAiCompatibleClient client =
+                new OpenAiCompatibleClient(
+                        new ObjectMapper(),
+                        new LlmEndpointPolicy(true, new LlmEndpointExceptionProperties(List.of())));
+        LlmConnectionException exception =
+                assertThrows(
+                        LlmConnectionException.class,
+                        () ->
+                                client.embedBatch(
+                                        "http://localhost:" + server.getAddress().getPort() + "/v1",
+                                        "embedding-model",
+                                        "test-key",
+                                        List.of("first", "second"),
+                                        2,
+                                        5000));
+        assertEquals("LLM_BATCH_UNSUPPORTED", exception.code());
+    }
+
+    @Test
+    void reusesHttpClientForTheSameEndpointAndTimeout() {
+        OpenAiCompatibleClient client =
+                new OpenAiCompatibleClient(
+                        new ObjectMapper(),
+                        new LlmEndpointPolicy(true, new LlmEndpointExceptionProperties(List.of())));
+        URI endpoint = URI.create("http://localhost:" + server.getAddress().getPort() + "/v1");
+
+        assertSame(client.httpClient(endpoint, 5000), client.httpClient(endpoint, 5000));
+        assertNotSame(client.httpClient(endpoint, 5000), client.httpClient(endpoint, 6000));
     }
 
     private static void respond(HttpExchange exchange, int status, String contentType, String body)

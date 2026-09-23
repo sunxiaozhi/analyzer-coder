@@ -12,6 +12,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 import javax.net.ssl.SSLException;
@@ -23,6 +26,7 @@ public class OpenAiCompatibleClient {
     private static final String PROBE_PROMPT = "Reply with exactly: CONNECTED";
     private final ObjectMapper json;
     private final LlmEndpointPolicy endpointPolicy;
+    private final ConcurrentMap<ClientKey, HttpClient> httpClients = new ConcurrentHashMap<>();
 
     public OpenAiCompatibleClient(ObjectMapper json, LlmEndpointPolicy endpointPolicy) {
         this.json = json;
@@ -52,11 +56,7 @@ public class OpenAiCompatibleClient {
             throw exception;
         }
 
-        HttpClient client =
-                HttpClient.newBuilder()
-                        .connectTimeout(Duration.ofMillis(spec.connectTimeoutMs()))
-                        .followRedirects(HttpClient.Redirect.NEVER)
-                        .build();
+        HttpClient client = httpClient(baseUri, spec.connectTimeoutMs());
 
         Long connectDuration;
         stageStarted = System.nanoTime();
@@ -138,11 +138,7 @@ public class OpenAiCompatibleClient {
 
     public String generate(LlmProviderSpec spec, String apiKey, String prompt) {
         URI baseUri = endpointPolicy.validateAndResolve(spec.baseUrl());
-        HttpClient client =
-                HttpClient.newBuilder()
-                        .connectTimeout(Duration.ofMillis(spec.connectTimeoutMs()))
-                        .followRedirects(HttpClient.Redirect.NEVER)
-                        .build();
+        HttpClient client = httpClient(baseUri, spec.connectTimeoutMs());
         return generate(
                 client,
                 baseUri,
@@ -161,11 +157,7 @@ public class OpenAiCompatibleClient {
             int dimension,
             int requestTimeoutMs) {
         URI baseUri = endpointPolicy.validateAndResolve(baseUrl);
-        HttpClient http =
-                HttpClient.newBuilder()
-                        .connectTimeout(Duration.ofMillis(Math.min(requestTimeoutMs, 10000)))
-                        .followRedirects(HttpClient.Redirect.NEVER)
-                        .build();
+        HttpClient http = httpClient(baseUri, Math.min(requestTimeoutMs, 10000));
         ObjectNode payload = json.createObjectNode();
         payload.put("model", model);
         payload.put("input", input);
@@ -182,29 +174,110 @@ public class OpenAiCompatibleClient {
                                     .build(),
                             HttpResponse.BodyHandlers.ofString());
             requireAllowedStatus(response.statusCode(), response.body());
-            JsonNode values = json.readTree(response.body()).path("data").path(0).path("embedding");
-            if (!values.isArray() || values.size() != dimension) {
-                throw new LlmConnectionException(
-                        "VECTOR_DIMENSION_INCOMPATIBLE", "向量模型返回维度与当前索引不兼容，要求 " + dimension + " 维");
-            }
-            StringBuilder vector = new StringBuilder("[");
-            for (int index = 0; index < values.size(); index++) {
-                JsonNode value = values.get(index);
-                if (!value.isNumber() || !Double.isFinite(value.asDouble())) {
-                    throw new LlmConnectionException("LLM_PROTOCOL_INVALID", "向量模型返回了无效数值");
-                }
-                if (index > 0) {
-                    vector.append(',');
-                }
-                vector.append(value.asDouble());
-            }
-            return vector.append(']').toString();
+            return embeddingVector(
+                    json.readTree(response.body()).path("data").path(0).path("embedding"),
+                    dimension);
         } catch (LlmConnectionException exception) {
             throw exception;
         } catch (Exception exception) {
             throw mapTransport(exception);
         }
     }
+
+    public List<String> embedBatch(
+            String baseUrl,
+            String model,
+            String apiKey,
+            List<String> inputs,
+            int dimension,
+            int requestTimeoutMs) {
+        if (inputs.isEmpty()) return List.of();
+        URI baseUri = endpointPolicy.validateAndResolve(baseUrl);
+        HttpClient http = httpClient(baseUri, Math.min(requestTimeoutMs, 10000));
+        ObjectNode payload = json.createObjectNode();
+        payload.put("model", model);
+        payload.set("input", json.valueToTree(inputs));
+        payload.put("dimensions", dimension);
+        long deadline = System.nanoTime() + Duration.ofMillis(requestTimeoutMs).toNanos();
+        try {
+            HttpResponse<String> response =
+                    http.send(
+                            request(baseUri, "/embeddings", apiKey, deadline)
+                                    .header("Content-Type", "application/json")
+                                    .POST(
+                                            HttpRequest.BodyPublishers.ofString(
+                                                    json.writeValueAsString(payload)))
+                                    .build(),
+                            HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 400
+                    || response.statusCode() == 413
+                    || response.statusCode() == 422) {
+                throw new LlmConnectionException("LLM_BATCH_UNSUPPORTED", "向量服务不支持当前批量输入");
+            }
+            requireAllowedStatus(response.statusCode(), response.body());
+            JsonNode data = json.readTree(response.body()).path("data");
+            if (!data.isArray() || data.size() != inputs.size()) {
+                throw new LlmConnectionException("LLM_BATCH_UNSUPPORTED", "向量服务返回的批量结果数量不匹配");
+            }
+            String[] vectors = new String[inputs.size()];
+            for (int position = 0; position < data.size(); position++) {
+                JsonNode item = data.get(position);
+                JsonNode indexNode = item.path("index");
+                int index = indexNode.isInt() ? indexNode.asInt() : position;
+                if (index < 0 || index >= vectors.length || vectors[index] != null) {
+                    throw new LlmConnectionException("LLM_BATCH_UNSUPPORTED", "向量服务返回的批量结果顺序无效");
+                }
+                vectors[index] = embeddingVector(item.path("embedding"), dimension);
+            }
+            for (String vector : vectors) {
+                if (vector == null) {
+                    throw new LlmConnectionException("LLM_BATCH_UNSUPPORTED", "向量服务返回的批量结果顺序无效");
+                }
+            }
+            return List.of(vectors);
+        } catch (LlmConnectionException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw mapTransport(exception);
+        }
+    }
+
+    private static String embeddingVector(JsonNode values, int dimension) {
+        if (!values.isArray() || values.size() != dimension) {
+            throw new LlmConnectionException(
+                    "VECTOR_DIMENSION_INCOMPATIBLE", "向量模型返回维度与当前索引不兼容，要求 " + dimension + " 维");
+        }
+        StringBuilder vector = new StringBuilder("[");
+        for (int index = 0; index < values.size(); index++) {
+            JsonNode value = values.get(index);
+            if (!value.isNumber() || !Double.isFinite(value.asDouble())) {
+                throw new LlmConnectionException("LLM_PROTOCOL_INVALID", "向量模型返回了无效数值");
+            }
+            if (index > 0) vector.append(',');
+            vector.append(value.asDouble());
+        }
+        return vector.append(']').toString();
+    }
+
+    HttpClient httpClient(URI baseUri, long connectTimeoutMs) {
+        ClientKey key =
+                new ClientKey(
+                        baseUri, connectTimeoutMs, endpointPolicy.skipTlsVerification(baseUri));
+        return httpClients.computeIfAbsent(key, this::createHttpClient);
+    }
+
+    private HttpClient createHttpClient(ClientKey key) {
+        HttpClient.Builder builder =
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofMillis(key.connectTimeoutMs()))
+                        .followRedirects(HttpClient.Redirect.NEVER);
+        if (key.skipTlsVerification()) {
+            builder.sslContext(EndpointTlsContext.insecureForExplicitException());
+        }
+        return builder.build();
+    }
+
+    private record ClientKey(URI baseUri, long connectTimeoutMs, boolean skipTlsVerification) {}
 
     private String generate(
             HttpClient client,

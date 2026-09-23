@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 class BranchLifecycleSqlContractTest {
     @Test
     void migrationAndMappersKeepBranchIdentityAcrossHistoryAndMarkdown() throws Exception {
-        String migration = resource("db/migration/V7__branch_lifecycle_and_provenance.sql");
+        String migration = resource("db/migration/V1__init_schema.sql");
         String markdown = resource("mappers/MarkdownKnowledgeSourceMapper.xml");
         String intelligence = resource("mappers/IntelligenceMapper.xml");
 
@@ -16,8 +16,8 @@ class BranchLifecycleSqlContractTest {
                 .contains("tracking_status")
                 .contains("repository_project_drafts")
                 .contains("source_branch_id")
-                .contains("repositories_default_branch_contentVersion")
-                .contains("FOREIGN KEY(repo_id,branch_id)");
+                .contains("repositories_default_branch_contentversion")
+                .contains("FOREIGN KEY (repo_id, branch_id)");
         assertThat(markdown)
                 .contains("ON CONFLICT(repo_id,branch_id,file_path)")
                 .contains("l.source_branch_id=s.branch_id")

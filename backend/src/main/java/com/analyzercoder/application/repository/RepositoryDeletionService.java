@@ -42,7 +42,6 @@ public class RepositoryDeletionService {
         mapper.deleteIndexJobs(repositoryId);
         mapper.deleteRepositoryGrants(repositoryId);
         mapper.deleteRepositoryCredentials(repositoryId);
-        mapper.deleteGovernanceLock(repositoryId);
         mapper.finalizeDeletion(repositoryId);
         mapper.completeCleanup(repositoryId);
     }

@@ -38,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class IntelligenceService {
     private static final int DIMENSION = 64;
     private static final int MAX_CANDIDATES_PER_CHANNEL = 40;
+    private static final int EXTERNAL_EMBEDDING_BATCH_SIZE = 16;
     private static final Set<String> REVIEW_STATUSES = Set.of("APPROVED", "CHANGES_REQUESTED");
     private static final Set<String> PUBLICATION_STATUSES =
             Set.of("DRAFT", "PUBLISHED", "ARCHIVED");
@@ -191,7 +192,10 @@ public class IntelligenceService {
                             .stream().map(this::answerContentVersion).toList();
             if (context != null
                     && history.stream()
-                            .anyMatch(turn -> !context.contentVersion().equals(turn.contentVersion())))
+                            .anyMatch(
+                                    turn ->
+                                            !context.contentVersion()
+                                                    .equals(turn.contentVersion())))
                 throw new IllegalArgumentException("会话属于其他代码版本，请在当前分支新建会话");
             Integer next = mapper.nextTurnNo(threadId);
             turnNo = next == null ? history.size() + 1 : next;
@@ -201,6 +205,13 @@ public class IntelligenceService {
         String retrievalQuery = contextualQuery(question, history);
         EvidenceSearchResult retrieval =
                 unifiedSearchDetailed(repositoryId, retrievalQuery, 10, context);
+        ChainContext chain =
+                modelConfigId == null
+                        ? new ChainContext(retrieval.evidence(), List.of())
+                        : expandCallChain(
+                                repositoryId,
+                                retrieval.retrieval().contentVersion(),
+                                retrieval.evidence());
         return answer(
                 repositoryId,
                 accountId,
@@ -211,10 +222,119 @@ public class IntelligenceService {
                 turnNo,
                 threadTitle,
                 history,
-                retrieval.evidence(),
+                chain.evidence(),
+                chain.links(),
                 retrieval.retrieval(),
                 modelConfigId,
                 context);
+    }
+
+    private ChainContext expandCallChain(
+            UUID repositoryId, UUID contentVersion, List<Evidence> evidence) {
+        if (contentVersion == null || evidence.isEmpty()) {
+            return new ChainContext(evidence, List.of());
+        }
+        List<Evidence> expanded = new ArrayList<>(evidence);
+        Map<UUID, Integer> citationIndexes = new LinkedHashMap<>();
+        for (int index = 0; index < expanded.size(); index++) {
+            UUID id = expanded.get(index).chunkId();
+            if (id != null) citationIndexes.put(id, index + 1);
+        }
+        List<UUID> seedIds =
+                new ArrayList<>(
+                        evidence.stream()
+                                .filter(item -> "CODE".equals(item.sourceType()))
+                                .filter(item -> contentVersion.equals(item.contentVersion()))
+                                .map(Evidence::chunkId)
+                                .filter(Objects::nonNull)
+                                .limit(4)
+                                .toList());
+        for (Evidence item : evidence) {
+            if (seedIds.size() >= 4 || expanded.size() >= 12) break;
+            if (!"KNOWLEDGE".equals(item.sourceType())) continue;
+            for (CodeReference reference : item.codeReferences()) {
+                if (seedIds.size() >= 4 || expanded.size() >= 12) break;
+                UUID id = reference.chunkId();
+                if (id == null
+                        || reference.stale()
+                        || !contentVersion.equals(reference.contentVersion())
+                        || seedIds.contains(id)) continue;
+                if (!citationIndexes.containsKey(id)) {
+                    Map<String, Object> row;
+                    try {
+                        row = mapper.findChunkAtContentVersion(repositoryId, id, contentVersion);
+                    } catch (RuntimeException ignored) {
+                        continue;
+                    }
+                    if (row == null
+                            || !Objects.equals(
+                                    reference.contentHash(), string(row, "content_hash"))) continue;
+                    expanded.add(codeEvidence(repositoryId, row, "KNOWLEDGE_CODE_REFERENCE"));
+                    citationIndexes.put(id, expanded.size());
+                }
+                seedIds.add(id);
+            }
+        }
+        if (seedIds.isEmpty()) return new ChainContext(List.copyOf(expanded), List.of());
+
+        List<Map<String, Object>> neighbors;
+        try {
+            neighbors = graphRetrievalMapper.callNeighbors(repositoryId, contentVersion, seedIds, 24);
+        } catch (RuntimeException ignored) {
+            return new ChainContext(List.copyOf(expanded), List.of());
+        }
+        if (neighbors == null || neighbors.isEmpty()) {
+            return new ChainContext(List.copyOf(expanded), List.of());
+        }
+
+        List<CallLink> links = new ArrayList<>();
+        for (Map<String, Object> row : neighbors) {
+            UUID neighborId = uuid(row, "id");
+            if (neighborId == null) continue;
+            if (!citationIndexes.containsKey(neighborId) && expanded.size() < 14) {
+                expanded.add(codeEvidence(repositoryId, row, "HEURISTIC_CALL_REFERENCE"));
+                citationIndexes.put(neighborId, expanded.size());
+            }
+            Integer source = citationIndexes.get(uuid(row, "source_chunk_id"));
+            Integer target = citationIndexes.get(uuid(row, "target_chunk_id"));
+            if (source != null && target != null) {
+                links.add(
+                        new CallLink(
+                                source,
+                                target,
+                                string(row, "source_symbol"),
+                                string(row, "target_symbol"),
+                                string(row, "relation")));
+            }
+        }
+        return new ChainContext(
+                List.copyOf(expanded), links.stream().distinct().limit(12).toList());
+    }
+
+    private static Evidence codeEvidence(
+            UUID repositoryId, Map<String, Object> row, String channel) {
+        String symbol = string(row, "symbol_name");
+        return new Evidence(
+                repositoryId,
+                "CODE",
+                uuid(row, "id"),
+                null,
+                uuid(row, "content_version"),
+                symbol == null ? string(row, "file_path") : symbol,
+                string(row, "file_path"),
+                symbol,
+                string(row, "symbol_kind"),
+                integer(row, "start_line"),
+                integer(row, "end_line"),
+                string(row, "content"),
+                string(row, "content_hash"),
+                0.24,
+                0.24,
+                0,
+                "HEURISTIC",
+                List.of(channel),
+                null,
+                List.of());
     }
 
     private Answer answer(
@@ -228,6 +348,7 @@ public class IntelligenceService {
             String threadTitle,
             List<Answer> history,
             List<Evidence> evidence,
+            List<CallLink> callLinks,
             RetrievalDiagnostics retrieval,
             UUID modelConfigId,
             BranchReadContext context) {
@@ -253,7 +374,8 @@ public class IntelligenceService {
             Optional<LlmSettingsService.GenerationResult> generated =
                     modelConfigId == null
                             ? Optional.empty()
-                            : llm.generate(modelConfigId, llmPrompt(question, history, evidence));
+                            : llm.generate(
+                                    modelConfigId, llmPrompt(question, history, evidence, callLinks));
             if (generated.isPresent()) {
                 AnswerCitationValidator.Validation validation =
                         citationValidator.validate(generated.get().answer(), evidence.size());
@@ -474,9 +596,13 @@ public class IntelligenceService {
 
         try {
             contentVersion =
-                    context == null ? mapper.currentContentVersion(repositoryId) : context.contentVersion();
+                    context == null
+                            ? mapper.currentContentVersion(repositoryId)
+                            : context.contentVersion();
         } catch (RuntimeException exception) {
-            unavailable.add(unavailable("CURRENT_CONTENT_VERSION", "CONTENT_VERSION_LOOKUP_FAILED", exception));
+            unavailable.add(
+                    unavailable(
+                            "CURRENT_CONTENT_VERSION", "CONTENT_VERSION_LOOKUP_FAILED", exception));
         }
 
         List<Map<String, Object>> codeKeywordRows = List.of();
@@ -848,7 +974,7 @@ public class IntelligenceService {
     }
 
     private static String llmPrompt(
-            String question, List<Answer> history, List<Evidence> evidence) {
+            String question, List<Answer> history, List<Evidence> evidence, List<CallLink> links) {
         StringBuilder prompt =
                 new StringBuilder(
                                 "你是仓库知识与代码问答助手。只能依据下面带编号的本轮证据回答；"
@@ -865,7 +991,9 @@ public class IntelligenceService {
         }
         if (history.isEmpty()) prompt.append("无");
         prompt.append("\n当前问题：").append(limitText(question, 1_200)).append("\n本轮证据：");
-        int remaining = 14_000;
+        int remaining = links.isEmpty() ? 14_000 : 12_000;
+        int contentLimit =
+                links.isEmpty() ? 2_400 : Math.min(2_400, 10_000 / evidence.size());
         for (int index = 0; index < evidence.size() && remaining > 0; index++) {
             Evidence item = evidence.get(index);
             String header =
@@ -874,22 +1002,45 @@ public class IntelligenceService {
                             + "]["
                             + item.sourceType()
                             + "] "
-                            + item.title()
+                            + limitText(item.title(), 120)
                             + (item.startLine() == null ? "" : ":" + item.startLine())
                             + "\n";
             prompt.append(header);
             remaining -= header.length();
-            int length = Math.min(Math.min(item.content().length(), 2_400), Math.max(0, remaining));
+            int length =
+                    Math.min(Math.min(item.content().length(), contentLimit), Math.max(0, remaining));
             prompt.append(item.content(), 0, length);
             remaining -= length;
-            for (CodeReference reference : item.codeReferences()) {
-                String link = "\n关联代码：" + reference.filePath() + ":" + reference.startLine();
-                if (link.length() > remaining) break;
-                prompt.append(link);
-                remaining -= link.length();
+            if (links.isEmpty()) {
+                for (CodeReference reference : item.codeReferences()) {
+                    String link = "\n关联代码：" + reference.filePath() + ":" + reference.startLine();
+                    if (link.length() > remaining) break;
+                    prompt.append(link);
+                    remaining -= link.length();
+                }
             }
         }
-        return prompt.append("\n请用中文回答当前问题；每个仓库事实句末必须标注一个或多个 [S编号]；" + "区分团队知识和源码事实；冲突时以当前内容版本源码为准。")
+        if (!links.isEmpty()) {
+            prompt.append("\n候选调用关系（来自启发式索引，箭头表示调用方向，须结合代码核实）：");
+            for (CallLink link : links) {
+                prompt.append("\n[S")
+                        .append(link.sourceIndex())
+                        .append("] ")
+                        .append(link.sourceSymbol())
+                        .append(" -> [S")
+                        .append(link.targetIndex())
+                        .append("] ")
+                        .append(link.targetSymbol())
+                        .append(" (")
+                        .append(link.relation())
+                        .append(')');
+            }
+        }
+        return prompt.append(
+                        "\n请用中文回答当前问题；每个仓库事实句末必须标注一个或多个 [S编号]；"
+                                + "区分团队知识和源码事实；冲突时以当前内容版本源码为准；"
+                                + "分析功能实现时说明入口、主要步骤、调用方向和不确定点；"
+                                + "启发式调用关系只能作为线索，无法从代码证据核实时请明确说明不确定。")
                 .toString();
     }
 
@@ -902,15 +1053,19 @@ public class IntelligenceService {
         prepareCodeEmbeddings(repositoryId, null, () -> {});
     }
 
-    public void prepareBranchEmbeddings(UUID repositoryId, UUID contentVersion, Runnable checkpoint) {
+    public void prepareBranchEmbeddings(
+            UUID repositoryId, UUID contentVersion, Runnable checkpoint) {
         if (contentVersion == null) throw new IllegalArgumentException("分支内容版本不能为空");
         prepareCodeEmbeddings(repositoryId, contentVersion, checkpoint);
     }
 
-    private void prepareCodeEmbeddings(UUID repositoryId, UUID contentVersion, Runnable checkpoint) {
+    private void prepareCodeEmbeddings(
+            UUID repositoryId, UUID contentVersion, Runnable checkpoint) {
         String model = llm.activeVectorModelName();
         int dimension = llm.activeVectorModelDimension();
         String capability = llm.activeRetrievalCapability();
+        LlmSettingsService.ExternalVectorizer externalVectorizer = null;
+        List<Map<String, Object>> pendingExternal = new ArrayList<>();
         for (Map<String, Object> row :
                 contentVersion == null
                         ? mapper.missingEmbeddings(repositoryId, model, dimension, capability)
@@ -937,18 +1092,50 @@ public class IntelligenceService {
                         string(row, "content_hash"));
                 continue;
             }
-            LlmSettingsService.VectorEmbedding embedding = llm.vectorize(string(row, "content"));
-            String vector =
-                    embedding.vector() == null
-                            ? localVector(string(row, "content"))
-                            : embedding.vector();
+            String content = string(row, "content");
+            if (!"CHARACTER_HASH".equals(capability)) {
+                if (externalVectorizer == null) externalVectorizer = llm.openExternalVectorizer();
+                pendingExternal.add(row);
+                if (pendingExternal.size() == EXTERNAL_EMBEDDING_BATCH_SIZE) {
+                    upsertCodeEmbeddingBatch(repositoryId, pendingExternal, externalVectorizer);
+                    pendingExternal.clear();
+                }
+                continue;
+            }
+            mapper.upsertEmbedding(
+                    uuid(row, "id"),
+                    repositoryId,
+                    model,
+                    dimension,
+                    capability,
+                    localVector(content),
+                    string(row, "content_hash"));
+        }
+        if (!pendingExternal.isEmpty()) {
+            upsertCodeEmbeddingBatch(repositoryId, pendingExternal, externalVectorizer);
+        }
+    }
+
+    private void upsertCodeEmbeddingBatch(
+            UUID repositoryId,
+            List<Map<String, Object>> rows,
+            LlmSettingsService.ExternalVectorizer vectorizer) {
+        List<LlmSettingsService.VectorEmbedding> embeddings =
+                vectorizer.vectorizeBatch(
+                        rows.stream().map(row -> string(row, "content")).toList());
+        if (embeddings.size() != rows.size()) {
+            throw new IllegalStateException("批量向量结果数量与代码片段数量不一致");
+        }
+        for (int index = 0; index < rows.size(); index++) {
+            Map<String, Object> row = rows.get(index);
+            LlmSettingsService.VectorEmbedding embedding = embeddings.get(index);
             mapper.upsertEmbedding(
                     uuid(row, "id"),
                     repositoryId,
                     embedding.model(),
                     embedding.dimension(),
                     embedding.retrievalCapability(),
-                    vector,
+                    embedding.vector(),
                     string(row, "content_hash"));
         }
     }
@@ -957,11 +1144,49 @@ public class IntelligenceService {
         String model = llm.activeVectorModelName();
         int dimension = llm.activeVectorModelDimension();
         String capability = llm.activeRetrievalCapability();
+        LlmSettingsService.ExternalVectorizer externalVectorizer = null;
+        List<Map<String, Object>> pendingExternal = new ArrayList<>();
         for (Map<String, Object> row :
                 mapper.missingKnowledgeEmbeddings(repositoryId, model, dimension, capability)) {
             String content = string(row, "content");
-            LlmSettingsService.VectorEmbedding embedding = llm.vectorize(content);
-            String vector = embedding.vector() == null ? localVector(content) : embedding.vector();
+            if (!"CHARACTER_HASH".equals(capability)) {
+                if (externalVectorizer == null) externalVectorizer = llm.openExternalVectorizer();
+                pendingExternal.add(row);
+                if (pendingExternal.size() == EXTERNAL_EMBEDDING_BATCH_SIZE) {
+                    upsertKnowledgeEmbeddingBatch(
+                            repositoryId, pendingExternal, externalVectorizer);
+                    pendingExternal.clear();
+                }
+                continue;
+            }
+            mapper.upsertKnowledgeEmbedding(
+                    uuid(row, "id"),
+                    repositoryId,
+                    integer(row, "revision"),
+                    model,
+                    dimension,
+                    capability,
+                    localVector(content),
+                    sha256(content));
+        }
+        if (!pendingExternal.isEmpty()) {
+            upsertKnowledgeEmbeddingBatch(repositoryId, pendingExternal, externalVectorizer);
+        }
+    }
+
+    private void upsertKnowledgeEmbeddingBatch(
+            UUID repositoryId,
+            List<Map<String, Object>> rows,
+            LlmSettingsService.ExternalVectorizer vectorizer) {
+        List<LlmSettingsService.VectorEmbedding> embeddings =
+                vectorizer.vectorizeBatch(
+                        rows.stream().map(row -> string(row, "content")).toList());
+        if (embeddings.size() != rows.size()) {
+            throw new IllegalStateException("批量向量结果数量与知识片段数量不一致");
+        }
+        for (int index = 0; index < rows.size(); index++) {
+            Map<String, Object> row = rows.get(index);
+            LlmSettingsService.VectorEmbedding embedding = embeddings.get(index);
             mapper.upsertKnowledgeEmbedding(
                     uuid(row, "id"),
                     repositoryId,
@@ -969,8 +1194,8 @@ public class IntelligenceService {
                     embedding.model(),
                     embedding.dimension(),
                     embedding.retrievalCapability(),
-                    vector,
-                    sha256(content));
+                    embedding.vector(),
+                    sha256(string(row, "content")));
         }
     }
 
@@ -981,11 +1206,7 @@ public class IntelligenceService {
 
     @Transactional
     public GraphResult graph(
-            UUID repositoryId,
-            String symbol,
-            int depth,
-            String direction,
-            UUID contentVersion) {
+            UUID repositoryId, String symbol, int depth, String direction, UUID contentVersion) {
         int maximumDepth = Math.max(1, Math.min(depth, 5));
         List<GraphEdge> all =
                 (contentVersion == null
@@ -993,13 +1214,13 @@ public class IntelligenceService {
                                 : mapper.heuristicCallEdgesAtContentVersion(
                                         repositoryId, contentVersion))
                         .stream()
-                        .map(
-                                row ->
-                                        new GraphEdge(
-                                                string(row, "source_symbol"),
-                                                string(row, "target_symbol"),
-                                                string(row, "relation")))
-                        .toList();
+                                .map(
+                                        row ->
+                                                new GraphEdge(
+                                                        string(row, "source_symbol"),
+                                                        string(row, "target_symbol"),
+                                                        string(row, "relation")))
+                                .toList();
         Map<String, Integer> distances = new LinkedHashMap<>();
         distances.put(symbol, 0);
         List<GraphEdge> edges = new ArrayList<>();
@@ -1032,7 +1253,9 @@ public class IntelligenceService {
                 uniqueEdges,
                 uniqueEdges.size() > 20 ? "HIGH" : uniqueEdges.size() > 5 ? "MEDIUM" : "LOW",
                 "HEURISTIC_CALL_REFERENCE",
-                contentVersion == null ? mapper.currentContentVersion(repositoryId) : contentVersion,
+                contentVersion == null
+                        ? mapper.currentContentVersion(repositoryId)
+                        : contentVersion,
                 "SYMBOL_TOKEN_FOLLOWED_BY_PARENTHESIS",
                 List.of(
                         "关系来自索引阶段的符号名加左括号字符串匹配，不是 CodeGraph CLI 结果",
@@ -1295,12 +1518,13 @@ public class IntelligenceService {
                 symbols.putIfAbsent(symbol, chunk);
             }
         }
+        SymbolCallMatcher matcher = new SymbolCallMatcher(symbols.keySet());
         for (Map<String, Object> source : chunks) {
             String content = string(source, "content");
-            for (Map.Entry<String, Map<String, Object>> target : symbols.entrySet()) {
-                UUID sourceId = uuid(source, "id");
-                UUID targetId = uuid(target.getValue(), "id");
-                if (sourceId.equals(targetId) || !content.contains(target.getKey() + "(")) {
+            UUID sourceId = uuid(source, "id");
+            for (String targetSymbol : matcher.find(content)) {
+                UUID targetId = uuid(symbols.get(targetSymbol), "id");
+                if (sourceId.equals(targetId)) {
                     continue;
                 }
                 mapper.insertHeuristicCallEdge(
@@ -1310,7 +1534,7 @@ public class IntelligenceService {
                         sourceId,
                         targetId,
                         string(source, "symbol_name"),
-                        target.getKey());
+                        targetSymbol);
             }
         }
     }
@@ -1538,14 +1762,18 @@ public class IntelligenceService {
         return normalized.substring(0, end);
     }
 
-    private static String localVector(String text) {
+    static String localVector(String text) {
         float[] output = new float[DIMENSION];
         String normalized = text.toLowerCase(Locale.ROOT);
-        for (int index = 0; index < normalized.length(); index++) {
-            int hash =
-                    normalized
-                            .substring(index, Math.min(normalized.length(), index + 3))
-                            .hashCode();
+        int length = normalized.length();
+        for (int index = 0; index < length; index++) {
+            int hash = normalized.charAt(index);
+            if (index + 1 < length) {
+                hash = 31 * hash + normalized.charAt(index + 1);
+            }
+            if (index + 2 < length) {
+                hash = 31 * hash + normalized.charAt(index + 2);
+            }
             output[Math.floorMod(hash, DIMENSION)] += (hash & 1) == 0 ? 1 : -1;
         }
         double norm = 0;
@@ -1585,6 +1813,15 @@ public class IntelligenceService {
     }
 
     private record IndexedEvidence(int index, Evidence evidence) {}
+
+    private record ChainContext(List<Evidence> evidence, List<CallLink> links) {}
+
+    private record CallLink(
+            int sourceIndex,
+            int targetIndex,
+            String sourceSymbol,
+            String targetSymbol,
+            String relation) {}
 
     private record RetrievalOutcome(
             List<RetrievalRanker.RankedCandidate> ranked, RetrievalDiagnostics diagnostics) {}

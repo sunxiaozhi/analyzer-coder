@@ -15,7 +15,6 @@ import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.AccountRole;
 import com.analyzercoder.security.AuthenticatedAccount;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.UUID;
@@ -25,6 +24,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @EnabledIfEnvironmentVariable(named = "APP_BRANCH_JOB_TEST_URL", matches = ".+")
 class BranchPreparationJobsTest {
@@ -46,12 +46,28 @@ class BranchPreparationJobsTest {
             db.execute(
                     "CREATE TABLE repository_branches(id UUID PRIMARY KEY,repo_id UUID,content_version UUID,content_indexed_at TIMESTAMPTZ,tracking_status TEXT DEFAULT 'ACTIVE',UNIQUE(repo_id,id))");
             db.execute("CREATE TABLE code_chunks(repo_id UUID,branch_id UUID,content_version UUID)");
-            try (var input =
-                    getClass()
-                            .getClassLoader()
-                            .getResourceAsStream("db/migration/V5__branch_preparation_jobs.sql")) {
-                db.execute(new String(input.readAllBytes(), StandardCharsets.UTF_8));
-            }
+            db.execute("""
+                    CREATE TABLE branch_preparation_jobs (
+                        id UUID PRIMARY KEY,
+                        repo_id UUID NOT NULL,
+                        branch_id UUID NOT NULL,
+                        account_id UUID NOT NULL REFERENCES accounts(id),
+                        status TEXT NOT NULL CHECK(status IN ('QUEUED','RUNNING','SUCCEEDED','FAILED')),
+                        stage TEXT NOT NULL DEFAULT 'QUEUED',
+                        attempt_token UUID,
+                        target_commit TEXT,
+                        kind TEXT NOT NULL DEFAULT 'PREPARE'
+                            CHECK(kind IN ('SYNC','CONTENT','GRAPH','VECTORS','PREPARE')),
+                        target_content_version UUID,
+                        error TEXT,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY(repo_id,branch_id) REFERENCES repository_branches(repo_id,id),
+                        CHECK(kind IN ('SYNC','PREPARE') OR target_content_version IS NOT NULL)
+                    )
+                    """);
+            db.execute("CREATE UNIQUE INDEX branch_preparation_one_active ON branch_preparation_jobs(branch_id,kind) WHERE status IN ('QUEUED','RUNNING')");
+            db.execute("CREATE INDEX branch_preparation_queue ON branch_preparation_jobs(status,created_at)");
             UUID repo = UUID.randomUUID(), branch = UUID.randomUUID(), account = UUID.randomUUID();
             db.update(
                     "INSERT INTO accounts VALUES(?,'owner','Owner','SUPER_ADMIN',TRUE,FALSE)",
@@ -62,6 +78,7 @@ class BranchPreparationJobsTest {
                     new AuthenticatedAccount(
                             account, "owner", "Owner", AccountRole.SUPER_ADMIN, false, null);
             var executor = mock(RepositoryBranchService.class);
+            var codeOperations = mock(BranchCodeOperationsService.class);
             var intelligence = mock(IntelligenceService.class);
             var service =
                     new BranchPreparationJobs(
@@ -71,6 +88,7 @@ class BranchPreparationJobsTest {
                             mock(AccessControlService.class),
                             new DataSourceTransactionManager(source),
                             intelligence);
+            ReflectionTestUtils.setField(service, "codeOperations", codeOperations);
             var first = service.submit(actor, repo, branch);
             assertThat(service.submit(actor, repo, branch).id()).isEqualTo(first.id());
             verifyNoInteractions(executor);
@@ -84,20 +102,22 @@ class BranchPreparationJobsTest {
                             call -> {
                                 assertThat(call.<String>getArgument(3)).isEqualTo(commit);
                                 call.<BiConsumer<String, String>>getArgument(4)
-                                        .accept("INDEXING", commit);
+                                        .accept("SYNC", commit);
                                 call.<Runnable>getArgument(5).run();
-                                return null;
+                                return new BranchReadContext(
+                                        UUID.randomUUID(), repo, branch, "main", UUID.randomUUID(),
+                                        commit, Path.of("."), Instant.now().plusSeconds(60));
                             })
-                    .when(executor)
-                    .executePreparation(any(), eq(repo), eq(branch), any(), any(), any());
+                    .when(codeOperations)
+                    .executeSync(any(), eq(repo), eq(branch), any(), any(), any());
             service.processNext();
             assertThat(service.list(actor, repo).get(0).status()).isEqualTo("SUCCEEDED");
 
-            reset(executor);
+            reset(codeOperations);
             var second = service.submit(actor, repo, branch);
             doThrow(new IllegalStateException("private filesystem details"))
-                    .when(executor)
-                    .executePreparation(any(), any(), any(), any(), any(), any());
+                    .when(codeOperations)
+                    .executeSync(any(), any(), any(), any(), any(), any());
             service.processNext();
             assertThat(service.list(actor, repo).get(0).status()).isEqualTo("FAILED");
             assertThat(service.list(actor, repo).get(0).error())
@@ -162,7 +182,7 @@ class BranchPreparationJobsTest {
             var vectorJob = service.submitVectors(actor, context);
             assertThat(service.submitVectors(actor, context).id()).isEqualTo(vectorJob.id());
             assertThatThrownBy(() -> service.submitVectors(actor, next))
-                    .hasMessageContaining("其他内容版本");
+                    .hasMessageContaining("请先构建此分支内容版本的内容索引");
             doAnswer(
                             call -> {
                                 call.<Runnable>getArgument(2).run();

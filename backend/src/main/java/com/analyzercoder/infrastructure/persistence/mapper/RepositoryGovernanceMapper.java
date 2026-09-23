@@ -210,14 +210,6 @@ public interface RepositoryGovernanceMapper {
     int deleteRepositoryCredentials(@Param("repositoryId") UUID repositoryId);
 
     /**
-     * 删除符合给定条件的数据。
-     *
-     * @param repositoryId 目标对象的唯一标识
-     * @return 本次操作影响的记录数
-     */
-    int deleteGovernanceLock(@Param("repositoryId") UUID repositoryId);
-
-    /**
      * 完成仓库删除状态迁移并清除待删除标记。
      *
      * @param repositoryId 目标对象的唯一标识
