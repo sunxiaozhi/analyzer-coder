@@ -78,7 +78,14 @@ public class CodeGraphService {
                         nodes,
                         edges));
         return new Artifact(
-                id, repoId, repo.contentVersion(), cli, "PUBLISHED", marker.toString(), nodes, edges);
+                id,
+                repoId,
+                repo.contentVersion(),
+                cli,
+                "PUBLISHED",
+                marker.toString(),
+                nodes,
+                edges);
     }
 
     public CodeGraphPropagation impact(UUID repoId, String symbol, int depth) {
@@ -201,12 +208,27 @@ public class CodeGraphService {
     }
 
     public CodeGraphExplorer.View explore(UUID repoId, String module, String query) {
+        return explore(repoId, module, query, CodeGraphExplorer.Options.defaults());
+    }
+
+    public CodeGraphExplorer.View explore(
+            UUID repoId, String module, String query, CodeGraphExplorer.Options options) {
         RepoVersion repo = version(repoId);
-        return exploreContentVersion(repoId, repo.contentVersion(), module, query);
+        return exploreContentVersion(repoId, repo.contentVersion(), module, query, options);
     }
 
     public CodeGraphExplorer.View exploreContentVersion(
             UUID repoId, UUID contentVersion, String module, String query) {
+        return exploreContentVersion(
+                repoId, contentVersion, module, query, CodeGraphExplorer.Options.defaults());
+    }
+
+    public CodeGraphExplorer.View exploreContentVersion(
+            UUID repoId,
+            UUID contentVersion,
+            String module,
+            String query,
+            CodeGraphExplorer.Options options) {
         Artifact current = artifact(mapper.findPublished(repoId, contentVersion));
         if (current == null)
             throw new CodeGraphException(
@@ -216,7 +238,8 @@ public class CodeGraphService {
                 repoId,
                 contentVersion,
                 module,
-                query);
+                query,
+                options);
     }
 
     public static class BuildCanceledException extends RuntimeException {

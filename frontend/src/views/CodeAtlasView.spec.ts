@@ -11,7 +11,7 @@ const atlasRoute = reactive({ query: {} as Record<string, string> });
 const store = reactive({ selectedRepositoryId: 'a', selectedRepository: { name: 'Project', sourceType: '' }, repositories: [{}] });
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => store }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => atlasRoute }));
-vi.mock('@/api/codeAtlas', () => ({ getCodeAtlas: vi.fn() }));
+vi.mock('@/api/codeAtlas', async importOriginal => ({ ...await importOriginal<typeof import('@/api/codeAtlas')>(), getCodeAtlas: vi.fn() }));
 vi.mock('@/api/repositories', () => ({ getRepositoryFile: vi.fn() }));
 const view = (repo = 'a'): AtlasView => ({ repositoryId: repo, contentVersion: 'contentVersion', level: 'SYMBOL', nodes: [{ id: 'n', label: 'save', kind: 'method', filePath: 'src/a.ts', module: 'src', startLine: 1, endLine: 2, count: 1 }], edges: [], totalNodes: 1, totalEdges: 0, partial: false });
 beforeEach(() => {
@@ -71,7 +71,7 @@ it('keeps view controls and search in one toolbar, with context outside the canv
   expect(wrapper.find('.atlas-toolbar .atlas-search').exists()).toBe(true);
   expect(wrapper.find('.atlas-brand').exists()).toBe(false);
   expect(wrapper.find('.atlas-stage .atlas-caption').exists()).toBe(false);
-  expect(wrapper.find('.file-type-legend').exists()).toBe(true);
+  expect(wrapper.get('.render-panel').text()).toContain('CodeGraph 符号');
   wrapper.unmount();
 });
 
@@ -140,6 +140,7 @@ it('rejects source content from a different contentVersion', async () => {
   await wrapper.get('[data-view-2d]').trigger('click');
   await flushPromises();
   await wrapper.get('[data-node]').trigger('click');
+  await wrapper.get('.source-action').trigger('click');
   await flushPromises();
   expect(wrapper.text()).toContain('源码版本已更新');
   expect(wrapper.text()).not.toContain('wrong-source');
@@ -157,7 +158,7 @@ it('expands a module using its exact scope', async () => {
   wrapper.unmount();
 });
 
-it('keeps reading defaults quiet and shows local relations on selection', async () => {
+it('shows real relations immediately and exposes neighbor actions on selection', async () => {
   const graph = view();
   graph.nodes.push({ ...graph.nodes[0], id: 'other', label: 'caller' });
   graph.edges = [{ source: 'other', target: 'n', kind: 'CALL', count: 1 }];
@@ -166,15 +167,15 @@ it('keeps reading defaults quiet and shows local relations on selection', async 
   await flushPromises();
   expect((wrapper.get('.atlas-toolbar input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false);
   await wrapper.get('[data-view-2d]').trigger('click');
-  expect(wrapper.findAll('.atlas-link')).toHaveLength(0);
+  expect(wrapper.findAll('.atlas-link')).toHaveLength(1);
   await wrapper.get('[data-node]').trigger('click');
   expect(wrapper.findAll('.atlas-link')).toHaveLength(1);
-  expect(wrapper.get('.relation-legend').text()).toContain('入向');
+  expect(wrapper.get('.selection-actions').text()).toContain('入向');
   expect(wrapper.find('.atlas-stage .atlas-detail').exists()).toBe(false);
   wrapper.unmount();
 });
 
-it('uses a full-height sibling panel with wrapped source cells and collapsible relations', async () => {
+it('opens source on demand in a bottom drawer and keeps the canvas full width', async () => {
   vi.mocked(getCodeAtlas).mockResolvedValue(view());
   const longLine = 'const path = "' + '长路径/'.repeat(80) + '";';
   vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: longLine + '\nreturn path;' } as Awaited<ReturnType<typeof getRepositoryFile>>);
@@ -182,27 +183,26 @@ it('uses a full-height sibling panel with wrapped source cells and collapsible r
   await wrapper.get('[data-view-2d]').trigger('click');
   await flushPromises();
   await wrapper.get('[data-node]').trigger('click');
+  await wrapper.get('.source-action').trigger('click');
   await flushPromises();
-  expect(wrapper.classes()).toContain('has-detail');
-  expect(wrapper.get('.atlas-detail').element.parentElement).toBe(wrapper.element);
-  expect(wrapper.get('.relations').attributes('open')).toBeUndefined();
-  expect(wrapper.get('.relations').classes()).not.toContain('relations-fill');
+  expect(wrapper.find('.atlas-detail').exists()).toBe(false);
+  expect(wrapper.get('.atlas-drawer').element.parentElement).toBe(wrapper.element);
   expect(wrapper.get('.atlas-source code').text()).toBe(longLine);
   expect(wrapper.find('.render-status').exists()).toBe(false);
-  await wrapper.get('[aria-label="关闭详情"]').trigger('click');
-  expect(wrapper.find('.atlas-detail').exists()).toBe(false);
+  await wrapper.get('[aria-label="关闭抽屉"]').trigger('click');
+  expect(wrapper.find('.atlas-drawer').exists()).toBe(false);
+  expect(wrapper.find('.selection-bar').exists()).toBe(true);
   wrapper.unmount();
 });
 
-it('lets module relations fill the unused source area', async () => {
-  vi.mocked(getCodeAtlas).mockResolvedValue({ ...view(), level: 'MODULE', nodes: [{ ...view().nodes[0], kind: 'MODULE', filePath: '' }] });
+it('does not fetch source until the source action is requested', async () => {
+  vi.mocked(getCodeAtlas).mockResolvedValue(view());
   const wrapper = mount(CodeAtlasView);
   await wrapper.get('[data-view-2d]').trigger('click');
   await flushPromises();
   await wrapper.get('[data-node]').trigger('click');
-  expect(wrapper.get('.relations').classes()).toContain('relations-fill');
-  expect(wrapper.get('.relations').attributes('open')).toBeDefined();
-  expect(wrapper.find('.source-section').exists()).toBe(false);
+  expect(getRepositoryFile).not.toHaveBeenCalled();
+  expect(wrapper.find('.atlas-drawer').exists()).toBe(false);
   wrapper.unmount();
 });
 
@@ -214,7 +214,7 @@ it('locates the file and symbol passed from unified search', async () => {
   await flushPromises();
   expect(getCodeAtlas).toHaveBeenCalledWith('a', '', 'save', 'ctx-main');
   expect(wrapper.get('[aria-label="节点详情"]').text()).toContain('src/a.ts');
-  expect(wrapper.text()).toContain('分析此符号的影响范围');
+  expect(wrapper.text()).toContain('影响路径');
   wrapper.unmount();
 });
 
@@ -237,5 +237,31 @@ it('rejects a graph from a different contentVersion than the search-result link'
   expect(wrapper.text()).toContain('目标文件与当前分支内容版本不一致');
   expect(getRepositoryFile).not.toHaveBeenCalled();
   expect(wrapper.find('[aria-label="节点详情"]').exists()).toBe(false);
+  wrapper.unmount();
+});
+
+
+it('expands selected nodes by direction while preserving current context and nodes', async () => {
+  vi.mocked(getCodeAtlas).mockResolvedValueOnce(view()).mockResolvedValueOnce({ ...view(), nodes: [view().nodes[0], { ...view().nodes[0], id: 'caller', label: 'externalCaller', module: 'backend' }], edges: [{ source: 'caller', target: 'n', kind: 'calls', count: 2, sourceLines: [8, 12] }] });
+  const wrapper = mount(CodeAtlasView);
+  await wrapper.get('[data-view-2d]').trigger('click'); await flushPromises();
+  await wrapper.get('[data-node]').trigger('click');
+  await wrapper.findAll('.selection-actions button').find(b => b.text().includes('入向'))!.trigger('click');
+  await flushPromises();
+  expect(getCodeAtlas).toHaveBeenLastCalledWith('a', '', '', 'ctx-main', { focusId: 'n', direction: 'in', depth: 1, limit: 240 });
+  expect(wrapper.findAll('[data-node]')).toHaveLength(2);
+  expect(wrapper.get('.selection-symbol').text()).toContain('save');
+  wrapper.unmount();
+});
+
+it('opens the source occurrence when a relation is clicked', async () => {
+  const graph = view(); graph.nodes.push({ ...graph.nodes[0], id: 'callee', label: 'helper' });
+  graph.edges = [{ source: 'n', target: 'callee', kind: 'calls', count: 1, sourceLines: [8] }];
+  vi.mocked(getCodeAtlas).mockResolvedValue(graph);
+  vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: Array.from({length: 20}, (_, i) => 'line ' + (i + 1)).join('\n') } as any);
+  const wrapper = mount(CodeAtlasView); await wrapper.get('[data-view-2d]').trigger('click'); await flushPromises();
+  await wrapper.get('[data-edge]').trigger('click'); await flushPromises();
+  expect(wrapper.get('.atlas-source .marked').text()).toContain('line 8');
+  expect(wrapper.get('.drawer-path').text()).toContain(':8');
   wrapper.unmount();
 });

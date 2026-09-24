@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { AtlasEdge, AtlasNode } from '@/api/codeAtlas';
+import { atlasEdgeKey, type AtlasEdge, type AtlasNode } from '@/api/codeAtlas';
 import { atlasDistricts, layoutAtlas3d } from './atlasLayout3d';
 import { createAtlasRenderer } from './atlasRenderer';
 import { boxesOverlap, nodeScreenSize, projectAtlasPoint, type ScreenBox } from './atlasProjection';
@@ -11,9 +11,9 @@ import {
   type AtlasFileType,
 } from './atlasFileType';
 
-const props = defineProps<{ nodes: AtlasNode[]; edges: AtlasEdge[]; selectedId?: string; connected: Set<string>; autoRotate: boolean; forceCompatibility?: boolean }>();
+const props = defineProps<{ nodes: AtlasNode[]; edges: AtlasEdge[]; selectedId?: string; connected: Set<string>; autoRotate: boolean; forceCompatibility?: boolean; highlighted?: Set<string> }>();
 const emit = defineEmits<{
-  select: [node: AtlasNode]; expand: [node: AtlasNode];
+  select: [node: AtlasNode]; expand: [node: AtlasNode]; edge: [edge: AtlasEdge];
   ready: [engine: 'webgl' | 'compatible']; degraded: [reason: string]; unavailable: [reason?: string];
 }>();
 const host = ref<HTMLDivElement>();
@@ -23,7 +23,9 @@ const softwareNodes = ref<{
   id: string; node: AtlasNode; icon: string; x: number; y: number;
   size: number; opacity: number; zIndex: number; color: string;
 }[]>([]);
-const softwareEdges = ref<{ key: string; points: string; color: string; opacity: number }[]>([]);
+const softwareEdges = ref<{ key: string; edge: AtlasEdge; points: string; color: string; opacity: number }[]>([]);
+const relationLabels = ref<{ key: string; edge: AtlasEdge; x: number; y: number }[]>([]);
+const groupLabels = ref<{ key: string; text: string; x: number; y: number; file: boolean }[]>([]);
 const softwareDistricts = ref<{ module: string; points: string; color: string }[]>([]);
 const hovered = ref('');
 const positions = computed(() => layoutAtlas3d(props.nodes));
@@ -78,7 +80,8 @@ let edgeDirty = true;
 let viewport = { width: 1, height: 1 };
 let lastFocusId = '';
 let overviewCamera: { eye: THREE.Vector3; target: THREE.Vector3 } | undefined;
-const edgeColor = (source: string, target: string) => !props.selectedId ? '#82b8cc' : source === target ? '#b4a1f2' : target === props.selectedId ? '#efbd84' : '#5ccdd4';
+const edgeColor = (source: string, target: string, kind = '') => props.highlighted?.has(atlasEdgeKey({ source, target, kind, count: 1 })) ? '#168fa3' : source === props.selectedId || target === props.selectedId ? '#2f7fd3' : '#809cb4';
+const edgeActive = (e: AtlasEdge) => props.highlighted?.has(atlasEdgeKey(e)) || e.source === props.selectedId || e.target === props.selectedId;
 const projectedNodes = new Map<string, { x: number; y: number; size: number; depth: number }>();
 const edgeCurves = computed(() => {
   const byId = new Map(positions.value.map(node => [node.id, node]));
@@ -89,7 +92,7 @@ const edgeCurves = computed(() => {
     middle.y += Math.max(35, start.distanceTo(end) * .16);
     if (edge.source === edge.target) { middle.x += 85; end.z += 1; }
     const curve = new THREE.QuadraticBezierCurve3(start, middle, end);
-    return [{ key: edge.source + '-' + edge.target + '-' + edge.kind + '-' + index, color: edgeColor(edge.source, edge.target), points: curve.getPoints(20) }];
+    return [{ key: edge.source + '-' + edge.target + '-' + edge.kind + '-' + index, edge, color: edgeColor(edge.source, edge.target, edge.kind), points: curve.getPoints(20) }];
   });
 });
 const vector = (n: { x: number; y: number; z: number }) => new THREE.Vector3(n.x, n.y, n.z);
@@ -106,12 +109,12 @@ function home() {
   if (!controls) return;
   const radius = Math.max(100, ...positions.value.map(n => vector(n).length() + n.radius));
   const fov = Math.min(camera.fov * Math.PI / 360, Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect));
-  const distance = radius / Math.sin(fov) * 1.15;
+  const distance = radius / Math.sin(fov) * 1.04;
   camera.far = Math.max(30000, distance * 5); camera.updateProjectionMatrix();
   controls.maxDistance = distance * 4;
   focus = undefined;
   overviewCamera = undefined;
-  camera.position.copy(new THREE.Vector3(.35, 1.15, 1).normalize().multiplyScalar(distance));
+  camera.position.copy(new THREE.Vector3(.18, 1.25, 1).normalize().multiplyScalar(distance));
   controls.target.set(0, 0, 0); controls.update(); camera.updateMatrixWorld(true); sceneDirty = true;
 }
 function zoomBy(factor: number) {
@@ -122,28 +125,19 @@ function zoomBy(factor: number) {
 }
 defineExpose({ home, zoomBy });
 function rebuild() {
+  const preserveFocus = meshes.size > 0 && !!props.selectedId;
   if (softwareMode.value) { home(); sceneDirty = true; return; }
   dispose(districtGroup);
   districts.value.forEach(d => {
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(d.width, 12, d.depth),
-      new THREE.MeshStandardMaterial({ color: new THREE.Color(d.color).lerp(new THREE.Color('#13344a'), .66), roughness: .78, transparent: true, opacity: .8 }));
-    plate.position.set(d.x, -8, d.z); districtGroup.add(plate);
-    const border = new THREE.LineSegments(new THREE.EdgesGeometry(plate.geometry),
-      new THREE.LineBasicMaterial({ color: d.color, transparent: true, opacity: .7 }));
-    border.position.copy(plate.position); districtGroup.add(border);
+    const corners = [new THREE.Vector3(d.left, 0, d.back), new THREE.Vector3(d.right, 0, d.back), new THREE.Vector3(d.right, 0, d.front), new THREE.Vector3(d.left, 0, d.front)];
+    districtGroup.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineBasicMaterial({ color: '#b7cbd9', transparent: true, opacity: .55 })));
   });
   dispose(graph); meshes.clear(); icons.clear(); rings.clear();
   positions.value.forEach(n => {
-    const material = new THREE.MeshStandardMaterial({ color: n.color, metalness: .35, roughness: .24, emissive: n.color, emissiveIntensity: .12 });
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(n.radius, 16, 12), material);
+    const material = new THREE.MeshStandardMaterial({ color: n.color, metalness: .12, roughness: .38, emissive: n.color, emissiveIntensity: .04 });
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(n.radius, 12, 8), material);
     mesh.position.copy(vector(n)); mesh.userData.nodeId = n.id;
     meshes.set(n.id, mesh); graph.add(mesh);
-    // Keep a spherical picking target, but render a camera-facing file icon.
-    mesh.material.visible = false;
-    const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: iconTexture(atlasFileType(n)), depthTest: true, depthWrite: false }));
-    icon.position.copy(mesh.position); icon.scale.setScalar(n.kind === 'MODULE' ? MODULE_ICON_SIZE : 38);
-    icon.renderOrder = 2;
-    graph.add(icon); icons.set(n.id, icon);
     if (n.kind === 'MODULE') {
       const ring = new THREE.Sprite(new THREE.SpriteMaterial({
         map: ringTexture(n.color), transparent: true, opacity: .72,
@@ -153,7 +147,7 @@ function rebuild() {
       graph.add(ring); rings.set(n.id, ring);
     }
   });
-  rebuildEdges(); highlight(); home();
+  rebuildEdges(); highlight(); if (preserveFocus) focusSelected(); else home();
 }
 function rebuildEdges() {
   if (softwareMode.value) return;
@@ -166,15 +160,13 @@ function rebuildEdges() {
     middle.y += Math.max(35, start.distanceTo(end) * .16);
     if (a === b) { middle.x += 85; end.z += 1; }
     const curve = new THREE.QuadraticBezierCurve3(start, middle, end);
-    const color = new THREE.Color(edgeColor(edge.source, edge.target));
-    edgeGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(32)), new THREE.LineBasicMaterial({ color, transparent: true, opacity: props.selectedId ? .8 : .28 })));
+    const color = new THREE.Color(edgeColor(edge.source, edge.target, edge.kind));
+    const material = /inherit|extend|implement/i.test(edge.kind) ? new THREE.LineDashedMaterial({ color, transparent: true, opacity: edgeActive(edge) ? .95 : props.selectedId ? .16 : .38, dashSize: 7, gapSize: 4 }) : new THREE.LineBasicMaterial({ color, transparent: true, opacity: edgeActive(edge) ? .95 : props.selectedId ? .16 : .38 });
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(20)), material);
+    line.computeLineDistances(); line.userData.edge = edge; edgeGroup.add(line);
     const arrow = new THREE.ArrowHelper(curve.getTangent(.8).normalize(), curve.getPoint(.8), 12, color.getHex(), 7, 4);
     edgeGroup.add(arrow);
-    // Animate at most 160 actual edges; all requested edges still have lines.
-    if (props.selectedId && !reduced && i < 24) {
-      const pulse = new THREE.Mesh(new THREE.SphereGeometry(2.4, 8, 6), new THREE.MeshBasicMaterial({ color }));
-      pulse.position.copy(curve.getPoint(.5)); edgeGroup.add(pulse); pulses.push({ mesh: pulse, curve });
-    }
+
   });
 }
 function highlight() {
@@ -182,8 +174,8 @@ function highlight() {
   if (softwareMode.value) return;
   meshes.forEach((mesh, id) => {
     const active = !props.selectedId || props.connected.has(id);
-    mesh.material.color.set(active ? positions.value.find(n => n.id === id)!.color : '#a9bbc8');
-    mesh.material.emissiveIntensity = id === props.selectedId ? .65 : .12;
+    mesh.material.color.set(active ? positions.value.find(n => n.id === id)!.color : '#c2d0dc');
+    mesh.material.emissiveIntensity = id === props.selectedId ? .18 : .02;
     mesh.scale.setScalar(id === props.selectedId ? 1.3 : 1);
     const icon = icons.get(id);
     if (icon) {
@@ -214,8 +206,8 @@ function pick(event: PointerEvent | MouseEvent) {
   if (!renderer) return;
   const rect = renderer.domElement.getBoundingClientRect();
   raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
-  const hit = raycaster.intersectObjects([...icons.values()], false)[0]?.object;
-  return hit ? [...icons].find(([, icon]) => icon === hit)?.[0] : undefined;
+  const hit = raycaster.intersectObjects([...meshes.values()], false)[0]?.object;
+  return hit?.userData.nodeId as string | undefined;
 }
 function cancelFocus() { focus = undefined; clearTimeout(focusTimer); }
 function pointerDown(event: PointerEvent) { down = { x: event.clientX, y: event.clientY }; cancelFocus(); }
@@ -224,6 +216,11 @@ function pointerUp(event: PointerEvent) {
   down = undefined;
   const id = pick(event), node = props.nodes.find(n => n.id === id);
   if (node) emit('select', node);
+  else if (renderer) {
+    raycaster.params.Line.threshold = 5;
+    const hit = raycaster.intersectObjects(edgeGroup.children, false).find(item => item.object.userData.edge);
+    if (hit) emit('edge', hit.object.userData.edge as AtlasEdge);
+  }
 }
 function pointerMove(event: PointerEvent) { if (!softwareMode.value) hovered.value = pick(event) ?? ''; }
 function doubleClick(event: MouseEvent) { clearTimeout(focusTimer); const node = props.nodes.find(n => n.id === pick(event)); if (node) emit('expand', node); }
@@ -233,7 +230,7 @@ function updateProjectedNodes() {
   for (const node of positions.value) {
     const point = projectAtlasPoint(vector(node), camera, width, height);
     if (!point) continue;
-    const worldSize = node.kind === 'MODULE' ? MODULE_RING_SIZE : 38;
+    const worldSize = node.radius * 2;
     const size = nodeScreenSize(worldSize, point.pixelsPerUnit, node.id === props.selectedId);
     projectedNodes.set(node.id, { ...point, size });
     // Keep icon sizes consistent in GPU and compatibility renderers.
@@ -242,6 +239,7 @@ function updateProjectedNodes() {
       const scale = size / point.pixelsPerUnit;
       if (icon) icon.scale.setScalar(node.kind === 'MODULE' ? scale * MODULE_ICON_SIZE / MODULE_RING_SIZE : scale);
       ring?.scale.setScalar(scale);
+      const mesh = meshes.get(node.id); if (mesh) mesh.scale.setScalar(scale / (node.radius * 2));
     }
   }
 }
@@ -255,7 +253,7 @@ function updateLabels() {
     (projectedNodes.get(a.id)?.depth ?? Infinity) - (projectedNodes.get(b.id)?.depth ?? Infinity));
   for (const n of order) {
     if (props.selectedId && !props.connected.has(n.id) && n.id !== props.selectedId && n.id !== hovered.value) continue;
-    if (result.length >= 32) break;
+    if (result.length >= (width > 900 ? 64 : 40)) break;
     const point = projectedNodes.get(n.id);
     if (!point) continue;
     const candidates = [
@@ -270,11 +268,31 @@ function updateLabels() {
       if (occupied.some(other => boxesOverlap(box, other))) continue;
       if (iconBoxes.some(other => boxesOverlap(box, other, 2))) continue;
       occupied.push(box);
-      result.push({ id: n.id, label: n.label, title: n.label + ' · ' + atlasFileType(n).label + ' · ' + (n.filePath || n.module), x, y, color: n.color });
+      result.push({ id: n.id, label: n.label, title: (n.qualifiedName || n.label) + ' · ' + n.kind + ' · ' + (n.filePath || n.module) + ':' + n.startLine, x, y, color: n.color });
       break;
     }
   }
   labels.value = result;
+  relationLabels.value = edgeCurves.value.filter(e => edgeActive(e.edge)).slice(0, 14).flatMap(e => {
+    const point = projectAtlasPoint(e.points[10], camera, width, height);
+    if (!point || point.x < 60 || point.x > width - 60 || point.y < 30 || point.y > height - 150) return [];
+    const box = { left: point.x - 48, right: point.x + 48, top: point.y - 12, bottom: point.y + 12 };
+    if (occupied.some(other => boxesOverlap(box, other))) return [];
+    occupied.push(box); return [{ key: e.key, edge: e.edge, x: point.x, y: point.y }];
+  });
+  const groupPoints = districts.value.map(d => ({ key: d.module, text: d.module, x: d.left, y: 0, z: d.back, file: false }));
+  for (const file of [...new Set(positions.value.map(n => n.filePath))]) {
+    const members = positions.value.filter(n => n.filePath === file);
+    groupPoints.push({ key: file, text: file.split('/').pop() || file, x: Math.min(...members.map(n => n.x)) - 60, y: 0, z: Math.min(...members.map(n => n.z)) - 35, file: true });
+  }
+  groupLabels.value = groupPoints.flatMap(g => {
+    const point = projectAtlasPoint(vector(g), camera, width, height);
+    if (!point || point.x < 10 || point.x > width - 160 || point.y < 10 || point.y > height - 150) return [];
+    if (g.file && point.pixelsPerUnit < .35) return [];
+    const box = { left: point.x, right: point.x + 150, top: point.y, bottom: point.y + 20 };
+    if (occupied.some(other => boxesOverlap(box, other))) return [];
+    occupied.push(box); return [{ key: g.key, text: g.text, x: point.x, y: point.y, file: g.file }];
+  });
 }
 function updateSoftwareScene() {
   if (!softwareMode.value) return;
@@ -297,8 +315,8 @@ function updateSoftwareScene() {
   softwareEdges.value = edgeCurves.value.flatMap(edge => {
     const projected = edge.points.map(point => projectAtlasPoint(point, camera, width, height));
     if (projected.some(point => !point)) return [];
-    return [{ key: edge.key, points: projected.map(point => point!.x.toFixed(1) + ',' + point!.y.toFixed(1)).join(' '),
-      color: props.selectedId ? edge.color : '#82b8cc', opacity: props.selectedId ? .9 : .32 }];
+    return [{ key: edge.key, edge: edge.edge, points: projected.map(point => point!.x.toFixed(1) + ',' + point!.y.toFixed(1)).join(' '),
+      color: edge.color, opacity: edgeActive(edge.edge) ? .95 : props.selectedId ? .18 : .38 }];
   });
 }
 function animate(time: number) {
@@ -369,7 +387,7 @@ onMounted(() => {
     } else {
     renderer = createAtlasRenderer();
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, props.nodes.length > 160 ? 1 : 1.5));
-    renderer.setClearColor('#0d2940', 0); host.value!.prepend(renderer.domElement);
+    renderer.setClearColor('#f4f7f9', 0); host.value!.prepend(renderer.domElement);
     renderer.domElement.addEventListener('webglcontextlost', contextLost);
     configureControls(renderer.domElement);
     scene.add(districtGroup, graph, edgeGroup, new THREE.HemisphereLight('#ffffff', '#60758a', 2.4));
@@ -392,7 +410,7 @@ onMounted(() => {
 watch(() => props.nodes, rebuild);
 watch(() => props.edges, () => { edgeDirty = true; rebuildEdges(); });
 watch(hovered, () => { sceneDirty = true; });
-watch(() => [props.selectedId, props.connected], () => { highlight(); });
+watch(() => [props.selectedId, props.connected, props.highlighted], () => { highlight(); rebuildEdges(); });
 watch(() => props.selectedId, (id, previous) => {
   clearTimeout(focusTimer);
   // Preserve the double-click target before moving the camera.
@@ -421,7 +439,7 @@ onBeforeUnmount(() => {
         <defs><marker id="software-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#5e8faf" /></marker></defs>
         <polygon v-for="district in softwareDistricts" :key="district.module" :points="district.points" :fill="district.color" :stroke="district.color" class="software-district"><title>{{ district.module }}</title></polygon>
         <polyline v-for="edge in softwareEdges" :key="edge.key" :points="edge.points"
-          :stroke="edge.color" :opacity="edge.opacity" marker-end="url(#software-arrow)" />
+          :stroke="edge.color" :opacity="edge.opacity" marker-end="url(#software-arrow)" @pointerdown.stop @pointerup.stop @click.stop="emit('edge', edge.edge)" />
       </svg>
       <button v-for="item in softwareNodes" :key="item.id" class="software-node"
         :class="{ module: item.node.kind === 'MODULE', selected: selectedId === item.id }"
@@ -432,9 +450,11 @@ onBeforeUnmount(() => {
         @pointerdown.stop="cancelFocus" @pointerup.stop @focus="hovered = item.id" @blur="hovered = ''" @mouseenter="hovered = item.id" @mouseleave="hovered = ''"
         @click.stop="emit('select', item.node)" @dblclick.stop="emit('expand', item.node)">
         <span v-if="item.node.kind === 'MODULE'" class="software-ring" />
-        <img :src="item.icon" alt="" />
+        <span class="software-sphere" />
       </button>
     </div>
+    <div class="spatial-groups" aria-hidden="true"><span v-for="label in groupLabels" :key="label.key" :class="{ file: label.file }" :style="{ left: label.x + 'px', top: label.y + 'px' }">{{ label.text }}</span></div>
+    <div class="relation-labels"><button v-for="label in relationLabels" :key="label.key" :style="{ left: label.x + 'px', top: label.y + 'px' }" :title="label.edge.sourceLines?.map(n => 'L' + n).join(', ')" @pointerdown.stop @pointerup.stop @click.stop="emit('edge', label.edge)">{{ label.edge.kind }}{{ label.edge.count > 1 ? ' ×' + label.edge.count : '' }}</button></div>
     <div class="three-labels">
       <button v-for="label in labels" :key="label.id" :style="{ left: label.x + 'px', top: label.y + 'px', borderColor: label.color }"
         :title="label.title" :aria-label="label.title" :class="{ selected: selectedId === label.id }"
@@ -446,44 +466,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.atlas-three{position:absolute;inset:0;overflow:hidden;isolation:isolate;touch-action:none;background:radial-gradient(ellipse at 50% 45%,#fff 0,#e8f0f7 65%,#dbe7f1 100%)}
+.atlas-three{position:absolute;inset:0;overflow:hidden;isolation:isolate;touch-action:none;background:radial-gradient(ellipse at 50% 35%,#fff 0,#f0f5f9 85%)}
 .atlas-three :deep(canvas){display:block;width:100%;height:100%;touch-action:none}
-.software-scene{position:absolute;inset:0;overflow:hidden;z-index:0;touch-action:none}
-.software-scene svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
-.software-district{fill-opacity:.08;stroke-opacity:.35;stroke-width:1.2}
-.software-scene polyline{fill:none;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round}
-.has-selection .software-scene polyline{stroke-dasharray:5 5;animation:software-flow 1.8s linear infinite}
-.software-node{position:absolute;display:grid;place-items:center;transform:translate(-50%,-50%);padding:0;border:0;background:transparent;cursor:pointer}
-.software-node img{position:relative;z-index:2;width:64%;height:64%;filter:drop-shadow(0 3px 4px rgb(23 50 77 / 18%));pointer-events:none}
-.software-node:not(.module) img{width:100%;height:100%}.software-node.selected img{filter:drop-shadow(0 0 8px color-mix(in srgb,var(--node-color),transparent 30%))}
-.software-ring{position:absolute;inset:3%;z-index:1;border:3px solid var(--node-color);border-radius:50%;box-shadow:0 0 0 2px rgb(255 255 255 / 75%),0 0 0 4px color-mix(in srgb,var(--node-color),transparent 72%);pointer-events:none}
-.three-labels{position:absolute;inset:0;pointer-events:none;z-index:1}
-.three-labels button,.three-labels span{position:absolute;transform:translate(-50%,0);max-width:150px;padding:4px 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid;border-radius:5px;background:rgb(255 255 255 / 94%);box-shadow:0 3px 12px #17324d18;color:#17324d;font:12px Consolas,"Microsoft YaHei",monospace}
-.three-labels button{cursor:pointer;pointer-events:auto}.three-labels span{pointer-events:none}
-.three-labels .selected{background:#17324d;color:white}.three-labels button:focus-visible,.software-node:focus-visible{outline:3px solid #2f7fd3;outline-offset:3px}
-@keyframes software-flow{to{stroke-dashoffset:-20}}
-@media(prefers-reduced-motion:reduce){.software-scene polyline{animation:none}}
-
-.atlas-three {
-  background: radial-gradient(ellipse at 50% 44%, #214c694f 0, #0d2940 65%, #091c2e 100%);
-}
-.software-district { fill-opacity: .12; stroke-opacity: .7; }
-.software-scene polyline { stroke-width: 1.7; }
-.software-node img { filter: drop-shadow(0 4px 8px #020d1fa6); }
-.software-ring {
-  box-shadow: 0 0 0 2px #0e2a3d, 0 0 12px color-mix(in srgb, var(--node-color), transparent 40%);
-}
-.three-labels button,
-.three-labels span {
-  color: #e9f7fb;
-  background: #102f46eb;
-  box-shadow: 0 7px 20px #0413218c;
-  font: 12px "Cascadia Code", "Microsoft YaHei", monospace;
-}
-.three-labels .selected { color: #0c293b; background: #f2c38c; }
-.three-labels button:focus-visible,
-.software-node:focus-visible { outline-color: #f2c38c; }
-@media (prefers-reduced-motion: reduce) {
-  .has-selection .software-scene polyline { animation: none; }
-}
+.software-scene{position:absolute;inset:0;overflow:hidden;z-index:0;touch-action:none}.software-scene svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}.software-district{fill-opacity:.025;stroke-opacity:.3;stroke-width:1}.software-scene polyline{fill:none;stroke-width:1.3;stroke-linejoin:round;pointer-events:stroke;cursor:pointer}.software-node{position:absolute;display:grid;place-items:center;transform:translate(-50%,-50%);padding:0;border:0;background:transparent;cursor:pointer}.software-sphere{width:100%;height:100%;border-radius:50%;background:radial-gradient(circle at 28% 22%,#fff 0,var(--node-color) 48%,#254f70 100%);box-shadow:0 3px 7px #17324d20;pointer-events:none}.software-node.selected .software-sphere{outline:2px solid #2f7fd3;outline-offset:5px}.three-labels,.relation-labels,.spatial-groups{position:absolute;inset:0;pointer-events:none;z-index:1}.three-labels button{position:absolute;transform:translate(-50%,0);max-width:150px;padding:4px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #d8e2e8!important;border-radius:4px;background:#ffffffef;color:#17324d;font:12px Consolas,"Microsoft YaHei",monospace;cursor:pointer;pointer-events:auto}.three-labels .selected{background:#eaf3fe;border-color:#2f7fd3!important;color:#205990}.three-labels button:focus-visible,.software-node:focus-visible,.relation-labels button:focus-visible{outline:2px solid #2f7fd3;outline-offset:3px}.relation-labels button{position:absolute;transform:translate(-50%,-50%);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:0;background:#f4f7f9e8;color:#256899;padding:3px 5px;font:11px Consolas,monospace;pointer-events:auto;cursor:pointer}.spatial-groups span{position:absolute;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#617d93;font:600 12px "Segoe UI",sans-serif}.spatial-groups .file{font:11px Consolas,monospace;color:#7b90a1}
 </style>

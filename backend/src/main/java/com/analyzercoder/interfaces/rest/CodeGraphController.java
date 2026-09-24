@@ -1,5 +1,6 @@
 package com.analyzercoder.interfaces.rest;
 
+import com.analyzercoder.application.intelligence.CodeGraphExplorer;
 import com.analyzercoder.application.intelligence.CodeGraphPropagation;
 import com.analyzercoder.application.intelligence.CodeGraphService;
 import com.analyzercoder.application.intelligence.CodeGraphTaskService;
@@ -84,6 +85,10 @@ public class CodeGraphController {
             @PathVariable UUID repoId,
             @RequestParam(defaultValue = "") String module,
             @RequestParam(defaultValue = "") String query,
+            @RequestParam(defaultValue = "") String focusId,
+            @RequestParam(defaultValue = "both") String direction,
+            @RequestParam(defaultValue = "1") int depth,
+            @RequestParam(defaultValue = "240") int limit,
             HttpServletRequest request) {
         access.require(
                 SecurityContext.account(request),
@@ -92,8 +97,10 @@ public class CodeGraphController {
         if (query.length() > 500 || module.length() > 500)
             throw new IllegalArgumentException("查询范围过长");
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        var options = new CodeGraphExplorer.Options(focusId, direction, depth, limit);
         if (context != null)
-            return service.exploreContentVersion(repoId, context.contentVersion(), module, query);
-        return service.explore(repoId, module, query);
+            return service.exploreContentVersion(
+                    repoId, context.contentVersion(), module, query, options);
+        return service.explore(repoId, module, query, options);
     }
 }

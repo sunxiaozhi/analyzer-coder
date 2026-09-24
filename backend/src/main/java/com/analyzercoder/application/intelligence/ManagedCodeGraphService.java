@@ -69,7 +69,8 @@ public class ManagedCodeGraphService extends CodeGraphService {
     @Override
     public Artifact buildContentVersion(
             UUID repositoryId, UUID contentVersion, Path contentVersionPath, BuildControl control) {
-        return buildVersion(repositoryId, new Version(contentVersion, contentVersionPath), control, true);
+        return buildVersion(
+                repositoryId, new Version(contentVersion, contentVersionPath), control, true);
     }
 
     private Artifact buildVersion(
@@ -135,7 +136,8 @@ public class ManagedCodeGraphService extends CodeGraphService {
                     nodes,
                     edges);
         } catch (IOException exception) {
-            throw new IllegalStateException("无法准备 CodeGraph 工作目录：" + exception.getMessage(), exception);
+            throw new IllegalStateException(
+                    "无法准备 CodeGraph 工作目录：" + exception.getMessage(), exception);
         }
     }
 
@@ -261,25 +263,37 @@ public class ManagedCodeGraphService extends CodeGraphService {
 
     @Override
     public CodeGraphExplorer.View explore(UUID repositoryId, String module, String query) {
+        return explore(repositoryId, module, query, CodeGraphExplorer.Options.defaults());
+    }
+
+    @Override
+    public CodeGraphExplorer.View explore(UUID repositoryId, String module, String query, CodeGraphExplorer.Options options) {
         Version current = version(repositoryId);
         Artifact artifact = published(repositoryId, current.contentVersion());
         var graph = CodeGraphDatabaseReader.read(json, Path.of(artifact.artifactPath()));
         if (!current.contentVersion().equals(version(repositoryId).contentVersion())) {
             throw new CodeGraphException("CODEGRAPH_VERSION_MISMATCH", "查询期间内容版本已更新，请刷新图谱");
         }
-        return CodeGraphExplorer.project(graph, repositoryId, current.contentVersion(), module, query);
+        return CodeGraphExplorer.project(
+                graph, repositoryId, current.contentVersion(), module, query, options);
     }
 
     @Override
     public CodeGraphExplorer.View exploreContentVersion(
             UUID repositoryId, UUID contentVersion, String module, String query) {
+        return exploreContentVersion(repositoryId, contentVersion, module, query, CodeGraphExplorer.Options.defaults());
+    }
+
+    @Override
+    public CodeGraphExplorer.View exploreContentVersion(UUID repositoryId, UUID contentVersion,
+            String module, String query, CodeGraphExplorer.Options options) {
         Artifact artifact = published(repositoryId, contentVersion);
         return CodeGraphExplorer.project(
                 CodeGraphDatabaseReader.read(json, Path.of(artifact.artifactPath())),
                 repositoryId,
                 contentVersion,
                 module,
-                query);
+                query, options);
     }
 
     private Version version(UUID repositoryId) {

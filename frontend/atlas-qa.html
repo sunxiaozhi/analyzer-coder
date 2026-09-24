@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="UTF-8"><style>html,body,#app{margin:0;width:100%;height:100%;box-sizing:border-box}body{padding:20px;background:#f4f7f9}#app{height:calc(100vh - 40px)}</style></head><body><div id="app"></div><script type="module">
+import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
+import CodeAtlasExplorer from '/src/features/graph/CodeAtlasExplorer.vue';
+import { useRepositoryStore } from '/src/stores/repositoryStore.ts';
+import { useBranchContextStore } from '/src/stores/branchContextStore.ts';
+import '/src/styles/main.css';
+const files = [
+ ['api','CodeGraphController.java',['explore','impact','build']],
+ ['application','CodeGraphExplorer.java',['project','Options','Node','Edge']],
+ ['application','CodeGraphService.java',['exploreContentVersion','impactContentVersion','latest']],
+ ['infrastructure','CodeGraphDatabaseReader.java',['read','readNodes','readEdges']],
+ ['infrastructure','CodeGraphMapper.java',['findPublished','insertArtifact']],
+];
+const nodes = files.flatMap(([module,file,names],g)=>names.map((label,i)=>({id:g+'-'+i,label,qualifiedName:'com.analyzercoder.'+label,kind:i===0?'method':'function',filePath:module+'/'+file,startLine:10+i*20,endLine:25+i*20,module,count:1,incomingCount:1,outgoingCount:2})));
+const pairs=[['0-0','1-0'],['0-0','2-0'],['0-1','2-1'],['0-2','4-1'],['2-0','1-0'],['2-0','3-0'],['2-0','4-0'],['2-1','3-0'],['2-2','4-0'],['1-0','1-1'],['1-0','1-2'],['1-0','1-3'],['3-0','3-1'],['3-0','3-2']];
+const edges=pairs.map(([source,target],i)=>({source,target,kind:i%5===0?'references':'calls',count:i%3+1,sourceLines:[12+i]}));
+const graph={repositoryId:'qa',contentVersion:'qa-version',level:'SYMBOL',nodes,edges,totalNodes:nodes.length,totalEdges:edges.length,partial:false,repositoryNodes:nodes.length,repositoryEdges:edges.length,relationKinds:['calls','references']};
+window.fetch=async url=>new Response(JSON.stringify(String(url).includes('/codegraph/explore')?graph:{contentVersion:'qa-version',content:Array.from({length:150},(_,i)=>`${i%3===0?'public':'  return'} codeGraph.read();`).join('\n')}),{status:200,headers:{'Content-Type':'application/json'}});
+const pinia=createPinia(); const app=createApp(CodeAtlasExplorer);app.use(pinia);
+const repo=useRepositoryStore();repo.repositories=[{id:'qa',name:'analyzer-coder · UI 验证数据'}];repo.selectedRepositoryId='qa';
+const branches=useBranchContextStore();branches.repositoryId='qa';branches.selectedBranchId='main';branches.context={contextId:'qa-context',repositoryId:'qa',branchId:'main',contentVersion:'qa-version',commitSha:'qa',branchName:'main'};
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/',component:{template:'<div/>'}}]});app.use(router);await router.push('/');app.mount('#app');
+</script></body></html>

@@ -1,32 +1,11 @@
 import type { AtlasNode } from '@/api/codeAtlas';
-import { atlasColors } from './atlasLayout';
+import { layoutAtlas } from './atlasLayout';
 
-// Stable module districts on a shared ground plane. File order expresses
-// containment, while height is decorative, never a quality/architecture metric.
+// The same module/file ordering in both renderers; height distinguishes symbol kinds.
 export function layoutAtlas3d(nodes: AtlasNode[]) {
-  const groups = [...new Set(nodes.map(n => n.module))].sort();
-  const blocks = groups.map(group => {
-    const members = nodes.filter(n => n.module === group).sort((a, b) => a.filePath.localeCompare(b.filePath) || a.id.localeCompare(b.id));
-    const columns = Math.ceil(Math.sqrt(members.length));
-    return { group, members, columns, width: Math.max(220, columns * 150), depth: Math.max(220, Math.ceil(members.length / columns) * 140) };
-  });
-  const limit = Math.max(500, Math.sqrt(blocks.reduce((sum, b) => sum + (b.width + 120) * (b.depth + 120), 0) * 1.3));
-  let x = 0, z = 0, rowDepth = 0;
-  const result = blocks.flatMap((block, gi) => {
-    if (x && x + block.width > limit) { x = 0; z += rowDepth + 120; rowDepth = 0; }
-    const placed = block.members.map((node, i) => {
-      return { ...node, x: x + 75 + i % block.columns * 150,
-        y: node.kind === 'MODULE' ? 48 : 35, z: z + 70 + Math.floor(i / block.columns) * 140,
-        radius: node.kind === 'MODULE' ? 22 : 9,
-        color: atlasColors[gi % atlasColors.length] };
-    });
-    x += block.width + 120; rowDepth = Math.max(rowDepth, block.depth);
-    return placed;
-  });
-  if (!result.length) return result;
-  const mid = (axis: 'x' | 'y' | 'z') => (Math.min(...result.map(n => n[axis])) + Math.max(...result.map(n => n[axis]))) / 2;
-  const cx = mid('x'), cz = mid('z');
-  return result.map(n => ({ ...n, x: n.x - cx, z: n.z - cz }));
+  return layoutAtlas(nodes, []).map(n => ({ ...n, x: (n.x - 600) * .6, z: (n.y - 400) * .6,
+    y: /file|module/i.test(n.kind) ? 25 : /class|interface|enum/i.test(n.kind) ? 50 : 75,
+    radius: /class|interface/i.test(n.kind) ? 13 : 9 }));
 }
 
 export function atlasDistricts(nodes: ReturnType<typeof layoutAtlas3d>) {
