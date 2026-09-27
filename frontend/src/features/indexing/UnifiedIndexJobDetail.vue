@@ -55,7 +55,7 @@ function fallbackLabel(reason: string | null) {
       <div class="section-head"><h2>任务详情</h2><TaskStatusTag :status="job.status" /></div>
       <dl class="meta-grid">
         <div class="meta-wide"><dt>任务编号</dt><dd class="mono">{{ job.id }}</dd></div>
-        <div><dt>仓库</dt><dd>{{ repositoryName(job.repositoryId) }}</dd></div>
+        <div><dt>项目</dt><dd>{{ repositoryName(job.repositoryId) }}</dd></div>
         <div><dt>请求类型</dt><dd>{{ typeLabel(job.type) }}</dd></div>
         <div v-if="job.type === 'FULL' || job.type === 'INCREMENTAL'"><dt>实际模式</dt><dd>{{ modeLabel(job.executionMode) }}</dd></div>
         <div v-if="job.fallbackReason"><dt>回退原因</dt><dd>{{ fallbackLabel(job.fallbackReason) }}</dd></div>

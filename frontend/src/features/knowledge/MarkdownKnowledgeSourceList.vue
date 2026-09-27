@@ -48,7 +48,7 @@ function formatBytes(value: number) {
       <div class="source-ledger-copy">
         <span class="source-eyebrow">自动提取</span>
         <h2>当前内容版本中的 Markdown</h2>
-        <p>仓库扫描时自动发现；生成后先进入草稿，由团队确认后再发布。</p>
+        <p>扫描项目代码时自动发现；生成后先进入草稿，由团队确认后再发布。</p>
       </div>
 
       <dl class="source-counts" aria-label="Markdown 处理状态统计">

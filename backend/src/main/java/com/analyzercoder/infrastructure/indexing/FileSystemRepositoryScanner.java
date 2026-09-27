@@ -90,7 +90,7 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
     public List<ScannedRepositoryFile> scan(CodeRepository repository) {
         Path root = repository.currentContentVersionPath();
         if (root == null || !Files.isDirectory(root)) {
-            throw new IllegalStateException("仓库尚未发布可读取的代码版本");
+            throw new IllegalStateException("项目尚未发布可读取的代码版本");
         }
         try (Stream<Path> paths = Files.walk(root)) {
             return paths.filter(Files::isRegularFile)
@@ -111,7 +111,7 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
         if (relativePaths == null) return scan(repository);
         Path root = repository.currentContentVersionPath();
         if (root == null || !Files.isDirectory(root)) {
-            throw new IllegalStateException("仓库尚未发布可读取的代码版本");
+            throw new IllegalStateException("项目尚未发布可读取的代码版本");
         }
         List<ScannedRepositoryFile> files = new ArrayList<>();
         for (String relative : relativePaths) {
@@ -131,7 +131,7 @@ public class FileSystemRepositoryScanner implements RepositoryScannerPort {
     public List<ScannedRepositoryFile> scanMarkdown(CodeRepository repository) {
         Path root = repository.currentContentVersionPath();
         if (root == null || !Files.isDirectory(root)) {
-            throw new IllegalStateException("仓库尚未发布可读取的代码版本");
+            throw new IllegalStateException("项目尚未发布可读取的代码版本");
         }
         try (Stream<Path> paths = Files.walk(root)) {
             return paths.filter(Files::isRegularFile)

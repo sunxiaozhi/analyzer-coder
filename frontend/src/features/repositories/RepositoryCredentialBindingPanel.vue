@@ -31,7 +31,7 @@ async function load() {
   try {
     status.value = await repositoryCredentialsApi.repositoryBinding(props.repositoryId);
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '仓库凭据状态加载失败');
+    ElMessage.error(error instanceof Error ? error.message : '项目来源凭据状态加载失败');
   } finally {
     loading.value = false;
   }
@@ -55,7 +55,7 @@ async function unbind() {
   try {
     await repositoryCredentialsApi.unbindRepository(props.repositoryId);
     if (status.value) status.value = { ...status.value, credential: null };
-    ElMessage.success('仓库凭据已解绑');
+    ElMessage.success('项目来源凭据已解绑');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '凭据解绑失败');
   } finally {

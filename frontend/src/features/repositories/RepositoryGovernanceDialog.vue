@@ -46,7 +46,7 @@ async function changePermission(member: RepositoryMember, permission: Repository
 
 async function revoke(member: RepositoryMember) {
   if (!props.repository) return;
-  await ElMessageBox.confirm(`撤销 ${member.displayName} 的仓库访问权限？`, '撤销授权', { type: 'warning' });
+  await ElMessageBox.confirm(`撤销 ${member.displayName} 的项目访问权限？`, '撤销授权', { type: 'warning' });
   const result = await repositoryGovernanceApi.revoke(props.repository.id, member.accountId, ownershipVersion.value);
   ownershipVersion.value = result.ownershipVersion;
   emit('changed');
@@ -55,7 +55,7 @@ async function revoke(member: RepositoryMember) {
 
 async function transferOwnership() {
   if (!props.repository || !transfer.accountId) return ElMessage.warning('请选择新所有者');
-  await ElMessageBox.confirm(`将仓库所有权转移给所选账号？转移后你将立即失去治理权限。`, '确认转移所有权', { type: 'warning', confirmButtonText: '确认转移' });
+  await ElMessageBox.confirm(`将项目所有权转移给所选账号？转移后你将立即失去治理权限。`, '确认转移所有权', { type: 'warning', confirmButtonText: '确认转移' });
   await repositoryGovernanceApi.transfer(props.repository.id, {
     newOwnerAccountId: transfer.accountId,
     newName: transfer.newName.trim() || props.repository.name,
@@ -70,7 +70,7 @@ watch(() => [props.modelValue, props.repository?.id], () => { if (props.modelVal
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" :title="`仓库治理 · ${repository?.name ?? ''}`" width="760" @update:model-value="emit('update:modelValue', $event)">
+  <el-dialog :model-value="modelValue" :title="`项目治理 · ${repository?.name ?? ''}`" width="760" @update:model-value="emit('update:modelValue', $event)">
     <el-tabs v-loading="busy">
       <el-tab-pane label="成员授权">
         <div class="toolbar">
@@ -88,10 +88,10 @@ watch(() => [props.modelValue, props.repository?.id], () => { if (props.modelVal
         </el-table>
       </el-tab-pane>
       <el-tab-pane label="转移所有权">
-        <el-alert title="转移仅适用于就绪或认证异常的仓库；目标账号下存在同名仓库时请先填写新名称。" type="warning" :closable="false" />
+        <el-alert title="转移仅适用于就绪或认证异常的项目；目标账号下存在同名项目时请先填写新名称。" type="warning" :closable="false" />
         <el-form label-width="130px" style="margin-top: 20px">
           <el-form-item label="新所有者"><el-select v-model="transfer.accountId" filterable style="width: 360px"><el-option v-for="candidate in candidates.filter(item => item.id !== repository?.ownerAccountId)" :key="candidate.id" :label="`${candidate.displayName} (${candidate.username})`" :value="candidate.id" /></el-select></el-form-item>
-          <el-form-item label="转移后仓库名"><el-input v-model="transfer.newName" style="width: 360px" /></el-form-item>
+          <el-form-item label="转移后项目名"><el-input v-model="transfer.newName" style="width: 360px" /></el-form-item>
           <el-form-item label="原所有者权限"><el-select v-model="transfer.previousOwnerPermission" clearable placeholder="不保留权限" style="width: 360px"><el-option label="只读" value="READ" /><el-option label="维护" value="MAINTAIN" /><el-option label="管理" value="MANAGE" /></el-select></el-form-item>
           <el-form-item><el-button type="danger" @click="transferOwnership">转移所有权</el-button></el-form-item>
         </el-form>

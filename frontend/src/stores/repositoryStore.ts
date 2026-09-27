@@ -49,7 +49,7 @@ export const useRepositoryStore = defineStore('repository', () => {
         await updateCurrentRepositoryPreference(selectedRepositoryId.value);
       }
     } catch (exception) {
-      error.value = exception instanceof Error ? exception.message : '加载仓库失败';
+      error.value = exception instanceof Error ? exception.message : '加载项目失败';
     } finally {
       loading.value = false;
       initialized.value = true;
@@ -92,7 +92,7 @@ export const useRepositoryStore = defineStore('repository', () => {
 
   async function selectRepository(repositoryId: string | null) {
     if (repositoryId && !repositories.value.some((repository) => repository.id === repositoryId)) {
-      throw new Error('当前账号无权访问该仓库');
+      throw new Error('当前账号无权访问该项目');
     }
     selectedRepositoryId.value = repositoryId;
     await updateCurrentRepositoryPreference(repositoryId);

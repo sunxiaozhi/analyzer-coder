@@ -42,7 +42,7 @@ const selectedModel = computed(() =>
   askModels.value.find(item => item.id === selectedModelId.value) ?? null
 );
 const readinessCopy = computed(() => {
-  if (!repository.value) return { label: '未选择仓库', type: 'info' as const };
+  if (!repository.value) return { label: '未选择项目', type: 'info' as const };
   return { label: readScope.blocked.value ? '分支内容版本未就绪' : branchContentReady.value ? '当前分支内容索引已就绪' : '当前分支待构建内容索引', type: branchContentReady.value ? 'success' as const : 'info' as const };
 });
 
@@ -68,7 +68,7 @@ async function loadContext(repositoryId: string | null) {
     if (isCurrent()) branchContentReady.value = status.contentVersion === branchContext.context?.contentVersion && status.contentReady;
   })
     .catch((error) => {
-      if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法检查仓库状态');
+      if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法检查项目状态');
     })
     .finally(() => { if (isCurrent()) readinessLoading.value = false; });
   const historyTask = intelligenceApi.history(repositoryId, 50, 0, branchContext.context?.contextId)
@@ -114,13 +114,13 @@ async function refreshReadinessForAsk(repositoryId: string): Promise<boolean | n
 
 async function send() {
   const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId) return ElMessage.warning('请先选择仓库');
+  if (!repositoryId) return ElMessage.warning('请先选择项目');
   if (readScope.blocked.value) {
     return ElMessage.warning('当前分支内容版本尚未就绪，请先在分支工作区完成准备');
   }
   const ready = canAsk.value || await refreshReadinessForAsk(repositoryId);
   if (ready === null || repositoryId !== repositories.selectedRepositoryId) return;
-  if (!ready) return ElMessage.warning('当前仓库尚未完成问答准备，请先完成索引');
+  if (!ready) return ElMessage.warning('当前项目尚未完成问答准备，请先完成索引');
   try {
     const result = await conversation.send(repositoryId, selectedModelId.value || null, branchContext.context?.contextId ?? null);
     if (!result || result.repositoryId !== repositories.selectedRepositoryId) return;
@@ -241,12 +241,12 @@ onMounted(async () => {
     <header class="qa-command surface">
       <div class="scope-copy">
         <span>问答范围</span>
-        <strong>{{ repository?.name ?? '未选择仓库' }}</strong>
+        <strong>{{ repository?.name ?? '未选择项目' }}</strong>
         <small>{{ branchContext.context?.branchName ?? repository?.branch ?? '无分支' }}<template v-if="branchContext.context?.commitSha ?? repository?.commit"> · {{ (branchContext.context?.commitSha ?? repository?.commit)?.slice(0, 8) }}</template></small>
       </div>
       <el-tag :type="readinessCopy?.type" effect="plain" round>{{ readinessCopy?.label }}</el-tag>
       <div v-if="!repository || !canAsk" class="command-notice">
-        <span>{{ repository ? '当前仓库还没有可检索的代码内容。' : '先选择项目才能开始问答。' }}</span>
+        <span>{{ repository ? '当前项目还没有可检索的代码内容。' : '先选择项目才能开始问答。' }}</span>
         <el-button link type="primary" @click="openReadinessAction">{{ repository ? '去准备项目' : '选择项目' }}</el-button>
       </div>
       <div v-else-if="!modelsLoading && !selectedModel" class="command-notice">

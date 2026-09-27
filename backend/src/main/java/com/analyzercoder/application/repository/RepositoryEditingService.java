@@ -47,7 +47,7 @@ public class RepositoryEditingService {
         String nextName = normalizeName(name);
         String nextDescription = description == null ? "" : description.trim();
         if (nextDescription.length() > 500) {
-            throw new IllegalArgumentException("仓库描述不能超过 500 个字符");
+            throw new IllegalArgumentException("项目描述不能超过 500 个字符");
         }
         String nextBranch = defaultBranch == null ? current.defaultBranch() : defaultBranch.trim();
         if (nextBranch != null && nextBranch.length() > 255) {
@@ -57,7 +57,7 @@ public class RepositoryEditingService {
         if (mapper.countByOwnerAndNormalizedNameExcludingId(
                         current.ownerAccountId(), normalizedName, repositoryId)
                 > 0) {
-            throw new ApiSecurityException(409, "REPOSITORY_NAME_CONFLICT", "该所有者名下已存在同名仓库");
+            throw new ApiSecurityException(409, "REPOSITORY_NAME_CONFLICT", "该所有者名下已存在同名项目");
         }
         if (mapper.updateEditableMetadata(
                         repositoryId,
@@ -68,7 +68,7 @@ public class RepositoryEditingService {
                         expectedVersion)
                 != 1) {
             throw new ApiSecurityException(
-                    409, "REPOSITORY_VERSION_CONFLICT", "仓库资料已被其他操作修改，请刷新后重试");
+                    409, "REPOSITORY_VERSION_CONFLICT", "项目资料已被其他操作修改，请刷新后重试");
         }
         authService.audit(
                 actor.id(), null, repositoryId, "REPOSITORY_UPDATED", "SUCCESS", sourceIp);
@@ -77,18 +77,18 @@ public class RepositoryEditingService {
     private RepositoryRow requireRow(UUID id) {
         RepositoryRow row = mapper.findById(id);
         if (row == null) {
-            throw new IllegalArgumentException("仓库不存在");
+            throw new IllegalArgumentException("项目不存在");
         }
         return row;
     }
 
     private static String normalizeName(String value) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("仓库名称不能为空");
+            throw new IllegalArgumentException("项目名称不能为空");
         }
         String normalized = value.trim();
         if (normalized.length() > 100) {
-            throw new IllegalArgumentException("仓库名称不能超过 100 个字符");
+            throw new IllegalArgumentException("项目名称不能超过 100 个字符");
         }
         return normalized;
     }

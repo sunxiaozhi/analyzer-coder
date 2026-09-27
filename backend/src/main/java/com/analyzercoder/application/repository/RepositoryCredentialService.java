@@ -181,7 +181,7 @@ public class RepositoryCredentialService {
         requireOwned(actor, id);
         int bindings = mapper.countBindings(id);
         if (bindings > 0) {
-            throw new IllegalStateException("凭据仍被 " + bindings + " 个仓库使用，请先更换或解绑");
+            throw new IllegalStateException("凭据仍被 " + bindings + " 个项目使用，请先更换或解绑");
         }
         mapper.delete(id);
         auth.audit(actor.id(), null, null, "REPOSITORY_CREDENTIAL_DELETED", "SUCCESS", sourceIp);

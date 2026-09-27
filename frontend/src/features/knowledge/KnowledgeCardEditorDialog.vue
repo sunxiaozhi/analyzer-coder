@@ -131,7 +131,7 @@ async function loadMembers() {
       relationship: 'MAINTAIN',
       permissionLevel: 'MAINTAIN',
     }] : [];
-    ElMessage.error(error instanceof Error ? error.message : '仓库成员加载失败');
+    ElMessage.error(error instanceof Error ? error.message : '项目成员加载失败');
   } finally {
     loadedMembersRepository.value = props.repositoryId;
     membersLoading.value = false;

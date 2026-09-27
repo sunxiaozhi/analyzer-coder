@@ -276,7 +276,7 @@ public class AuthService {
                             ? repositoryAccessMapper.findMetadata(repositoryId)
                             : repositoryAccessMapper.findAccess(account.id(), repositoryId);
             if (access == null) {
-                throw new ApiSecurityException(403, "FORBIDDEN", "无权限访问该仓库");
+                throw new ApiSecurityException(403, "FORBIDDEN", "无权限访问该项目");
             }
         }
         mapper.updateLastRepository(account.id(), repositoryId, Instant.now());
@@ -342,7 +342,7 @@ public class AuthService {
             throw new IllegalStateException("不能停用当前登录账号");
         }
         if (!nextEnabled && repositoryAccessMapper.countOwnedRepositories(targetId) > 0) {
-            throw new IllegalStateException("该账号仍是仓库 OWNER，请先完成所有权转移");
+            throw new IllegalStateException("该账号仍是项目所有者，请先完成所有权转移");
         }
         if (current.role() == AccountRole.SUPER_ADMIN
                 && current.enabled()
@@ -415,7 +415,7 @@ public class AuthService {
             UUID repositoryId,
             RepositoryPermission permission,
             String sourceIp) {
-        throw new ApiSecurityException(409, "USE_REPOSITORY_GOVERNANCE", "请在仓库治理页面分配权限");
+        throw new ApiSecurityException(409, "USE_REPOSITORY_GOVERNANCE", "请在项目治理页面分配权限");
     }
 
     public List<AuditView> auditEvents(int limit, int offset) {

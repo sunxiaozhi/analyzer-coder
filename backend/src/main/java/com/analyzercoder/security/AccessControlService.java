@@ -39,7 +39,7 @@ public class AccessControlService {
             CodeRepositoryId repositoryId,
             RepositoryPermission required) {
         if (!canAccess(account, repositoryId, required)) {
-            throw new ApiSecurityException(403, "FORBIDDEN", "无权限访问该仓库");
+            throw new ApiSecurityException(403, "FORBIDDEN", "无权限访问该项目");
         }
     }
 
@@ -49,7 +49,7 @@ public class AccessControlService {
         }
         RepositoryAccessRow access = mapper.findAccess(account.id(), repositoryId.value());
         if (access == null || !account.id().equals(access.ownerAccountId())) {
-            throw new ApiSecurityException(403, "OWNER_REQUIRED", "只有仓库所有者或超级管理员可执行此操作");
+            throw new ApiSecurityException(403, "OWNER_REQUIRED", "只有项目所有者或超级管理员可执行此操作");
         }
     }
 
@@ -65,7 +65,7 @@ public class AccessControlService {
                         ? mapper.findMetadata(repositoryId.value())
                         : mapper.findAccess(account.id(), repositoryId.value());
         if (row == null) {
-            throw new ApiSecurityException(403, "FORBIDDEN", "无权限访问该仓库");
+            throw new ApiSecurityException(403, "FORBIDDEN", "无权限访问该项目");
         }
         boolean admin = account.isSuperAdmin(), owner = account.id().equals(row.ownerAccountId());
         RepositoryPermission permission =

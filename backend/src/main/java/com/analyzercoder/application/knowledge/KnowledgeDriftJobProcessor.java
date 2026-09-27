@@ -50,7 +50,7 @@ public class KnowledgeDriftJobProcessor {
             }
             CodeRepository repository = repository(running);
             inspectedContentVersion =
-                    Objects.requireNonNull(repository.currentContentVersion(), "仓库尚未发布可用的代码版本");
+                    Objects.requireNonNull(repository.currentContentVersion(), "项目尚未发布可用的代码版本");
             jobs.heartbeat(running.id(), "check_knowledge_drift:" + inspectedContentVersion.value());
             KnowledgeDriftService.InspectionReport report = drift.inspect(repository);
 

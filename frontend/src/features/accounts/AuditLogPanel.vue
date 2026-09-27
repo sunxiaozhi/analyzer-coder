@@ -12,7 +12,7 @@ const eventTypes=computed(()=>unique(props.rows.map(row=>row.eventType)));
 const results=computed(()=>unique(props.rows.map(row=>row.result)));
 const filteredRows=computed(()=>props.rows.filter(row=>(!actor.value||row.actorUsername===actor.value)&&(!target.value||row.targetUsername===target.value)&&(!eventType.value||row.eventType===eventType.value)&&(!result.value||row.result===result.value)&&(!range.value||(new Date(row.createdAt)>=range.value[0]&&new Date(row.createdAt)<=endOfDay(range.value[1])))));
 const pagedRows=computed(()=>filteredRows.value.slice((page.value-1)*pageSize.value,page.value*pageSize.value));
-const eventLabels:Record<string,string>={INITIAL_ADMIN_CREATED:'创建初始管理员',LOGIN_FAILED:'登录失败',LOGIN_SUCCEEDED:'登录成功',LOGOUT:'退出登录',ACCOUNT_LOCKED:'账号锁定',ACCOUNT_CREATED:'创建账号',ACCOUNT_UPDATED:'更新账号',ACCOUNT_DISABLED:'停用账号',ACCOUNT_UNLOCKED:'账号解锁',PASSWORD_CHANGED:'修改密码',PASSWORD_RESET:'重置密码',REPOSITORY_PERMISSION_CHANGED:'修改仓库权限',REPOSITORY_PERMISSION_REVOKED:'撤销仓库权限'};
+const eventLabels:Record<string,string>={INITIAL_ADMIN_CREATED:'创建初始管理员',LOGIN_FAILED:'登录失败',LOGIN_SUCCEEDED:'登录成功',LOGOUT:'退出登录',ACCOUNT_LOCKED:'账号锁定',ACCOUNT_CREATED:'创建账号',ACCOUNT_UPDATED:'更新账号',ACCOUNT_DISABLED:'停用账号',ACCOUNT_UNLOCKED:'账号解锁',PASSWORD_CHANGED:'修改密码',PASSWORD_RESET:'重置密码',REPOSITORY_PERMISSION_CHANGED:'修改项目权限',REPOSITORY_PERMISSION_REVOKED:'撤销项目权限'};
 
 watch(()=>[props.focusUsername,props.focusVersion] as const,([username])=>{target.value=username;page.value=1;},{immediate:true});
 watch([actor,target,eventType,result,range],()=>{page.value=1;});
@@ -43,7 +43,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
         <el-table-column label="结果" width="100"><template #default="{row}"><el-tag :type="row.result==='SUCCESS'?'success':'danger'" effect="plain">{{row.result==='SUCCESS'?'成功':'拒绝'}}</el-tag></template></el-table-column>
         <el-table-column prop="actorUsername" label="操作者" min-width="120"><template #default="{row}">{{row.actorUsername??'系统'}}</template></el-table-column>
         <el-table-column prop="targetUsername" label="目标账号" min-width="120"><template #default="{row}">{{row.targetUsername??'—'}}</template></el-table-column>
-        <el-table-column prop="repositoryName" label="目标仓库" min-width="140"><template #default="{row}">{{row.repositoryName??'—'}}</template></el-table-column>
+        <el-table-column prop="repositoryName" label="目标项目" min-width="140"><template #default="{row}">{{row.repositoryName??'—'}}</template></el-table-column>
         <el-table-column label="时间" width="190"><template #default="{row}"><el-tooltip :content="shanghaiDateTimeTitle(row.createdAt)" placement="top"><div class="audit-time"><span>{{formatShanghaiDateTime(row.createdAt)}}</span><small>{{formatRelativeTime(row.createdAt)}}</small></div></el-tooltip></template></el-table-column>
       </el-table>
     </div>

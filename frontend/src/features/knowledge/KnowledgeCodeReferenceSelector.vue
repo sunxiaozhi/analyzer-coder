@@ -89,7 +89,7 @@ function excerpt(content: string) {
       <div class="reference-intro-icon"><Link /></div>
       <div>
         <b>把知识定位到具体实现</b>
-        <p>搜索当前仓库的代码片段，选择后可从知识卡片直接打开源码或调用图谱。</p>
+        <p>搜索当前项目的代码片段，选择后可从知识卡片直接打开源码或调用图谱。</p>
       </div>
       <span>{{ references.length }}/30 已关联</span>
     </header>

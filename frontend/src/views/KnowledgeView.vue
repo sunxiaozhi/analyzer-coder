@@ -94,14 +94,14 @@ const sourceRows = computed(() => (markdownSources.value?.items ?? []).filter(so
   return matchesQuery && matchesStatus;
 }));
 const cardEmptyDescription = computed(() => {
-  if (!repositories.selectedRepositoryId) return '请先选择仓库';
-  if (!cards.value.length) return '当前仓库暂无知识卡片';
+  if (!repositories.selectedRepositoryId) return '请先选择项目';
+  if (!cards.value.length) return '当前项目暂无知识卡片';
   return '没有符合筛选条件的知识卡片';
 });
 const sourceEmptyDescription = computed(() => {
-  if (!repositories.selectedRepositoryId) return '请先选择仓库';
+  if (!repositories.selectedRepositoryId) return '请先选择项目';
   if (sourceLoadError.value) return sourceLoadError.value;
-  if (!markdownSources.value?.items.length) return '当前内容版本未发现 Markdown 文件，仓库重新扫描后会自动更新';
+  if (!markdownSources.value?.items.length) return '当前内容版本未发现 Markdown 文件，重新扫描项目代码后会自动更新';
   return '没有符合筛选条件的 Markdown';
 });
 
@@ -381,7 +381,7 @@ async function generateAllPending() {
   } catch (error) {
     if (error instanceof ApiError && error.status === 409) {
       await loadMarkdownSources();
-      ElMessage.warning('仓库内容版本已变化，列表已刷新，请确认最新待处理内容后重试');
+      ElMessage.warning('项目内容版本已变化，列表已刷新，请确认最新待处理内容后重试');
     } else {
       ElMessage.error(error instanceof Error ? error.message : '批量生成失败');
     }
@@ -493,7 +493,7 @@ onMounted(() => void load());
     <div v-if="!repositories.selectedRepositoryId" class="knowledge-gate">
       <BookOpenCheck :size="28" />
       <h1>先选择一个项目</h1>
-      <p>知识卡片必须归属明确仓库，才能绑定代码范围、负责人和当前内容版本。</p>
+      <p>知识卡片必须归属明确项目，才能绑定代码范围、负责人和当前内容版本。</p>
       <el-button type="primary" @click="router.push('/repositories')">前往项目管理</el-button>
     </div>
     <div v-else class="surface knowledge-surface">

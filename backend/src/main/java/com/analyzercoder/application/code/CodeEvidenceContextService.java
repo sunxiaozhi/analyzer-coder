@@ -38,7 +38,7 @@ public class CodeEvidenceContextService {
         CodeRepository repository =
                 repositories
                         .findById(repositoryId)
-                        .orElseThrow(() -> new IllegalArgumentException("代码仓库不存在"));
+                        .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
         return context(repository, filePath, symbol, includeDraftKnowledge, null);
     }
 

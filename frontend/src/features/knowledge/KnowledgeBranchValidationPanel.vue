@@ -78,7 +78,7 @@ onBeforeUnmount(() => { ++sequence; });
           </el-form-item>
           <el-button v-if="canManage" native-type="submit" type="primary" :loading="busy" :disabled="!note.trim()">保存验证结果</el-button>
         </el-form>
-        <p v-if="!canManage" class="validation-hint">当前权限仅可查看，保存验证结果需要仓库管理权限。</p>
+        <p v-if="!canManage" class="validation-hint">当前权限仅可查看，保存验证结果需要项目管理权限。</p>
       </template>
     </div>
   </details>

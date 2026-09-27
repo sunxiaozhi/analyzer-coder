@@ -26,7 +26,7 @@ public class KnowledgeDriftTaskService {
             return active;
         }
         if (active != null) {
-            throw new IllegalStateException("仓库已有活动任务，请等待完成后再检查知识失效");
+            throw new IllegalStateException("项目已有活动任务，请等待完成后再检查知识失效");
         }
         return tasks.save(IndexJob.create(repositoryId, IndexJobType.KNOWLEDGE_DRIFT));
     }

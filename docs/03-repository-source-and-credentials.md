@@ -103,7 +103,7 @@
 - 需求：已接入的远程项目可按默认分支拉取远端更新，必要时自动触发增量索引。
 - 规则：
   - 需要 `MAINTAIN`。
-  - 仅 `REMOTE_GIT`/`GITLAB` 可用，否则报 400「只有远程 Git 或 GitLab 仓库可以拉取远端更新」。
+  - 仅 `REMOTE_GIT`/`GITLAB` 可用，否则报 400「只有以远程 Git 或 GitLab 仓库为来源的项目可以拉取远端更新」。
   - `remote_url` 为空时以 409 拒绝，提示重新接入。
   - 拉取前对远程地址执行目标安全策略校验（见 REP-010）。
   - 使用该仓库已绑定的凭据（无绑定则匿名）：`git fetch --prune origin` 后 `git reset --hard origin/<默认分支|HEAD>`。
@@ -175,7 +175,7 @@
   - 完成 `POST /{id}/complete`：调用者必须对该 `repositoryId` 具备 `MANAGE`；草稿所有者必须与项目所有者一致，否则 409 `PROJECT_DRAFT_REPOSITORY_MISMATCH`；成功后把草稿 `description` 回填到项目并把项目版本号加一，草稿置 `READY`、写入 `result_repository_id`、`version+1`。
   - 失败重试语义：草稿只要仍处于 `SOURCE_CONFIGURED` 或 `FAILED` 就可重新配置来源或重新提交导入；失败写入 `FAILED` 与错误文本（截断 500 字符），且不会覆盖已 `READY` 的草稿。
   - 草稿内保存的 `credentialId` 仅做外键引用，不校验该凭据的归属与状态（需人工确认是否预期）。
-  - 当前实现不提供删除草稿的接口。
+  - 删除 `DELETE /{id}?version=...`：草稿所有者或超级管理员可删除 `DRAFT`/`SOURCE_CONFIGURED`/`FAILED` 草稿，要求版本匹配且没有排队或运行中的关联导入任务；导入中、已完成或已绑定项目的草稿拒绝删除。仅删除草稿记录，保留已接入项目、源码、凭据及历史导入任务（任务的草稿引用由外键置空），成功返回 204。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryProjectDraftController.java:26`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:27`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:41`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:67`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:82`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:111`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:127`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### REP-014 凭据类型与字段校验
@@ -212,7 +212,7 @@
   - 启用/停用分别写入状态 `ACTIVE` / `DISABLED`，停用时记录 `disabled_at`；审计事件为 `..._ENABLED` / `..._DISABLED`。
   - 检测：先做目标地址策略校验，再校验主机/端口匹配，然后执行 `git ls-remote --heads <url>`（45 秒超时）；只验证传输、认证和读取分支能力，不要求远端已经存在 `HEAD`，因此空仓库也可以通过凭据检测。成功写 `ACTIVE` 与 `last_validated_at`，审计结果 `SUCCESS`；失败写 `INVALID`、脱敏错误（截断 240 字符），审计结果 `DENIED`，并把原始异常抛给调用方。
   - `INVALID` 凭据允许再次执行检测以恢复为 `ACTIVE`；`DISABLED` 凭据必须先启用，不能直接检测或用于仓库操作。
-  - 删除：仍被仓库绑定时拒绝（409「凭据仍被 N 个仓库使用，请先更换或解绑」）。
+  - 删除：仍被项目绑定时拒绝（409「凭据仍被 N 个项目使用，请先更换或解绑」）。
   - 解析凭据时非 `ACTIVE` 状态直接拒绝（「所选 Git 凭据当前不可用」）。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryCredentialController.java:29`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:42`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:64`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:88`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:119`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:150`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:165`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialService.java:210`、`backend/src/main/resources/mappers/RepositoryCredentialMapper.xml:9`、`backend/src/main/java/com/analyzercoder/application/repository/GitCredentialExecutor.java:119`
 
@@ -222,7 +222,7 @@
 - 规则：
   - 绑定关系主键为 `(repository_id, usage_type)`，`usage_type` 只允许 `CLONE`；重复绑定按用途覆盖。
   - 三个接口（查询、绑定、解绑）都通过 `requireOwner` 鉴权，失败 403 `OWNER_REQUIRED`。
-  - 目标项目必须存在且配置了 `remote_url`，否则 409「只有远程 Git 仓库可以绑定访问凭据」。
+  - 目标项目必须存在且配置了 `remote_url`，否则 409「只有以远程 Git 仓库为来源的项目可以绑定访问凭据」。
   - 绑定流程：解析远程地址 → 对所选凭据执行完整检测（归属、状态、主机匹配、真实 `ls-remote`）→ 写入绑定 → 审计 `REPOSITORY_CREDENTIAL_BOUND`。
   - 解绑：写入解绑并审计 `REPOSITORY_CREDENTIAL_UNBOUND`；未绑定时为幂等空操作。
   - 由导入流程内部写入的绑定不带检测步骤（导入本身已完成克隆验证）；凭据解析对未绑定仓库返回 `null`，即允许匿名访问。
@@ -248,7 +248,7 @@
   - 成员列表需要 `MAINTAIN`；候选账号列表、授权、撤销授权、所有权转移、删除申请都需要所有者身份（或超级管理员）。
   - 所有权转移前要求仓库状态属于 `READY`/`AUTH_ERROR`，并要求目标所有者名下无同名仓库。
   - 授权接口拒绝把所有者本人写入普通授权记录。
-  - 删除申请在有活动写任务时拒绝（409「仓库存在运行中的写任务，暂不能删除」）。
+  - 删除申请在有活动写任务时拒绝（409「项目存在运行中的写任务，暂不能删除」）。
   - 只有所有者（或超级管理员）能执行删除、转移、授权，以及凭据绑定；`MANAGE` 成员可编辑资料、归档/恢复分支、清理内容版本，但不能删除仓库或改授权。
   - 治理写操作使用 `ownership_version` 乐观锁，版本不匹配时报 409 请求刷新。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryGovernanceController.java:33`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:39`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:44`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:63`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:138`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:157`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:78`
@@ -268,12 +268,12 @@
 
 ### REP-021 前端仓库接入与来源凭据界面
 
-- 需求：前端提供项目分页列表、两步接入向导、凭据管理、草稿续接与统一分支操作入口。
+- 需求：前端提供项目分页列表、单页接入表单、凭据管理、草稿续接与统一分支操作入口。
 - 规则：
   - 管理页按 `pageSize=15` 分页、搜索 300ms 防抖，使用分页接口；页面右侧统一渲染分支工作区，ZIP 使用 `WORKSPACE` 且隐藏添加分支入口。
-  - 接入向导来源类型为 `GITLAB`/`REMOTE_GIT`/`ZIP`/`LOCAL_GIT` 四选一；本地 Git 输入服务端路径，远程输入 HTTPS 地址与分支并可选凭据，ZIP 选择文件。
-  - 三种来源的前端接入流程统一先建草稿、再 `PATCH .../source`：本地 Git 调 `POST /api/repositories` 后 `complete`；ZIP 调 `POST /api/repository-imports/zip` 后 `complete`；远程走 `POST /api/repository-imports/remote-jobs` 并轮询作业（最多 120 次、每次 1 秒），作业完成后由后端自动 `complete` 草稿。
-  - 未完成草稿在列表上方最多展示 3 条并提供"继续接入"，复用同一草稿 id 重新配置。
+  - 接入表单同时展示项目资料与代码来源；来源类型为 `GITLAB`/`REMOTE_GIT`/`ZIP`/`LOCAL_GIT` 四选一。本地 Git 输入服务端路径，远程输入 HTTPS 地址与分支并可选凭据，ZIP 选择文件；提交前校验项目名称及所选来源必填项。
+  - 四种来源的前端接入流程统一先建草稿、再 `PATCH .../source`：本地 Git 调 `POST /api/repositories` 后 `complete`；ZIP 调 `POST /api/repository-imports/zip` 后 `complete`；远程 Git/GitLab 走 `POST /api/repository-imports/remote-jobs` 并轮询作业（最多 120 次、每次 1 秒），作业完成后由后端自动 `complete` 草稿。
+  - 未完成草稿在列表上方最多展示 3 条并提供"继续接入"，复用同一草稿 id 重新配置；旁边提供"删除"，确认后删除该草稿并更新列表，取消或删除失败则保留记录。导入中的草稿禁用续接和删除。
   - 凭据对话框支持列表、新建、更新、检测、启用/停用、删除（删除前先查绑定关系提示）；仓库凭据绑定面板仅在远程来源且具备 `canManageCredential` 时渲染。
   - 编辑资料对话框只允许改名称、描述、默认分支，并回传 `version` 乐观锁；来源类型不可修改。
 - 证据：`frontend/src/views/RepositoriesM0View.vue:31`、`frontend/src/views/RepositoriesM0View.vue:94`、`frontend/src/views/RepositoriesM0View.vue:112`、`frontend/src/views/RepositoriesM0View.vue:133`、`frontend/src/views/RepositoriesM0View.vue:194`、`frontend/src/views/RepositoriesM0View.vue:208`、`frontend/src/features/repositories/RepositoryFormDialog.vue:9`、`frontend/src/features/repositories/RepositoryCredentialManagerDialog.vue:36`、`frontend/src/features/repositories/RepositoryCredentialBindingPanel.vue:32`、`frontend/src/features/repositories/RepositoryEditDialog.vue:39`、`frontend/src/api/sourceImports.ts:22`、`frontend/src/api/projectDrafts.ts:30`、`frontend/src/api/repositoryCredentials.ts:32`
@@ -336,6 +336,7 @@
 | POST | `/api/repository-project-drafts` | 创建项目草稿 | 已认证账号 |
 | PATCH | `/api/repository-project-drafts/{id}/source` | 配置草稿来源 | 草稿所有者 |
 | POST | `/api/repository-project-drafts/{id}/complete` | 草稿与项目绑定完成 | 草稿所有者 + 对目标项目 MANAGE |
+| DELETE | `/api/repository-project-drafts/{id}?version=...` | 删除未完成接入草稿 | 草稿所有者或超级管理员；版本匹配且无活动导入任务 |
 | GET | `/api/repository-credentials` | 凭据列表 | 凭据所有者（或超级管理员） |
 | POST | `/api/repository-credentials` | 创建凭据 | 已认证账号 |
 | PUT | `/api/repository-credentials/{id}` | 更新凭据 | 凭据所有者（或超级管理员） |
@@ -369,8 +370,7 @@
 - 同步导入接口接收 `projectDraftId` 但未使用，因此通过该接口接入不会回填草稿状态。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:98`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositorySourceImportController.java:76`
 - 同步导入与异步导入的地址协议校验不一致：`importRemote` 允许 `http`/`https`，`importRemoteQueued` 只允许 `https`。当前仅因控制器先行执行 HTTPS-only 策略而未暴露差异，属实现内不一致。证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositorySourceImportService.java:65`、`backend/src/main/java/com/analyzercoder/application/repository/RepositorySourceImportService.java:252`
 - 草稿的 `credentialId` 在 `PATCH /{id}/source` 时不校验凭据归属与状态，其他账号的凭据 id 只要存在即可写入草稿；错误会在后续导入提交时才暴露。需人工确认是否预期。证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositoryProjectDraftService.java:41`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryImportJobService.java:61`
-- 没有删除项目草稿的接口，`FAILED` 草稿只能被复用或长期保留。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryProjectDraftController.java:17`
 - 前端没有导入作业列表与取消入口，也没有同步远程导入入口；异步导入只有 120 秒轮询，超时后仅提示稍后刷新。证据：`frontend/src/api/sourceImports.ts:21`、`frontend/src/views/RepositoriesM0View.vue:133`
 - 前端未消费部分后端字段：`contentVersionCreatedAt`、`codeGraphPath`、`codeGraphDetected`、`worktreeDigest`、`repositoryStatus` 与 `capabilities.canRead` 在界面中没有读取点。证据：`frontend/src/api/repositories.ts:119`、`frontend/src/api/repositories.ts:83`
-- 测试覆盖缺口（据 `backend/src/test` 检索）：`RepositoryPathPolicy` 的白名单越界拒绝没有测试；项目分页、详情、资料编辑、删除申请、同步/异步远程导入、`RepositoryRemoteSyncService`、凭据 CRUD 全链路、草稿生命周期（除 `complete` 的 SQL 契约）均无测试；ZIP 的容量上限与 `hideGitVersion` 行为无断言。证据：`backend/src/test/java/com/analyzercoder/application/repository/RegisterRepositoryServiceTest.java:65`、`backend/src/test/java/com/analyzercoder/application/repository/RepositoryProjectDraftServiceTest.java:29`
+- 测试覆盖缺口（据 `backend/src/test` 检索）：`RepositoryPathPolicy` 的白名单越界拒绝没有测试；项目分页、详情、资料编辑、删除申请、同步/异步远程导入、`RepositoryRemoteSyncService`、凭据 CRUD 全链路、草稿来源配置等生命周期操作（已有 `complete` SQL 契约及草稿删除数据库集成测试）仍缺测试；ZIP 的容量上限与 `hideGitVersion` 行为无断言。证据：`backend/src/test/java/com/analyzercoder/application/repository/RegisterRepositoryServiceTest.java:65`、`backend/src/test/java/com/analyzercoder/application/repository/RepositoryProjectDraftServiceTest.java:29`
 - 集成测试类名以 `IT` 结尾且 `backend/pom.xml` 未配置 failsafe，`mvn test` 默认不会执行它们，其中部分是 ZIP 导入与凭据使用链路的唯一端到端证据。需人工确认 CI 是否单独运行这些用例。证据：`backend/src/test/java/com/analyzercoder/integration/RepositoryHttpWorkflowIT.java:27`、`backend/pom.xml:1`

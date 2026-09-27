@@ -66,8 +66,8 @@
 
 | 方法 | 路径 | 用途 | 所需权限 | 请求要点 | 响应要点 | 来源 |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | /api/auth/preferences/current-repository | 读取"当前仓库"偏好 | 会话 | - | `CurrentRepositoryResponse{repositoryId}` | AccountPreferenceController.java:23-26 |
-| PUT | /api/auth/preferences/current-repository | 写入"当前仓库"偏好 | 会话 + CSRF；目标仓库不可见时 403 `FORBIDDEN` | `CurrentRepositoryRequest{repositoryId}` | `CurrentRepositoryResponse{repositoryId}` | AccountPreferenceController.java:28-34；AuthService.java:272-283 |
+| GET | /api/auth/preferences/current-repository | 读取“当前项目”偏好 | 会话 | - | `CurrentRepositoryResponse{repositoryId}` | AccountPreferenceController.java:23-26 |
+| PUT | /api/auth/preferences/current-repository | 写入“当前项目”偏好 | 会话 + CSRF；目标项目不可见时 403 `FORBIDDEN` | `CurrentRepositoryRequest{repositoryId}` | `CurrentRepositoryResponse{repositoryId}` | AccountPreferenceController.java:28-34；AuthService.java:272-283 |
 
 ### 3.3 `/api/accounts`（AccountController.java:25）
 
@@ -103,7 +103,7 @@
 | GET | /api/repositories | 列出全部可见仓库 | 会话（按可见性过滤） | - | `List<RepositoryResponse>` | RepositoryController.java:103-112 |
 | POST | /api/repositories/{repositoryId}/rescan | 重新扫描本地工作区 | MAINTAIN + CSRF | - | `RescanRepositoryResponse{changed,repository}` | RepositoryController.java:114-123,205 |
 | PATCH | /api/repositories/{repositoryId} | 修改名称/描述/默认分支 | MANAGE + CSRF | `UpdateRepositoryRequest{name(≤100),description(≤500),defaultBranch,version}` | `RepositoryResponse` | RepositoryController.java:162-177,199-203；RepositoryEditingService.java:44-45 |
-| DELETE | /api/repositories/{repositoryId} | 请求删除仓库 | 所有者（或超级管理员）+ CSRF | - | 无响应体 | RepositoryController.java:179-183；RepositoryGovernanceService.java:139-140 |
+| DELETE | /api/repositories/{repositoryId} | 请求删除项目 | 所有者（或超级管理员）+ CSRF | - | 无响应体 | RepositoryController.java:179-183；RepositoryGovernanceService.java:139-140 |
 
 `RepositoryResponse` 关键字段：`id,name,description,version,path,sourceType,branch,commit,worktreeDigest,dirty,contentVersion,contentVersionCreatedAt,codeGraphPath,codeGraphDetected,lastScannedAt,ownerAccountId,ownerDisplayName,relationship,ownershipVersion,repositoryStatus,capabilities`
 （RepositoryController.java:210-231）。
@@ -354,7 +354,7 @@
 
 - `GET /api/accounts/audit` 是唯一的审计读取端点，要求超级管理员，
   返回 `AuditView`，`limit` 被钳制到 1–200（AccountController.java:110-117；AuthService.java:421-436）。
-- 账号、令牌、仓库治理、仓库删除与凭据绑定等动作通过 `AuthService.audit` 写入审计事件
+- 账号、令牌、项目治理、项目删除与凭据绑定等动作通过 `AuthService.audit` 写入审计事件
   （`backend/src/main/java/com/analyzercoder/security/AuthService.java:438-455`）。
   审计范围与事件类型的完整清单见账号相关文档。
 

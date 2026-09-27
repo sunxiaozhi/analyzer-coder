@@ -13,21 +13,21 @@ const showTokens = shallowRef(false);
 onDeactivated(() => { showTokens.value = false; });
 
 const searchExample = computed(() => JSON.stringify({
-  repositoryId: repositories.selectedRepositoryId || '<仓库 UUID>',
+  repositoryId: repositories.selectedRepositoryId || '<项目 UUID>',
   query: '订单超时在哪里处理，有哪些相关约束？',
   limit: 20,
 }, null, 2));
 
 const scopesExample = JSON.stringify({ page: 1, pageSize: 20 }, null, 2);
 const graphExample = computed(() => JSON.stringify({
-  repositoryId: repositories.selectedRepositoryId || '<仓库 UUID>',
+  repositoryId: repositories.selectedRepositoryId || '<项目 UUID>',
   branchId: '<从 list_codegraph_scopes 选择的分支 UUID>',
   query: '订单超时由哪些函数处理？',
 }, null, 2));
 
 const errors = [
   ['401 / ACCESS_TOKEN_INVALID', '令牌无效、过期或已撤销。登录平台后创建新令牌。'],
-  ['403 / 无仓库权限', '访问令牌沿用绑定账户的实时仓库权限，请先分配 READ 权限。'],
+  ['403 / 无项目权限', '访问令牌沿用绑定账户的实时项目权限，请先分配 READ 权限。'],
   ['连接失败', '确认 Java 后端已启动，地址以 /api/mcp 结尾，客户端携带 Bearer 令牌。'],
   ['CODEGRAPH_ARTIFACT_NOT_AVAILABLE', '所选分支还没有已发布图谱。到项目管理准备该分支并构建 CodeGraph，确认 codegraphReady 为 true。'],
   ['CONTEXT_EXPIRED / CONTEXT_MISMATCH', 'contextId 已过期或与分支不匹配；重新选择分支并获取新的上下文。'],
@@ -45,8 +45,8 @@ const errors = [
     </header>
 
     <section class="guide-section">
-      <h2>1. 准备仓库</h2>
-      <p>先在 <RouterLink to="/repositories">项目管理</RouterLink> 接入仓库。联合检索需要已准备的代码版本；图谱查询还需要将目标 Git 分支准备好并发布 CodeGraph 产物。可在 <RouterLink to="/overview">项目总览</RouterLink> 查看准备状态。调用账户至少需要目标仓库的 READ 权限。</p>
+      <h2>1. 准备项目</h2>
+      <p>先在 <RouterLink to="/repositories">项目管理</RouterLink> 接入项目。联合检索需要已准备的代码版本；图谱查询还需要将目标 Git 分支准备好并发布 CodeGraph 产物。可在 <RouterLink to="/overview">项目总览</RouterLink> 查看准备状态。调用账户至少需要目标项目的 READ 权限。</p>
     </section>
 
     <section class="guide-section">

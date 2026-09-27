@@ -41,11 +41,11 @@ public class RepositoryRemoteSyncService {
         var repository = repositories.get(repositoryId);
         if (repository.sourceType() != RepositorySourceType.REMOTE_GIT
                 && repository.sourceType() != RepositorySourceType.GITLAB) {
-            throw new IllegalArgumentException("只有远程 Git 或 GitLab 仓库可以拉取远端更新");
+            throw new IllegalArgumentException("只有以远程 Git 或 GitLab 仓库为来源的项目可以拉取远端更新");
         }
         String remoteUrl = mapper.findRemoteUrl(repositoryId.value());
         if (remoteUrl == null || remoteUrl.isBlank()) {
-            throw new IllegalStateException("该仓库缺少远程地址，请重新接入");
+            throw new IllegalStateException("该项目缺少远程地址，请重新接入");
         }
         var resolved = credentials.resolveBound(actor, repositoryId.value(), remoteUrl);
         git.syncRepository(

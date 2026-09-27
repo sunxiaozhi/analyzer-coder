@@ -45,7 +45,7 @@ const labels: Record<string, string> = {
         </el-tag>
       </template>
     </el-table-column>
-    <el-table-column prop="repositoryPermissionCount" label="被授权仓库" width="100" />
+    <el-table-column prop="repositoryPermissionCount" label="被授权项目" width="100" />
     <el-table-column label="最近登录" min-width="165">
       <template #default="{ row }">
         {{ row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleString() : '—' }}

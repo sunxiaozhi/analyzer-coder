@@ -9,7 +9,7 @@ withDefaults(defineProps<{
 }>(), {
   multiple: false,
   loading: false,
-  placeholder: '选择仓库成员',
+  placeholder: '选择项目成员',
 });
 
 const model = defineModel<string | string[] | null>({ required: true });

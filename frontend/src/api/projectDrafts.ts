@@ -19,6 +19,9 @@ export interface ProjectDraft {
 const base = '/api/repository-project-drafts';
 export const projectDraftsApi = {
   list: () => request<ProjectDraft[]>(base),
+  remove: (draft: ProjectDraft) => request<void>(`${base}/${draft.id}?version=${draft.version}`, {
+    method: 'DELETE',
+  }),
   create: (name: string, description: string) => request<ProjectDraft>(base, {
     method: 'POST', body: JSON.stringify({ name, description }),
   }),

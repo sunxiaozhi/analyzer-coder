@@ -310,18 +310,18 @@
 - 需求：前端提供 `/atlas` 只读图谱页，支持模块聚合与符号视图、3D 与平面两种渲染、以及可回退的渲染降级。
 - 规则：
   - 路由 `/atlas` 对应 `CodeAtlasView.vue`，标题「代码图谱」。证据：`frontend/src/router/index.ts:26`。
-  - 视图切换为「3D 空间」与「平面阅读」，默认 3D；模块视图支持双击展开进入符号视图。证据：`frontend/src/views/CodeAtlasView.vue:18`、`frontend/src/views/CodeAtlasView.vue:163`、`frontend/src/views/CodeAtlasView.vue:192`。
-  - 3D 初始化失败时自动切换到平面模式并提示「3D 初始化失败，已切换到平面模式」；WebGL 上下文丢失时降级到兼容渲染并提示。证据：`frontend/src/views/CodeAtlasView.vue:25-35`、`frontend/src/features/graph/CodeAtlas3D.vue:358-361`。
-  - 用户可手动「重新检测 WebGL」或「使用兼容 3D」；两种渲染都不可用时抛 `unavailable` 事件继续回退。证据：`frontend/src/views/CodeAtlasView.vue:36-41`。
-  - 选中节点后展示关联关系（全部/入向/出向）与源码摘录；源码读取后校验内容版本一致性。证据：`frontend/src/views/CodeAtlasView.vue:238-240`、`frontend/src/views/CodeAtlasView.vue:151-161`。
+  - 默认使用「依赖画布」，可切换「3D 空间」。多文件结果按文件聚合为卡片，模块容器按依赖方向组织；循环依赖先合并为强连通分量再布局。证据：`frontend/src/features/graph/CodeAtlasExplorer.vue`、`frontend/src/features/graph/atlasCardLayout.ts`。
+  - 左侧代码结构支持进入模块与文件；文件范围展示该文件的符号及已加载的直接邻居，可返回文件概览或切换全部符号。文件关系按方向和类型聚合，保留原始关系与源码行号；计数仅代表当前已加载数据。证据：`frontend/src/features/graph/CodeAtlasExplorer.vue`、`frontend/src/features/graph/atlasCardLayout.ts`。
+  - 3D 初始化或 WebGL 自动检测失败时回退到依赖画布；设置内保留「重新检测 3D」「兼容 3D」。证据：`frontend/src/features/graph/CodeAtlasExplorer.vue`。
+  - 选中符号后可展开入向/出向邻居、查看关联出处与影响路径。源码按需显示在右侧面板，窄屏移至画布下方；选择其他符号时同步面板，同文件切换复用已读取源码，源码内容版本不一致时拒绝展示。证据：`frontend/src/features/graph/AtlasDetailDrawer.vue`、`frontend/src/views/CodeAtlasView.spec.ts`。
 - 证据：`frontend/src/views/CodeAtlasView.vue:1`
 
 ### GRAPH-018 关系方向语义与只读约束
 - 需求：可视化必须明确连线来自静态分析、不代表运行时轨迹；页面不得提供任何修改代码或图谱的操作。
 - 规则：
-  - 页面固定文案：「连线来自静态解析，不代表实际运行轨迹」「区域表示模块归属，空间高度不代表架构层级」。证据：`frontend/src/views/CodeAtlasView.vue:200-202`、`frontend/src/features/graph/atlasLayout3d.ts:4-5`。
-  - 关系方向用入向/出向图例与箭头表达，选中节点时高亮关联边、淡化无关节点。证据：`frontend/src/views/CodeAtlasView.vue:210`、`frontend/src/views/CodeAtlasView.vue:217-219`。
-  - 页面只读：所有交互为选择、展开、缩放、平移、打开源码；唯一的写操作是图谱构建（由 `canBuildGraph` 能力控制）。证据：`frontend/src/views/CodeAtlasView.vue:235-244`。
+  - 设置说明关系来自静态代码解析，总览仅聚合当前已加载数据；这些关系不代表实际运行轨迹。证据：`frontend/src/features/graph/CodeAtlasExplorer.vue`。
+  - 关系方向用入向/出向操作与箭头表达，悬停或选中节点时高亮关联边、淡化无关节点。证据：`frontend/src/features/graph/CodeAtlas2D.vue`。
+  - 图谱页面只读：所有交互为选择、下钻、展开、缩放、平移、查看或打开源码。证据：`frontend/src/features/graph/CodeAtlasExplorer.vue`。
   - 3D 动画与脉冲数量有上限（选中时仅前 80 条边加脉冲），并遵循 `prefers-reduced-motion`。证据：`frontend/src/features/graph/CodeAtlas3D.vue:173-177`、`frontend/src/features/graph/CodeAtlas3D.vue:363`。
   - 前端 `graph()` 实际调用 `/codegraph/impact`，`direction` 参数被忽略并固定为 `BOTH`。证据：`frontend/src/api/intelligence.ts:477-481`。
 - 证据：`frontend/src/views/CodeAtlasView.vue:200-202`

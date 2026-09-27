@@ -41,7 +41,7 @@ function openManagement() {
       <span><FolderTree :size="26" /></span>
       <h1>选择一个项目</h1>
       <p>项目总览会展示当前版本、代码索引和知识库状态。</p>
-      <el-button type="primary" @click="router.push('/repositories')">前往仓库管理</el-button>
+      <el-button type="primary" @click="router.push('/repositories')">前往项目管理</el-button>
     </div>
 
     <el-alert v-else-if="error" :title="error" type="error" :closable="false">

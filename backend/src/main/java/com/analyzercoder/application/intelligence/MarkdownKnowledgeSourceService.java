@@ -430,16 +430,16 @@ public class MarkdownKnowledgeSourceService {
 
     private CodeRepository repository(UUID repositoryId) {
         if (repositoryId == null) {
-            throw new IllegalArgumentException("仓库标识不能为空");
+            throw new IllegalArgumentException("项目标识不能为空");
         }
         return repositories
                 .findById(CodeRepositoryId.of(repositoryId))
-                .orElseThrow(() -> new IllegalArgumentException("仓库不存在"));
+                .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
     }
 
     private static UUID currentContentVersion(CodeRepository repository) {
         if (repository.currentContentVersion() == null) {
-            throw new ApiSecurityException(409, "MARKDOWN_SOURCE_NOT_READY", "仓库尚未发布可读取的内容内容版本");
+            throw new ApiSecurityException(409, "MARKDOWN_SOURCE_NOT_READY", "项目尚未发布可读取的内容版本");
         }
         return repository.currentContentVersion().value();
     }

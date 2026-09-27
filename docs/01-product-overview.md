@@ -36,7 +36,7 @@ Analyzer Coder（界面上称"代码知识平台"）是一个面向开发者的*
 | `MAINTAIN` | 维护 | 在 READ 基础上：同步/准备分支、构建内容索引与图谱、创建与编辑知识、上传附件、记录来源复核与分支验证 |
 | `MANAGE` | 管理 | 在 MAINTAIN 基础上：编辑仓库资料、配置模型与凭据、治理成员 |
 
-此外存在**所有者（owner）关系**，它不是权限级别：所有权记录在 `repositories.owner_account_id`（`backend/src/main/resources/db/migration/V1__init_schema.sql`），成员权限表 `repository_permissions` 明确不含 OWNER（`V1__init_schema.sql`）。账号等于所有者时按 MANAGE 处理，并可执行仅所有者动作（转移所有权、删除仓库、授予权限、管理凭据），错误码 `OWNER_REQUIRED`（`AccessControlService.java:46-54`）。
+此外存在**所有者（owner）关系**，它不是权限级别：所有权记录在 `repositories.owner_account_id`（`backend/src/main/resources/db/migration/V1__init_schema.sql`），成员权限表 `repository_permissions` 明确不含 OWNER（`V1__init_schema.sql`）。账号等于所有者时按 MANAGE 处理，并可执行仅所有者动作（转移所有权、删除项目、授予权限、管理凭据），错误码 `OWNER_REQUIRED`（`AccessControlService.java:46-54`）。
 
 前端展示用的能力位由 `AccessControlService.describe`（`:62-95`）计算，字段定义在 `RepositoryAccess.Capabilities`（`RepositoryAccess.java:13-23`）：`canRead`、`canEditRepository`、`canUpdate`、`canIndex`、`canBuildCodeGraph`、`canConfigure`、`canGrant`、`canManageCredential`、`canTransferOwnership`、`canDelete`。
 

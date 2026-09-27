@@ -135,7 +135,7 @@ function shortcut(event: KeyboardEvent) {
       <article v-if="requestState === 'sending'" class="message assistant pending">
         <span>助手</span>
         <div class="answer-loading">
-          <i></i><div><b>正在结合上下文检索当前仓库</b><small>正在核对代码和知识证据…</small></div>
+          <i></i><div><b>正在结合上下文检索当前项目</b><small>正在核对代码和知识证据…</small></div>
         </div>
       </article>
       <article v-if="requestState === 'failed'" class="message assistant failed">

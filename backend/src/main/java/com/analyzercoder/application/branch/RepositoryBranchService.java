@@ -348,7 +348,7 @@ public class RepositoryBranchService {
             if (unpublished != null) contentVersions.discardUnpublished(unpublished);
             db.update(
                     "UPDATE repository_branches SET preparation_status='FAILED',preparation_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND generation=?",
-                    "准备失败，请确认分支存在且仓库来源或凭据可用",
+                    "准备失败，请确认分支存在且项目的代码来源或凭据可用",
                     branchId,
                     generation);
             throw error;
@@ -456,7 +456,7 @@ public class RepositoryBranchService {
     private CodeRepository repository(UUID id) {
         return repositories
                 .findById(CodeRepositoryId.of(id))
-                .orElseThrow(() -> new IllegalArgumentException("仓库不存在"));
+                .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
     }
 
     private void require(AuthenticatedAccount actor, UUID id, RepositoryPermission permission) {

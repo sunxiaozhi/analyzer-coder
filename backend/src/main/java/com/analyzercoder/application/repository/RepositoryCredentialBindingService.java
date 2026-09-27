@@ -76,15 +76,15 @@ public class RepositoryCredentialBindingService {
 
     private String remoteUrl(AuthenticatedAccount actor, CodeRepositoryId repositoryId) {
         if (actor == null || repositoryId == null) {
-            throw new IllegalArgumentException("仓库凭据请求不完整");
+            throw new IllegalArgumentException("项目凭据绑定请求不完整");
         }
         access.requireOwner(actor, repositoryId);
         repositories
                 .findById(repositoryId)
-                .orElseThrow(() -> new IllegalArgumentException("代码仓库不存在"));
+                .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
         String remoteUrl = repositoryMapper.findRemoteUrl(repositoryId.value());
         if (remoteUrl == null || remoteUrl.isBlank()) {
-            throw new IllegalStateException("只有远程 Git 仓库可以绑定访问凭据");
+            throw new IllegalStateException("只有以远程 Git 仓库为来源的项目可以绑定访问凭据");
         }
         return remoteUrl;
     }

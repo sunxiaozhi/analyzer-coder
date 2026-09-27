@@ -147,7 +147,7 @@
 - 规则：
   - 模式 `ALL_BRANCHES` 表示项目共享知识，`branch_ids` 必须为空；模式 `SELECTED_BRANCHES` 表示指定分支范围，`branch_ids` 必须非空。
   - 指定分支数量上限 30；空模式、空列表（SELECTED_BRANCHES 但无分支）或 ALL_BRANCHES 携带分支列表均报"知识适用分支范围无效"。
-  - 每个分支必须属于当前仓库，否则报"适用分支不属于当前仓库"。
+  - 每个分支必须属于当前项目，否则拒绝该适用分支。
   - 新建知识卡时触发器自动把范围初始化为该项目默认分支的 SELECTED_BRANCHES 单分支。
   - 数据库约束在表层面再次保证模式与分支列表的一致性。
 - 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:73-96`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/test/java/com/analyzercoder/application/branch/BranchKnowledgeServiceTest.java:52-70`
@@ -206,8 +206,8 @@
 ### KNO-019 知识卡与代码片段的绑定
 - 需求：知识卡必须能把具体代码片段绑定为证据，绑定内容必须固化当时的版本信息与行号。
 - 规则：
-  - 绑定输入只接受 `chunkId`；服务端按当前仓库当前内容版本解析出 `content_version`、文件路径、符号名、起止行与内容哈希并落库。
-  - 只接受属于当前仓库、当前内容版本的代码片段，否则报"关联代码不存在或不属于当前仓库"。
+  - 绑定输入只接受 `chunkId`；服务端按当前项目当前内容版本解析出 `content_version`、文件路径、符号名、起止行与内容哈希并落库。
+  - 只接受属于当前项目、当前内容版本的代码片段，否则报"关联代码不存在或不属于当前项目"。
   - 同一请求内去重，每张知识卡单次最多绑定 30 处代码。
   - 绑定按位置序号保存，供界面按序展示。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1218-1246`、`backend/src/main/resources/mappers/IntelligenceMapper.xml:377-401`、`frontend/src/features/knowledge/KnowledgeCodeReferenceSelector.vue:60-61`
@@ -373,7 +373,7 @@
 - 规则：
   - 关联记录按 `(card_id, revision, attachment_id)` 唯一，带显示顺序，随知识修订级联删除；附件本身删除受限。
   - 单个修订最多 20 个附件，总字节数不得超过 200 MiB。
-  - 请求指定的附件必须属于当前仓库，否则报"附件不存在或不属于当前仓库"。
+  - 请求指定的附件必须属于当前项目，否则报"附件不存在或不属于当前项目"。
   - 请求未给出附件列表时沿用上一修订的附件集合，用于保持既有证据。
   - 编辑知识卡、恢复历史修订、修改分支范围都会为新修订重建附件关联。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/KnowledgeAttachmentService.java:132-189`、`backend/src/main/resources/mappers/KnowledgeAttachmentMapper.xml:13-33`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`frontend/src/features/knowledge/KnowledgeCardContentSection.vue:87`

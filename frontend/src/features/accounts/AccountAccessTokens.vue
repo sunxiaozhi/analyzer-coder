@@ -9,7 +9,7 @@ const { tokens, rawToken, loading, busy, error, create, revoke, copy, load } = u
 </script>
 <template>
   <section class="account-tokens">
-    <p class="token-description">令牌直接使用此账户的当前仓库权限。请在项目管理的仓库治理中分配成员权限，无需为令牌重复授权。管理员账户的令牌继承管理员权限。</p>
+    <p class="token-description">令牌直接使用此账户的当前项目权限。请在项目管理的项目治理中分配成员权限，无需为令牌重复授权。管理员账户的令牌继承管理员权限。</p>
     <p class="token-description">停用账户、修改或重置密码、变更角色会撤销旧令牌。待改密或已锁定的账户需先恢复正常状态。</p>
     <form class="token-form" @submit.prevent="create(name, days)">
       <label>令牌名称<input v-model="name" maxlength="80" required :disabled="busy || loading" /></label>

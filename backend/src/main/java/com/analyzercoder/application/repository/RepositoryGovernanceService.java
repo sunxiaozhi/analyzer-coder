@@ -117,14 +117,14 @@ public class RepositoryGovernanceService {
                         : requestedName.trim();
         String normalizedName = nextName.toLowerCase(Locale.ROOT);
         if (mapper.countNameConflict(newOwnerId, normalizedName, repositoryId) > 0) {
-            throw new IllegalStateException("目标 OWNER 下已存在同名仓库，请提供新名称");
+            throw new IllegalStateException("目标 OWNER 下已存在同名项目，请提供新名称");
         }
 
         mapper.deleteGrant(repositoryId, newOwnerId);
         if (mapper.transferOwnership(
                         repositoryId, expectedVersion, newOwnerId, nextName, normalizedName)
                 != 1) {
-            throw new IllegalStateException("仓库状态或所有权版本已变化，请刷新后重试");
+            throw new IllegalStateException("项目状态或所有权版本已变化，请刷新后重试");
         }
         mapper.deleteGrant(repositoryId, repository.ownerAccountId());
         if (previousOwnerPermission != null) {
@@ -140,15 +140,15 @@ public class RepositoryGovernanceService {
         access.requireOwner(actor, CodeRepositoryId.of(repositoryId));
         RepositoryGovernanceRow repository = mapper.findForUpdate(repositoryId);
         if (repository == null) {
-            throw new IllegalArgumentException("仓库不存在");
+            throw new IllegalArgumentException("项目不存在");
         }
         if (indexJobs.hasActiveJob(CodeRepositoryId.of(repositoryId))) {
-            throw new IllegalStateException("仓库存在运行中的写任务，暂不能删除");
+            throw new IllegalStateException("项目存在运行中的写任务，暂不能删除");
         }
 
         Instant now = Instant.now();
         if (mapper.markDeleting(repositoryId, repository.ownershipVersion()) != 1) {
-            throw new IllegalStateException("仓库治理状态已变化，请刷新后重试");
+            throw new IllegalStateException("项目治理状态已变化，请刷新后重试");
         }
         mapper.insertDeletionTombstone(repositoryId, actor.id(), now);
         audit(actor.id(), null, repositoryId, "REPOSITORY_DELETION_REQUESTED", sourceIp);
@@ -157,7 +157,7 @@ public class RepositoryGovernanceService {
     private RepositoryGovernanceRow locked(UUID repositoryId, long expectedVersion) {
         RepositoryGovernanceRow row = mapper.findForUpdate(repositoryId);
         if (row == null) {
-            throw new IllegalArgumentException("仓库不存在");
+            throw new IllegalArgumentException("项目不存在");
         }
         if (row.ownershipVersion() != expectedVersion) {
             throw new IllegalStateException("所有权版本已变化，请刷新后重试");

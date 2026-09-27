@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, shallowRef, ref, watch, defineAsyncComponent } from 'vue';
-import { Search, Orbit, ArrowLeft, Plus, Minus, Maximize, RefreshCw, X, Crosshair, GitBranch, Code2 } from 'lucide-vue-next';
+import { Search, Orbit, Plus, Minus, Maximize, RefreshCw, X, Crosshair, GitBranch, Code2, Folder, FileCode2, ChevronRight, Layers, PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Network } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 import { atlasEdgeKey, type AtlasNode, type AtlasEdge } from '@/api/codeAtlas';
-import { browserAtlasDisplayRecommendation } from './atlasPerformance';
+import { projectAtlasCards, type AtlasCardLevel } from './atlasCardLayout';
 import { useAtlasExplorer } from './useAtlasExplorer';
 import CodeAtlas2D from './CodeAtlas2D.vue';
 import AtlasDetailDrawer from './AtlasDetailDrawer.vue';
@@ -11,8 +11,8 @@ const CodeAtlas3D = defineAsyncComponent(() => import('./CodeAtlas3D.vue'));
 const { repositories, branches, data, selected, query, module, loading, error, notice, depth, limit,
   impact, pathIndex, select, clearSelection, load, overview, loadMore, expand, traceImpact, openSource } = useAtlasExplorer();
 const router = useRouter();
-const recommendation = browserAtlasDisplayRecommendation();
-const mode = shallowRef<'3d' | '2d'>(recommendation.mode), automaticModeReason = shallowRef(recommendation.reason);
+const mode = shallowRef<'3d' | '2d'>('2d'), level = shallowRef<AtlasCardLevel>('files');
+const focusFile = shallowRef(''), navigatorOpen = ref(true), hasSearchResults = shallowRef(false);
 const forceCompatibility = shallowRef(false), compatibility3d = shallowRef(false), rendererVersion = shallowRef(0);
 const diagnosticReason = shallowRef(''), threeError = shallowRef(''), autoRotate = shallowRef(false);
 const threeView = ref<{ home: () => void; zoomBy: (factor: number) => void }>(), flatView = ref<InstanceType<typeof CodeAtlas2D>>();
@@ -20,6 +20,17 @@ const relationKind = shallowRef(''), drawer = shallowRef<'source' | 'relations' 
 const drawerNode = shallowRef<AtlasNode | null>(null);
 const kinds = computed(() => data.value?.relationKinds ?? [...new Set(data.value?.edges.map(e => e.kind) ?? [])].sort());
 const byId = computed(() => new Map(data.value?.nodes.map(n => [n.id, n]) ?? []));
+const fileCount = computed(() => new Set(data.value?.nodes.map(n => n.filePath).filter(Boolean)).size);
+const tree = computed(() => {
+  const groups = new Map<string, Map<string, number>>();
+  for (const node of data.value?.nodes ?? []) {
+    if (!groups.has(node.module)) groups.set(node.module, new Map());
+    if (node.filePath) groups.get(node.module)!.set(node.filePath, (groups.get(node.module)!.get(node.filePath) ?? 0) + 1);
+  }
+  return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, files]) => ({
+    name, files: [...files].sort(([a], [b]) => a.localeCompare(b)).map(([path, count]) => ({ path, count, name: path.replace(/\\/g, '/').split('/').pop() })),
+  }));
+});
 const availablePaths = computed(() => impact.value?.paths.map((path, index) => ({ path, index })).filter(({ path }) => path.nodeIds.every(id => byId.value.has(id))) ?? []);
 const activePath = computed(() => impact.value?.paths[pathIndex.value]);
 const highlighted = computed(() => {
@@ -27,24 +38,39 @@ const highlighted = computed(() => {
   return new Set(impact.value?.edges.filter(e => ids.has(e.id)).map(e => atlasEdgeKey({ source: e.source, target: e.target, kind: e.relation, count: 1 })) ?? []);
 });
 const pathNodes = computed(() => activePath.value?.nodeIds.flatMap(id => byId.value.get(id) ? [byId.value.get(id)!] : []) ?? []);
+const filteredEdges = computed(() => (data.value?.edges ?? []).filter(e => !relationKind.value || e.kind === relationKind.value));
 const connected = computed(() => {
   if (activePath.value) return new Set(activePath.value.nodeIds);
   const ids = new Set<string>(); if (!selected.value) return ids;
   ids.add(selected.value.id);
-  data.value?.edges.forEach(e => { if (e.source === selected.value?.id) ids.add(e.target); if (e.target === selected.value?.id) ids.add(e.source); });
+  filteredEdges.value.forEach(e => { if (e.source === selected.value?.id) ids.add(e.target); if (e.target === selected.value?.id) ids.add(e.source); });
   return ids;
 });
-const filteredEdges = computed(() => (data.value?.edges ?? []).filter(e => !relationKind.value || e.kind === relationKind.value));
-const visibleEdges = computed(() => [...filteredEdges.value].sort((a, b) => {
+const canvasNodes = computed(() => {
+  if (!focusFile.value || mode.value === '3d') return data.value?.nodes ?? [];
+  const fileIds = new Set(data.value?.nodes.filter(n => n.filePath === focusFile.value).map(n => n.id));
+  const ids = new Set([...fileIds, ...connected.value]);
+  filteredEdges.value.forEach(e => { if (fileIds.has(e.source)) ids.add(e.target); if (fileIds.has(e.target)) ids.add(e.source); });
+  for (const node of impact.value?.nodes ?? []) ids.add(node.id);
+  return data.value?.nodes.filter(n => ids.has(n.id)) ?? [];
+});
+const canvasIds = computed(() => new Set(canvasNodes.value.map(n => n.id)));
+const scopedEdges = computed(() => filteredEdges.value.filter(e => canvasIds.value.has(e.source) && canvasIds.value.has(e.target)));
+const visibleEdges = computed(() => [...scopedEdges.value].sort((a, b) => {
   const rank = (e: AtlasEdge) => highlighted.value.has(atlasEdgeKey(e)) ? 2 : e.source === selected.value?.id || e.target === selected.value?.id ? 1 : 0;
   return rank(b) - rank(a);
 }).slice(0, mode.value === '2d' ? 1200 : 3000));
-const hiddenEdges = computed(() => filteredEdges.value.length - visibleEdges.value.length);
+const effectiveLevel = computed(() => focusFile.value || hasSearchResults.value || selected.value ? 'symbols' : level.value);
+const projection = computed(() => projectAtlasCards(canvasNodes.value, visibleEdges.value, effectiveLevel.value));
+const hiddenEdges = computed(() => scopedEdges.value.length - visibleEdges.value.length);
 const related = computed(() => data.value?.edges.filter(e => e.source === selected.value?.id || e.target === selected.value?.id) ?? []);
 const hiddenNeighbors = computed(() => selected.value?.neighborCount !== undefined ? Math.max(0, selected.value.neighborCount - new Set(related.value.flatMap(e => [e.source, e.target]).filter(id => id !== selected.value?.id)).size) : selected.value?.hiddenNeighborCount ?? 0);
 const incoming = computed(() => selected.value?.incomingCount ?? related.value.filter(e => e.target === selected.value?.id).length);
 const outgoing = computed(() => selected.value?.outgoingCount ?? related.value.filter(e => e.source === selected.value?.id).length);
-function selectNode(node: AtlasNode) { select(node); drawer.value = null; }
+function selectNode(node: AtlasNode) {
+  select(node);
+  if (drawer.value) { drawerNode.value = node; sourceLine.value = undefined; }
+}
 function openDrawer(tab: 'source' | 'relations', node = selected.value, line?: number) {
   if (!node) return; drawerNode.value = node; sourceLine.value = line; drawer.value = tab;
 }
@@ -52,58 +78,109 @@ function showEdge(edge: AtlasEdge) {
   const node = byId.value.get(edge.source); if (!node) return;
   openDrawer(edge.sourceLines?.length ? 'source' : 'relations', node, edge.sourceLines?.[0]);
 }
-function chooseMode(value: '3d' | '2d') { mode.value = value; automaticModeReason.value = ''; }
+function openFileScope(path: string) { focusFile.value = path; level.value = 'symbols'; clearSelection(); drawer.value = null; mode.value = '2d'; }
+function openModule(name: string) { focusFile.value = ''; module.value = name; query.value = ''; level.value = 'files'; drawer.value = null; void load(); }
+function goOverview() { focusFile.value = ''; level.value = 'files'; drawer.value = null; overview(); }
+function chooseLevel(next: AtlasCardLevel) { level.value = next; focusFile.value = ''; clearSelection(); drawer.value = null; }
+function search() { focusFile.value = ''; drawer.value = null; void load(); }
+function chooseMode(value: '3d' | '2d') { mode.value = value; threeError.value = ''; }
 function changeRenderer(compatible: boolean) { forceCompatibility.value = compatible; compatibility3d.value = compatible; threeError.value = ''; diagnosticReason.value = ''; mode.value = '3d'; rendererVersion.value++; }
 function ready3d(engine: 'webgl' | 'compatible') { compatibility3d.value = engine === 'compatible'; }
 function degraded3d(reason: string) {
   diagnosticReason.value = reason;
   if (forceCompatibility.value) { compatibility3d.value = true; threeError.value = '已启用兼容 3D'; return; }
-  mode.value = '2d'; automaticModeReason.value = 'WebGL 不可用'; threeError.value = 'WebGL 不可用，已切换到轻量平面。';
+  mode.value = '2d'; threeError.value = 'WebGL 不可用，已切换到依赖画布。';
 }
-function fallback3d(reason = '') { diagnosticReason.value = reason; mode.value = '2d'; threeError.value = '3D 初始化失败，已切换到平面模式。'; }
+function fallback3d(reason = '') { diagnosticReason.value = reason; mode.value = '2d'; threeError.value = '3D 初始化失败，已切换到依赖画布。'; }
 function camera() { return mode.value === '3d' ? threeView.value : flatView.value; }
-watch(() => data.value?.contentVersion, () => { drawer.value = null; relationKind.value = ''; });
-watch(() => selected.value?.id, () => { drawer.value = null; });
+function dismissSelection() { clearSelection(); drawer.value = null; }
+watch([() => data.value?.repositoryId, () => data.value?.contentVersion], () => {
+  drawer.value = null; relationKind.value = ''; focusFile.value = '';
+  hasSearchResults.value = !!data.value && !!query.value.trim();
+  if (data.value) level.value = fileCount.value <= 1 ? 'symbols' : 'files';
+});
 </script>
 <template>
-  <section class="atlas" :class="{ 'is-lightweight': mode === '2d', 'has-drawer': drawer }">
-    <header class="atlas-toolbar">
-      <div class="view-switch" aria-label="节点显示方式"><button :aria-pressed="mode === '3d'" @click="chooseMode('3d')">空间视图</button><button data-view-2d :aria-pressed="mode === '2d'" @click="chooseMode('2d')">轻量平面</button></div>
-      <form class="atlas-search" @submit.prevent="load()"><Search :size="16"/><input v-model="query" aria-label="搜索符号或文件" placeholder="搜索符号、限定名或文件…" maxlength="500"/><button type="submit" :disabled="loading">定位</button></form>
+  <section class="atlas" :class="{ 'has-drawer': drawer }">
+    <header class="atlas-heading">
+      <div class="heading-icon"><Network :size="20"/></div>
+      <div><h1>代码图谱</h1><p>从文件结构，探索每一次调用</p></div>
+      <span class="branch-chip"><GitBranch :size="13"/>{{ branches.context?.branchName || '当前版本' }}</span>
+    </header>
+    <div class="atlas-toolbar">
+      <button class="tool nav-toggle" :aria-label="navigatorOpen ? '收起代码结构' : '展开代码结构'" :aria-expanded="navigatorOpen" @click="navigatorOpen = !navigatorOpen"><PanelLeftClose v-if="navigatorOpen" :size="17"/><PanelLeftOpen v-else :size="17"/></button>
+      <div class="view-switch" aria-label="节点显示方式">
+        <button data-view-2d :aria-pressed="mode === '2d'" @click="chooseMode('2d')"><Layers :size="14"/>依赖画布</button>
+        <button data-view-3d :aria-pressed="mode === '3d'" @click="chooseMode('3d')"><Orbit :size="14"/>3D 空间</button>
+      </div>
+      <form class="atlas-search" @submit.prevent="search"><Search :size="15"/><input v-model="query" aria-label="搜索符号或文件" placeholder="搜索文件、函数或类…" maxlength="500"/><button type="submit" :disabled="loading">定位 <span>↵</span></button></form>
       <select v-model="relationKind" aria-label="关系类型"><option value="">全部关系</option><option v-for="kind in kinds" :key="kind" :value="kind">{{ kind }}</option></select>
-      <label class="depth-control">深度 <select v-model="depth" aria-label="展开深度"><option :value="1">1 跳</option><option :value="2">2 跳</option><option :value="3">3 跳</option></select></label>
-      <button class="tool" :disabled="loading" aria-label="刷新图谱" @click="load()"><RefreshCw :size="16"/></button>
-      <details class="render-diagnostics"><summary>图例与设置</summary><div class="render-panel">
-        <p>区域表示模块与文件归属。小球表示 CodeGraph 符号，箭头沿真实关系方向；继承、实现关系用虚线区分。</p>
-        <p>拖动旋转／平移 · 滚轮缩放 · 双击节点展开邻居 · 点击连线查看发生位置。</p>
+      <button class="tool" :disabled="loading" aria-label="刷新图谱" @click="load()"><RefreshCw :size="15" :class="{ spinning: loading }"/></button>
+      <details class="render-diagnostics"><summary aria-label="图谱设置"><SlidersHorizontal :size="16"/></summary><div class="render-panel">
+        <strong>图谱设置</strong>
+        <p>卡片表示文件与 CodeGraph 符号；模块按依赖组织，箭头指向被依赖的代码。</p>
+        <p>点击文件进入符号层。拖动画布平移、滚轮缩放，双击符号展开邻居，点击连线查看关联出处。</p>
+        <label class="depth-control">展开深度 <select v-model="depth" aria-label="展开深度"><option :value="1">1 跳</option><option :value="2">2 跳</option><option :value="3">3 跳</option></select></label>
         <label v-if="mode === '3d'"><input v-model="autoRotate" type="checkbox"/> 自动环绕</label>
-        <p>当前模式：{{ mode === '2d' ? '轻量平面' : compatibility3d ? '兼容 3D' : 'WebGL 2' }}</p>
+        <p v-if="mode === '3d'">当前模式：{{ compatibility3d ? '兼容 3D' : 'WebGL 2' }}</p>
         <p v-if="diagnosticReason" class="diagnostic-reason">{{ diagnosticReason }}</p>
-        <div><button data-render-auto @click="changeRenderer(false)">重新检测 WebGL</button><button data-render-compatible @click="changeRenderer(true)">使用兼容 3D</button></div>
-        <p v-if="data">内容版本：{{ data.contentVersion }}</p><p>关系来自静态代码解析。</p>
+        <div><button data-render-auto @click="changeRenderer(false)">重新检测 3D</button><button data-render-compatible @click="changeRenderer(true)">兼容 3D</button></div>
+        <p v-if="data">内容版本：{{ data.contentVersion }}</p><p>关系来自静态代码解析；总览聚合当前已加载数据。</p>
         <p v-if="data?.unmappedNodes">{{ data.unmappedNodes }} 个无文件位置节点未进入画布。</p>
         <template v-if="impact"><p>影响分析：{{ impact.relationSource }} · {{ impact.cliVersion }}</p><p>映射 {{ impact.coverage.representedNodeCount }} / {{ impact.coverage.cliReportedNodeCount }} 节点；{{ impact.coverage.representedEdgeCount }} / {{ impact.coverage.cliReportedEdgeCount }} 条关系</p><p v-for="item in impact.limitations" :key="item">{{ item }}</p></template>
       </div></details>
-    </header>
-    <div class="atlas-caption"><button v-if="module || query" @click="overview"><ArrowLeft :size="14"/> 全部代码</button><strong>{{ repositories.selectedRepository?.name || '代码图谱' }}</strong><span>{{ module || (query ? '定位与邻域' : '模块 / 文件 / 符号') }}</span><span v-if="automaticModeReason && mode === '2d'" class="performance-note">已自动启用轻量平面 · {{ automaticModeReason }}</span><span v-if="threeError" class="render-notice" role="status">{{ threeError }}</span></div>
-    <div class="atlas-stage">
-      <CodeAtlas3D v-if="mode === '3d' && data?.nodes.length" :key="rendererVersion" ref="threeView" :nodes="data.nodes" :edges="visibleEdges" :selected-id="selected?.id" :connected="connected" :highlighted="highlighted" :auto-rotate="autoRotate" :force-compatibility="forceCompatibility" @select="selectNode" @expand="selectNode($event); expand()" @edge="showEdge" @ready="ready3d" @degraded="degraded3d" @unavailable="fallback3d"/>
-      <CodeAtlas2D v-if="mode === '2d' && data?.nodes.length" ref="flatView" :nodes="data.nodes" :edges="visibleEdges" :selected-id="selected?.id" :connected="connected" :highlighted="highlighted" @select="selectNode" @expand="selectNode($event); expand()" @edge="showEdge"/>
-      <div v-if="!data?.nodes.length" class="atlas-empty"><Orbit :size="40"/><h2>{{ loading ? '正在读取代码图谱' : error ? '图谱暂不可用' : '当前范围没有符号' }}</h2><p>{{ error || '选择已发布 CodeGraph 的项目，或调整搜索范围。' }}</p><button v-if="!data" @click="router.push('/overview')">前往项目准备</button><button v-else @click="overview">返回全部代码</button></div>
-      <div v-if="loading && data?.nodes.length" class="graph-notice" role="status">正在加载关联…</div>
-      <div v-else-if="error && data" class="graph-notice error" role="alert">{{ error }}</div>
-      <div v-else-if="notice" class="graph-notice" role="status">{{ notice }}</div>
-      <div v-if="impact?.paths.length" class="path-control"><GitBranch :size="15"/><select v-model="pathIndex" aria-label="影响传播路径"><option :value="-1">影响路径 · {{ availablePaths.length }} 条已加载</option><option v-for="{ path, index } in availablePaths" :key="index" :value="index">{{ path.depth }} 跳 → {{ byId.get(path.targetNodeId)?.label || path.targetNodeId }}</option></select><span v-if="pathNodes.length" class="path-chain">{{ pathNodes.map(n => n.label).join(' → ') }}</span><button aria-label="关闭影响路径" @click="impact = null; pathIndex = -1"><X :size="14"/></button></div>
-      <div class="camera-tools"><button aria-label="缩小" @click="camera()?.zoomBy(1.2)"><Minus :size="16"/></button><button aria-label="放大" @click="camera()?.zoomBy(.8)"><Plus :size="16"/></button><button aria-label="适应全部节点" @click="camera()?.home()"><Maximize :size="16"/></button><button aria-label="取消聚焦" @click="clearSelection"><Crosshair :size="16"/></button></div>
-      <section v-if="selected" class="selection-bar" aria-label="节点详情">
-        <div class="selection-symbol"><span class="kind-badge">{{ selected.kind }}</span><strong :title="selected.qualifiedName || selected.label">{{ selected.label }}</strong><button aria-label="关闭详情" @click="clearSelection"><X :size="15"/></button><small :title="selected.filePath">{{ selected.filePath }}:{{ selected.startLine || '—' }}</small></div>
-        <div class="selection-actions"><button :disabled="loading" @click="expand('in')">↙ 入向 {{ incoming }}</button><button :disabled="loading" @click="expand('out')">↗ 出向 {{ outgoing }}</button><button v-if="hiddenNeighbors" :disabled="loading" @click="expand()">+{{ hiddenNeighbors }} 邻居</button><button @click="openDrawer('relations')">关联出处</button><button :disabled="loading" @click="traceImpact"><GitBranch :size="14"/> 影响路径</button><button class="source-action" @click="openDrawer('source')"><Code2 :size="14"/> 源码</button></div>
-      </section>
     </div>
-    <AtlasDetailDrawer v-if="drawer && drawerNode && data" :repository-id="data.repositoryId" :content-version="data.contentVersion" :context-id="branches.context?.contextId" :node="drawerNode" :nodes="data.nodes" :edges="data.edges" :tab="drawer" :line="sourceLine" @close="drawer = null" @tab="drawer = $event" @select="selectNode" @source="(node, line) => openDrawer('source', node, line)" @open-file="openSource"/>
-    <footer class="atlas-status"><span v-if="data">可见 {{ data.nodes.length }} 节点 · {{ visibleEdges.length }} 关系</span><span v-if="data?.repositoryNodes !== undefined">仓库 {{ data.repositoryNodes }} 节点 / {{ data.repositoryEdges }} 关系</span><span v-if="hiddenEdges" class="partial">{{ hiddenEdges }} 条已加载关系暂未绘制，聚焦可优先查看</span><span v-if="data?.partial" class="partial">范围内仍有数据未加载</span><button v-if="data?.partial && limit < 1200" :disabled="loading" @click="loadMore">加载更多</button><span v-if="data" class="version-tag" :title="data.contentVersion">CodeGraph · {{ data.contentVersion.slice(0, 8) }}</span></footer>
+    <div class="atlas-caption">
+      <nav aria-label="图谱路径"><button @click="goOverview"><Layers :size="13"/>{{ repositories.selectedRepository?.name || '全部代码' }}</button><template v-if="module"><ChevronRight :size="12"/><button @click="openModule(module)">{{ module }}</button></template><template v-if="focusFile"><ChevronRight :size="12"/><span :title="focusFile">{{ focusFile.replace(/\\/g, '/').split('/').pop() }}</span></template><span v-else-if="hasSearchResults">/ 搜索结果</span></nav>
+      <span v-if="threeError" class="render-notice" role="status">{{ threeError }}</span>
+      <div v-if="mode === '2d' && !hasSearchResults" class="level-switch" aria-label="图谱层级"><button :aria-pressed="effectiveLevel === 'files'" @click="chooseLevel('files')">文件概览</button><button :aria-pressed="effectiveLevel === 'symbols'" @click="chooseLevel('symbols')">符号关系</button></div>
+    </div>
+    <div class="atlas-workbench">
+      <aside v-if="navigatorOpen" class="atlas-navigator" aria-label="代码结构">
+        <div class="navigator-heading"><span>代码结构</span><span>{{ fileCount }} 文件</span></div>
+        <button class="repository-root" :class="{ active: !focusFile && !module }" @click="goOverview"><Layers :size="15"/><span>全部代码</span><ChevronRight :size="13"/></button>
+        <div class="tree-scroll">
+          <details v-for="group in tree" :key="group.name" open class="tree-module">
+            <summary><ChevronRight class="tree-chevron" :size="12"/><Folder :size="14"/><span :title="group.name">{{ group.name || '根目录' }}</span><small>{{ group.files.length }}</small></summary>
+            <button class="module-overview" :disabled="loading" @click="openModule(group.name)">查看模块依赖 <ChevronRight :size="11"/></button>
+            <button v-for="file in group.files" :key="file.path" class="tree-file" :class="{ active: focusFile === file.path }" :title="file.path" @click="openFileScope(file.path)"><FileCode2 :size="13"/><span>{{ file.name }}</span><small>{{ file.count }}</small></button>
+          </details>
+          <p v-if="!tree.length" class="tree-empty">{{ loading ? '正在读取结构…' : '加载图谱后显示代码结构' }}</p>
+        </div>
+        <div class="navigator-note"><span class="status-dot"/>基于当前版本的代码关系</div>
+      </aside>
+      <div class="atlas-stage">
+        <CodeAtlas3D v-if="mode === '3d' && data?.nodes.length" :key="rendererVersion" ref="threeView" :nodes="canvasNodes" :edges="visibleEdges" :selected-id="selected?.id" :connected="connected" :highlighted="highlighted" :auto-rotate="autoRotate" :force-compatibility="forceCompatibility" @select="selectNode" @expand="selectNode($event); expand()" @edge="showEdge" @ready="ready3d" @degraded="degraded3d" @unavailable="fallback3d"/>
+        <CodeAtlas2D v-if="mode === '2d' && data?.nodes.length" ref="flatView" :nodes="canvasNodes" :edges="visibleEdges" :selected-id="selected?.id" :connected="connected" :highlighted="highlighted" :level="effectiveLevel" :scope-key="focusFile" @select="selectNode" @expand="selectNode($event); expand()" @edge="showEdge" @file="openFileScope" @module="openModule"/>
+        <div v-if="!data?.nodes.length" class="atlas-empty"><div class="empty-icon"><Network :size="30"/></div><h2>{{ loading ? '正在展开代码结构' : error ? '图谱暂不可用' : '当前范围没有代码' }}</h2><p>{{ error || '选择已构建图谱的项目，或搜索其他文件与符号。' }}</p><button v-if="!data" @click="router.push('/overview')">前往项目准备</button><button v-else @click="goOverview">返回全部代码</button></div>
+        <div v-if="loading && data?.nodes.length" class="graph-notice" role="status">正在加载关联…</div>
+        <div v-else-if="error && data" class="graph-notice error" role="alert">{{ error }}</div>
+        <div v-else-if="notice" class="graph-notice" role="status">{{ notice }}</div>
+        <div v-if="focusFile && !selected && !loading" class="scope-hint"><FileCode2 :size="13"/><span>文件内符号与直接关联</span><button aria-label="退出文件范围" @click="chooseLevel('files')"><X :size="13"/></button></div>
+        <div v-if="impact?.paths.length" class="path-control"><GitBranch :size="15"/><select v-model="pathIndex" aria-label="影响传播路径"><option :value="-1">影响路径 · {{ availablePaths.length }} 条已加载</option><option v-for="{ path, index } in availablePaths" :key="index" :value="index">{{ path.depth }} 跳 → {{ byId.get(path.targetNodeId)?.label || path.targetNodeId }}</option></select><span v-if="pathNodes.length" class="path-chain">{{ pathNodes.map(n => n.label).join(' → ') }}</span><button aria-label="关闭影响路径" @click="impact = null; pathIndex = -1"><X :size="14"/></button></div>
+        <div class="canvas-hint" v-if="data?.nodes.length && !selected"><span>{{ effectiveLevel === 'files' && mode === '2d' ? '点击文件探索符号' : '选择节点查看代码与关联' }}</span><i/>拖动平移 · 滚轮缩放</div>
+        <div class="camera-tools"><button aria-label="缩小" @click="camera()?.zoomBy(1.2)"><Minus :size="15"/></button><span v-if="mode === '2d'">{{ Math.round((flatView?.zoom ?? 1) * 100) }}%</span><button aria-label="放大" @click="camera()?.zoomBy(.8)"><Plus :size="15"/></button><i/><button aria-label="适应全部节点" @click="camera()?.home()"><Maximize :size="15"/></button><button aria-label="取消聚焦" @click="dismissSelection"><Crosshair :size="15"/></button></div>
+        <section v-if="selected" class="selection-bar" aria-label="节点详情">
+          <div class="selection-symbol"><span class="kind-badge">{{ selected.kind }}</span><strong :title="selected.qualifiedName || selected.label">{{ selected.label }}</strong><button aria-label="关闭详情" @click="dismissSelection"><X :size="15"/></button><small :title="selected.filePath">{{ selected.filePath }}:{{ selected.startLine || '—' }}</small></div>
+          <div class="selection-actions"><button :disabled="loading" @click="expand('in')">↙ 入向 {{ incoming }}</button><button :disabled="loading" @click="expand('out')">↗ 出向 {{ outgoing }}</button><button v-if="hiddenNeighbors" :disabled="loading" @click="expand()">+{{ hiddenNeighbors }} 邻居</button><button @click="openDrawer('relations')">关联出处</button><button :disabled="loading" @click="traceImpact"><GitBranch :size="14"/>影响路径</button><button class="source-action" :disabled="!selected.filePath" @click="openDrawer('source')"><Code2 :size="14"/>源码</button></div>
+        </section>
+      </div>
+      <AtlasDetailDrawer v-if="drawer && drawerNode && data" :repository-id="data.repositoryId" :content-version="data.contentVersion" :context-id="branches.context?.contextId" :node="drawerNode" :nodes="data.nodes" :edges="data.edges" :tab="drawer" :line="sourceLine" @close="drawer = null" @tab="drawer = $event" @select="selectNode" @source="(node, line) => openDrawer('source', node, line)" @open-file="openSource"/>
+    </div>
+    <footer class="atlas-status"><span class="status-dot"/><span v-if="data">画布 {{ mode === '2d' ? projection.cards.length : canvasNodes.length }} 卡片 · {{ mode === '2d' ? projection.edges.length : visibleEdges.length }} 关系</span><span v-if="data">已加载 {{ data.nodes.length }} 节点</span><span v-if="hiddenEdges" class="partial">{{ hiddenEdges }} 条关系暂未绘制</span><span v-if="data?.partial" class="partial">部分数据</span><button v-if="data?.partial && limit < 1200" :disabled="loading" @click="loadMore">加载更多</button><span v-if="data" class="version-tag" :title="data.contentVersion">CodeGraph · {{ data.contentVersion.slice(0, 8) }}</span></footer>
   </section>
 </template>
 <style scoped>
-.atlas{display:flex;flex-direction:column;min-width:0;height:100%;min-height:520px;overflow:hidden;border:1px solid var(--app-border);border-radius:10px;color:var(--app-text-primary);background:var(--app-canvas);font-family:"Segoe UI","Microsoft YaHei",sans-serif}.atlas button,.atlas input,.atlas select{font:inherit}.atlas button{cursor:pointer;color:inherit}.atlas button:disabled{cursor:default;opacity:.45}.atlas button:focus-visible,.atlas input:focus-visible,.atlas select:focus-visible{outline:2px solid var(--app-color-action);outline-offset:3px}.atlas-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:11px 16px;border-bottom:1px solid var(--app-border);background:var(--app-surface);font-size:12px;z-index:5}.view-switch{display:flex;background:var(--app-surface-subtle);border:1px solid var(--app-border);padding:3px;border-radius:6px;flex:none}.view-switch button{padding:5px 10px;border:0;border-radius:3px;white-space:nowrap;background:transparent;color:var(--app-text-muted)}.view-switch button[aria-pressed=true]{background:var(--app-surface);color:var(--app-color-action);box-shadow:0 1px 4px #17324d18}.atlas-search{display:flex;align-items:center;gap:8px;flex:1;min-width:180px;padding:4px 5px 4px 10px;background:var(--app-canvas);border:1px solid var(--app-border);border-radius:6px}.atlas-search input{width:100%;min-width:0;border:0;background:none;color:var(--app-text-primary)}.atlas-search button{background:var(--app-color-action);color:white;border:0;border-radius:4px;padding:5px 10px;white-space:nowrap}.atlas-toolbar select{max-width:140px;border:0;background:transparent;color:var(--app-text-muted);padding:5px 0}.depth-control{display:flex;gap:4px;align-items:center;color:var(--app-text-muted)}.tool{display:flex;background:none;border:0;padding:5px}.render-diagnostics{position:relative}.render-diagnostics summary{cursor:pointer;color:var(--app-text-muted)}.render-panel{position:absolute;right:0;top:30px;width:340px;max-height:60vh;overflow:auto;padding:16px;background:var(--app-surface);border:1px solid var(--app-border);border-radius:8px;box-shadow:0 14px 36px #17324d26;line-height:1.7;overflow-wrap:anywhere}.render-panel p{margin:0 0 12px}.render-panel button{padding:6px 8px;margin:0 6px 10px 0;background:var(--app-surface-subtle);border:1px solid var(--app-border);border-radius:4px}.atlas-caption{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:9px 17px;color:var(--app-text-muted);font-size:11px;background:var(--app-surface);border-bottom:1px solid var(--app-border)}.atlas-caption strong{font-size:13px;color:var(--app-text-primary)}.atlas-caption button{display:flex;align-items:center;gap:5px;background:none;border:0;color:var(--app-color-action);padding:0}.performance-note{margin-left:auto}.render-notice{color:var(--app-color-warning)}.atlas-stage{position:relative;flex:1;min-height:330px;overflow:hidden;background:radial-gradient(ellipse at 50% 35%,#fff 0,#f0f5f9 80%)}.atlas-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--app-text-muted);padding:24px;text-align:center}.atlas-empty h2{font-size:18px;margin:0}.atlas-empty p{font-size:13px;max-width:560px;margin:0}.atlas-empty button{border:1px solid var(--app-border);background:var(--app-surface);border-radius:6px;padding:8px 14px}.camera-tools{position:absolute;right:16px;top:16px;display:flex;gap:2px;padding:4px;background:var(--app-surface);border:1px solid var(--app-border);border-radius:7px;box-shadow:0 4px 16px #17324d0d;z-index:3}.camera-tools button{display:flex;align-items:center;justify-content:center;border:0;background:none;padding:7px}.camera-tools button:hover{color:var(--app-color-action);background:var(--app-color-action-soft)}.selection-bar{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);width:min(780px,calc(100% - 40px));box-sizing:border-box;display:flex;flex-direction:column;gap:10px;background:var(--app-surface);border:1px solid var(--app-border);border-radius:10px;box-shadow:0 8px 32px #17324d18;padding:12px 16px;z-index:3}.selection-symbol{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}.kind-badge{font:11px Consolas,monospace;color:var(--app-color-evidence,#168fa3);background:#e9f4f5;border-radius:4px;padding:3px 6px}.selection-symbol strong{font:600 14px Consolas,"Microsoft YaHei",monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:75%}.selection-symbol>button{margin-left:auto;padding:0;border:0;background:none;display:flex}.selection-symbol small{flex-basis:100%;font:11px Consolas,monospace;color:var(--app-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.selection-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px}.selection-actions button{display:flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--app-border);background:var(--app-surface);padding:6px 9px;border-radius:5px}.selection-actions .source-action{margin-left:auto;background:var(--app-color-action);border-color:var(--app-color-action);color:white}.selection-actions button:hover{border-color:var(--app-color-action)}.atlas-status{display:flex;flex-wrap:wrap;align-items:center;gap:14px;background:var(--app-surface);border-top:1px solid var(--app-border);padding:9px 16px;font-size:11px;color:var(--app-text-muted)}.atlas-status button{padding:0;background:none;border:0;color:var(--app-color-action)}.version-tag{margin-left:auto;font-family:Consolas,monospace}.partial{color:var(--app-color-warning)}.graph-notice{position:absolute;top:12px;left:16px;max-width:60%;font-size:12px;color:#35607b;background:#fff;border:1px solid var(--app-border);padding:8px 12px;border-radius:5px;z-index:3}.graph-notice.error{color:var(--app-color-danger,#b74343)}.path-control{position:absolute;top:58px;left:16px;display:flex;align-items:center;gap:8px;max-width:calc(100% - 32px);background:var(--app-surface);padding:8px 12px;border:1px solid var(--app-border);border-radius:6px;z-index:3;font-size:12px;color:#168fa3}.path-control select{min-width:100px;max-width:260px;background:transparent;border:0;color:inherit}.path-chain{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:460px}.path-control button{border:0;background:none;display:flex}@media(max-width:900px){.atlas-toolbar{gap:8px;padding:10px}.atlas-search{order:2;flex-basis:100%}.selection-bar{bottom:10px;padding:10px 12px}.path-chain{display:none}.atlas-status{gap:8px}.selection-actions button{padding:5px 7px}}
+.atlas{--atlas-ink:#23344f;--atlas-muted:#7b899f;--atlas-line:#e5eaf2;--atlas-blue:#2563eb;display:flex;flex-direction:column;min-width:0;height:100%;min-height:580px;overflow:hidden;border:1px solid var(--atlas-line);border-radius:12px;color:var(--atlas-ink);background:#fff;font-family:"Segoe UI","Microsoft YaHei",sans-serif}
+.atlas button,.atlas input,.atlas select{font:inherit}.atlas button{cursor:pointer;color:inherit}.atlas button:disabled{cursor:default;opacity:.45}.atlas button:focus-visible,.atlas input:focus-visible,.atlas select:focus-visible,.atlas summary:focus-visible{outline:2px solid var(--atlas-blue);outline-offset:3px}.atlas button{transition:background .15s,color .15s}.atlas-heading{display:flex;align-items:center;gap:12px;padding:18px 22px 16px}.heading-icon{display:grid;place-items:center;width:38px;height:38px;background:#edf3ff;color:#3971da;border:1px solid #e0e9fc;border-radius:11px}.atlas-heading h1{font-size:17px;font-weight:650;letter-spacing:.3px;margin:0 0 4px}.atlas-heading p{font-size:11px;color:var(--atlas-muted);margin:0}.branch-chip{margin-left:auto;display:flex;align-items:center;gap:6px;padding:6px 10px;font:11px Consolas,monospace;background:#f8fafc;border:1px solid var(--atlas-line);border-radius:6px;color:#68788e}
+.atlas-toolbar{display:flex;align-items:center;gap:12px;padding:0 20px 15px;background:#fff;font-size:12px;z-index:6}.view-switch{display:flex;background:#f3f5f9;padding:3px;border-radius:7px;flex:none}.view-switch button{display:flex;align-items:center;gap:6px;padding:6px 11px;border:0;border-radius:5px;white-space:nowrap;background:transparent;color:var(--atlas-muted)}.view-switch button[aria-pressed=true]{background:#fff;color:#356bd2;box-shadow:0 1px 4px #22345214}.atlas-search{display:flex;align-items:center;gap:8px;flex:1;max-width:490px;min-width:170px;padding:4px 6px 4px 11px;background:#fafbfd;border:1px solid var(--atlas-line);border-radius:7px;color:var(--atlas-muted)}.atlas-search input{width:100%;min-width:0;border:0;background:none;color:var(--atlas-ink);outline-offset:0}.atlas-search input::placeholder{color:#96a1b3}.atlas-search button{display:flex;align-items:center;gap:6px;color:#728198;background:#fff;border:1px solid var(--atlas-line);border-radius:4px;padding:3px 7px;white-space:nowrap;font-size:11px}.atlas-search button span{color:#a6b0c0}.atlas-toolbar>select{margin-left:auto;max-width:130px;border:0;background:transparent;color:#728198;padding:5px}.tool{display:flex;align-items:center;justify-content:center;background:none;border:0;padding:6px;border-radius:5px}.tool:hover{background:#f1f5fc}.nav-toggle{color:#8491a5!important}.render-diagnostics{position:relative}.render-diagnostics summary{list-style:none;display:flex;padding:5px;cursor:pointer;color:var(--atlas-muted)}.render-diagnostics summary::-webkit-details-marker{display:none}.render-panel{position:absolute;right:0;top:32px;width:300px;max-width:75vw;max-height:65vh;overflow:auto;padding:18px;background:#fff;border:1px solid var(--atlas-line);border-radius:10px;box-shadow:0 12px 40px #23344f1c;line-height:1.8;overflow-wrap:anywhere}.render-panel strong{display:block;margin-bottom:10px}.render-panel p{margin:0 0 12px;color:var(--atlas-muted)}.render-panel button{padding:5px 8px;margin:0 5px 10px 0;background:#f6f8fc;border:1px solid var(--atlas-line);border-radius:5px}.render-panel label{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.atlas-caption{display:flex;align-items:center;gap:12px;min-height:45px;padding:0 21px;font-size:11px;background:#fff;border-block:1px solid var(--atlas-line);flex-wrap:wrap}.atlas-caption nav{display:flex;align-items:center;gap:9px;color:#a1acbd;min-width:0;flex:1;overflow:hidden}.atlas-caption nav>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#50617b}.atlas-caption button{display:flex;align-items:center;gap:7px;background:none;border:0;color:#6e7d93;padding:0;white-space:nowrap}.atlas-caption button:hover{color:var(--atlas-blue)}.level-switch{display:flex;align-items:center;gap:17px;align-self:stretch}.level-switch button{border-bottom:2px solid transparent;padding:0 2px}.level-switch button[aria-pressed=true]{color:#356bd2;border-bottom-color:#356bd2}.render-notice{color:#ab7721}
+.atlas-workbench{display:flex;flex:1;min-height:0;overflow:hidden}.atlas-navigator{width:215px;flex:none;display:flex;flex-direction:column;border-right:1px solid var(--atlas-line);background:#fff;min-height:0}.navigator-heading{display:flex;justify-content:space-between;align-items:center;padding:19px 17px 14px;font-size:11px;color:#6e7f97}.navigator-heading span:first-child{font-weight:600;color:#51627a}.navigator-heading span:last-child{font:10px Consolas,monospace;color:#9aa6b8}.repository-root{display:flex;align-items:center;gap:8px;border:0;background:none;margin:0 10px 10px;padding:9px;border-radius:6px;font-size:12px;text-align:left}.repository-root span{flex:1}.repository-root.active{background:#edf3ff;color:#3468c6}.tree-scroll{flex:1;overflow:auto;padding:0 10px}.tree-module{margin-bottom:8px}.tree-module summary{list-style:none;display:flex;align-items:center;gap:7px;cursor:pointer;padding:7px 4px;font-size:11px;color:#64758e}.tree-module summary::-webkit-details-marker{display:none}.tree-module summary span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}.tree-module small{font:10px Consolas,monospace;color:#9ba7b9}.tree-module[open] .tree-chevron{transform:rotate(90deg)}.module-overview{display:flex;align-items:center;gap:4px;font-size:10px!important;color:#8c9bb1!important;border:0;background:none;padding:4px 0 7px 27px}.module-overview:hover{color:var(--atlas-blue)!important}.tree-file{width:100%;display:flex;align-items:center;gap:7px;text-align:left;border:0;border-radius:5px;padding:8px 6px 8px 25px;background:none;color:#7a899d!important;font-size:11px!important}.tree-file svg{flex:none}.tree-file span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Consolas,"Microsoft YaHei",monospace}.tree-file:hover{background:#f5f7fb}.tree-file.active{background:#edf3ff;color:#356bd2!important}.tree-empty{font-size:11px;color:#8997aa;padding:10px}.navigator-note{display:flex;align-items:center;gap:6px;font-size:10px;color:#96a2b4;padding:16px;border-top:1px solid var(--atlas-line)}
+.atlas-stage{position:relative;flex:1;min-width:0;min-height:310px;overflow:hidden;background:#f6f8fb}.atlas-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:var(--atlas-muted);padding:28px;text-align:center}.empty-icon{padding:18px;background:#edf2fa;border:1px solid #dfe7f4;border-radius:18px;color:#7b98c7}.atlas-empty h2{font-size:16px;color:#4f627d;margin:0}.atlas-empty p{font-size:12px;max-width:440px;line-height:1.8;margin:0}.atlas-empty button{border:1px solid var(--atlas-line);background:#fff;border-radius:6px;padding:8px 14px;font-size:12px}
+.camera-tools{position:absolute;right:18px;bottom:17px;display:flex;align-items:center;gap:2px;padding:4px;background:#fff;border:1px solid #e0e6f0;border-radius:8px;box-shadow:0 3px 12px #23344f08;z-index:3}.camera-tools button{display:flex;align-items:center;justify-content:center;border:0;background:none;padding:6px;border-radius:4px;color:#64758c}.camera-tools button:hover{color:var(--atlas-blue);background:#edf3ff}.camera-tools>span{font:10px Consolas,monospace;color:#7c8ba1;min-width:30px;text-align:center}.camera-tools i{height:15px;width:1px;background:var(--atlas-line);margin:0 4px}.canvas-hint{position:absolute;bottom:26px;left:20px;display:flex;align-items:center;gap:9px;color:#9aa7b9;font-size:10px;pointer-events:none}.canvas-hint i{height:3px;width:3px;background:#acb7c8;border-radius:50%}.canvas-hint span{color:#8293ac}.scope-hint{position:absolute;top:15px;left:17px;display:flex;align-items:center;gap:7px;color:#7386a2;font-size:11px;background:#ffffffed;border:1px solid var(--atlas-line);border-radius:6px;padding:7px 10px}.scope-hint button{display:flex;border:0;background:none;padding:0;margin-left:5px;color:#91a0b5}
+.selection-bar{position:absolute;bottom:68px;left:50%;transform:translateX(-50%);width:min(660px,calc(100% - 32px));box-sizing:border-box;display:flex;flex-direction:column;gap:10px;background:#fff;border:1px solid #dce5f2;border-radius:10px;box-shadow:0 8px 30px #23344f12;padding:13px 15px;z-index:3}.selection-symbol{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}.kind-badge{font:10px Consolas,monospace;color:#4477c4;background:#edf3ff;border-radius:4px;padding:3px 6px}.selection-symbol strong{font:600 13px Consolas,"Microsoft YaHei",monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%}.selection-symbol>button{margin-left:auto;padding:0;border:0;background:none;display:flex;color:#8492a5}.selection-symbol small{flex-basis:100%;font:10px Consolas,monospace;color:#8c99ad;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.selection-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px}.selection-actions button{display:flex;align-items:center;gap:5px;font-size:11px;border:1px solid var(--atlas-line);background:#fff;padding:6px 8px;border-radius:5px;color:#6b7f99}.selection-actions .source-action{margin-left:auto;background:#3474e6;border-color:#3474e6;color:white}.selection-actions button:hover{border-color:#93b4ef}
+.atlas-status{display:flex;flex-wrap:wrap;align-items:center;gap:13px;background:#fff;border-top:1px solid var(--atlas-line);padding:10px 18px;font-size:10px;color:#8e9aae}.status-dot{width:5px;height:5px;border-radius:50%;background:#71aa9b;flex:none}.atlas-status button{padding:0;background:none;border:0;color:var(--atlas-blue)}.version-tag{margin-left:auto;font-family:Consolas,monospace}.partial{color:#ac853d}.graph-notice{position:absolute;top:15px;left:17px;max-width:70%;font-size:12px;color:#53719a;background:#fff;border:1px solid var(--atlas-line);padding:8px 12px;border-radius:6px;z-index:4}.graph-notice.error{color:#b74343}.path-control{position:absolute;top:54px;left:17px;display:flex;align-items:center;gap:8px;max-width:calc(100% - 34px);background:#fff;padding:8px 12px;border:1px solid var(--atlas-line);border-radius:6px;z-index:3;font-size:11px;color:#368575}.path-control select{min-width:100px;max-width:260px;background:transparent;border:0;color:inherit}.path-chain{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px}.path-control button{border:0;background:none;display:flex}.spinning{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:1100px){.has-drawer .atlas-navigator{display:none}.atlas-navigator{width:185px}.atlas-toolbar{gap:7px;padding-inline:13px}.canvas-hint{display:none}.path-chain{display:none}}
+@media(max-width:760px){.atlas{height:auto;min-height:650px}.atlas-heading{padding:14px}.atlas-toolbar{flex-wrap:wrap}.atlas-search{order:2;max-width:none;flex-basis:100%}.atlas-navigator{display:none}.atlas-caption{padding-inline:13px;gap:6px}.atlas-caption nav{flex-basis:100%;padding-top:10px}.level-switch{height:34px}.atlas-workbench{flex:none;flex-wrap:wrap;overflow:visible}.atlas-stage{flex-basis:100%;height:430px;min-height:430px}.selection-bar{padding:10px;bottom:62px}.atlas-status{gap:8px}.selection-actions button{padding:5px 6px}.branch-chip{max-width:100px;overflow:hidden}.nav-toggle{display:none}.render-panel{right:0}}
+@media(prefers-reduced-motion:reduce){.atlas button{transition:none}.spinning{animation:none}}
 </style>

@@ -365,7 +365,7 @@ public class IntelligenceService {
         List<IndexedEvidence> cited;
         CitationAssessment citationAssessment;
         if (evidence.isEmpty()) {
-            answer = "当前仓库的代码索引和有效知识中没有找到达到相关度门槛的证据。" + "请先完成索引、发布相关知识，或使用更具体的模块名、符号名和业务术语。";
+            answer = "当前项目的代码索引和有效知识中没有找到达到相关度门槛的证据。" + "请先完成索引、发布相关知识，或使用更具体的模块名、符号名和业务术语。";
             evidenceStatus = "INSUFFICIENT";
             fallbackReason = "NO_EVIDENCE";
             cited = List.of();
@@ -583,7 +583,7 @@ public class IntelligenceService {
             int limit,
             BranchReadContext context) {
         if (context != null && !repositoryId.equals(context.repositoryId()))
-            throw new IllegalArgumentException("上下文仓库不匹配");
+            throw new IllegalArgumentException("上下文项目不匹配");
         long retrievalStarted = System.nanoTime();
         int candidateLimit = Math.min(MAX_CANDIDATES_PER_CHANNEL, Math.max(16, limit * 4));
         int termCount = Math.max(1, query.terms().size());
@@ -977,8 +977,8 @@ public class IntelligenceService {
             String question, List<Answer> history, List<Evidence> evidence, List<CallLink> links) {
         StringBuilder prompt =
                 new StringBuilder(
-                                "你是仓库知识与代码问答助手。只能依据下面带编号的本轮证据回答；"
-                                        + "历史对话只用于理解指代和用户意图，不能作为仓库事实证据；"
+                                "你是项目知识与代码问答助手。只能依据下面带编号的本轮证据回答；"
+                                        + "历史对话只用于理解指代和用户意图，不能作为项目事实证据；"
                                         + "不能从本轮证据推出的内容必须明确说不知道；不要编造调用关系；"
                                         + "不同知识卡片必须视为独立来源，不得因标题或正文相同而合并；"
                                         + "若项目共享与分支专属知识矛盾，分别陈述并标注来源差异，不自行决定优先级。")
@@ -1037,7 +1037,7 @@ public class IntelligenceService {
             }
         }
         return prompt.append(
-                        "\n请用中文回答当前问题；每个仓库事实句末必须标注一个或多个 [S编号]；"
+                        "\n请用中文回答当前问题；每个项目事实句末必须标注一个或多个 [S编号]；"
                                 + "区分团队知识和源码事实；冲突时以当前内容版本源码为准；"
                                 + "分析功能实现时说明入口、主要步骤、调用方向和不确定点；"
                                 + "启发式调用关系只能作为线索，无法从代码证据核实时请明确说明不确定。")
@@ -1466,7 +1466,7 @@ public class IntelligenceService {
         for (UUID chunkId : ids) {
             Map<String, Object> row = mapper.findChunk(repositoryId, chunkId);
             if (row == null) {
-                throw new IllegalArgumentException("关联代码不存在或不属于当前仓库");
+                throw new IllegalArgumentException("关联代码不存在或不属于当前项目");
             }
             mapper.insertCodeReference(
                     cardId,

@@ -81,7 +81,7 @@ public class RepositoryProjectDraftService {
 
     @Transactional
     public Draft complete(AuthenticatedAccount actor, UUID id, UUID repositoryId) {
-        if (repositoryId == null) throw new IllegalArgumentException("缺少已导入的仓库");
+        if (repositoryId == null) throw new IllegalArgumentException("缺少已接入的项目");
         access.require(actor, CodeRepositoryId.of(repositoryId), RepositoryPermission.MANAGE);
         applyMetadata(id, repositoryId);
         if (db.update(
@@ -120,7 +120,7 @@ public class RepositoryProjectDraftService {
                         repositoryId)
                 != 1) {
             throw new ApiSecurityException(
-                    409, "PROJECT_DRAFT_REPOSITORY_MISMATCH", "项目草稿与导入仓库归属不一致");
+                    409, "PROJECT_DRAFT_REPOSITORY_MISMATCH", "项目草稿与已接入项目归属不一致");
         }
     }
 
@@ -131,6 +131,36 @@ public class RepositoryProjectDraftService {
                     "UPDATE repository_project_drafts SET lifecycle_status='FAILED',error=?,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND lifecycle_status<>'READY'",
                     error == null ? "来源准备失败" : error.substring(0, Math.min(500, error.length())),
                     id);
+    }
+
+    @Transactional
+    public void delete(AuthenticatedAccount actor, UUID id, long expectedVersion) {
+        Draft draft = get(actor, id);
+        if ("IMPORTING".equals(draft.lifecycleStatus())) {
+            throw new ApiSecurityException(409, "PROJECT_DRAFT_IMPORTING", "项目正在接入，请等待导入结束后再删除草稿");
+        }
+        if ("READY".equals(draft.lifecycleStatus()) || draft.resultRepositoryId() != null) {
+            throw new ApiSecurityException(409, "PROJECT_DRAFT_COMPLETED", "项目已接入，不能作为未完成草稿删除");
+        }
+        if (db.update(
+                        """
+                        DELETE FROM repository_project_drafts
+                        WHERE id=? AND (owner_account_id=? OR ?) AND version=?
+                            AND lifecycle_status IN ('DRAFT','SOURCE_CONFIGURED','FAILED')
+                            AND result_repository_id IS NULL
+                            AND NOT EXISTS (
+                                SELECT 1 FROM repository_import_jobs j
+                                WHERE j.project_draft_id=repository_project_drafts.id
+                                    AND j.status IN ('QUEUED','RUNNING')
+                            )
+                        """,
+                        id,
+                        actor.id(),
+                        actor.isSuperAdmin(),
+                        expectedVersion)
+                != 1) {
+            throw new ApiSecurityException(409, "PROJECT_DRAFT_CONFLICT", "项目草稿已变化或仍有导入任务，请刷新后重试");
+        }
     }
 
     public List<Draft> list(AuthenticatedAccount actor) {

@@ -60,7 +60,7 @@ const workbenchReady = computed(() => Boolean(
 const gateCopy = computed(() => {
   if (!repository.value) return {
     title: '先选择一个项目',
-    detail: '代码检索、源码预览和适用知识都需要明确的仓库范围。',
+    detail: '代码检索、源码预览和适用知识都需要明确的项目范围。',
     action: '前往项目管理',
     path: '/repositories',
   };
@@ -229,7 +229,7 @@ async function openFile(
 async function search() {
   const repositoryId = repositories.selectedRepositoryId;
   const keyword = query.value.trim();
-  if (!repositoryId) return ElMessage.warning('请先选择仓库');
+  if (!repositoryId) return ElMessage.warning('请先选择项目');
   if (readScope.blocked.value || !contentVersion.value) return ElMessage.warning(readScope.reason.value);
   if (!keyword) {
     clearSearch();
@@ -382,7 +382,7 @@ watch(
     <template v-else>
     <header class="workbench-command">
       <div class="contentVersion-context">
-        <strong>{{ repository?.name ?? '未选择仓库' }}</strong>
+        <strong>{{ repository?.name ?? '未选择项目' }}</strong>
         <span>{{ contentVersion?.branch ?? repository?.branch ?? '无分支' }}</span>
         <span class="mono">{{ shortCommit }}</span>
         <span>{{ contentVersion?.files.length ?? 0 }} 个文件</span>

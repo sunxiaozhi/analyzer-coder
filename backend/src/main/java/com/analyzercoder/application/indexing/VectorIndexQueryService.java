@@ -35,7 +35,7 @@ public class VectorIndexQueryService {
 
     private Summary summary(Map<String, Object> row) {
         if (row == null) {
-            throw new IllegalArgumentException("仓库不存在");
+            throw new IllegalArgumentException("项目不存在");
         }
         return new Summary(
                 uuid(row, "repository_id"),

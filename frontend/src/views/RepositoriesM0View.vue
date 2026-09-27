@@ -25,6 +25,7 @@ const route = useRoute();
 const rows = shallowRef<Repository[]>([]);
 const projectDrafts = shallowRef<ProjectDraft[]>([]);
 const retryingDraft = shallowRef<ProjectDraft | null>(null);
+const deletingDraftId = shallowRef<string | null>(null);
 const query = shallowRef('');
 const pageNum = shallowRef(1);
 const pageSize = shallowRef(15);
@@ -65,7 +66,7 @@ async function loadPage() {
       await loadPage();
     }
   } catch (error) {
-    if (alive && version === pageVersion) pageError.value = error instanceof Error ? error.message : '仓库列表加载失败';
+    if (alive && version === pageVersion) pageError.value = error instanceof Error ? error.message : '项目列表加载失败';
   } finally { if (alive && version === pageVersion) pageLoading.value = false; }
 }
 async function selectProject(project: Repository) {
@@ -91,6 +92,7 @@ async function create(input: Input) {
   try {
     let draft = retryingDraft.value
       ?? await projectDraftsApi.create(input.name, input.description);
+    retryingDraft.value = draft;
     const sourceLocation = input.sourceType === 'LOCAL_GIT'
       ? input.path
       : input.sourceType === 'ZIP'
@@ -99,6 +101,7 @@ async function create(input: Input) {
     draft = await projectDraftsApi.configure(
       draft, input.sourceType, sourceLocation, input.credentialId || undefined,
     );
+    retryingDraft.value = draft;
     if (input.sourceType === 'LOCAL_GIT') {
       const repository = await store.createRepository({ name: input.name, path: input.path });
       await projectDraftsApi.complete(draft.id, repository);
@@ -121,20 +124,42 @@ async function create(input: Input) {
     retryingDraft.value = null;
     pageNum.value = 1;
     await reloadAll();
-    ElMessage.success('仓库代码版本已验证并发布');
+    ElMessage.success('项目代码版本已验证并发布');
   } catch (error) {
     projectDrafts.value = await projectDraftsApi.list().catch(() => projectDrafts.value);
+    if (retryingDraft.value) {
+      retryingDraft.value = projectDrafts.value.find(draft => draft.id === retryingDraft.value?.id) ?? retryingDraft.value;
+    }
     ElMessage.error(error instanceof Error ? error.message : '导入失败');
   }
   finally { importing.value = false; }
 }
-async function waitForImport(id:string){for(let attempt=0;attempt<120;attempt++){const job=await sourceImportsApi.job(id);if(job.status==='SUCCEEDED')return job;if(job.status==='FAILED'||job.status==='CANCELED')throw new Error(job.errorMessage??'仓库导入未完成');await new Promise(resolve=>window.setTimeout(resolve,1000));}throw new Error('仓库导入仍在后台运行，请稍后刷新列表')}
+async function waitForImport(id:string){for(let attempt=0;attempt<120;attempt++){const job=await sourceImportsApi.job(id);if(job.status==='SUCCEEDED')return job;if(job.status==='FAILED'||job.status==='CANCELED')throw new Error(job.errorMessage??'项目接入未完成');await new Promise(resolve=>window.setTimeout(resolve,1000));}throw new Error('项目接入仍在后台运行，请稍后刷新列表')}
 function retryDraft(draft: ProjectDraft) { retryingDraft.value = draft; dialogOpen.value = true; }
+async function removeDraft(draft: ProjectDraft) {
+  if (deletingDraftId.value || importing.value || draft.lifecycleStatus === 'IMPORTING') return;
+  deletingDraftId.value = draft.id;
+  try {
+    await ElMessageBox.confirm(
+      `删除“${draft.name}”的接入草稿？只清理这条未完成的接入记录，已接入项目和源码不受影响。`,
+      '删除接入草稿',
+      { type: 'warning', confirmButtonText: '删除草稿', cancelButtonText: '取消' },
+    );
+    await projectDraftsApi.remove(draft);
+    projectDrafts.value = projectDrafts.value.filter(item => item.id !== draft.id);
+    if (retryingDraft.value?.id === draft.id) retryingDraft.value = null;
+    ElMessage.success('接入草稿已删除');
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(error instanceof Error ? error.message : '删除接入草稿失败');
+    projectDrafts.value = await projectDraftsApi.list().catch(() => projectDrafts.value);
+  } finally { deletingDraftId.value = null; }
+}
 function openEdit(repository: Repository) { editing.value = repository; editOpen.value = true; }
 async function saveEdit(input: { name: string; description: string; defaultBranch: string; version: number }) {
   if (!editing.value) return;
   editBusy.value = true;
-  try { await updateRepository(editing.value.id, input); editOpen.value = false; await reloadAll(); ElMessage.success('仓库资料已更新'); }
+  try { await updateRepository(editing.value.id, input); editOpen.value = false; await reloadAll(); ElMessage.success('项目资料已更新'); }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存失败'); }
   finally { editBusy.value = false; }
 }
@@ -161,7 +186,7 @@ async function readBranch(branchId: string, target?: 'search' | 'atlas') {
 function openSettings(repository: Repository) { managedRepository.value = repository; managementOpen.value = true; }
 function govern(repository: Repository) { governedRepository.value = repository; governanceOpen.value = true; }
 async function governanceChanged() { await reloadAll(); governedRepository.value = store.repositories.find(item => item.id === governedRepository.value?.id) ?? null; }
-async function remove(id: string, name: string) { await ElMessageBox.confirm(`删除平台中的“${name}”及其派生数据；本地原目录不会被修改。`, '删除仓库', { type: 'warning' }); await store.removeRepository(id); if (managedRepository.value?.id === id) managementOpen.value = false; await loadPage(); }
+async function remove(id: string, name: string) { await ElMessageBox.confirm(`删除平台中的“${name}”及其派生数据；本地原目录不会被修改。`, '删除项目', { type: 'warning' }); await store.removeRepository(id); if (managedRepository.value?.id === id) managementOpen.value = false; await loadPage(); }
 
 watch(query, () => {
   window.clearTimeout(searchTimer);
@@ -191,8 +216,11 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
         <el-alert v-if="pageError || store.error" :title="pageError ?? store.error ?? ''" type="error" :closable="false" />
         <div v-if="unfinishedDrafts.length" class="draft-stack">
           <div v-for="draft in unfinishedDrafts.slice(0, 3)" :key="draft.id" class="draft-row">
-            <span><b>{{ draft.name }}</b><small>{{ draft.error ?? '等待配置代码来源' }}</small></span>
-            <el-button link type="primary" @click="retryDraft(draft)">继续接入</el-button>
+            <span class="draft-copy"><b>{{ draft.name }}</b><small :title="draft.error ?? undefined">{{ draft.error ?? (draft.lifecycleStatus === 'IMPORTING' ? '正在接入，请等待导入结束' : '等待配置代码来源') }}</small></span>
+            <div class="draft-actions">
+              <el-button link type="primary" :disabled="importing || !!deletingDraftId || draft.lifecycleStatus === 'IMPORTING'" @click="retryDraft(draft)">{{ draft.lifecycleStatus === 'IMPORTING' ? '接入中' : '继续接入' }}</el-button>
+              <el-button link type="danger" :loading="deletingDraftId === draft.id" :disabled="importing || !!deletingDraftId || draft.lifecycleStatus === 'IMPORTING'" @click="removeDraft(draft)">删除</el-button>
+            </div>
           </div>
         </div>
       </div>
@@ -239,7 +267,8 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
 .project-branches > :deep(.el-empty) { flex: 1; padding: 60px 20px; }
 .draft-stack { display: grid; gap: 8px; margin: 0 0 18px; }
 .draft-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px; color: var(--app-text-regular); border: 1px solid #ead7b8; border-radius: 6px; background: var(--app-color-warning-soft); font-size: 12px; }
-.draft-row span { display: grid; min-width: 0; gap: 4px; }.draft-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.draft-copy { display: grid; min-width: 0; gap: 4px; }.draft-copy b, .draft-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.draft-actions { display: flex; align-items: center; flex-shrink: 0; gap: 8px; }.draft-actions .el-button + .el-button { margin-left: 0; }
 @media (max-width: 1100px) { .repository-design { grid-template-columns: 270px minmax(0, 1fr); gap: 16px; }.repository-list-header { padding: 20px 14px 0; } }
 @media (max-width: 760px) { .repository-design { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; height: auto; overflow: visible; gap: 18px; }.repository-list-surface { grid-template-rows: auto minmax(100px, 260px) auto; }.project-branches { overflow: visible; }.repository-table-region { overflow-y: auto; } }
 </style>

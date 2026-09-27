@@ -26,7 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class BranchPreparationJobs {
     private static final Logger log = LoggerFactory.getLogger(BranchPreparationJobs.class);
     private static final String GENERIC_FAILURE =
-            "任务失败，请检查分支、仓库权限、凭据或向量模型配置后重试";
+            "任务失败，请检查分支、项目权限、凭据或向量模型配置后重试";
 
     private final JdbcTemplate db;
     private final DataSource dataSource;

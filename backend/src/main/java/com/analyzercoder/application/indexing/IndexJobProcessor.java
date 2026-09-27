@@ -125,7 +125,7 @@ public class IndexJobProcessor {
                                                     "Repository not found: "
                                                             + runningJob.repositoryId().value()));
             if (repository.currentContentVersion() == null) {
-                throw new IllegalStateException("仓库尚未发布可用的代码版本");
+                throw new IllegalStateException("项目尚未发布可用的代码版本");
             }
 
             List<ScannedRepositoryFile> allFiles = repositoryScannerPort.scan(repository);

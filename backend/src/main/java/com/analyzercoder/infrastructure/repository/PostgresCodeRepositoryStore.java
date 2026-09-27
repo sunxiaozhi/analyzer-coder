@@ -34,7 +34,7 @@ public class PostgresCodeRepositoryStore implements CodeRepositoryStore {
     @Override
     public CodeRepository save(CodeRepository repository) {
         if (mapper.update(RepositoryRow.forUpdate(repository)) != 1) {
-            throw new IllegalArgumentException("仓库不存在");
+            throw new IllegalArgumentException("项目不存在");
         }
         return repository;
     }

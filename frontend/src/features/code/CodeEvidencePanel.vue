@@ -58,12 +58,12 @@ function applicabilityLabel(kind: string) {
     DIRECT_BINDING: '直接代码绑定',
     PATH_SCOPE: '路径范围命中',
     SYMBOL_SCOPE: '符号范围命中',
-    REPOSITORY_SCOPE: '仓库范围命中',
+    REPOSITORY_SCOPE: '项目范围命中',
   } as Record<string, string>)[kind] ?? kind;
 }
 
 function limitationLabel(value: string) {
-  if (value === 'DETERMINISTIC_KNOWLEDGE_MATCHING_ONLY') return '只展示代码绑定、路径、符号或仓库范围能够确定命中的知识；关键词相似内容不会被当作适用规则。';
+  if (value === 'DETERMINISTIC_KNOWLEDGE_MATCHING_ONLY') return '只展示代码绑定、路径、符号或项目范围能够确定命中的知识；关键词相似内容不会被当作适用规则。';
   if (value === 'DIRECT_KNOWLEDGE_BINDINGS_ONLY') return '这里只展示直接绑定到该文件的知识，不把关键词相似结果冒充适用规则。';
   return '其他限制说明。';
 }

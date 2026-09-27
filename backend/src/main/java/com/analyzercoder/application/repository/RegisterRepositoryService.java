@@ -57,7 +57,7 @@ public class RegisterRepositoryService implements RegisterRepositoryUseCase {
     private CodeRepository register(RegisterRepositoryCommand command, Path source) {
         String name = command.name().trim();
         if (repositoryStore.existsByNormalizedName(command.ownerAccountId(), name)) {
-            throw new IllegalStateException("当前所有者下已存在同名仓库");
+            throw new IllegalStateException("当前所有者下已存在同名项目");
         }
         if (repositoryStore.existsByPath(source)) {
             throw new IllegalStateException("该仓库路径已经接入平台");
@@ -88,7 +88,7 @@ public class RegisterRepositoryService implements RegisterRepositoryUseCase {
     public RepositoryScanResult rescan(CodeRepositoryId id) {
         CodeRepository repository = get(id);
         if (indexJobStore.hasActiveJob(id)) {
-            throw new IllegalStateException("仓库存在运行中的索引任务，暂时不能同步");
+            throw new IllegalStateException("项目存在运行中的索引任务，暂时不能同步");
         }
         GitRepositoryContentVersion version = gitInspector.inspect(repository.path());
         if (repository.hasSameVersion(version)) {
@@ -106,7 +106,7 @@ public class RegisterRepositoryService implements RegisterRepositoryUseCase {
     public void delete(CodeRepositoryId id) {
         get(id);
         if (indexJobStore.hasActiveJob(id)) {
-            throw new IllegalStateException("仓库存在运行中的索引任务，暂时不能删除");
+            throw new IllegalStateException("项目存在运行中的索引任务，暂时不能删除");
         }
         codeChunkStore.deleteByRepositoryId(id);
         indexJobStore.deleteByRepositoryId(id);

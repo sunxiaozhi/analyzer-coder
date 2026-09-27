@@ -34,7 +34,7 @@ function typeLabel(type: Task['type']) {
     empty-text="尚无任务"
     @row-click="(row: Task) => emit('select', row.id)"
   >
-    <el-table-column label="仓库" min-width="180">
+    <el-table-column label="项目" min-width="180">
       <template #default="{ row }">{{ repositoryName(row.repositoryId) }}</template>
     </el-table-column>
     <el-table-column label="类型" width="130">

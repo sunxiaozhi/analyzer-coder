@@ -5,7 +5,7 @@ import * as z from 'zod/v4';
 import { AnalyzerApiError, clientFromEnvironment } from './api-client.mjs';
 
 const uuid = z.string().uuid();
-const repositoryId = uuid.describe('已认证账户可读取的仓库 UUID');
+const repositoryId = uuid.describe('已认证账户可读取的项目 UUID');
 
 export function createAnalyzerMcpServer(api = clientFromEnvironment()) {
   const server = new McpServer(

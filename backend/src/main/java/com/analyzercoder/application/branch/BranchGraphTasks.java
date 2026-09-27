@@ -71,7 +71,7 @@ public class BranchGraphTasks {
             var current = target(active.get(0));
             if (current.isPresent() && current.get().contentVersion().equals(target.contentVersion()))
                 return jobs.findById(IndexJobId.of(active.get(0))).orElseThrow();
-            throw new ApiSecurityException(409, "BRANCH_GRAPH_BUSY", "仓库已有其他版本的活动任务，请等待其完成");
+            throw new ApiSecurityException(409, "BRANCH_GRAPH_BUSY", "项目已有其他版本的活动任务，请等待其完成");
         }
         IndexJob job =
                 jobs.save(

@@ -129,7 +129,7 @@ public class KnowledgeDriftService {
                         .orElseThrow(
                                 () ->
                                         new KnowledgeDriftException(
-                                                "REPOSITORY_NOT_FOUND", "代码仓库不存在"));
+                                                "REPOSITORY_NOT_FOUND", "项目不存在"));
         requirePublished(repository);
         KnowledgeDriftCandidateRow candidate = mapper.findCandidate(repositoryId.value(), cardId);
         if (candidate == null) {
@@ -399,7 +399,7 @@ public class KnowledgeDriftService {
         if (repository == null
                 || repository.currentContentVersion() == null
                 || repository.currentCommit() == null) {
-            throw new KnowledgeDriftException("CURRENT_CONTENT_VERSION_REQUIRED", "仓库尚未发布可用于知识复核的代码内容版本");
+            throw new KnowledgeDriftException("CURRENT_CONTENT_VERSION_REQUIRED", "项目尚未发布可用于知识复核的代码内容版本");
         }
     }
 

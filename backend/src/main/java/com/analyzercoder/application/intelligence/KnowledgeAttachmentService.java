@@ -143,7 +143,7 @@ public class KnowledgeAttachmentService {
         for (UUID id : ids) {
             Map<String, Object> row = mapper.find(repositoryId, id);
             if (row == null) {
-                throw new IllegalArgumentException("附件不存在或不属于当前仓库");
+                throw new IllegalArgumentException("附件不存在或不属于当前项目");
             }
             bytes += number(row, "size_bytes");
             if (bytes > REVISION_LIMIT) {

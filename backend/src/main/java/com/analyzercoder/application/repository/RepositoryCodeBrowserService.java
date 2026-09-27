@@ -123,7 +123,7 @@ public class RepositoryCodeBrowserService {
     private CodeRepository published(CodeRepositoryId repositoryId) {
         CodeRepository repository = repositories.get(repositoryId);
         if (repository.currentContentVersion() == null || repository.currentContentVersionPath() == null) {
-            throw new IllegalStateException("仓库尚未发布可浏览的代码内容版本");
+            throw new IllegalStateException("项目尚未发布可浏览的代码内容版本");
         }
         return repository;
     }

@@ -77,7 +77,7 @@ const preparationStatus = computed<{ label: string; tone: StatusTone }>(() => {
 });
 
 const repositoryMeta = computed(() => {
-  if (!repository.value) return '选择后才能读取仓库内容版本、代码证据和知识数据';
+  if (!repository.value) return '选择后才能读取项目内容版本、代码证据和知识数据';
   const branch = branchContext.context?.branchName ?? '分支未知';
   const commit = branchContext.context?.commitSha;
   return commit ? branch + ' · ' + commit.slice(0, 8) : branch;
@@ -110,8 +110,8 @@ const workflowCards = computed<GuideCard[]>(() => {
       key: 'project',
       number: '01',
       title: '选择项目',
-      description: '选择当前账号已获授权的仓库，后续页面都以这个仓库为上下文。',
-      source: '仓库列表、当前账号授权与仓库选择偏好',
+      description: '选择当前账号已获授权的项目，后续页面都以这个项目为上下文。',
+      source: '项目列表、当前账号授权与项目选择偏好',
       status: repository.value ? '已选择 ' + repository.value.name : '需要选择项目',
       statusTone: repository.value ? 'success' : 'warning',
       action: repository.value ? '管理项目' : '选择项目',
@@ -180,7 +180,7 @@ const administrationCards: GuideCard[] = [
     number: 'A1',
     title: '任务中心',
     description: '查看普通索引和分支准备任务的阶段、失败原因及历史详情。',
-    source: 'index_jobs、branch_preparation_jobs 与可见仓库信息',
+    source: 'index_jobs、branch_preparation_jobs 与可见项目信息',
     status: '管理员功能',
     statusTone: 'neutral',
     action: '查看任务',
@@ -205,8 +205,8 @@ const administrationCards: GuideCard[] = [
     key: 'accounts',
     number: 'A3',
     title: '账号权限',
-    description: '维护平台账号与访问令牌；仓库授权在项目管理中完成。',
-    source: 'accounts、访问令牌与仓库授权',
+    description: '维护平台账号与访问令牌；项目授权在项目管理中完成。',
+    source: 'accounts、访问令牌与项目授权',
     status: '管理员功能',
     statusTone: 'neutral',
     action: '管理账号',
@@ -273,7 +273,7 @@ watch(
       </div>
       <div class="guide-principle">
         <CircleCheck :size="18" aria-hidden="true" />
-        <span>页面数据始终按当前账号的仓库授权隔离</span>
+        <span>页面数据始终按当前账号的项目授权隔离</span>
       </div>
     </header>
 

@@ -53,7 +53,7 @@ public class BranchRemoteService {
     private String url(UUID repoId) {
         String url = repositories.findRemoteUrl(repoId);
         if (url == null || url.isBlank()) {
-            throw new IllegalArgumentException("当前仓库未配置远程地址");
+            throw new IllegalArgumentException("当前项目未配置远程地址");
         }
         remoteTargets.requireAllowed(url);
         return url;

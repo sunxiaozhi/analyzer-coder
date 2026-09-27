@@ -74,7 +74,7 @@ async function changeRepository(repositoryId: string | null) {
     delete query.contextId;
     await router.replace({ query });
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存当前仓库失败');
+    ElMessage.error(error instanceof Error ? error.message : '保存当前项目失败');
   }
 }
 async function changeBranch(branchId: string) {
@@ -244,7 +244,7 @@ onMounted(() => {
       </section>
     </nav>
   </aside>
-  <main class="workspace"><header class="topbar"><span class="repository-label">当前仓库</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择仓库" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select>
+  <main class="workspace"><header class="topbar"><span class="repository-label">当前项目</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择项目" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select>
     <div v-if="repositoryStore.selectedRepositoryId && branchAwareRepository" class="branch-lock" :data-ready="branchContext.ready">
       <GitBranch :size="15" />
       <el-select

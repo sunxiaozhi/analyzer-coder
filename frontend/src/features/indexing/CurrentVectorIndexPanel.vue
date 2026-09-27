@@ -93,7 +93,7 @@ function openCode(item: VectorIndexChunk) {
       <div class="vector-table-region">
         <el-empty
           v-if="!repositoryStore.selectedRepositoryId"
-          description="请选择仓库查看当前向量索引"
+          description="请选择项目查看当前向量索引"
         />
         <VectorIndexTable
           v-else

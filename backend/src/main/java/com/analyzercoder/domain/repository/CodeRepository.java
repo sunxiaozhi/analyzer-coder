@@ -115,11 +115,11 @@ public record CodeRepository(
 
     private static String normalizeName(String value) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("仓库名称不能为空");
+            throw new IllegalArgumentException("项目名称不能为空");
         }
         String normalized = value.trim();
         if (normalized.length() > 100) {
-            throw new IllegalArgumentException("仓库名称不能超过 100 个字符");
+            throw new IllegalArgumentException("项目名称不能超过 100 个字符");
         }
         return normalized;
     }

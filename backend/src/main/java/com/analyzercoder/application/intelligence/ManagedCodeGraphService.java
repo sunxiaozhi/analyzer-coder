@@ -113,7 +113,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
             control.checkpoint("publish_codegraph");
             Version current = immutableBranch ? version : version(repositoryId);
             if (!version.contentVersion().equals(current.contentVersion())) {
-                throw new IllegalStateException("CodeGraph 构建期间仓库内容版本已切换，拒绝发布旧版本产物");
+                throw new IllegalStateException("CodeGraph 构建期间项目内容版本已切换，拒绝发布旧版本产物");
             }
             CodeGraphArtifactRow row =
                     new CodeGraphArtifactRow(
@@ -299,7 +299,7 @@ public class ManagedCodeGraphService extends CodeGraphService {
     private Version version(UUID repositoryId) {
         var row = mapper.findRepositoryVersion(repositoryId);
         if (row == null) {
-            throw new IllegalArgumentException("仓库不存在");
+            throw new IllegalArgumentException("项目不存在");
         }
         return new Version(row.contentVersion(), Path.of(row.contentVersionPath()));
     }

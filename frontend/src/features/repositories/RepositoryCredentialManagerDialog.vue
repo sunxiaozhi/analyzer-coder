@@ -49,7 +49,7 @@ async function save() {
   finally { saving.value = false; }
 }
 async function validate(item: RepositoryCredential) {
-  if (!props.repositoryUrl.trim()) { ElMessage.warning('请先在接入表单填写仓库地址'); return; }
+  if (!props.repositoryUrl.trim()) { ElMessage.warning('请先在接入表单填写远程仓库地址'); return; }
   validatingId.value = item.id;
   try { const updated = await repositoryCredentialsApi.validate(item.id, props.repositoryUrl); rows.value = rows.value.map(row => row.id === updated.id ? updated : row); ElMessage.success('凭据验证成功'); }
   catch (error) { await load(); ElMessage.error(error instanceof Error ? error.message : '凭据验证失败'); }
@@ -91,7 +91,7 @@ function select(item: RepositoryCredential) { if (item.status !== 'ACTIVE') retu
         <el-form-item label="用户名"><el-input v-model="form.username" :placeholder="form.type === 'GITLAB_PAT' ? 'oauth2' : 'Git 用户名'" /></el-form-item>
         <el-form-item :label="editingId ? '新令牌（留空保留原令牌）' : '访问令牌'" required><el-input v-model="form.secret" type="password" show-password autocomplete="new-password" /></el-form-item>
         <div class="form-actions">
-          <el-button v-if="editingId" :loading="validatingId === editingId" @click="validate(rows.find(item => item.id === editingId)!)">检测当前仓库</el-button>
+          <el-button v-if="editingId" :loading="validatingId === editingId" @click="validate(rows.find(item => item.id === editingId)!)">检测接入地址</el-button>
           <el-button type="primary" :loading="saving" @click="save">保存</el-button>
           <el-button v-if="editingId" :disabled="rows.find(item => item.id === editingId)?.status !== 'ACTIVE'" @click="select(rows.find(item => item.id === editingId)!)">选择此凭据</el-button>
           <el-button v-if="editingId" @click="toggle(rows.find(item => item.id === editingId)!)">{{ rows.find(item => item.id === editingId)?.status === 'DISABLED' ? '启用' : '停用' }}</el-button>

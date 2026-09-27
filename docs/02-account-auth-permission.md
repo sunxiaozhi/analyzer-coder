@@ -4,13 +4,13 @@
 
 ## 1 功能范围与角色
 
-本领域覆盖四件事：**账号生命周期**、**认证与会话**、**项目权限与仓库治理**、**系统审计日志**。术语统一如下：
+本领域覆盖四件事：**账号生命周期**、**认证与会话**、**项目权限与项目治理**、**系统审计日志**。术语统一如下：
 
 - **项目（project）**：即代码中的仓库（repository），持久化标识为 `repositories.id`，对外字段名沿用 `repositoryId`。
 - **权限级别**：`READ < MAINTAIN < MANAGE`，共三级，用枚举 `ordinal()` 比较，不存在第四级（`backend/src/main/java/com/analyzercoder/security/RepositoryPermission.java:4-11`）。
 - **所有者（owner）关系**：由 `repositories.owner_account_id` 表达，不是权限级别；所有者一律按 `MANAGE` 处理，并可执行仅所有者动作（`backend/src/main/java/com/analyzercoder/security/AccessControlService.java:30-32`、`:46-54`）。`repository_permissions` 表注释明确「不包含由 owner_account_id 表达的 OWNER」（`backend/src/main/resources/db/migration/V1__init_schema.sql`）。
 - **账号角色**：`SUPER_ADMIN`（超级管理员）与 `NORMAL`（普通用户），仅此两种（`backend/src/main/java/com/analyzercoder/security/AccountRole.java:4-7`）。
-- **会话（session）**：`login_sessions` 表中的浏览器登录态；**账户访问令牌（access token）**：`acp_` 前缀的长期凭据，仅代表账号身份；**仓库治理（governance）**：成员授权、撤销、所有权转移与删除申请。
+- **会话（session）**：`login_sessions` 表中的浏览器登录态；**账户访问令牌（access token）**：`acp_` 前缀的长期凭据，仅代表账号身份；**项目治理（governance）**：成员授权、撤销、所有权转移与删除申请。
 
 普通用户能否访问某项目，取决于可见性（所有者或已被授权）与请求所需权限级别；超级管理员在权限判定中直接放行，且不受可见性过滤限制。
 
@@ -21,7 +21,7 @@
 - 规则：
   - 两个端点都仅超级管理员可调用，非管理员返回 403 `FORBIDDEN`。
   - 分页参数 `pageNum` 默认 1、`pageSize` 默认 20，要求 `pageNum >= 1`、`1 <= pageSize <= 100`，否则 400；`query` 为空或空白视为不筛选，匹配 `LOWER(username)` 或 `LOWER(display_name)` 的包含关系。
-  - 分页排序 `created_at DESC, id DESC`，全量排序 `created_at ASC, id ASC`（两者相反，全量端点前端未接入）；摘要包含状态、被授权仓库数、最近登录时间与来源 IP、创建/更新时间、`accountVersion`，其中 `repositoryPermissionCount` 只统计 `repository_permissions` 行数，不含作为所有者拥有的项目。
+  - 分页排序 `created_at DESC, id DESC`，全量排序 `created_at ASC, id ASC`（两者相反，全量端点前端未接入）；摘要包含状态、被授权项目数、最近登录时间与来源 IP、创建/更新时间、`accountVersion`，其中 `repositoryPermissionCount` 只统计 `repository_permissions` 行数，不含作为所有者拥有的项目。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/AccountController.java:33-47`、`backend/src/main/java/com/analyzercoder/security/AuthService.java:285-295`、`backend/src/main/resources/mappers/AuthMapper.xml:70-84`、`backend/src/main/java/com/analyzercoder/application/common/PageResult.java:24-31`
 
 ### ACC-002 账号创建
@@ -141,7 +141,7 @@
 - 规则：
   - `ApiSecurityException` 按其自带状态码原样返回，响应体为 `{code, message, timestamp}`。
   - `IllegalArgumentException` 返回 400 `BAD_REQUEST`；Bean 校验失败返回 400 `VALIDATION_FAILED`；`IllegalStateException` 与数据库约束冲突返回 409 `CONFLICT`（数据库冲突提示统一为「数据约束校验失败」）；其余异常返回 500 `INTERNAL_ERROR` 且提示「服务器内部错误」。
-  - 因此治理类的并发与前置约束失败（所有权版本变化、OWNER 约束、名称冲突、唯一管理员约束、仍持有仓库等）统一表现为 409 `CONFLICT`，只有自带错误码的校验使用 403/409 专用码。
+  - 因此治理类的并发与前置约束失败（所有权版本变化、OWNER 约束、名称冲突、唯一管理员约束、仍持有项目等）统一表现为 409 `CONFLICT`，只有自带错误码的校验使用 403/409 专用码。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/ApiExceptionHandler.java:21-40`、`:70-81`
 
 ### ACC-017 密码复杂度与哈希
@@ -156,11 +156,11 @@
 - 需求：集中判定某账号对某项目是否达到所需权限级别。
 - 规则：
   - 判定顺序：超级管理员直接通过；否则读取该账号在此项目上的访问记录，无记录即拒绝；账号等于 `owner_account_id` 即通过；否则要求 `permission_level` 非空且其 `ordinal()` 不小于所需级别。
-  - 判定失败返回 403 `FORBIDDEN`（提示「无权限访问该仓库」）；访问记录查询限定 `deleted_at IS NULL`，且只在该账号是所有者或存在授权行时返回；权限级别由数据库约束为 `READ`、`MAINTAIN`、`MANAGE` 三者之一。
+  - 判定失败返回 403 `FORBIDDEN`（提示「无权限访问该项目」）；访问记录查询限定 `deleted_at IS NULL`，且只在该账号是所有者或存在授权行时返回；权限级别由数据库约束为 `READ`、`MAINTAIN`、`MANAGE` 三者之一。
   - `canAccess` 对超级管理员无条件返回真，不查询成员表；`requireOwner` 对超级管理员直接放行；`visibleRepositoryIds` 对超级管理员返回全部未删除项目；管理类端点统一要求超级管理员角色，超级管理员在某项目上不是所有者时关系标签为 `SUPER_ADMIN` 而非 `OWNER`，能力位仍按 `MANAGE` 计算。
 - 证据：`backend/src/main/java/com/analyzercoder/security/AccessControlService.java:19-25`、`:46-60`、`:62-95`、`backend/src/main/resources/mappers/RepositoryAccessMapper.xml:15-22`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/java/com/analyzercoder/security/SecurityContext.java:27-33`
 
-### ACC-019 仓库可见性
+### ACC-019 项目可见性
 - 需求：项目列表只展示账号可见的项目。
 - 规则：
   - 普通用户可见集合 = 未删除且（本人为所有者 或 存在本人授权行）的项目 id；超级管理员可见集合 = 全部未删除项目 id。
@@ -168,7 +168,7 @@
   - MCP 工具在该集合基础上额外排除来源类型为 `ZIP` 的项目；分页查询的搜索字段包含项目名称、描述、默认分支与所有者用户名/显示名称。
 - 证据：`backend/src/main/java/com/analyzercoder/security/AccessControlService.java:56-60`、`backend/src/main/resources/mappers/RepositoryAccessMapper.xml:29-37`、`backend/src/main/resources/mappers/RepositoryMapper.xml:60-78`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryController.java:83-112`、`backend/src/main/java/com/analyzercoder/application/mcp/McpCodeGraphTools.java:149-160`
 
-### ACC-020 仓库关系与能力描述
+### ACC-020 项目关系与能力描述
 - 需求：项目详情向调用方描述当前账号与该项目的关系统标签与能力位。
 - 规则：
   - 关系标签取值 `SUPER_ADMIN`、`OWNER`、`READ`、`MAINTAIN`、`MANAGE`；非所有者、非管理员的成员按其权限级别命名关系。
@@ -176,11 +176,11 @@
   - 响应同时给出 `ownerAccountId`、`ownerDisplayName`、`ownershipVersion`、`repositoryStatus`，无访问记录时返回 403 `FORBIDDEN`；前端把关系标签本地化为「所有者 / 只读成员 / 维护成员 / 管理成员 / 平台管理员」。
 - 证据：`backend/src/main/java/com/analyzercoder/security/AccessControlService.java:62-95`、`backend/src/main/java/com/analyzercoder/security/RepositoryAccess.java:6-23`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryController.java:210-267`、`frontend/src/utils/displayLabels.ts:27-33`
 
-### ACC-021 仓库所有者专属动作
+### ACC-021 项目所有者专属动作
 - 需求：治理性动作仅项目所有者或超级管理员可执行。
 - 规则：
-  - 校验在账号为超级管理员时直接通过；否则要求存在访问记录且账号等于 `owner_account_id`；失败返回 403 `OWNER_REQUIRED`，提示「只有仓库所有者或超级管理员可执行此操作」。
-  - 适用动作：候选账号查询、授予/调整/撤销成员权限、所有权转移、仓库删除申请、凭据绑定。
+  - 校验在账号为超级管理员时直接通过；否则要求存在访问记录且账号等于 `owner_account_id`；失败返回 403 `OWNER_REQUIRED`，提示「只有项目所有者或超级管理员可执行此操作」。
+  - 适用动作：候选账号查询、授予/调整/撤销成员权限、所有权转移、项目删除申请、凭据绑定。
 - 证据：`backend/src/main/java/com/analyzercoder/security/AccessControlService.java:46-54`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:45`、`:57`、`:83`、`:104`、`:140`、`backend/src/main/java/com/analyzercoder/application/repository/RepositoryCredentialBindingService.java:81`
 
 ### ACC-022 所有权版本乐观锁
@@ -200,7 +200,7 @@
 - 证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:39-47`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:39-56`、`backend/src/test/java/com/analyzercoder/application/repository/RepositoryGovernanceServiceTest.java:29-43`、`frontend/src/features/repositories/RepositoryGovernanceDialog.vue:16`
 
 ### ACC-024 成员权限的授予、调整与撤销
-- 需求：所有者或管理员为账号授予仓库权限，并可调整或撤销。
+- 需求：所有者或管理员为账号授予项目权限，并可调整或撤销。
 - 规则：
   - 两个写操作都需要所有者权限并校验 `expectedOwnershipVersion`。
   - 授予：目标账号必须存在且启用，否则 400；目标账号不能是当前所有者，否则 400（提示「OWNER 不能写入普通授权」）；`permission` 不能为空且取值为 `READ`/`MAINTAIN`/`MANAGE`；写入为 upsert（已有授权行时更新级别与时间）；审计事件 `REPOSITORY_PERMISSION_CHANGED`。
@@ -215,7 +215,7 @@
   - 目标账号已有的授权行会被删除（避免所有者同时存在普通授权）；原所有者的授权行一并删除，若提交了 `previousOwnerPermission` 则为原所有者写入该级别的授权；成功后更新 `owner_account_id` 与名称、`ownership_version` 自增 1，审计事件 `REPOSITORY_OWNERSHIP_TRANSFERRED`（目标账号列为新所有者）。
 - 证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:95-136`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:60-64`、`:78-83`、`backend/src/main/resources/mappers/RepositoryAccessMapper.xml:55-60`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryGovernanceController.java:76-90`
 
-### ACC-026 仓库删除申请
+### ACC-026 项目删除申请
 - 需求：所有者申请删除项目，进入异步清理流程。
 - 规则：
   - 需要所有者权限；项目不存在时 400；存在运行中的写任务时返回 409。
@@ -224,9 +224,9 @@
 - 证据：`backend/src/main/java/com/analyzercoder/application/repository/RepositoryGovernanceService.java:138-155`、`backend/src/main/resources/mappers/RepositoryGovernanceMapper.xml:84-93`、`:99-107`、`:118-131`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryController.java:179-183`
 
 ### ACC-027 旧授权接口停用与账号权限清单
-- 需求：账号维度下的权限写入入口不再生效，统一改由仓库治理完成；管理员仍可只读查询账号授权清单。
+- 需求：账号维度下的权限写入入口不再生效，统一改由项目治理完成；管理员仍可只读查询账号授权清单。
 - 规则：
-  - `PUT /api/accounts/{accountId}/permissions/{repositoryId}` 无论参数如何都返回 409 `USE_REPOSITORY_GOVERNANCE`，提示「请在仓库治理页面分配权限」，且仍要求超级管理员身份；前端 `api/accounts.ts` 未封装该路径。
+  - `PUT /api/accounts/{accountId}/permissions/{repositoryId}` 无论参数如何都返回 409 `USE_REPOSITORY_GOVERNANCE`，提示「请在项目治理页面分配权限」，且仍要求超级管理员身份；前端 `api/accounts.ts` 未封装该路径。
   - `GET /api/accounts/{accountId}/permissions` 仅超级管理员可调用，返回该账号在 `repository_permissions` 中的全部授权行，按项目名与 id 排序，排除已逻辑删除的项目，不包含该账号作为所有者拥有的项目；前端无调用方。
 - 证据：`backend/src/main/java/com/analyzercoder/security/AuthService.java:399-419`、`backend/src/main/resources/mappers/AuthMapper.xml:131-134`、`backend/src/main/java/com/analyzercoder/interfaces/rest/AccountController.java:92-108`、`frontend/src/api/accounts.ts:7-19`
 
@@ -251,7 +251,7 @@
 - 规则：
   - 明文必须匹配 `acp_[A-Za-z0-9_-]{43}`，否则 401 `ACCESS_TOKEN_INVALID`；按摘要查找记录，记录不存在、已撤销、已过期（`expires_at` 不晚于当前时间）任一成立即 401。
   - 账号必须启用（否则 401）、不得待改密（403 `PASSWORD_CHANGE_REQUIRED`）、不得锁定（403 `ACCOUNT_LOCKED`）；通过后刷新 `last_used_at`（条件为未撤销且未过期），刷新失败即 401。
-  - 令牌只解析出账号身份、不携带仓库范围，仓库权限在每个业务请求中由 `AccessControlService` 实时判定；认证失败响应带 `WWW-Authenticate: Bearer realm="analyzer-mcp"`（令牌无效时附带 `error="invalid_token"`）；管理范围判定为「调用方是超级管理员，或调用方 id 等于路径中的 `accountId`」，否则 403 `FORBIDDEN`（提示「只能管理自己的访问令牌」），该规则对列表、创建、撤销一致生效。
+  - 令牌只解析出账号身份、不携带项目范围，项目权限在每个业务请求中由 `AccessControlService` 实时判定；认证失败响应带 `WWW-Authenticate: Bearer realm="analyzer-mcp"`（令牌无效时附带 `error="invalid_token"`）；管理范围判定为「调用方是超级管理员，或调用方 id 等于路径中的 `accountId`」，否则 403 `FORBIDDEN`（提示「只能管理自己的访问令牌」），该规则对列表、创建、撤销一致生效。
 - 证据：`backend/src/main/java/com/analyzercoder/security/AccessTokenService.java:16`、`:71-102`、`backend/src/main/java/com/analyzercoder/security/AccessTokenInterceptor.java:32-46`、`backend/src/test/java/com/analyzercoder/security/AccessTokenServiceTest.java:76-153`
 
 ### ACC-031 访问令牌端点范围与 Origin 校验
@@ -259,10 +259,10 @@
 - 规则：
   - 允许的端点只有 `POST /api/mcp`、`GET /api/repositories/{uuid}/evidence-search`、`POST /api/repositories/{uuid}/contexts`；携带 `Authorization` 头但请求其它路径时返回 403 `TOKEN_ENDPOINT_FORBIDDEN`（提示「访问令牌仅可调用 MCP 工具接口」），未携带 `Authorization` 头且目标不是 `/api/mcp` 时按会话流程继续处理。
   - `/api/mcp` 必须携带 `Authorization: Bearer <token>`，缺失时返回 401 `ACCESS_TOKEN_REQUIRED`，不接受会话 Cookie 替代；Origin 头存在时校验来源：要求 host 等于请求 `serverName`（忽略大小写）、scheme 等于请求 scheme（忽略大小写）、端口等于请求 `serverPort`（`Origin` 未写端口时按 443/80 推断）、无用户信息、无 path、无 query、无 fragment，任一不满足或无法解析为 URI 时返回 403 `MCP_ORIGIN_FORBIDDEN`。
-  - 令牌请求跳过会话与 CSRF 校验，但仍受业务层仓库权限约束：`evidence-search` 与 `/contexts` 需要 `READ`，MCP 工具内部同样按 `READ` 等权限校验并受可见性过滤；因此令牌不能调用账号管理、令牌管理、账户偏好、`/api/auth/me` 等会话类端点；外部 MCP 适配器在配置了 `ANALYZER_ACCESS_TOKEN` 时发送该头，否则回退到会话 Cookie + CSRF 头。
+  - 令牌请求跳过会话与 CSRF 校验，但仍受业务层项目权限约束：`evidence-search` 与 `/contexts` 需要 `READ`，MCP 工具内部同样按 `READ` 等权限校验并受可见性过滤；因此令牌不能调用账号管理、令牌管理、账户偏好、`/api/auth/me` 等会话类端点；外部 MCP 适配器在配置了 `ANALYZER_ACCESS_TOKEN` 时发送该头，否则回退到会话 Cookie + CSRF 头。
 - 证据：`backend/src/main/java/com/analyzercoder/security/AccessTokenInterceptor.java:11-53`、`:55-75`、`backend/src/main/java/com/analyzercoder/security/SessionInterceptor.java:45-46`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IntelligenceController.java:59-69`、`backend/src/main/java/com/analyzercoder/interfaces/rest/RepositoryBranchController.java:108-115`、`backend/src/main/java/com/analyzercoder/application/branch/RepositoryBranchService.java:347-349`、`backend/src/main/java/com/analyzercoder/interfaces/rest/McpController.java:39-45`、`mcp-server/src/api-client.mjs:22-31`
 
-### ACC-032 当前仓库偏好
+### ACC-032 当前项目偏好
 - 需求：账号记录并读回当前选中的项目，用于界面上下文恢复。
 - 规则：
   - 存储在 `accounts.last_repository_id`，外键指向 `repositories`，项目删除时置空；读取返回当前登录账号的该字段，未设置时为 `null`。
@@ -271,7 +271,7 @@
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/AccountPreferenceController.java:23-38`、`backend/src/main/java/com/analyzercoder/security/AuthService.java:271-283`、`backend/src/main/resources/mappers/AuthMapper.xml:117-119`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/test/java/com/analyzercoder/security/AuthServiceRepositoryPreferenceTest.java:38-74`、`frontend/src/api/accountPreferences.ts:7-16`
 
 ### ACC-033 审计事件记录
-- 需求：安全、账号与仓库治理事件写入统一审计表。
+- 需求：安全、账号与项目治理事件写入统一审计表。
 - 规则：
   - 已实现的写入事件类型：`INITIAL_ADMIN_CREATED`、`LOGIN_SUCCEEDED`、`LOGIN_FAILED`、`ACCOUNT_LOCKED`、`LOGOUT`、`PASSWORD_CHANGED`、`PASSWORD_RESET`、`ACCOUNT_CREATED`、`ACCOUNT_UPDATED`、`ACCOUNT_ENABLED`、`ACCOUNT_DISABLED`、`ACCOUNT_ROLE_CHANGED`、`ACCOUNT_UNLOCKED`、`ACCESS_TOKEN_CREATED`、`ACCESS_TOKEN_REVOKED`、`REPOSITORY_PERMISSION_CHANGED`、`REPOSITORY_PERMISSION_REVOKED`、`REPOSITORY_OWNERSHIP_TRANSFERRED`、`REPOSITORY_DELETION_REQUESTED`、`REPOSITORY_UPDATED`。
   - 登录成功、改密、重置、建号与治理类事件的结果为 `SUCCESS`，登录失败与账号锁定为 `DENIED`。
@@ -291,7 +291,7 @@
 - 需求：账号、登录、审计与治理界面按后端契约组织调用。
 - 规则：
   - 账号页 `/accounts` 与审计页 `/audit` 在路由元数据中标记 `admin: true`；未认证跳转登录页，待改密账号被强制留在登录页，非管理员访问管理页被重定向到总览页。
-  - `api/accounts.ts` 封装分页、创建、更新、重置密码、解锁、审计查询；`api/accessTokens.ts` 封装令牌列表、创建、撤销；`api/repositoryGovernance.ts` 封装成员、候选、授予、撤销、转移；`api/auth.ts` 封装验证码、登录、`me`、改密、登出；`api/accountPreferences.ts` 封装当前仓库偏好；`authStore` 持有会话账号与 CSRF 令牌并提供 `restore`、`login`、`changePassword`、`logout`。
+  - `api/accounts.ts` 封装分页、创建、更新、重置密码、解锁、审计查询；`api/accessTokens.ts` 封装令牌列表、创建、撤销；`api/repositoryGovernance.ts` 封装成员、候选、授予、撤销、转移；`api/auth.ts` 封装验证码、登录、`me`、改密、登出；`api/accountPreferences.ts` 封装当前项目偏好；`authStore` 持有会话账号与 CSRF 令牌并提供 `restore`、`login`、`changePassword`、`logout`。
   - 账号表格按状态提供「编辑 / 访问令牌 / 查看审计 / 解锁账号（仅锁定时）/ 重置密码 / 停用或启用」操作；状态标签为「正常 / 已停用 / 已锁定 / 待修改密码」，角色标签为「管理员 / 普通用户」，并以 `currentAccountId` 禁用当前登录账号的停用按钮；账号创建与重置密码后以弹窗展示一次性临时密码并提示只显示一次；令牌管理弹窗在账号非启用状态时禁用「创建令牌」；令牌 hook 在切换账号或组件销毁时清空已展示的明文令牌，并用请求代次避免过期响应覆盖最新状态。
 - 证据：`frontend/src/router/index.ts:38-57`、`frontend/src/api/accounts.ts:7-19`、`frontend/src/api/accessTokens.ts:3-7`、`frontend/src/api/repositoryGovernance.ts:22-41`、`frontend/src/api/auth.ts:1`、`frontend/src/api/accountPreferences.ts:7-16`、`frontend/src/stores/authStore.ts:1`、`frontend/src/features/accounts/AccountTable.vue:18-23`、`:48`、`:54-81`、`frontend/src/views/AccountsView.vue:46-53`、`frontend/src/features/accounts/useAccessTokens.ts:47-53`
 
@@ -358,8 +358,8 @@
 | GET | `/api/auth/me` | 查询当前会话账号与 CSRF 令牌 | 有效会话 |
 | POST | `/api/auth/change-password` | 修改自己的密码 | 有效会话（待改密时仍可调用） |
 | POST | `/api/auth/logout` | 登出并清除 Cookie | 有效会话 |
-| GET | `/api/auth/preferences/current-repository` | 读取当前仓库偏好 | 有效会话 |
-| PUT | `/api/auth/preferences/current-repository` | 更新当前仓库偏好 | 有效会话 + 该项目的 `READ`（超级管理员放行） |
+| GET | `/api/auth/preferences/current-repository` | 读取当前项目偏好 | 有效会话 |
+| PUT | `/api/auth/preferences/current-repository` | 更新当前项目偏好 | 有效会话 + 该项目的 `READ`（超级管理员放行） |
 
 账号管理（全部要求超级管理员）：
 
@@ -380,7 +380,7 @@
 
 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/AuthController.java:64-117`、`backend/src/main/java/com/analyzercoder/interfaces/rest/AccountPreferenceController.java:23-34`、`backend/src/main/java/com/analyzercoder/interfaces/rest/AccountController.java:33-117`、`backend/src/main/java/com/analyzercoder/interfaces/rest/AccountAccessTokenController.java:28-58`、`backend/src/main/java/com/analyzercoder/security/AccessTokenService.java:99-102`
 
-仓库治理：
+项目治理：
 
 | 方法 | 路径 | 用途 | 所需权限 |
 | --- | --- | --- | --- |
@@ -431,5 +431,5 @@
 9. **账户访问令牌与 `/api/auth/me` 不兼容**：会话拦截器在存在令牌账号属性时直接放行，但 `/api/auth/me` 走 `SecurityContext.session` 会抛 401 `SESSION_EXPIRED`；实际请求会先被令牌拦截器以 403 `TOKEN_ENDPOINT_FORBIDDEN` 拒绝。令牌与账户偏好等会话类端点是否应互通，需人工确认。证据：`backend/src/main/java/com/analyzercoder/security/SessionInterceptor.java:45-46`、`backend/src/main/java/com/analyzercoder/security/SecurityContext.java:13-19`、`backend/src/main/java/com/analyzercoder/security/AccessTokenInterceptor.java:28-30`
 10. **审计 IP 的代理场景未覆盖**：来源 IP 统一取 `request.getRemoteAddr()`，默认 `forward-headers-strategy: none`；`ForwardedClientIpTest` 只验证 `ForwardedHeaderFilter` 自身行为，未验证应用是否注册该过滤器。反向代理部署下真实来源地址是否可用，需人工确认。证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/AuthController.java:60-62`、`backend/src/main/resources/application.yml:41`、`backend/src/test/java/com/analyzercoder/interfaces/rest/ForwardedClientIpTest.java:12-34`
 11. **测试覆盖缺口**：`backend/src/test` 下没有 `CaptchaService`、`AccessControlService`、`SessionInterceptor` 的 CSRF 分支、`AccountController`，以及 `RepositoryGovernanceService` 授予/撤销/转移/删除分支的测试；前端 `useAccessTokens.spec.ts` 只覆盖令牌 hook 的创建、撤销与明文清理。证据：`backend/src/test/java/com/analyzercoder/security/AccessTokenServiceTest.java:23-164`、`backend/src/test/java/com/analyzercoder/security/PasswordResetSecurityTest.java:25-94`、`backend/src/test/java/com/analyzercoder/security/AuthServiceRepositoryPreferenceTest.java:21-75`、`backend/src/test/java/com/analyzercoder/application/repository/RepositoryGovernanceServiceTest.java:23-44`、`frontend/src/features/accounts/useAccessTokens.spec.ts:1-55`
-12. **`AccountSummary.repositoryPermissionCount` 语义偏差**：该字段只统计成员授权行，作为所有者拥有的项目不计入；账号列表显示为「被授权仓库」，与账号实际可访问的项目数不等。证据：`backend/src/main/resources/mappers/AuthMapper.xml:70-73`、`frontend/src/features/accounts/AccountTable.vue:48`
+12. **`AccountSummary.repositoryPermissionCount` 语义偏差**：该字段只统计成员授权行，作为所有者拥有的项目不计入；账号列表显示为「被授权项目」，与账号实际可访问的项目数不等。证据：`backend/src/main/resources/mappers/AuthMapper.xml:70-73`、`frontend/src/features/accounts/AccountTable.vue:48`
 13. **审计界面 `focusVersion` 自增量无效**：`AuditLogsView` 把 `focusVersion` 固定为 1 并传入面板，面板用其触发筛选重置，因此重复从账号列表跳转同一目标账号时不会重新触发定位逻辑。证据：`frontend/src/views/AuditLogsView.vue:16`、`frontend/src/features/accounts/AuditLogPanel.vue:17`

@@ -187,7 +187,7 @@ public class ChangedSymbolResolver {
                                         "CODEGRAPH_VERSION_MISMATCH",
                                         source.path(),
                                         hunkIndex,
-                                        "CodeGraph 返回了仓库、内容版本、提交或路径不一致的节点，已排除"));
+                                        "CodeGraph 返回了项目、内容版本、提交或路径不一致的节点，已排除"));
                     }
                     candidates.stream()
                             .filter(node -> validGraphNode(node, request, range))

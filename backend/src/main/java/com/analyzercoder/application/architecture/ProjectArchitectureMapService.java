@@ -105,7 +105,7 @@ public class ProjectArchitectureMapService {
             String path) {
         RepositoryCodeBrowserService.FileContent file = browser.read(repositoryId, path);
         if (!contentVersion.contentVersion().equals(file.contentVersion())) {
-            throw new ArchitectureContentVersionChangedException("架构分析期间仓库内容版本已切换，请基于新内容版本重试");
+            throw new ArchitectureContentVersionChangedException("架构分析期间项目内容版本已切换，请基于新内容版本重试");
         }
         return file.content();
     }

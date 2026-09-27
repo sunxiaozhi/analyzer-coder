@@ -75,29 +75,35 @@ it('keeps view controls and search in one toolbar, with context outside the canv
   wrapper.unmount();
 });
 
-it('starts in 3D and falls back to planar interaction when WebGL fails', async () => {
+it('starts with dependency cards and recovers when optional 3D fails', async () => {
   vi.mocked(getCodeAtlas).mockResolvedValue(view());
   const wrapper = mount(CodeAtlasView, { global: { stubs: {
     CodeAtlas3D: { template: '<button data-no-webgl @click="$emit(\'unavailable\', \'模拟上下文失败\')">No WebGL</button>' },
   } } });
   await flushPromises();
+  expect(wrapper.find('[data-view-2d]').attributes('aria-pressed')).toBe('true');
+  expect(wrapper.findAll('.card-surface')).toHaveLength(1);
+  await wrapper.get('[data-view-3d]').trigger('click');
+  await flushPromises();
   expect(wrapper.find('[data-view-2d]').attributes('aria-pressed')).toBe('false');
   await wrapper.get('[data-no-webgl]').trigger('click');
-  expect(wrapper.get('[role="status"]').text()).toContain('已切换到平面模式');
+  expect(wrapper.get('[role="status"]').text()).toContain('已切换到依赖画布');
   expect(wrapper.get('.diagnostic-reason').text()).toContain('模拟上下文失败');
   expect(wrapper.findAll('[data-node]')).toHaveLength(1);
   wrapper.unmount();
 });
 
-it('switches to the lightweight view when automatic WebGL compatibility is needed', async () => {
+it('returns to dependency cards when optional WebGL needs compatibility', async () => {
   vi.mocked(getCodeAtlas).mockResolvedValue(view());
   const wrapper = mount(CodeAtlasView, { global: { stubs: {
     CodeAtlas3D: { template: '<button data-compatible @click="$emit(\'degraded\', \'WebGL 创建失败\')">Compatible</button>' },
   } } });
   await flushPromises();
+  await wrapper.get('[data-view-3d]').trigger('click');
+  await flushPromises();
   await wrapper.get('[data-compatible]').trigger('click');
   expect(wrapper.find('[data-view-2d]').attributes('aria-pressed')).toBe('true');
-  expect(wrapper.get('[role="status"]').text()).toContain('已切换到轻量平面');
+  expect(wrapper.get('[role="status"]').text()).toContain('已切换到依赖画布');
   expect(wrapper.text()).toContain('WebGL 不可用');
   wrapper.unmount();
 });
@@ -165,7 +171,7 @@ it('shows real relations immediately and exposes neighbor actions on selection',
   vi.mocked(getCodeAtlas).mockResolvedValue(graph);
   const wrapper = mount(CodeAtlasView, { global: { stubs: { CodeAtlas3D: true } } });
   await flushPromises();
-  expect((wrapper.get('.atlas-toolbar input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false);
+  expect(wrapper.find('[data-view-2d]').attributes('aria-pressed')).toBe('true');
   await wrapper.get('[data-view-2d]').trigger('click');
   expect(wrapper.findAll('.atlas-link')).toHaveLength(1);
   await wrapper.get('[data-node]').trigger('click');
@@ -175,7 +181,7 @@ it('shows real relations immediately and exposes neighbor actions on selection',
   wrapper.unmount();
 });
 
-it('opens source on demand in a bottom drawer and keeps the canvas full width', async () => {
+it('opens source beside the canvas and keeps long source lines readable', async () => {
   vi.mocked(getCodeAtlas).mockResolvedValue(view());
   const longLine = 'const path = "' + '长路径/'.repeat(80) + '";';
   vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: longLine + '\nreturn path;' } as Awaited<ReturnType<typeof getRepositoryFile>>);
@@ -186,7 +192,7 @@ it('opens source on demand in a bottom drawer and keeps the canvas full width', 
   await wrapper.get('.source-action').trigger('click');
   await flushPromises();
   expect(wrapper.find('.atlas-detail').exists()).toBe(false);
-  expect(wrapper.get('.atlas-drawer').element.parentElement).toBe(wrapper.element);
+  expect(wrapper.get('.atlas-drawer').element.parentElement).toBe(wrapper.get('.atlas-workbench').element);
   expect(wrapper.get('.atlas-source code').text()).toBe(longLine);
   expect(wrapper.find('.render-status').exists()).toBe(false);
   await wrapper.get('[aria-label="关闭抽屉"]').trigger('click');
@@ -263,5 +269,87 @@ it('opens the source occurrence when a relation is clicked', async () => {
   await wrapper.get('[data-edge]').trigger('click'); await flushPromises();
   expect(wrapper.get('.atlas-source .marked').text()).toContain('line 8');
   expect(wrapper.get('.drawer-path').text()).toContain(':8');
+  wrapper.unmount();
+});
+
+function fileGraph(): AtlasView {
+  const graph = view();
+  graph.nodes.push(
+    { ...graph.nodes[0], id: 'helper', label: 'helper', startLine: 20, endLine: 25 },
+    { ...graph.nodes[0], id: 'caller', label: 'caller', filePath: 'api/controller.ts', module: 'api' },
+    { ...graph.nodes[0], id: 'unrelated', label: 'unrelated', filePath: 'other/job.ts', module: 'other' },
+  );
+  graph.edges = [{ source: 'caller', target: 'n', kind: 'calls', count: 1, sourceLines: [8] }];
+  return graph;
+}
+
+it('starts with file cards, drills into a file and keeps only its symbols and direct neighbors', async () => {
+  vi.mocked(getCodeAtlas).mockResolvedValue(fileGraph());
+  const wrapper = mount(CodeAtlasView); await flushPromises();
+  expect(wrapper.findAll('[data-card-kind="FILE"]')).toHaveLength(3);
+  await wrapper.get('[aria-label="搜索符号或文件"]').setValue('draft search');
+  expect(wrapper.findAll('[data-card-kind="FILE"]')).toHaveLength(3);
+  await wrapper.get('[aria-label="搜索符号或文件"]').setValue('');
+  await wrapper.findAll('[data-node]').find(n => n.attributes('aria-label')?.includes('src/a.ts'))!.trigger('click');
+  expect(wrapper.findAll('[data-node]')).toHaveLength(3);
+  expect(wrapper.get('.atlas-stage').text()).not.toContain('unrelated');
+  expect(wrapper.get('[aria-label="图谱路径"]').text()).toContain('a.ts');
+  expect(getCodeAtlas).toHaveBeenCalledTimes(1);
+  await wrapper.get('[aria-label="退出文件范围"]').trigger('click');
+  expect(wrapper.findAll('[data-card-kind="FILE"]')).toHaveLength(3);
+  expect(wrapper.find('.scope-hint').exists()).toBe(false);
+  wrapper.unmount();
+});
+
+it('keeps the file scope and source panel when expanding the selected symbol', async () => {
+  const graph = fileGraph();
+  const expanded = { ...graph, nodes: [...graph.nodes, { ...graph.nodes[0], id: 'neighbor', label: 'newNeighbor', filePath: 'new/n.ts' }],
+    edges: [...graph.edges, { source: 'n', target: 'neighbor', kind: 'calls', count: 1 }] };
+  vi.mocked(getCodeAtlas).mockResolvedValueOnce(graph).mockResolvedValue(expanded);
+  vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: 'save()' } as any);
+  const wrapper = mount(CodeAtlasView); await flushPromises();
+  await wrapper.findAll('.tree-file').find(n => n.attributes('title') === 'src/a.ts')!.trigger('click');
+  await wrapper.findAll('[data-node]').find(n => n.attributes('aria-label')?.startsWith('save ·'))!.trigger('click');
+  await wrapper.get('.source-action').trigger('click'); await flushPromises();
+  await wrapper.findAll('.selection-actions button').find(b => b.text().includes('出向'))!.trigger('click'); await flushPromises();
+  expect(wrapper.get('[aria-label="图谱路径"]').text()).toContain('a.ts');
+  expect(wrapper.find('.atlas-drawer').exists()).toBe(true);
+  expect(wrapper.get('.atlas-stage').text()).toContain('newNeighbor');
+  expect(wrapper.get('.atlas-stage').text()).not.toContain('unrelated');
+  wrapper.unmount();
+});
+
+it('follows symbol selection in the open inspector without fetching the same file again', async () => {
+  const graph = view(); graph.nodes.push({ ...graph.nodes[0], id: 'helper', label: 'helper', startLine: 20, endLine: 22 });
+  vi.mocked(getCodeAtlas).mockResolvedValue(graph);
+  vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: Array.from({ length: 30 }, (_, i) => 'line ' + (i + 1)).join('\n') } as any);
+  const wrapper = mount(CodeAtlasView); await flushPromises();
+  await wrapper.findAll('[data-node]').find(n => n.attributes('aria-label')?.startsWith('save ·'))!.trigger('click');
+  await wrapper.get('.source-action').trigger('click'); await flushPromises();
+  await wrapper.findAll('[data-node]').find(n => n.attributes('aria-label')?.startsWith('helper ·'))!.trigger('click'); await flushPromises();
+  expect(wrapper.get('.inspector-symbol').text()).toContain('helper');
+  expect(wrapper.get('.atlas-source .marked').text()).toContain('line 20');
+  expect(getRepositoryFile).toHaveBeenCalledTimes(1);
+  wrapper.unmount();
+});
+
+it('uses original source evidence when a projected file relationship is opened', async () => {
+  vi.mocked(getCodeAtlas).mockResolvedValue(fileGraph());
+  vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: Array.from({ length: 20 }, (_, i) => 'line ' + (i + 1)).join('\n') } as any);
+  const wrapper = mount(CodeAtlasView); await flushPromises();
+  await wrapper.get('[data-edge]').trigger('click'); await flushPromises();
+  expect(getRepositoryFile).toHaveBeenLastCalledWith('a', 'api/controller.ts', 'ctx-main');
+  expect(wrapper.get('.atlas-source .marked').text()).toContain('line 8');
+  expect(wrapper.findAll('[data-card-kind="FILE"]')).toHaveLength(3);
+  wrapper.unmount();
+});
+
+it('opens module scope through the navigation tree with the pinned branch context', async () => {
+  vi.mocked(getCodeAtlas).mockResolvedValue(fileGraph());
+  const wrapper = mount(CodeAtlasView); await flushPromises();
+  await wrapper.findAll('.tree-module').find(n => n.get('summary').text().includes('api'))!.get('.module-overview').trigger('click');
+  await flushPromises();
+  expect(getCodeAtlas).toHaveBeenLastCalledWith('a', 'api', '', 'ctx-main');
+  expect(wrapper.get('[aria-label="图谱路径"]').text()).toContain('api');
   wrapper.unmount();
 });

@@ -52,7 +52,7 @@ watch(
         <div class="scope-grid">
           <el-form-item label="路径规则">
             <el-input v-model="paths" type="textarea" :rows="4" placeholder="backend/src/**/refund/**" />
-            <small>每行一项，使用仓库相对通配规则。</small>
+            <small>每行一项，使用项目代码相对路径通配规则。</small>
           </el-form-item>
           <el-form-item label="符号">
             <el-input

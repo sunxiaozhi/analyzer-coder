@@ -30,7 +30,7 @@ public class CodeGraphTaskService {
             return active;
         }
         if (active != null) {
-            throw new IllegalStateException("仓库已有活动任务，请等待完成后再构建 CodeGraph");
+            throw new IllegalStateException("项目已有活动任务，请等待完成后再构建 CodeGraph");
         }
 
         return tasks.save(IndexJob.create(repositoryId, IndexJobType.CODEGRAPH));

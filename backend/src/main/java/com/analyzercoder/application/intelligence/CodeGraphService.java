@@ -131,7 +131,7 @@ public class CodeGraphService {
     private RepoVersion version(UUID id) {
         var row = mapper.findRepositoryVersion(id);
         if (row == null) {
-            throw new IllegalArgumentException("仓库不存在");
+            throw new IllegalArgumentException("项目不存在");
         }
         return new RepoVersion(row.contentVersion(), Path.of(row.contentVersionPath()));
     }

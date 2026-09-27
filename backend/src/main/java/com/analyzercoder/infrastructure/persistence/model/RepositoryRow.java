@@ -30,7 +30,7 @@ public record RepositoryRow(
         long repositoryVersion) {
     public static RepositoryRow forInsert(CodeRepository r, UUID owner) {
         if (owner == null) {
-            throw new IllegalArgumentException("仓库所有者账号不能为空");
+            throw new IllegalArgumentException("项目所有者账号不能为空");
         }
         return from(r, owner);
     }
