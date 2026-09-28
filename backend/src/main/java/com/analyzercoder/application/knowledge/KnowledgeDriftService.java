@@ -118,18 +118,23 @@ public class KnowledgeDriftService {
     @Transactional
     public DriftEvent reviewSource(
             CodeRepositoryId repositoryId, UUID cardId, UUID actorId, SourceReviewRequest request) {
-        if (request == null || request.expectedRevision() <= 0) {
-            throw new IllegalArgumentException("expectedRevision 必须是正整数");
-        }
-        SourceReviewAction action = request.normalizedAction();
-        String note = cleanNote(request.note());
         CodeRepository repository =
                 repositories
                         .findById(repositoryId)
                         .orElseThrow(
-                                () ->
-                                        new KnowledgeDriftException(
-                                                "REPOSITORY_NOT_FOUND", "项目不存在"));
+                                () -> new KnowledgeDriftException("REPOSITORY_NOT_FOUND", "项目不存在"));
+        return reviewSource(repository, cardId, actorId, request);
+    }
+
+    @Transactional
+    public DriftEvent reviewSource(
+            CodeRepository repository, UUID cardId, UUID actorId, SourceReviewRequest request) {
+        if (request == null || request.expectedRevision() <= 0) {
+            throw new IllegalArgumentException("expectedRevision 必须是正整数");
+        }
+        CodeRepositoryId repositoryId = repository.id();
+        SourceReviewAction action = request.normalizedAction();
+        String note = cleanNote(request.note());
         requirePublished(repository);
         KnowledgeDriftCandidateRow candidate = mapper.findCandidate(repositoryId.value(), cardId);
         if (candidate == null) {
@@ -148,6 +153,14 @@ public class KnowledgeDriftService {
                 != 1) {
             throw new KnowledgeDriftException("KNOWLEDGE_REVISION_CONFLICT", "知识修订已变化，请刷新后重新核对");
         }
+        mapper.recordSourceValidation(
+                repositoryId.value(),
+                cardId,
+                request.expectedRevision(),
+                repository.currentContentVersion().value(),
+                action == SourceReviewAction.CONFIRM_CURRENT ? "CURRENT" : "INVALID",
+                note,
+                actorId);
         DriftReason manualReason =
                 new DriftReason(
                         action == SourceReviewAction.CONFIRM_CURRENT
@@ -399,7 +412,8 @@ public class KnowledgeDriftService {
         if (repository == null
                 || repository.currentContentVersion() == null
                 || repository.currentCommit() == null) {
-            throw new KnowledgeDriftException("CURRENT_CONTENT_VERSION_REQUIRED", "项目尚未发布可用于知识复核的代码内容版本");
+            throw new KnowledgeDriftException(
+                    "CURRENT_CONTENT_VERSION_REQUIRED", "项目尚未发布可用于知识复核的代码内容版本");
         }
     }
 

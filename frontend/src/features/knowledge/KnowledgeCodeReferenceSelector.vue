@@ -6,7 +6,7 @@ import type { CodeReference } from '@/api/intelligence';
 import { listChunks } from '@/api/repositories';
 import type { CodeChunk } from '@/types/api';
 
-const props = defineProps<{ repositoryId: string }>();
+const props = defineProps<{ repositoryId: string; contextId?: string | null }>();
 const emit = defineEmits<{
   openCode: [reference: CodeReference];
 }>();
@@ -19,7 +19,7 @@ const loading = shallowRef(false);
 const searched = shallowRef(false);
 const selectedChunkIds = computed(() => new Set(references.value.map(item => item.chunkId).filter(Boolean)));
 
-watch(() => props.repositoryId, () => {
+watch(() => [props.repositoryId, props.contextId], () => {
   query.value = '';
   results.value = [];
   total.value = 0;
@@ -38,7 +38,7 @@ async function search() {
   loading.value = true;
   searched.value = true;
   try {
-    const response = await listChunks(props.repositoryId, { q: keyword, limit: 20 });
+    const response = await listChunks(props.repositoryId, { q: keyword, limit: 20 }, props.contextId);
     results.value = response.chunks;
     total.value = response.total;
   } catch (error) {

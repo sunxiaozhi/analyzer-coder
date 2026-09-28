@@ -123,7 +123,7 @@ class EngineeringKnowledgePolicyTest {
     }
 
     @Test
-    void requiredKnowledgeNeedsOwnerScopeApprovalAndCurrentEvidenceToPublish() {
+    void requiredKnowledgeNeedsOwnerAndConfirmationButScopeIsOptional() {
         UUID owner = UUID.randomUUID();
         KnowledgeScope scope = new KnowledgeScope(List.of("backend/src/**"), List.of(), List.of());
 
@@ -136,15 +136,12 @@ class EngineeringKnowledgePolicyTest {
                                         "APPROVED",
                                         "CURRENT"))
                 .hasMessageContaining("负责人");
-        assertThatThrownBy(
-                        () ->
-                                policy.validateForPublication(
-                                        KnowledgeEnforcement.REQUIRED,
-                                        owner,
-                                        KnowledgeScope.empty(),
-                                        "APPROVED",
-                                        "CURRENT"))
-                .hasMessageContaining("适用范围");
+        policy.validateForPublication(
+                KnowledgeEnforcement.REQUIRED,
+                owner,
+                KnowledgeScope.empty(),
+                "APPROVED",
+                "CURRENT");
         assertThatThrownBy(
                         () ->
                                 policy.validateForPublication(

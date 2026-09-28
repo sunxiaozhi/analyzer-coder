@@ -11,6 +11,25 @@ class BranchContextInterceptorTest {
     final String base = "/api/repositories/11111111-1111-4111-8111-111111111111";
 
     @Test
+    void allowsBranchScopedCodeSelectionAndKnowledgeMutations() {
+        var interceptor = new BranchContextInterceptor();
+        var cardPath = "/knowledge/22222222-2222-4222-8222-222222222222";
+        for (var route :
+                new String[][] {
+                    {"GET", "/chunks"},
+                    {"PUT", cardPath},
+                    {"POST", cardPath + "/review"},
+                    {"POST", cardPath + "/publication"},
+                    {"POST", cardPath + "/publish"}
+                }) {
+            var request = new MockHttpServletRequest(route[0], base + route[1]);
+            request.addHeader("X-Branch-Context", "pinned");
+            assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), null))
+                    .isTrue();
+        }
+    }
+
+    @Test
     void rejectsIgnoredContextsButAllowsExplicitReaders() {
         var interceptor = new BranchContextInterceptor();
         var request = new MockHttpServletRequest("GET", base + "/profile");
@@ -54,12 +73,11 @@ class BranchContextInterceptorTest {
 
         for (var path :
                 new String[] {
-                    "/vector-index/summary",
-                    "/vector-index/chunks",
-                    "/vector-index/knowledge"
+                    "/vector-index/summary", "/vector-index/chunks", "/vector-index/knowledge"
                 }) {
             request.setRequestURI(base + path);
-            assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), null)).isTrue();
+            assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), null))
+                    .isTrue();
         }
 
         request.setMethod("POST");

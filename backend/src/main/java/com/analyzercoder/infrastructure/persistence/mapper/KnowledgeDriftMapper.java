@@ -43,6 +43,15 @@ public interface KnowledgeDriftMapper {
             @Param("note") String note,
             @Param("actorId") UUID actorId);
 
+    int recordSourceValidation(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("cardId") UUID cardId,
+            @Param("revision") int revision,
+            @Param("contentVersion") UUID contentVersion,
+            @Param("state") String state,
+            @Param("note") String note,
+            @Param("actorId") UUID actorId);
+
     int insertEvent(KnowledgeDriftEventRow row);
 
     KnowledgeDriftEventRow latestEvent(

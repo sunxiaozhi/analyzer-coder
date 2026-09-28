@@ -88,9 +88,7 @@ const enforcementLabels: Record<string, string> = {
       <el-button v-if="canMaintain" link @click="emit('edit', card)">编辑</el-button>
       <el-button v-if="canMaintain" link @click="emit('history', card)">历史</el-button>
       <template v-if="canManage">
-        <el-button v-if="card.reviewStatus !== 'APPROVED'" link type="primary" @click="emit('review', card, 'APPROVED')">通过评审</el-button>
-        <el-button v-else link @click="emit('review', card, 'CHANGES_REQUESTED')">要求修改</el-button>
-        <el-button v-if="card.publicationStatus !== 'PUBLISHED' && card.reviewStatus === 'APPROVED' && !['SUSPECT', 'STALE'].includes(card.sourceVersionStatus)" link type="success" @click="emit('publish', card, 'PUBLISHED')">发布</el-button>
+        <el-button v-if="card.publicationStatus !== 'PUBLISHED'" link type="success" @click="emit('publish', card, 'PUBLISHED')">确认并发布</el-button>
         <el-button v-if="card.publicationStatus === 'PUBLISHED'" link @click="emit('publish', card, 'DRAFT')">撤回</el-button>
       </template>
     </footer>

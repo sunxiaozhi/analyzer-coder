@@ -38,6 +38,9 @@ public class IntelligenceController {
     @org.springframework.beans.factory.annotation.Autowired
     private BranchKnowledgeService branchKnowledge;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.analyzercoder.application.knowledge.KnowledgePublicationService publication;
+
     public IntelligenceController(IntelligenceService service, AccessControlService access) {
         this.service = service;
         this.access = access;
@@ -232,6 +235,19 @@ public class IntelligenceController {
         requireKnowledgeBranch(request, repoId, cardId);
         return service.setCardPublication(repoId, cardId, account.id(), body.publicationStatus());
     }
+
+    @PostMapping("/repositories/{repoId}/knowledge/{cardId}/publish")
+    public IntelligenceService.KnowledgeCard publishCard(
+            @PathVariable UUID repoId,
+            @PathVariable UUID cardId,
+            @RequestBody PublishRequest body,
+            HttpServletRequest request) {
+        var account = require(request, repoId, RepositoryPermission.MANAGE);
+        return publication.publish(
+                account, branchContexts.resolve(request, repoId), cardId, body.expectedRevision());
+    }
+
+    public record PublishRequest(int expectedRevision) {}
 
     @GetMapping("/settings")
     public Map<String, String> settings(HttpServletRequest request) {

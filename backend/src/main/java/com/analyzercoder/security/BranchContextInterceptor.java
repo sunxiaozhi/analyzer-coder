@@ -22,13 +22,16 @@ public class BranchContextInterceptor implements HandlerInterceptor {
                     "/knowledge",
                     "/knowledge/markdown-sources",
                     "/vector-index/(?:summary|chunks|knowledge)",
+                    "/chunks",
                     "/chunks/[0-9a-fA-F-]{36}/graph-target");
     private static final List<Pattern> POST =
             patterns(
                     "/ask",
                     "/codegraph/build",
                     "/knowledge",
-                    "/knowledge/markdown-sources/(?:generate|generate-pending)");
+                    "/knowledge/markdown-sources/(?:generate|generate-pending)",
+                    "/knowledge/[0-9a-fA-F-]{36}/(?:review|publication|publish|source-review)");
+    private static final List<Pattern> PUT = patterns("/knowledge/[0-9a-fA-F-]{36}");
     private static final List<Pattern> PATCH = patterns("/qa/records/[0-9a-fA-F-]{36}");
     private static final List<Pattern> DELETE = PATCH;
 
@@ -49,6 +52,7 @@ public class BranchContextInterceptor implements HandlerInterceptor {
                 switch (method) {
                     case "GET" -> GET;
                     case "POST" -> POST;
+                    case "PUT" -> PUT;
                     case "PATCH" -> PATCH;
                     case "DELETE" -> DELETE;
                     default -> List.<Pattern>of();

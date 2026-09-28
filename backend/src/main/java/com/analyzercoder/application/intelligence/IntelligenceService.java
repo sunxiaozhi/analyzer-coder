@@ -279,7 +279,8 @@ public class IntelligenceService {
 
         List<Map<String, Object>> neighbors;
         try {
-            neighbors = graphRetrievalMapper.callNeighbors(repositoryId, contentVersion, seedIds, 24);
+            neighbors =
+                    graphRetrievalMapper.callNeighbors(repositoryId, contentVersion, seedIds, 24);
         } catch (RuntimeException ignored) {
             return new ChainContext(List.copyOf(expanded), List.of());
         }
@@ -375,7 +376,8 @@ public class IntelligenceService {
                     modelConfigId == null
                             ? Optional.empty()
                             : llm.generate(
-                                    modelConfigId, llmPrompt(question, history, evidence, callLinks));
+                                    modelConfigId,
+                                    llmPrompt(question, history, evidence, callLinks));
             if (generated.isPresent()) {
                 AnswerCitationValidator.Validation validation =
                         citationValidator.validate(generated.get().answer(), evidence.size());
@@ -992,8 +994,7 @@ public class IntelligenceService {
         if (history.isEmpty()) prompt.append("无");
         prompt.append("\n当前问题：").append(limitText(question, 1_200)).append("\n本轮证据：");
         int remaining = links.isEmpty() ? 14_000 : 12_000;
-        int contentLimit =
-                links.isEmpty() ? 2_400 : Math.min(2_400, 10_000 / evidence.size());
+        int contentLimit = links.isEmpty() ? 2_400 : Math.min(2_400, 10_000 / evidence.size());
         for (int index = 0; index < evidence.size() && remaining > 0; index++) {
             Evidence item = evidence.get(index);
             String header =
@@ -1008,7 +1009,9 @@ public class IntelligenceService {
             prompt.append(header);
             remaining -= header.length();
             int length =
-                    Math.min(Math.min(item.content().length(), contentLimit), Math.max(0, remaining));
+                    Math.min(
+                            Math.min(item.content().length(), contentLimit),
+                            Math.max(0, remaining));
             prompt.append(item.content(), 0, length);
             remaining -= length;
             if (links.isEmpty()) {
@@ -1464,7 +1467,7 @@ public class IntelligenceService {
                         .toList();
         int position = 0;
         for (UUID chunkId : ids) {
-            Map<String, Object> row = mapper.findChunk(repositoryId, chunkId);
+            Map<String, Object> row = mapper.findChunkForCard(repositoryId, cardId, chunkId);
             if (row == null) {
                 throw new IllegalArgumentException("关联代码不存在或不属于当前项目");
             }

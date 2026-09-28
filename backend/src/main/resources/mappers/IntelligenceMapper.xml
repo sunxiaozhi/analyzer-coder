@@ -351,11 +351,11 @@
             verified_commit=CASE WHEN EXISTS(
                 SELECT 1 FROM knowledge_code_refs ref
                 WHERE ref.card_id=c.id AND ref.revision=c.revision
-            ) THEN (SELECT current_commit FROM repositories WHERE id=c.repo_id) ELSE NULL END,
+            ) THEN (SELECT commit_sha FROM repository_branches WHERE id=c.branch_id) ELSE NULL END,
             last_verified_content_version=CASE WHEN EXISTS(
                 SELECT 1 FROM knowledge_code_refs ref
                 WHERE ref.card_id=c.id AND ref.revision=c.revision
-            ) THEN (SELECT current_content_version FROM repositories WHERE id=c.repo_id) ELSE NULL END,
+            ) THEN (SELECT content_version FROM repository_branches WHERE id=c.branch_id) ELSE NULL END,
             verification_note=CASE WHEN EXISTS(
                 SELECT 1 FROM knowledge_code_refs ref
                 WHERE ref.card_id=c.id AND ref.revision=c.revision
@@ -382,6 +382,13 @@
         SELECT source_symbol,target_symbol,relation FROM heuristic_call_edges
         WHERE repo_id=#{repositoryId} AND content_version=#{contentVersion}
         LIMIT 500
+    </select>
+    <select id="findChunkForCard" resultType="map">
+        SELECT c.id,c.content_version,c.file_path,c.symbol_name,c.start_line,c.end_line,c.content,c.content_hash
+        FROM code_chunks c
+        JOIN knowledge_cards k ON k.repo_id=c.repo_id AND k.id=#{cardId}
+        JOIN repository_branches b ON b.id=k.branch_id AND b.content_version=c.content_version
+        WHERE c.repo_id=#{repositoryId} AND c.id=#{chunkId}
     </select>
     <select id="findChunkAtContentVersion" resultType="map">
         SELECT id,content_version,file_path,symbol_name,start_line,end_line,content,content_hash

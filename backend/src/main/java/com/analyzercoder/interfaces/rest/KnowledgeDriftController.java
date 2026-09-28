@@ -1,5 +1,7 @@
 package com.analyzercoder.interfaces.rest;
 
+import com.analyzercoder.application.branch.BranchKnowledgeService;
+import com.analyzercoder.application.branch.RepositoryBranchService;
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.application.knowledge.KnowledgeDriftService;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
@@ -26,14 +28,23 @@ public class KnowledgeDriftController {
     private final KnowledgeDriftService drift;
     private final IntelligenceService intelligence;
     private final AccessControlService access;
+    private final BranchRequestContext contexts;
+    private final RepositoryBranchService branches;
+    private final BranchKnowledgeService knowledge;
 
     public KnowledgeDriftController(
             KnowledgeDriftService drift,
             IntelligenceService intelligence,
-            AccessControlService access) {
+            AccessControlService access,
+            BranchRequestContext contexts,
+            RepositoryBranchService branches,
+            BranchKnowledgeService knowledge) {
         this.drift = drift;
         this.intelligence = intelligence;
         this.access = access;
+        this.contexts = contexts;
+        this.branches = branches;
+        this.knowledge = knowledge;
     }
 
     @GetMapping("/source-drift")
@@ -59,9 +70,12 @@ public class KnowledgeDriftController {
         var account = SecurityContext.account(request);
         CodeRepositoryId id = CodeRepositoryId.of(repositoryId);
         access.require(account, id, RepositoryPermission.MAINTAIN);
+        var context = contexts.resolve(request, repositoryId);
+        if (!knowledge.applicable(repositoryId, context.branchId()).contains(cardId))
+            throw new IllegalArgumentException("知识卡不属于当前阅读分支");
         KnowledgeDriftService.DriftEvent event =
                 drift.reviewSource(
-                        id,
+                        branches.repositoryFor(context),
                         cardId,
                         account.id(),
                         new KnowledgeDriftService.SourceReviewRequest(

@@ -79,7 +79,7 @@ const knowledgeKinds = computed(() => [...new Set(cards.value.map(card => card.k
   .sort((left, right) => knowledgeKindLabel(left).localeCompare(knowledgeKindLabel(right), 'zh-CN')));
 const cardRows = computed(() => cards.value.filter(card => {
   const value = cardQuery.value.trim().toLowerCase();
-  const matchesTitle = !value || card.title.toLowerCase().includes(value);
+  const matchesTitle = !value || [card.title, card.content, ...card.tags].join(' ').toLowerCase().includes(value);
   const matchesType = selectedKnowledgeKind.value === allKnowledgeKinds
     || card.knowledgeKind === selectedKnowledgeKind.value;
   return matchesTitle && matchesType && (!readScope.requiresContext.value || validationFilter.value === 'ALL' || validationState(card) === validationFilter.value);
@@ -108,10 +108,16 @@ const sourceEmptyDescription = computed(() => {
 async function branchValidationSaved() {
   const previous = branchContext.context;
   if (!previous) return;
+  const viewingId = viewing.value?.id;
+  const wasOpen = detailDialog.value;
   await branchContext.select(previous.branchId);
-  if (repositories.selectedRepositoryId !== previous.repositoryId) return;
+  if (repositories.selectedRepositoryId !== previous.repositoryId
+    || branchContext.context?.branchId !== previous.branchId) return;
   await loadCards();
-  if (viewing.value) viewing.value = cards.value.find(card => card.id === viewing.value?.id) ?? null;
+  if (viewingId) {
+    viewing.value = cards.value.find(card => card.id === viewingId) ?? null;
+    detailDialog.value = wasOpen && Boolean(viewing.value);
+  }
 }
 
 async function loadCards() {
@@ -259,9 +265,12 @@ async function sourceReview(action: 'CONFIRM_CURRENT' | 'MARK_STALE') {
       action,
       card.revision,
       prompt.value.trim(),
+      branchContext.context?.contextId,
     );
     cards.value = cards.value.map(item => item.id === response.card.id ? response.card : item);
+    await branchValidationSaved();
     viewing.value = response.card;
+    detailDialog.value = true;
     driftEvent.value = response.event;
     ElMessage.success(confirming ? '已绑定当前代码版本' : '知识已标记为失效');
   } catch (error) {
@@ -417,7 +426,7 @@ async function save(input: CardInput) {
   if (!repositoryId) return;
   busy.value = true;
   try {
-    if (editing.value) await intelligenceApi.updateCard(repositoryId, editing.value.id, input);
+    if (editing.value) await intelligenceApi.updateCard(repositoryId, editing.value.id, input, branchContext.context?.contextId);
     else await intelligenceApi.createCard(repositoryId, input, branchContext.context?.contextId);
     dialog.value = false;
     await load();
@@ -432,7 +441,7 @@ async function reviewCard(card: KnowledgeCard, reviewStatus: 'APPROVED' | 'CHANG
   const action = reviewStatus === 'APPROVED' ? '通过人工评审' : '标记为要求修改';
   try {
     await ElMessageBox.confirm(`${action}“${card.title}”？该操作不会自动改变发布状态。`, '人工评审', { type: 'warning' });
-    await intelligenceApi.reviewCard(repositoryId, card.id, reviewStatus);
+    await intelligenceApi.reviewCard(repositoryId, card.id, reviewStatus, branchContext.context?.contextId);
     await loadCards();
     ElMessage.success(`${action}完成`);
   } catch (error) {
@@ -444,9 +453,17 @@ async function setPublication(card: KnowledgeCard, publicationStatus: 'DRAFT' | 
   if (!repositoryId) return;
   const action = publicationStatus === 'PUBLISHED' ? '发布' : publicationStatus === 'ARCHIVED' ? '归档' : '撤回为草稿';
   try {
-    await ElMessageBox.confirm(`${action}“${card.title}”？`, '发布状态', { type: 'warning' });
-    await intelligenceApi.setCardPublication(repositoryId, card.id, publicationStatus);
-    await loadCards();
+    const context = branchContext.context;
+    if (!context) return;
+    await ElMessageBox.confirm(publicationStatus === 'PUBLISHED'
+      ? `确认“${card.title}”适用于 ${context.branchName} 分支并发布？发布后可用于检索和问答。`
+      : `${action}“${card.title}”？`, '发布知识', { confirmButtonText: publicationStatus === 'PUBLISHED' ? '确认并发布' : '确定', cancelButtonText: '取消' });
+    if (publicationStatus === 'PUBLISHED') {
+      await intelligenceApi.publishCard(repositoryId, card.id, card.revision, context.contextId);
+    } else {
+      await intelligenceApi.setCardPublication(repositoryId, card.id, publicationStatus, context.contextId);
+    }
+    await branchValidationSaved();
     ElMessage.success(`${action}完成`);
   } catch (error) {
     if (error instanceof Error) ElMessage.error(error.message);
@@ -528,7 +545,7 @@ onMounted(() => void load());
           v-model="cardQuery"
           class="app-search-input knowledge-search"
           :prefix-icon="Search"
-          placeholder="搜索卡片标题"
+          placeholder="搜索标题、正文或标签"
           clearable
         />
         <el-input
@@ -651,6 +668,7 @@ onMounted(() => void load());
       @source-review="sourceReview"
     />
     <KnowledgeCardEditorDialog v-if="canMaintain && repositories.selectedRepositoryId" v-model="dialog"
+      :context-id="branchContext.context?.contextId"
       :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy"
       :initial-reference="initialReference"
       :branch-name="branchContext.context?.branchName ?? null"

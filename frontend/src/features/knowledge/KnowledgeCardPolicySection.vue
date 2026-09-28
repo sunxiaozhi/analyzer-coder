@@ -4,11 +4,10 @@ import type { KnowledgeEnforcement } from '@/api/intelligence';
 import type { RepositoryMember } from '@/api/repositoryGovernance';
 import KnowledgeAccountSelect from './KnowledgeAccountSelect.vue';
 
-const props = defineProps<{
+defineProps<{
   members: RepositoryMember[];
   membersLoading: boolean;
   currentAccountAvailable: boolean;
-  scopeReady: boolean;
 }>();
 const emit = defineEmits<{ useCurrentAccount: [] }>();
 
@@ -18,11 +17,11 @@ const ownerAccountId = defineModel<string | null>('ownerAccountId', { required: 
 const enforcementOptions: { value: KnowledgeEnforcement; label: string; hint: string }[] = [
   { value: 'REFERENCE', label: '参考', hint: '作为理解项目的背景信息' },
   { value: 'ADVISORY', label: '重点提醒', hint: '命中相关代码时提醒开发者关注' },
-  { value: 'REQUIRED', label: '强约束', hint: '发布前需要负责人、适用范围和当前代码证据' },
+  { value: 'REQUIRED', label: '强约束', hint: '由负责人确认后发布，作为开发时必须遵循的规则' },
 ];
 const selectedHint = computed(() => enforcementOptions.find(option => option.value === enforcement.value)?.hint ?? '');
 const requiredIncomplete = computed(() => enforcement.value === 'REQUIRED'
-  && (!ownerAccountId.value || !props.scopeReady));
+  && !ownerAccountId.value);
 </script>
 
 <template>
@@ -55,7 +54,7 @@ const requiredIncomplete = computed(() => enforcement.value === 'REQUIRED'
         v-if="requiredIncomplete"
         type="warning"
         :closable="false"
-        title="草稿可以保存；发布强约束知识前，需要负责人和至少一种路径或符号范围。"
+        title="草稿可以保存；发布强约束知识前，请指定负责人。"
       />
     </div>
   </section>

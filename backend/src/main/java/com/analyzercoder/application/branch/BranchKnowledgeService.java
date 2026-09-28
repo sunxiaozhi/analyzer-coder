@@ -81,6 +81,31 @@ public class BranchKnowledgeService {
                         context.branchId());
         if (count == null || count != 1)
             throw new ApiSecurityException(409, "KNOWLEDGE_SCOPE_MISMATCH", "知识修订已变化或不适用于该分支");
+        String sourceState =
+                switch (state) {
+                    case "CURRENT" -> "CURRENT";
+                    case "REVIEW_REQUIRED" -> "SUSPECT";
+                    case "INVALID" -> "STALE";
+                    default -> "UNVERIFIED";
+                };
+        db.update(
+                """
+                UPDATE knowledge_cards SET source_version_status=?, verification_note=?,
+                    verified_commit=CASE WHEN ?='CURRENT' THEN ? ELSE verified_commit END,
+                    last_verified_content_version=CASE WHEN ?='CURRENT' THEN ? ELSE last_verified_content_version END,
+                    source_version_checked_at=CURRENT_TIMESTAMP
+                WHERE id=? AND repo_id=? AND revision=? AND branch_id=?
+                """,
+                sourceState,
+                note,
+                state,
+                context.commitSha(),
+                state,
+                context.contentVersion(),
+                cardId,
+                context.repositoryId(),
+                revision,
+                context.branchId());
         db.update(
                 """
             INSERT INTO knowledge_branch_validations(card_id,revision,branch_id,content_version,state,note,checked_by) VALUES(?,?,?,?,?,?,?)

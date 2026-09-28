@@ -209,13 +209,14 @@ export function getIndexJob(indexJobId: string): Promise<IndexJob> {
 export function listChunks(
   repositoryId: string,
   params: { q?: string; limit?: number; offset?: number } = {},
+  contextId?: string | null,
 ): Promise<CodeChunkListResponse> {
   const search = new URLSearchParams();
   if (params.q) search.set('q', params.q);
   if (params.limit) search.set('limit', String(params.limit));
   if (params.offset) search.set('offset', String(params.offset));
   const suffix = search.toString() ? `?${search}` : '';
-  return request<CodeChunkListResponse>(`/api/repositories/${repositoryId}/chunks${suffix}`);
+  return request<CodeChunkListResponse>(`/api/repositories/${repositoryId}/chunks${suffix}`, branchContextOptions(contextId));
 }
 export interface BranchOverview {
   preparation: RepositoryPreparation;

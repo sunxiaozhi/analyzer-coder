@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue';
+import { shallowRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   intelligenceApi,
@@ -19,6 +19,7 @@ import { useKnowledgeCardEditor } from './useKnowledgeCardEditor';
 const props = defineProps<{
   modelValue: boolean;
   repositoryId: string;
+  contextId?: string | null;
   card: KnowledgeCard | null;
   busy: boolean;
   branchName?: string | null;
@@ -35,7 +36,7 @@ const emit = defineEmits<{
 }>();
 
 const auth = useAuthStore();
-const { form, scopeText, reset, toPayload } = useKnowledgeCardEditor(() => auth.account?.id ?? null);
+const { form, reset, toPayload } = useKnowledgeCardEditor(() => auth.account?.id ?? null);
 const attachments = shallowRef<KnowledgeAttachment[]>([]);
 const uploading = shallowRef(false);
 const codeReferences = shallowRef<CodeReference[]>([]);
@@ -44,11 +45,6 @@ const membersLoading = shallowRef(false);
 const loadedMembersRepository = shallowRef<string | null>(null);
 let referencePrimeVersion = 0;
 
-const scopeReady = computed(() => Boolean(
-  scopeText.paths.trim()
-  || scopeText.symbols.trim()
-  || form.scope.modules.length
-));
 
 watch(
   () => [props.modelValue, props.card] as const,
@@ -85,7 +81,7 @@ async function primeInitialReference(
     const response = await listChunks(props.repositoryId, {
       q: target.symbolName || target.filePath,
       limit: 20,
-    });
+    }, props.contextId);
     if (version !== referencePrimeVersion || !props.modelValue || props.card) return;
     const candidates = response.chunks.filter(chunk => chunk.filePath === target.filePath
       && (!target.contentVersion || chunk.contentVersion === target.contentVersion));
@@ -209,8 +205,7 @@ function save() {
 
       <KnowledgeCodeAssociationSection
         v-model:references="codeReferences"
-        v-model:paths="scopeText.paths"
-        v-model:symbols="scopeText.symbols"
+        :context-id="contextId"
         :repository-id="repositoryId"
         @open-code="emit('openCode', $event)"
       />
@@ -221,7 +216,6 @@ function save() {
         :members="members"
         :members-loading="membersLoading"
         :current-account-available="Boolean(auth.account)"
-        :scope-ready="scopeReady"
         @use-current-account="useCurrentAccount"
       />
 
@@ -229,7 +223,7 @@ function save() {
         class="draft-note"
         type="info"
         :closable="false"
-        title="保存后可在卡片列表中完成评审、来源确认和发布。"
+        title="保存后，在卡片列表点击“确认并发布”即可用于检索和问答。"
       />
     </el-form>
 

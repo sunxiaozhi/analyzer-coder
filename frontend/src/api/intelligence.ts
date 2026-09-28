@@ -520,8 +520,9 @@ export const intelligenceApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  updateCard: (repositoryId: string, id: string, input: CardInput) =>
+  updateCard: (repositoryId: string, id: string, input: CardInput, contextId?: string | null) =>
     request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}`, {
+      ...withBranchContext(contextId),
       method: 'PUT',
       body: JSON.stringify(input),
     }),
@@ -529,7 +530,9 @@ export const intelligenceApi = {
     repositoryId: string,
     id: string,
     reviewStatus: 'APPROVED' | 'CHANGES_REQUESTED',
+    contextId?: string | null,
   ) => request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}/review`, {
+    ...withBranchContext(contextId),
     method: 'POST',
     body: JSON.stringify({ reviewStatus }),
   }),
@@ -537,10 +540,15 @@ export const intelligenceApi = {
     repositoryId: string,
     id: string,
     publicationStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED',
+    contextId?: string | null,
   ) => request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}/publication`, {
+    ...withBranchContext(contextId),
     method: 'POST',
     body: JSON.stringify({ publicationStatus }),
   }),
+  publishCard: (repositoryId: string, id: string, expectedRevision: number, contextId: string) =>
+    request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}/publish`,
+      withBranchContext(contextId, { method: 'POST', body: JSON.stringify({ expectedRevision }) })),
   sourceDrift: (repositoryId: string, id: string) =>
     request<KnowledgeDriftEvent | null>(
       `/api/repositories/${repositoryId}/knowledge/${id}/source-drift`,
@@ -551,9 +559,10 @@ export const intelligenceApi = {
     action: 'CONFIRM_CURRENT' | 'MARK_STALE',
     expectedRevision: number,
     note: string,
+    contextId?: string | null,
   ) => request<KnowledgeSourceReviewResponse>(
     `/api/repositories/${repositoryId}/knowledge/${id}/source-review`,
-    { method: 'POST', body: JSON.stringify({ action, expectedRevision, note }) },
+    withBranchContext(contextId, { method: 'POST', body: JSON.stringify({ action, expectedRevision, note }) }),
   ),
   cardHistory: (repositoryId: string, id: string) =>
     request<CardRevision[]>(`/api/repositories/${repositoryId}/knowledge/${id}/history`),

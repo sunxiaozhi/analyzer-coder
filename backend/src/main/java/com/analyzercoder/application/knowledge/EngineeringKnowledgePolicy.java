@@ -65,9 +65,6 @@ public class EngineeringKnowledgePolicy {
         if (ownerAccountId == null) {
             throw new IllegalStateException("必须执行的工程知识需要指定负责人后才能发布");
         }
-        if (scope == null || scope.isEmpty()) {
-            throw new IllegalStateException("必须执行的工程知识需要设置适用范围后才能发布");
-        }
         if (!"APPROVED".equals(reviewStatus)) {
             throw new IllegalStateException("必须执行的工程知识尚未通过人工评审，不能发布");
         }

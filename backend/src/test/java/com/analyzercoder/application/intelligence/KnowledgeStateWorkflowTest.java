@@ -95,11 +95,10 @@ class KnowledgeStateWorkflowTest {
     }
 
     @Test
-    void requiredKnowledgeCannotPublishWithoutOwnerScopeAndCurrentEvidence() {
+    void requiredKnowledgeCannotPublishWithoutOwnerAndCurrentConfirmation() {
         when(mapper.cards(repositoryId, true))
                 .thenReturn(
                         List.of(requiredRow(null, emptyScope(), "CURRENT")),
-                        List.of(requiredRow(actorId, emptyScope(), "CURRENT")),
                         List.of(requiredRow(actorId, populatedScope(), "UNVERIFIED")));
 
         assertThatThrownBy(
@@ -107,11 +106,6 @@ class KnowledgeStateWorkflowTest {
                                 service.setCardPublication(
                                         repositoryId, cardId, actorId, "PUBLISHED"))
                 .hasMessageContaining("负责人");
-        assertThatThrownBy(
-                        () ->
-                                service.setCardPublication(
-                                        repositoryId, cardId, actorId, "PUBLISHED"))
-                .hasMessageContaining("适用范围");
         assertThatThrownBy(
                         () ->
                                 service.setCardPublication(

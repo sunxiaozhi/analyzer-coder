@@ -61,6 +61,13 @@ const hasScope = computed(() => Boolean(props.card && (
         <span>修订 v{{ card.revision }}</span>
         <time>{{ new Date(card.updatedAt).toLocaleString() }}</time>
       </div>
+      <div class="detail-content" v-html="card.renderedContent" />
+      <div v-if="card.tags.length" class="detail-tags">
+        <span v-for="tag in card.tags" :key="tag"># {{ tag }}</span>
+      </div>
+      <KnowledgeAttachmentList :items="card.attachments" :repository-id="card.repositoryId" />
+      <details class="maintenance-details">
+        <summary>维护信息与复核</summary>
       <dl class="engineering-facts">
         <div><dt>负责人</dt><dd class="mono">{{ card.ownerAccountId || '未指定' }}</dd></div>
         <div><dt>最近验证内容版本</dt><dd class="mono">{{ card.lastVerifiedContentVersion || '尚未验证' }}</dd></div>
@@ -79,11 +86,7 @@ const hasScope = computed(() => Boolean(props.card && (
       <KnowledgeBranchValidationPanel v-if="visible && branchContext && branchContext.repositoryId === card.repositoryId"
         :context="branchContext" :card-id="card.id" :card-revision="card.revision" :can-manage="canManage ?? false"
         @saved="emit('branchValidated')" />
-      <div class="detail-content" v-html="card.renderedContent" />
-      <div v-if="card.tags.length" class="detail-tags">
-        <span v-for="tag in card.tags" :key="tag"># {{ tag }}</span>
-      </div>
-      <KnowledgeAttachmentList :items="card.attachments" :repository-id="card.repositoryId" />
+      </details>
       <section v-if="hasScope" class="engineering-detail">
         <h3>适用范围</h3>
         <div v-if="card.scope.pathPatterns.length"><b>路径</b><code v-for="item in card.scope.pathPatterns" :key="item">{{ item }}</code></div>
@@ -106,6 +109,8 @@ const hasScope = computed(() => Boolean(props.card && (
 </template>
 
 <style scoped>
+.maintenance-details { margin-top: 16px; }
+.maintenance-details > summary { cursor: pointer; padding: 10px 0; color: #50647a; }
 .detail-meta {
   display: flex;
   align-items: center;

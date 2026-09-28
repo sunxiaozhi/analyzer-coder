@@ -1,28 +1,16 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue';
+import { computed } from 'vue';
 import type { CodeReference } from '@/api/intelligence';
 import KnowledgeCodeReferenceSelector from './KnowledgeCodeReferenceSelector.vue';
 
-defineProps<{ repositoryId: string }>();
+defineProps<{ repositoryId: string; contextId?: string | null }>();
 const emit = defineEmits<{ openCode: [reference: CodeReference] }>();
 
 const references = defineModel<CodeReference[]>('references', { required: true });
-const paths = defineModel<string>('paths', { required: true });
-const symbols = defineModel<string>('symbols', { required: true });
-const advancedSections = shallowRef<string[]>([]);
 const referenceSummary = computed(() => references.value.length
   ? `已绑定 ${references.value.length} 处代码`
   : '尚未绑定代码');
 
-watch(
-  () => [paths.value, symbols.value] as const,
-  ([pathValue, symbolValue]) => {
-    if ((pathValue.trim() || symbolValue.trim()) && !advancedSections.value.includes('scope')) {
-      advancedSections.value = ['scope'];
-    }
-  },
-  { immediate: true },
-);
 </script>
 
 <template>
@@ -30,7 +18,7 @@ watch(
     <header class="section-heading source-heading">
       <div>
         <h3>关联代码</h3>
-        <p>绑定具体实现后，可以从知识返回源码，并检测引用内容是否发生变化。</p>
+        <p>可选。关联具体实现，方便从知识返回源码；业务经验和操作说明也可以直接录入。</p>
       </div>
       <span :data-active="references.length > 0">{{ referenceSummary }}</span>
     </header>
@@ -38,34 +26,11 @@ watch(
     <KnowledgeCodeReferenceSelector
       v-model="references"
       :repository-id="repositoryId"
+      :context-id="contextId"
       @open-code="emit('openCode', $event)"
     />
 
-    <el-collapse v-model="advancedSections" class="advanced-scope">
-      <el-collapse-item name="scope">
-        <template #title>
-          <div class="advanced-title">
-            <b>扩大适用范围</b>
-            <small>可选；让知识覆盖一组路径或同名代码符号</small>
-          </div>
-        </template>
-        <div class="scope-grid">
-          <el-form-item label="路径规则">
-            <el-input v-model="paths" type="textarea" :rows="4" placeholder="backend/src/**/refund/**" />
-            <small>每行一项，使用项目代码相对路径通配规则。</small>
-          </el-form-item>
-          <el-form-item label="符号">
-            <el-input
-              v-model="symbols"
-              type="textarea"
-              :rows="4"
-              placeholder="RefundService&#10;approveRefund"
-            />
-            <small>每行一项，与类、函数或方法名精确匹配。</small>
-          </el-form-item>
-        </div>
-      </el-collapse-item>
-    </el-collapse>
+
   </section>
 </template>
 
@@ -90,15 +55,8 @@ watch(
   font-size: 13px;
 }
 .source-heading > span[data-active='true'] { color: #1f668f; border-color: #a9cce1; background: #edf7fc; }
-.advanced-scope { margin-top: 18px; border-top-color: #dce4e9; border-bottom: 0; }
-.advanced-title { display: grid; line-height: 1.35; }
-.advanced-title b { color: #34444f; font-size: 14px; }
-.advanced-title small { color: #74838e; font-size: 13px; font-weight: 400; }
-.scope-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 4px 2px 0; }
-.scope-grid small { display: block; margin-top: 5px; color: var(--el-text-color-secondary); line-height: 1.45; }
 @media (max-width: 760px) {
   .editor-section { padding: 14px; }
   .source-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
-  .scope-grid { grid-template-columns: 1fr; gap: 0; }
 }
 </style>

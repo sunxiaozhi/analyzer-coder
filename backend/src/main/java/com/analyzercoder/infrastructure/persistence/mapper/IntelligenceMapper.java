@@ -261,8 +261,7 @@ public interface IntelligenceMapper {
     List<Map<String, Object>> heuristicCallEdges(@Param("repositoryId") UUID repositoryId);
 
     List<Map<String, Object>> heuristicCallEdgesAtContentVersion(
-            @Param("repositoryId") UUID repositoryId,
-            @Param("contentVersion") UUID contentVersion);
+            @Param("repositoryId") UUID repositoryId, @Param("contentVersion") UUID contentVersion);
 
     UUID currentContentVersion(@Param("repositoryId") UUID repositoryId);
 
@@ -391,6 +390,11 @@ public interface IntelligenceMapper {
      */
     Map<String, Object> findChunk(
             @Param("repositoryId") UUID repositoryId, @Param("chunkId") UUID chunkId);
+
+    Map<String, Object> findChunkForCard(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("cardId") UUID cardId,
+            @Param("chunkId") UUID chunkId);
 
     Map<String, Object> findChunkAtContentVersion(
             @Param("repositoryId") UUID repositoryId,
