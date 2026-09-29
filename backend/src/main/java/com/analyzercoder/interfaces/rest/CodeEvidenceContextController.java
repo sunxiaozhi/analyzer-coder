@@ -49,7 +49,20 @@ public class CodeEvidenceContextController {
                     filePath,
                     symbol,
                     includeDraft,
-                    branchKnowledge.applicable(repositoryId, context.branchId()));
+                    branchKnowledge.applicable(repositoryId, context.branchId()),
+                    branchKnowledge.validations(account, context).stream()
+                            .collect(
+                                    java.util.stream.Collectors.toMap(
+                                            com.analyzercoder.application.branch
+                                                            .BranchKnowledgeService.ValidationCard
+                                                    ::cardId,
+                                            v ->
+                                                    switch (v.state()) {
+                                                        case "CURRENT" -> "CURRENT";
+                                                        case "INVALID" -> "STALE";
+                                                        case "REVIEW_REQUIRED" -> "SUSPECT";
+                                                        default -> "UNVERIFIED";
+                                                    })));
         }
         return service.context(id, filePath, symbol, includeDraft);
     }

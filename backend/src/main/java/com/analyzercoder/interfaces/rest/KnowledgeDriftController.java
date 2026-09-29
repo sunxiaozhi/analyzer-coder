@@ -57,7 +57,10 @@ public class KnowledgeDriftController {
                 CodeRepositoryId.of(repositoryId),
                 RepositoryPermission.READ);
         KnowledgeDriftService.DriftEvent event =
-                drift.latestEvent(CodeRepositoryId.of(repositoryId), cardId);
+                drift.latestEvent(
+                        CodeRepositoryId.of(repositoryId),
+                        cardId,
+                        contexts.resolve(request, repositoryId).contentVersion());
         return event == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(event);
     }
 
@@ -79,7 +82,8 @@ public class KnowledgeDriftController {
                         cardId,
                         account.id(),
                         new KnowledgeDriftService.SourceReviewRequest(
-                                body.action(), body.expectedRevision(), body.note()));
+                                body.action(), body.expectedRevision(), body.note()),
+                        context.branchId());
         return new SourceReviewResponse(intelligence.card(repositoryId, cardId), event);
     }
 

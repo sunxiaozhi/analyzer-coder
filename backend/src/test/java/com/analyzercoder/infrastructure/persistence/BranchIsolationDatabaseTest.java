@@ -159,9 +159,81 @@ class BranchIsolationDatabaseTest {
                                             mainCard,
                                             release))
                             .isZero();
+                    // Scope changes share one card, keep history, and take effect even in old
+                    // contexts.
+                    var scopes =
+                            new com.analyzercoder.application.branch.BranchKnowledgeService(
+                                    db,
+                                    org.mockito.Mockito.mock(
+                                            com.analyzercoder.security.AccessControlService.class));
+                    UUID shared = card(db, repo, main, "shared branchproof");
+                    assertThat(scopes.applicable(repo, release)).doesNotContain(shared);
+                    scopes.saveScope(
+                            repo,
+                            shared,
+                            1,
+                            new com.analyzercoder.application.branch.BranchKnowledgeService
+                                    .BranchScope("ALL_BRANCHES", List.of()));
+                    db.update(
+                            "INSERT INTO branch_context_knowledge VALUES(?,?,1),(?,?,1)",
+                            ctx1,
+                            shared,
+                            ctx2,
+                            shared);
+                    session.clearCache();
+                    assertThat(knowledge(mapper, repo, s2, release, ctx2))
+                            .extracting(row -> row.get("id"))
+                            .contains(shared);
+                    UUID future = UUID.randomUUID();
+                    branch(
+                            db,
+                            repo,
+                            future,
+                            UUID.randomUUID(),
+                            UUID.randomUUID(),
+                            account,
+                            "future-" + future);
+                    assertThat(scopes.applicable(repo, future)).contains(shared);
+                    db.update(
+                            "INSERT INTO knowledge_branch_validations(card_id,revision,branch_id,content_version,state) VALUES(?,1,?,?,'INVALID')",
+                            shared,
+                            release,
+                            s2);
+                    session.clearCache();
+                    assertThat(knowledge(mapper, repo, s2, release, ctx2))
+                            .extracting(row -> row.get("id"))
+                            .doesNotContain(shared);
+                    assertThat(knowledge(mapper, repo, s1, main, ctx1))
+                            .extracting(row -> row.get("id"))
+                            .contains(shared);
+                    db.update("UPDATE knowledge_cards SET revision=revision+1 WHERE id=?", shared);
+                    scopes.saveScope(
+                            repo,
+                            shared,
+                            2,
+                            new com.analyzercoder.application.branch.BranchKnowledgeService
+                                    .BranchScope("SELECTED_BRANCHES", List.of(main, release)));
+                    assertThat(scopes.applicable(repo, main)).contains(shared);
+                    assertThat(scopes.applicable(repo, release)).contains(shared);
+                    assertThat(scopes.applicable(repo, future)).doesNotContain(shared);
+                    assertThat(scopes.scope(shared, 1).mode()).isEqualTo("ALL_BRANCHES");
+                    db.update("UPDATE knowledge_cards SET revision=revision+1 WHERE id=?", shared);
+                    scopes.saveScope(
+                            repo,
+                            shared,
+                            3,
+                            new com.analyzercoder.application.branch.BranchKnowledgeService
+                                    .BranchScope("SELECTED_BRANCHES", List.of(release)));
+                    session.clearCache();
+                    assertThat(knowledge(mapper, repo, s1, main, ctx1))
+                            .extracting(row -> row.get("id"))
+                            .doesNotContain(shared);
+
                     assertThat(db.update("DELETE FROM code_chunks WHERE id=?", chunk1))
                             .isEqualTo(1);
-                    db.update("UPDATE repositories SET deleted_at=CURRENT_TIMESTAMP WHERE id=?", repo);
+                    db.update(
+                            "UPDATE repositories SET deleted_at=CURRENT_TIMESTAMP WHERE id=?",
+                            repo);
                     db.update(
                             "UPDATE repositories SET repository_status='DELETED' WHERE id=?", repo);
                     assertThat(
@@ -180,7 +252,14 @@ class BranchIsolationDatabaseTest {
     private static List<Map<String, Object>> knowledge(
             IntelligenceMapper mapper, UUID repo, UUID contentVersion, UUID branch, UUID context) {
         return mapper.searchBranchKnowledgeKeyword(
-                repo, contentVersion, branch, context, "branchproof", List.of("branchproof"), 1, 20);
+                repo,
+                contentVersion,
+                branch,
+                context,
+                "branchproof",
+                List.of("branchproof"),
+                1,
+                20);
     }
 
     private static void branch(

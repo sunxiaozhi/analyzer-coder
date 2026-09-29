@@ -17,6 +17,7 @@ import {
   type MarkdownKnowledgeSourceList as MarkdownKnowledgeSourceOverview,
   type MarkdownKnowledgeSourceStatus,
 } from '@/api/intelligence';
+import { cardForBranch } from '@/features/knowledge/knowledgeBranchScope';
 import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
@@ -135,7 +136,7 @@ async function loadCards() {
       branchContext.context ? branchesApi.validations(branchContext.context) : Promise.resolve([]),
     ]);
     if(!isCurrent())return;
-    cards.value=loadedCards; branchValidations.value=loadedValidations;
+    cards.value=loadedCards.map(card => cardForBranch(card, branchContext.context, loadedValidations)); branchValidations.value=loadedValidations;
     syncRequestedCard(); syncRequestedCreate();
   }catch(error){
     if(isCurrent())ElMessage.error(error instanceof Error?error.message:'知识卡片加载失败');
@@ -179,8 +180,11 @@ function syncRequestedCard() {
 }
 function openCreate() { initialReference.value = null; editing.value = null; dialog.value = true; }
 function scopeLabel(card: KnowledgeCard) {
-  void card;
-  return `分支 · ${branchContext.context?.branchName ?? '未选择'}`;
+  const scope = card.branchScope;
+  if (scope?.mode === 'ALL_BRANCHES') return '项目共享 · 所有分支';
+  const names = scope?.branchIds.map(id => branchContext.branches.find(branch => branch.id === id)?.name ?? '未知分支');
+  if (names && names.length > 1) return `指定分支 · ${names.join('、')}`;
+  return `分支 · ${names?.[0] ?? branchContext.context?.branchName ?? '未选择'}`;
 }
 function openEdit(card: KnowledgeCard) { initialReference.value = null; editing.value = card; dialog.value = true; }
 function syncRequestedCreate() {
@@ -207,7 +211,7 @@ async function loadDrift(card: KnowledgeCard) {
   driftEvent.value = null;
   driftLoading.value = true;
   try {
-    const result = await intelligenceApi.sourceDrift(repositoryId, card.id);
+    const result = await intelligenceApi.sourceDrift(repositoryId, card.id, branchContext.context?.contextId);
     if (repositoryId === repositories.selectedRepositoryId && viewing.value?.id === card.id) {
       driftEvent.value = result;
     }
@@ -286,20 +290,28 @@ async function sourceReview(action: 'CONFIRM_CURRENT' | 'MARK_STALE') {
     sourceReviewLoading.value = false;
   }
 }
-function openCode(reference: CodeReference) {
+async function referenceContext(reference: CodeReference) {
+  const context = branchContext.context;
+  if (!reference.branchId || reference.branchId === context?.branchId) return context;
+  return branchesApi.context(reference.repositoryId, reference.branchId);
+}
+async function openCode(reference: CodeReference) {
+  try {
+  const context = await referenceContext(reference);
   detailDialog.value = false;
   dialog.value = false;
-  void router.push({
+  await router.push({
     name: 'search',
     query: {
       contentVersion: reference.contentVersion ?? undefined,
       path: reference.filePath,
       startLine: String(reference.startLine ?? 1),
       endLine: String(reference.endLine ?? reference.startLine ?? 1),
-      branchId: branchContext.context?.branchId,
-      contextId: branchContext.context?.contextId,
+      branchId: context?.branchId,
+      contextId: context?.contextId,
     },
   });
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法打开引用分支'); }
 }
 
 function openMarkdown(source: MarkdownKnowledgeSource) {
@@ -403,8 +415,9 @@ async function openGraph(reference: CodeReference) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   try {
+    const context = await referenceContext(reference);
     const target = reference.chunkId
-      ? await intelligenceApi.graphTarget(repositoryId, reference.chunkId, branchContext.context?.contextId)
+      ? await intelligenceApi.graphTarget(repositoryId, reference.chunkId, context?.contextId)
       : { symbol: reference.symbolName || reference.filePath, filePath: reference.filePath, startLine: reference.startLine };
     detailDialog.value = false;
     await router.push({ name: 'search', query: {
@@ -414,8 +427,8 @@ async function openGraph(reference: CodeReference) {
       symbol: target.symbol,
       depth: '3',
       relation: '1',
-      branchId: branchContext.context?.branchId,
-      contextId: branchContext.context?.contextId,
+      branchId: context?.branchId,
+      contextId: context?.contextId,
     } });
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '无法解析图谱目标');
@@ -655,6 +668,7 @@ onMounted(() => void load());
     <KnowledgeCardDetailDialog
       v-model="detailDialog"
       :card="viewing"
+      :scope-label="viewing ? scopeLabel(viewing) : undefined"
       :drift-event="driftEvent"
       :drift-loading="driftLoading"
       :can-maintain="canMaintain"
@@ -672,6 +686,7 @@ onMounted(() => void load());
       :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy"
       :initial-reference="initialReference"
       :branch-name="branchContext.context?.branchName ?? null"
+      :branch-id="branchContext.context?.branchId" :branches="branchContext.branches"
       @submit="save" @open-code="openCode" />
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">

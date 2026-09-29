@@ -36,6 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
 /** 编排代码问答流程：分析问题、混合检索证据、调用模型并校验最终引用。 */
 @Service
 public class IntelligenceService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.analyzercoder.application.branch.BranchKnowledgeService branchKnowledge;
+
     private static final int DIMENSION = 64;
     private static final int MAX_CANDIDATES_PER_CHANNEL = 40;
     private static final int EXTERNAL_EMBEDDING_BATCH_SIZE = 16;
@@ -1313,6 +1316,8 @@ public class IntelligenceService {
                 writeJson(validated.scope()),
                 writeJson(validated.obligations()));
         KnowledgeCard card = findCard(repositoryId, id);
+        if (branchKnowledge != null)
+            branchKnowledge.saveScope(repositoryId, id, card.revision(), input.branchScope());
         attachments.attach(repositoryId, id, card.revision(), validated.attachmentIds());
         attachCodeReferences(repositoryId, id, card.revision(), validated.codeReferences());
         mapper.refreshCardSourceVersion(repositoryId, id);
@@ -1322,6 +1327,8 @@ public class IntelligenceService {
     @Transactional
     public KnowledgeCard updateCard(UUID repositoryId, UUID id, UUID actor, CardInput input) {
         CardInput validated = validateCardInput(input);
+        if (branchKnowledge != null)
+            branchKnowledge.checkRevision(repositoryId, id, input.expectedRevision());
         if (mapper.updateCard(
                         id,
                         repositoryId,
@@ -1340,6 +1347,8 @@ public class IntelligenceService {
             throw new IllegalArgumentException("知识卡片不存在");
         }
         KnowledgeCard card = findCard(repositoryId, id);
+        if (branchKnowledge != null)
+            branchKnowledge.saveScope(repositoryId, id, card.revision(), input.branchScope());
         attachments.attach(repositoryId, id, card.revision(), validated.attachmentIds());
         attachCodeReferences(repositoryId, id, card.revision(), validated.codeReferences());
         mapper.refreshCardSourceVersion(repositoryId, id);
@@ -1499,7 +1508,9 @@ public class IntelligenceService {
                                         integer(row, "start_line"),
                                         integer(row, "end_line"),
                                         string(row, "content_hash"),
-                                        bool(row, "stale")))
+                                        bool(row, "stale"),
+                                        uuid(row, "branch_id"),
+                                        string(row, "branch_name")))
                 .toList();
     }
 
@@ -1597,7 +1608,8 @@ public class IntelligenceService {
                 row.reviewedBy(),
                 row.reviewedAt(),
                 attachments.list(row.repositoryId(), row.id(), row.revision()),
-                codeReferences(row.repositoryId(), row.id(), row.revision()));
+                codeReferences(row.repositoryId(), row.id(), row.revision()),
+                branchKnowledge == null ? null : branchKnowledge.scope(row.id(), row.revision()));
     }
 
     private <T> T readPayload(String payload, Class<T> type, T fallback) {
@@ -1994,7 +2006,33 @@ public class IntelligenceService {
             Integer startLine,
             Integer endLine,
             String contentHash,
-            boolean stale) {}
+            boolean stale,
+            UUID branchId,
+            String branchName) {
+        public CodeReference(
+                UUID repositoryId,
+                UUID chunkId,
+                UUID contentVersion,
+                String filePath,
+                String symbolName,
+                Integer startLine,
+                Integer endLine,
+                String contentHash,
+                boolean stale) {
+            this(
+                    repositoryId,
+                    chunkId,
+                    contentVersion,
+                    filePath,
+                    symbolName,
+                    startLine,
+                    endLine,
+                    contentHash,
+                    stale,
+                    null,
+                    null);
+        }
+    }
 
     public record CardInput(
             String title,
@@ -2008,7 +2046,39 @@ public class IntelligenceService {
             KnowledgeScope scope,
             KnowledgeObligations obligations,
             List<UUID> attachmentIds,
-            List<CodeReferenceInput> codeReferences) {
+            List<CodeReferenceInput> codeReferences,
+            com.analyzercoder.application.branch.BranchKnowledgeService.BranchScope branchScope,
+            Integer expectedRevision) {
+        public CardInput(
+                String title,
+                String cardType,
+                String content,
+                List<String> tags,
+                String knowledgeKind,
+                String severity,
+                String enforcement,
+                UUID ownerAccountId,
+                KnowledgeScope scope,
+                KnowledgeObligations obligations,
+                List<UUID> attachmentIds,
+                List<CodeReferenceInput> codeReferences) {
+            this(
+                    title,
+                    cardType,
+                    content,
+                    tags,
+                    knowledgeKind,
+                    severity,
+                    enforcement,
+                    ownerAccountId,
+                    scope,
+                    obligations,
+                    attachmentIds,
+                    codeReferences,
+                    null,
+                    null);
+        }
+
         public CardInput {
             if (tags == null) {
                 tags = List.of();
@@ -2055,5 +2125,65 @@ public class IntelligenceService {
             UUID reviewedBy,
             Instant reviewedAt,
             List<KnowledgeAttachmentService.Attachment> attachments,
-            List<CodeReference> codeReferences) {}
+            List<CodeReference> codeReferences,
+            com.analyzercoder.application.branch.BranchKnowledgeService.BranchScope branchScope) {
+        public KnowledgeCard(
+                UUID id,
+                UUID repositoryId,
+                String title,
+                String cardType,
+                String content,
+                String renderedContent,
+                List<String> tags,
+                KnowledgeKind knowledgeKind,
+                KnowledgeSeverity severity,
+                KnowledgeEnforcement enforcement,
+                UUID ownerAccountId,
+                KnowledgeScope scope,
+                KnowledgeObligations obligations,
+                UUID lastVerifiedContentVersion,
+                String verificationNote,
+                String publicationStatus,
+                int revision,
+                Instant createdAt,
+                Instant updatedAt,
+                String verifiedCommit,
+                String sourceVersionStatus,
+                Instant sourceVersionCheckedAt,
+                String reviewStatus,
+                UUID reviewedBy,
+                Instant reviewedAt,
+                List<KnowledgeAttachmentService.Attachment> attachments,
+                List<CodeReference> codeReferences) {
+            this(
+                    id,
+                    repositoryId,
+                    title,
+                    cardType,
+                    content,
+                    renderedContent,
+                    tags,
+                    knowledgeKind,
+                    severity,
+                    enforcement,
+                    ownerAccountId,
+                    scope,
+                    obligations,
+                    lastVerifiedContentVersion,
+                    verificationNote,
+                    publicationStatus,
+                    revision,
+                    createdAt,
+                    updatedAt,
+                    verifiedCommit,
+                    sourceVersionStatus,
+                    sourceVersionCheckedAt,
+                    reviewStatus,
+                    reviewedBy,
+                    reviewedAt,
+                    attachments,
+                    codeReferences,
+                    null);
+        }
+    }
 }

@@ -30,7 +30,7 @@
         k.repo_id=#{repositoryId}
         AND EXISTS(SELECT 1 FROM repositories br
             JOIN repository_branches bb ON bb.repo_id=br.id AND bb.name=COALESCE(br.default_branch,'WORKSPACE')
-            WHERE br.id=k.repo_id AND bb.id=k.branch_id)
+            WHERE br.id=k.repo_id AND knowledge_applies_to_branch(k.id,bb.id))
         AND k.publication_status='PUBLISHED'
         AND k.review_status='APPROVED'
         AND k.source_version_status NOT IN ('SUSPECT','STALE')
@@ -51,25 +51,11 @@
         )
     </sql>
     <sql id="validBranchKnowledge">
-        k.repo_id=#{repositoryId}
-        AND k.branch_id=#{branchId}
-        AND k.publication_status='PUBLISHED'
-        AND k.review_status='APPROVED'
-        AND k.source_version_status NOT IN ('SUSPECT','STALE')
-        AND NOT EXISTS(
-            SELECT 1
-            FROM knowledge_code_refs ref
-            LEFT JOIN code_chunks current_chunk
-              ON current_chunk.repo_id=ref.repo_id
-             AND current_chunk.branch_id=#{branchId}
-             AND current_chunk.file_path=ref.file_path
-             AND current_chunk.start_line=ref.start_line
-             AND current_chunk.content_hash=ref.content_hash
-             AND current_chunk.content_version=#{contentVersion}
-            WHERE ref.card_id=k.id
-              AND ref.revision=k.revision
-              AND current_chunk.id IS NULL
-        )
+        k.repo_id=#{repositoryId} AND knowledge_applies_to_branch(k.id,#{branchId},k.revision)
+        AND k.publication_status='PUBLISHED' AND k.review_status='APPROVED'
+        AND ((k.enforcement='REFERENCE' AND NOT EXISTS(SELECT 1 FROM knowledge_code_refs r WHERE r.card_id=k.id AND r.revision=k.revision))
+            OR EXISTS(SELECT 1 FROM knowledge_branch_validations v WHERE v.card_id=k.id AND v.revision=k.revision AND v.branch_id=#{branchId} AND v.content_version=#{contentVersion} AND v.state='CURRENT'))
+        AND NOT EXISTS(SELECT 1 FROM knowledge_branch_validations v WHERE v.card_id=k.id AND v.revision=k.revision AND v.branch_id=#{branchId} AND v.content_version=#{contentVersion} AND v.state IN ('REVIEW_REQUIRED','INVALID'))
     </sql>
 
     <select id="summary" resultType="map">

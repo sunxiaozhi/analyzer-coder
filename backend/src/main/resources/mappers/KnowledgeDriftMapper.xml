@@ -72,7 +72,9 @@
           AND source_version_status='CURRENT' AND verified_commit=#{expectedCommit}
     </update>
     <update id="reviewSource">
-        UPDATE knowledge_cards SET source_version_status=#{resultStatus},
+        UPDATE knowledge_cards SET source_version_status=CASE WHEN EXISTS(SELECT 1 FROM knowledge_branch_scopes s
+            WHERE s.card_id=knowledge_cards.id AND s.mode='SELECTED_BRANCHES' AND cardinality(s.branch_ids)=1)
+            THEN #{resultStatus} ELSE source_version_status END,
             verified_commit=CASE WHEN #{resultStatus}='CURRENT' THEN #{currentCommit} ELSE verified_commit END,
             last_verified_content_version=CASE WHEN #{resultStatus}='CURRENT' THEN #{currentContentVersion} ELSE last_verified_content_version END,
             verification_note=#{note},source_version_checked_at=CURRENT_TIMESTAMP,
@@ -83,6 +85,14 @@
         INSERT INTO knowledge_branch_validations(card_id,revision,branch_id,content_version,state,note,checked_by)
         SELECT id,revision,branch_id,#{contentVersion},#{state},#{note},#{actorId}
         FROM knowledge_cards WHERE repo_id=#{repositoryId} AND id=#{cardId} AND revision=#{revision}
+        ON CONFLICT(card_id,revision,branch_id,content_version) DO UPDATE SET state=EXCLUDED.state,
+            note=EXCLUDED.note,checked_by=EXCLUDED.checked_by,checked_at=CURRENT_TIMESTAMP
+    </insert>
+    <insert id="recordBranchSourceValidation">
+        INSERT INTO knowledge_branch_validations(card_id,revision,branch_id,content_version,state,note,checked_by)
+        SELECT id,revision,#{branchId},#{contentVersion},#{state},#{note},#{actorId}
+        FROM knowledge_cards WHERE repo_id=#{repositoryId} AND id=#{cardId} AND revision=#{revision}
+          AND knowledge_applies_to_branch(id,#{branchId})
         ON CONFLICT(card_id,revision,branch_id,content_version) DO UPDATE SET state=EXCLUDED.state,
             note=EXCLUDED.note,checked_by=EXCLUDED.checked_by,checked_at=CURRENT_TIMESTAMP
     </insert>
@@ -102,6 +112,15 @@
             note,actor_id,created_at
         FROM knowledge_drift_events
         WHERE repo_id=#{repositoryId} AND card_id=#{cardId}
+        ORDER BY created_at DESC,id DESC LIMIT 1
+    </select>
+    <select id="latestEventAtVersion" resultMap="event">
+        SELECT id,repo_id,card_id,card_revision,from_content_version,to_content_version,from_commit,to_commit,
+            previous_status,result_status,trigger_type,reasons_payload::text AS reasons_payload,
+            note,actor_id,created_at
+        FROM knowledge_drift_events
+        WHERE repo_id=#{repositoryId} AND card_id=#{cardId}
+        AND to_content_version=#{contentVersion}
         ORDER BY created_at DESC,id DESC LIMIT 1
     </select>
 </mapper>

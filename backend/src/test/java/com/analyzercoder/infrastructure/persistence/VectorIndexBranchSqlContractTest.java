@@ -16,9 +16,9 @@ class VectorIndexBranchSqlContractTest {
                 .contains("<select id=\"knowledgeForBranch\"")
                 .contains("c.branch_id=#{branchId}")
                 .contains("c.content_version=#{contentVersion}")
-                .contains("k.branch_id=#{branchId}")
-                .contains("current_chunk.branch_id=#{branchId}")
-                .contains("current_chunk.content_version=#{contentVersion}");
+                .contains("knowledge_applies_to_branch(k.id,#{branchId},k.revision)")
+                .contains("v.branch_id=#{branchId}")
+                .contains("v.content_version=#{contentVersion}");
     }
 
     private String resource(String path) throws Exception {

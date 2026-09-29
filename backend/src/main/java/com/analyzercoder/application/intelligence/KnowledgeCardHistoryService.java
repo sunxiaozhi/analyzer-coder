@@ -21,17 +21,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class KnowledgeCardHistoryService {
     private final KnowledgeHistoryMapper mapper;
     private final KnowledgeAttachmentService attachments;
-    private final MarkdownRenderingService markdown;
+    private final IntelligenceService intelligence;
     private final ObjectMapper json;
 
     public KnowledgeCardHistoryService(
             KnowledgeHistoryMapper mapper,
             KnowledgeAttachmentService attachments,
-            MarkdownRenderingService markdown,
+            IntelligenceService intelligence,
             ObjectMapper json) {
         this.mapper = mapper;
         this.attachments = attachments;
-        this.markdown = markdown;
+        this.intelligence = intelligence;
         this.json = json;
     }
 
@@ -82,37 +82,9 @@ public class KnowledgeCardHistoryService {
                 attachments.list(repoId, cardId, revision).stream()
                         .map(KnowledgeAttachmentService.Attachment::id)
                         .toList());
-        return new IntelligenceService.KnowledgeCard(
-                card.id(),
-                card.repositoryId(),
-                card.title(),
-                card.cardType(),
-                card.content(),
-                markdown.render(repoId, card.content()),
-                List.of(card.tags()),
-                KnowledgeKind.valueOf(card.knowledgeKind()),
-                KnowledgeSeverity.valueOf(card.severity()),
-                KnowledgeEnforcement.valueOf(card.enforcement()),
-                card.ownerAccountId(),
-                readPayload(card.scopePayload(), KnowledgeScope.class, KnowledgeScope.empty()),
-                readPayload(
-                        card.obligationsPayload(),
-                        KnowledgeObligations.class,
-                        KnowledgeObligations.empty()),
-                card.lastVerifiedContentVersion(),
-                card.verificationNote(),
-                card.publicationStatus(),
-                card.revision(),
-                card.createdAt(),
-                card.updatedAt(),
-                card.verifiedCommit(),
-                card.sourceVersionStatus(),
-                card.sourceVersionCheckedAt(),
-                card.reviewStatus(),
-                card.reviewedBy(),
-                card.reviewedAt(),
-                attachments.list(repoId, cardId, card.revision()),
-                List.of());
+        mapper.copyCodeReferences(repoId, cardId, revision, card.revision());
+        mapper.restoreBranchScope(repoId, cardId, revision, card.revision());
+        return intelligence.card(repoId, cardId);
     }
 
     private <T> T readPayload(String payload, Class<T> type, T fallback) {

@@ -92,6 +92,7 @@ class KnowledgeDriftControllerTest {
                         eq(repository),
                         eq(cardId),
                         eq(account.id()),
-                        any(KnowledgeDriftService.SourceReviewRequest.class));
+                        any(KnowledgeDriftService.SourceReviewRequest.class),
+                        eq(context.branchId()));
     }
 }

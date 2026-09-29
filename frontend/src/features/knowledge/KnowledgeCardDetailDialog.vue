@@ -14,6 +14,7 @@ const props = defineProps<{
   canMaintain: boolean;
   sourceReviewLoading: boolean;
   branchContext?: BranchContext | null;
+  scopeLabel?: string;
   canManage?: boolean;
 }>();
 const emit = defineEmits<{
@@ -45,6 +46,7 @@ const hasScope = computed(() => Boolean(props.card && (
   <el-dialog v-model="visible" :title="card?.title ?? '知识卡片详情'" width="760">
     <template v-if="card">
       <div class="detail-meta">
+        <el-tag v-if="scopeLabel" type="info">{{ scopeLabel }}</el-tag>
         <el-tag effect="plain">{{ kindLabels[card.knowledgeKind] }}</el-tag>
         <el-tag :type="card.enforcement === 'REQUIRED' ? 'danger' : card.enforcement === 'ADVISORY' ? 'warning' : 'info'">
           {{ enforcementLabels[card.enforcement] }}

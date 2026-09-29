@@ -33,20 +33,33 @@ class BranchKnowledgeServiceTest {
                     UUID.randomUUID(), "owner", "Owner", AccountRole.SUPER_ADMIN, false, null);
     final BranchReadContext context =
             new BranchReadContext(
-                    UUID.randomUUID(), repo, branch, "main", version, "abc", Path.of("."), Instant.now());
+                    UUID.randomUUID(),
+                    repo,
+                    branch,
+                    "main",
+                    version,
+                    "abc",
+                    Path.of("."),
+                    Instant.now());
 
     @Test
-    void applicableKnowledgeIsSelectedByOwningBranch() {
+    void applicableKnowledgeIncludesSharedScopes() {
         when(db.queryForList(anyString(), eq(UUID.class), eq(repo), eq(branch)))
                 .thenReturn(List.of(card));
 
         assertThat(service.applicable(repo, branch)).containsExactly(card);
-        verify(db).queryForList(contains("branch_id=?"), eq(UUID.class), eq(repo), eq(branch));
+        verify(db)
+                .queryForList(
+                        contains("knowledge_applies_to_branch(id,?)"),
+                        eq(UUID.class),
+                        eq(repo),
+                        eq(branch));
     }
 
     @Test
     void verificationRequiresTheCardToBelongToTheBranch() {
-        when(db.queryForObject(anyString(), eq(Integer.class), eq(repo), eq(card), eq(2), eq(branch)))
+        when(db.queryForObject(
+                        anyString(), eq(Integer.class), eq(repo), eq(card), eq(2), eq(branch)))
                 .thenReturn(0);
 
         assertThatThrownBy(() -> service.verify(actor, context, card, 2, "CURRENT", "checked"))
@@ -57,7 +70,8 @@ class BranchKnowledgeServiceTest {
 
     @Test
     void verificationIsRecordedAgainstBranchAndCurrentContentToken() {
-        when(db.queryForObject(anyString(), eq(Integer.class), eq(repo), eq(card), eq(2), eq(branch)))
+        when(db.queryForObject(
+                        anyString(), eq(Integer.class), eq(repo), eq(card), eq(2), eq(branch)))
                 .thenReturn(1);
 
         service.verify(actor, context, card, 2, "CURRENT", "checked");

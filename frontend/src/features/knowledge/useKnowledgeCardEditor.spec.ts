@@ -85,4 +85,19 @@ describe('useKnowledgeCardEditor', () => {
     expect(payload.obligations.requiredTests).toEqual(['npm test']);
     expect(payload.obligations.knowledgeUpdateRequired).toBe(true);
   });
+  it('defaults new cards to the current branch and preserves a shared card on another branch', () => {
+    const editor = useKnowledgeCardEditor(() => 'owner', () => 'legacy');
+    editor.reset(null);
+    expect(editor.toPayload({ attachmentIds: [], codeReferences: [] }).branchScope)
+      .toEqual({ mode: 'SELECTED_BRANCHES', branchIds: ['legacy'] });
+    const card = { ...legacyCard(), branchScope: { mode: 'ALL_BRANCHES' as const, branchIds: [] } };
+    editor.reset(card);
+    expect(editor.toPayload({ attachmentIds: [], codeReferences: [] }).branchScope).toEqual(card.branchScope);
+    editor.form.branchScope = { mode: 'SELECTED_BRANCHES', branchIds: ['main', 'legacy'] };
+    const payload = editor.toPayload({ attachmentIds: [], codeReferences: [] });
+    payload.branchScope!.branchIds.push('future');
+    expect(editor.form.branchScope.branchIds).toEqual(['main', 'legacy']);
+    expect(card.branchScope).toEqual({ mode: 'ALL_BRANCHES', branchIds: [] });
+  });
+
 });

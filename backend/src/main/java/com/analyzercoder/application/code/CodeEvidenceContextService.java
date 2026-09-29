@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -48,6 +49,17 @@ public class CodeEvidenceContextService {
             String symbol,
             boolean includeDraftKnowledge,
             Set<UUID> applicableCardIds) {
+        return context(
+                repository, filePath, symbol, includeDraftKnowledge, applicableCardIds, null);
+    }
+
+    public CodeEvidenceContext context(
+            CodeRepository repository,
+            String filePath,
+            String symbol,
+            boolean includeDraftKnowledge,
+            Set<UUID> applicableCardIds,
+            Map<UUID, String> branchStates) {
         CodeRepositoryId repositoryId = repository.id();
         String normalizedPath = normalizeFilePath(filePath);
         String normalizedSymbol = symbol == null || symbol.isBlank() ? null : symbol.trim();
@@ -60,7 +72,14 @@ public class CodeEvidenceContextService {
                         .map(
                                 card ->
                                         knowledgeReference(
-                                                repository, card, normalizedPath, normalizedSymbol))
+                                                repository,
+                                                card,
+                                                normalizedPath,
+                                                normalizedSymbol,
+                                                branchStates == null
+                                                        ? card.sourceVersionStatus()
+                                                        : branchStates.getOrDefault(
+                                                                card.id(), "UNVERIFIED")))
                         .filter(Objects::nonNull)
                         .sorted(
                                 Comparator.comparing(KnowledgeReference::trusted)
@@ -90,7 +109,8 @@ public class CodeEvidenceContextService {
             CodeRepository repository,
             IntelligenceService.KnowledgeCard card,
             String filePath,
-            String symbol) {
+            String symbol,
+            String sourceStatus) {
         List<CodeBinding> bindings =
                 card.codeReferences().stream()
                         .filter(
@@ -111,7 +131,9 @@ public class CodeEvidenceContextService {
                                                         && repository
                                                                 .currentContentVersion()
                                                                 .value()
-                                                                .equals(reference.contentVersion())))
+                                                                .equals(
+                                                                        reference
+                                                                                .contentVersion())))
                         .toList();
         LinkedHashSet<ApplicabilityReason> applicability = new LinkedHashSet<>();
         if (!bindings.isEmpty()) {
@@ -147,7 +169,7 @@ public class CodeEvidenceContextService {
         boolean trusted =
                 "PUBLISHED".equals(card.publicationStatus())
                         && "APPROVED".equals(card.reviewStatus())
-                        && "CURRENT".equals(card.sourceVersionStatus())
+                        && "CURRENT".equals(sourceStatus)
                         && bindings.stream().noneMatch(CodeBinding::stale);
         return new KnowledgeReference(
                 card.id(),
@@ -159,7 +181,7 @@ public class CodeEvidenceContextService {
                 card.revision(),
                 card.publicationStatus(),
                 card.reviewStatus(),
-                card.sourceVersionStatus(),
+                sourceStatus,
                 trusted,
                 bindings,
                 List.copyOf(applicability));

@@ -129,6 +129,16 @@ public class KnowledgeDriftService {
     @Transactional
     public DriftEvent reviewSource(
             CodeRepository repository, UUID cardId, UUID actorId, SourceReviewRequest request) {
+        return reviewSource(repository, cardId, actorId, request, null);
+    }
+
+    @Transactional
+    public DriftEvent reviewSource(
+            CodeRepository repository,
+            UUID cardId,
+            UUID actorId,
+            SourceReviewRequest request,
+            UUID branchId) {
         if (request == null || request.expectedRevision() <= 0) {
             throw new IllegalArgumentException("expectedRevision 必须是正整数");
         }
@@ -153,14 +163,25 @@ public class KnowledgeDriftService {
                 != 1) {
             throw new KnowledgeDriftException("KNOWLEDGE_REVISION_CONFLICT", "知识修订已变化，请刷新后重新核对");
         }
-        mapper.recordSourceValidation(
-                repositoryId.value(),
-                cardId,
-                request.expectedRevision(),
-                repository.currentContentVersion().value(),
-                action == SourceReviewAction.CONFIRM_CURRENT ? "CURRENT" : "INVALID",
-                note,
-                actorId);
+        if (branchId == null)
+            mapper.recordSourceValidation(
+                    repositoryId.value(),
+                    cardId,
+                    request.expectedRevision(),
+                    repository.currentContentVersion().value(),
+                    action == SourceReviewAction.CONFIRM_CURRENT ? "CURRENT" : "INVALID",
+                    note,
+                    actorId);
+        else
+            mapper.recordBranchSourceValidation(
+                    repositoryId.value(),
+                    cardId,
+                    request.expectedRevision(),
+                    branchId,
+                    repository.currentContentVersion().value(),
+                    action == SourceReviewAction.CONFIRM_CURRENT ? "CURRENT" : "INVALID",
+                    note,
+                    actorId);
         DriftReason manualReason =
                 new DriftReason(
                         action == SourceReviewAction.CONFIRM_CURRENT
@@ -192,6 +213,12 @@ public class KnowledgeDriftService {
     @Transactional(readOnly = true)
     public DriftEvent latestEvent(CodeRepositoryId repositoryId, UUID cardId) {
         KnowledgeDriftEventRow row = mapper.latestEvent(repositoryId.value(), cardId);
+        return row == null ? null : event(row);
+    }
+
+    public DriftEvent latestEvent(CodeRepositoryId repositoryId, UUID cardId, UUID contentVersion) {
+        KnowledgeDriftEventRow row =
+                mapper.latestEventAtVersion(repositoryId.value(), cardId, contentVersion);
         return row == null ? null : event(row);
     }
 

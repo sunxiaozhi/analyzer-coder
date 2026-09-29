@@ -8,6 +8,7 @@ interface PayloadOptions {
 
 function emptyForm(ownerAccountId: string | null): CardInput {
   return {
+    expectedRevision: undefined,
     title: '',
     cardType: '知识卡片',
     content: '',
@@ -30,6 +31,8 @@ function emptyForm(ownerAccountId: string | null): CardInput {
 
 function cardForm(card: KnowledgeCard): CardInput {
   return {
+    branchScope: card.branchScope ? { mode: card.branchScope.mode, branchIds: [...card.branchScope.branchIds] } : undefined,
+    expectedRevision: card.revision,
     title: card.title,
     cardType: card.cardType || '知识卡片',
     content: card.content,
@@ -61,13 +64,14 @@ function lines(value: string) {
   return [...new Set(value.split(/\r?\n/).map(item => item.trim()).filter(Boolean))];
 }
 
-export function useKnowledgeCardEditor(currentAccountId: () => string | null) {
+export function useKnowledgeCardEditor(currentAccountId: () => string | null, currentBranchId: () => string | null = () => null) {
   const form = reactive<CardInput>(emptyForm(currentAccountId()));
   const scopeText = reactive({ paths: '', symbols: '' });
 
   function reset(card: KnowledgeCard | null) {
     const next = card ? cardForm(card) : emptyForm(currentAccountId());
     Object.assign(form, next);
+    form.branchScope = next.branchScope ?? { mode: 'SELECTED_BRANCHES', branchIds: currentBranchId() ? [currentBranchId()!] : [] };
     scopeText.paths = next.scope.pathPatterns.join('\n');
     scopeText.symbols = next.scope.symbols.join('\n');
   }
@@ -75,6 +79,7 @@ export function useKnowledgeCardEditor(currentAccountId: () => string | null) {
   function toPayload(options: PayloadOptions): CardInput {
     return {
       ...form,
+      branchScope: form.branchScope ? { mode: form.branchScope.mode, branchIds: [...form.branchScope.branchIds] } : undefined,
       title: form.title.trim(),
       cardType: form.cardType || '知识卡片',
       tags: [...new Set(form.tags.map(value => value.trim()).filter(Boolean))],

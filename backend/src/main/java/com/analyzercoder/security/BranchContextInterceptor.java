@@ -21,6 +21,7 @@ public class BranchContextInterceptor implements HandlerInterceptor {
                     "/qa/records(?:/[0-9a-fA-F-]{36})?",
                     "/knowledge",
                     "/knowledge/markdown-sources",
+                    "/knowledge/[0-9a-fA-F-]{36}/source-drift",
                     "/vector-index/(?:summary|chunks|knowledge)",
                     "/chunks",
                     "/chunks/[0-9a-fA-F-]{36}/graph-target");

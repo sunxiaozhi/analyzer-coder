@@ -42,7 +42,7 @@
         c.repo_id=#{repositoryId} AND c.publication_status='PUBLISHED'
         AND EXISTS(SELECT 1 FROM repositories br
             JOIN repository_branches bb ON bb.repo_id=br.id AND bb.name=COALESCE(br.default_branch,'WORKSPACE')
-            WHERE br.id=c.repo_id AND bb.id=c.branch_id)
+            WHERE br.id=c.repo_id AND knowledge_applies_to_branch(c.id,bb.id))
         AND c.review_status='APPROVED'
         AND c.source_version_status NOT IN ('SUSPECT','STALE')
         AND NOT EXISTS(
@@ -315,7 +315,7 @@
         publication_status,revision,created_at,updated_at,
         verified_commit,source_version_status,source_version_checked_at,review_status,reviewed_by,reviewed_at
         FROM knowledge_cards WHERE repo_id=#{repositoryId}
-        <if test="!includeDraft">AND publication_status='PUBLISHED' AND review_status='APPROVED' AND source_version_status NOT IN ('SUSPECT','STALE')</if>
+        <if test="!includeDraft">AND publication_status='PUBLISHED' AND review_status='APPROVED'</if>
         ORDER BY updated_at DESC
     </select>
     <insert id="insertCard">
@@ -387,7 +387,7 @@
         SELECT c.id,c.content_version,c.file_path,c.symbol_name,c.start_line,c.end_line,c.content,c.content_hash
         FROM code_chunks c
         JOIN knowledge_cards k ON k.repo_id=c.repo_id AND k.id=#{cardId}
-        JOIN repository_branches b ON b.id=k.branch_id AND b.content_version=c.content_version
+        JOIN repository_branches b ON b.id=c.branch_id AND b.content_version=c.content_version
         WHERE c.repo_id=#{repositoryId} AND c.id=#{chunkId}
     </select>
     <select id="findChunkAtContentVersion" resultType="map">
@@ -398,11 +398,12 @@
     <select id="codeReferences" resultType="map">
         SELECT COALESCE(c.id,r.chunk_id) chunk_id,COALESCE(c.content_version,r.content_version) content_version,
         r.file_path,COALESCE(c.symbol_name,r.symbol_name) symbol_name,r.start_line,r.end_line,r.content_hash,
-        (c.id IS NULL) stale
+        (c.id IS NULL) stale, r.branch_id, b.name branch_name
         FROM knowledge_code_refs r LEFT JOIN code_chunks c
           ON c.repo_id=r.repo_id AND c.file_path=r.file_path AND c.start_line=r.start_line
          AND c.content_version=r.content_version
          AND c.content_hash=r.content_hash
+        LEFT JOIN repository_branches b ON b.id=r.branch_id
         WHERE r.repo_id=#{repositoryId} AND r.card_id=#{cardId} AND r.revision=#{revision}
         ORDER BY r.position
     </select>
@@ -423,7 +424,8 @@
     <select id="missingKnowledgeEmbeddings" resultType="map">
         SELECT c.id,c.revision,CONCAT(c.title,E'\n',c.content,E'\n',ARRAY_TO_STRING(c.tags,' ')) content
         FROM knowledge_cards c LEFT JOIN knowledge_card_embeddings e ON e.card_id=c.id
-        WHERE <include refid="validKnowledge"/>
+        WHERE c.repo_id=#{repositoryId} AND c.publication_status='PUBLISHED'
+        AND c.review_status='APPROVED'
         AND(e.card_id IS NULL OR e.revision&lt;&gt;c.revision OR e.model&lt;&gt;#{model}
         OR e.dimension&lt;&gt;#{dimension} OR e.retrieval_capability&lt;&gt;#{capability})
     </select>
@@ -468,7 +470,7 @@
     </select>
     <sql id="validBranchKnowledge">
         c.repo_id=#{repositoryId} AND live.publication_status='PUBLISHED' AND live.review_status='APPROVED'
-        AND c.branch_id=#{branchId}
+        AND knowledge_applies_to_branch(c.id,#{branchId},c.revision)
         AND (
             (c.enforcement='REFERENCE' AND NOT EXISTS(SELECT 1 FROM knowledge_code_refs refs WHERE refs.card_id=c.id AND refs.revision=c.revision))
             OR EXISTS(SELECT 1 FROM knowledge_branch_validations v WHERE v.card_id=c.id AND v.revision=c.revision
@@ -533,7 +535,7 @@
 
     <select id="searchBranchKnowledgeKeyword" resultType="map">
         SELECT <include refid="knowledgeColumns"/>,
-        '分支专属 · ' || COALESCE(scope_branch.name,'未知分支') source_scope,
+        CASE WHEN scope.mode='ALL_BRANCHES' THEN '项目共享' WHEN cardinality(scope.branch_ids)>1 THEN '指定分支共享' ELSE '分支 · '||scope_branch.name END source_scope,
         LEAST(1.0,
           CASE WHEN POSITION(#{query} IN LOWER(c.title))&gt;0 THEN .95 ELSE 0 END
           +CASE WHEN POSITION(#{query} IN LOWER(c.content))&gt;0 THEN .65 ELSE 0 END
@@ -552,7 +554,8 @@
         FROM (SELECT r.*,r.card_id AS id FROM knowledge_card_revisions r) c
         JOIN knowledge_cards live ON live.id=c.id
         JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
-        JOIN repository_branches scope_branch ON scope_branch.id=c.branch_id
+        JOIN repository_branches scope_branch ON scope_branch.id=#{branchId}
+        JOIN knowledge_branch_scope_history scope ON scope.card_id=c.id AND scope.revision=c.revision
         WHERE <include refid="validBranchKnowledge"/> AND(
           POSITION(#{query} IN LOWER(c.title))&gt;0
           OR POSITION(#{query} IN LOWER(c.content))&gt;0
@@ -569,14 +572,15 @@
 
     <select id="searchBranchKnowledgeVector" resultType="map">
         SELECT <include refid="knowledgeColumns"/>,
-        '分支专属 · ' || COALESCE(scope_branch.name,'未知分支') source_scope,
+        CASE WHEN scope.mode='ALL_BRANCHES' THEN '项目共享' WHEN cardinality(scope.branch_ids)>1 THEN '指定分支共享' ELSE '分支 · '||scope_branch.name END source_scope,
         0.0 lexical_score,
         GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
         FROM knowledge_card_embeddings e
         JOIN (SELECT r.*,r.card_id AS id FROM knowledge_card_revisions r) c ON c.id=e.card_id AND c.revision=e.revision
         JOIN knowledge_cards live ON live.id=c.id
         JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
-        JOIN repository_branches scope_branch ON scope_branch.id=c.branch_id
+        JOIN repository_branches scope_branch ON scope_branch.id=#{branchId}
+        JOIN knowledge_branch_scope_history scope ON scope.card_id=c.id AND scope.revision=c.revision
         WHERE <include refid="validBranchKnowledge"/> AND e.model=#{model} AND e.dimension=#{dimension}
         ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.changed_at DESC
         LIMIT #{limit}

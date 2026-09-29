@@ -54,7 +54,8 @@ public class BranchOverviewService {
         var artifact = graph.findPublished(context.repositoryId(), context.contentVersion());
         var knowledge = knowledge(context);
         var summary = summary(context, knowledge.trusted());
-        var profile = RepositoryPreparationService.profile(contentVersion.files(), summary, artifact);
+        var profile =
+                RepositoryPreparationService.profile(contentVersion.files(), summary, artifact);
         boolean content =
                 Boolean.TRUE.equals(
                         db.queryForObject(
@@ -175,7 +176,7 @@ public class BranchOverviewService {
                 FROM knowledge_cards k
                 LEFT JOIN knowledge_branch_validations v ON v.card_id=k.id AND v.revision=k.revision AND v.branch_id=? AND v.content_version=?
                 WHERE k.repo_id=? AND k.publication_status<>'ARCHIVED'
-                    AND k.branch_id=?
+                    AND knowledge_applies_to_branch(k.id,?)
                 """,
                 (r, n) ->
                         new ProjectKnowledgeHealthRow(

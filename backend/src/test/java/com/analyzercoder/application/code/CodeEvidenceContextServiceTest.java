@@ -54,7 +54,8 @@ class CodeEvidenceContextServiceTest {
                                     .singleElement()
                                     .satisfies(
                                             binding -> {
-                                                assertThat(binding.currentContentVersion()).isTrue();
+                                                assertThat(binding.currentContentVersion())
+                                                        .isTrue();
                                                 assertThat(binding.contentHash()).isEqualTo("hash");
                                             });
                         });
@@ -89,6 +90,32 @@ class CodeEvidenceContextServiceTest {
                                     .extracting(
                                             CodeEvidenceContextService.ApplicabilityReason::kind)
                                     .containsExactly("PATH_SCOPE", "SYMBOL_SCOPE");
+                        });
+    }
+
+    @Test
+    void branchValidationOverridesAnotherBranchesGlobalSourceStatus() {
+        IntelligenceService intelligence = mock(IntelligenceService.class);
+        var service =
+                new CodeEvidenceContextService(
+                        mock(CodeRepositoryStore.class), intelligence, new RepositoryGlobMatcher());
+        var repository = repository();
+        var card = card(repository, "src/refund/RefundService.java");
+        when(intelligence.cards(repository.id().value(), true)).thenReturn(List.of(card));
+        var result =
+                service.context(
+                        repository,
+                        "src/refund/RefundService.java",
+                        null,
+                        true,
+                        java.util.Set.of(card.id()),
+                        java.util.Map.of(card.id(), "STALE"));
+        assertThat(result.knowledgeReferences())
+                .singleElement()
+                .satisfies(
+                        k -> {
+                            assertThat(k.trusted()).isFalse();
+                            assertThat(k.sourceVersionStatus()).isEqualTo("STALE");
                         });
     }
 

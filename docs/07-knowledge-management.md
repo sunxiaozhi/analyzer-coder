@@ -1,4 +1,7 @@
 # 知识管理需求
+
+> 2026-09-29 使用流程更新：在当前分支填写标题和正文，按需添加标签、附件与关联代码；保存后点击“确认并发布”，一次完成评审、分支确认与发布。录入页已移除“扩大适用范围”；历史范围字段继续兼容，新增卡片不需要填写。下面较早的条目中，独立评审接口属于兼容接口，不再要求用户逐步操作。
+
 > 本文档由当前实现反推生成（2026-09-19）。描述已实现的需求，不是新设计。
 
 ## 1 功能范围与角色
@@ -29,8 +32,8 @@
 | 动作 | 所需权限 | 证据 |
 | --- | --- | --- |
 | 列出知识卡、读取来源漂移证据、读取修订历史、读取 Markdown 来源、读取分支范围与验证列表 | READ | `IntelligenceController.java:176-188`、`KnowledgeDriftController.java:44-47`、`KnowledgeCardHistoryController.java:34-37`、`MarkdownKnowledgeSourceController.java:41`、`BranchKnowledgeService.java:33-34,61,164-165` |
-| 创建知识卡、编辑知识卡、上传附件、来源复核、生成 Markdown 来源、批量生成 | MAINTAIN | `IntelligenceController.java:195,209`、`KnowledgeAttachmentController.java:43`、`KnowledgeDriftController.java:61`、`MarkdownKnowledgeSourceController.java:51,66` |
-| 人工评审、发布/撤回/归档、分支范围与分支验证 | MANAGE | `IntelligenceController.java:219,229`、`BranchKnowledgeService.java:81,164-165` |
+| 创建知识卡、编辑知识卡（含共享范围）、上传附件、来源复核、生成 Markdown 来源、批量生成 | MAINTAIN | `IntelligenceController.java:195,209`、`KnowledgeAttachmentController.java:43`、`KnowledgeDriftController.java:61`、`MarkdownKnowledgeSourceController.java:51,66` |
+| 人工评审、发布/撤回/归档与分支验证 | MANAGE | `IntelligenceController.java:219,229`、`BranchKnowledgeService.java:81,164-165` |
 | 恢复历史修订 | MAINTAIN | `KnowledgeCardHistoryController.java:48` |
 
 ## 2 需求条目
@@ -121,7 +124,7 @@
   - 发布状态只接受 DRAFT、PUBLISHED、ARCHIVED。
   - 目标状态为 PUBLISHED 时，`review_status` 必须为 APPROVED，否则报"知识卡片尚未通过人工评审，不能发布"。
   - 目标状态为 PUBLISHED 时，`source_version_status` 不得为 SUSPECT 或 STALE，否则报"知识来源版本已过期，复核内容后才能发布"。
-  - 执行级别为 REQUIRED 时额外要求：必须有负责人、适用范围不得为空、评审必须通过、来源版本必须为 CURRENT。
+  - 执行级别为 REQUIRED 时额外要求：必须有负责人、评审必须通过、来源版本必须为 CURRENT；不再要求填写独立适用范围。“确认并发布”在同一事务内记录评审和当前分支确认。
   - 发布成功后触发知识向量补齐；补齐失败不阻断发布，已发布知识仍可经关键词通道检索。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:42-43,1118-1143,1265-1271`、`backend/src/main/java/com/analyzercoder/application/knowledge/EngineeringKnowledgePolicy.java:56-77`、`backend/src/test/java/com/analyzercoder/application/intelligence/KnowledgeStateWorkflowTest.java:51-121`
 
@@ -139,28 +142,24 @@
   - 历史查询按修订号倒序返回该卡片的全部修订，含标题、类型、正文、标签、治理字段、发布状态、修改人与修改时间。
   - 恢复动作要求目标修订存在，否则报"知识卡片历史修订不存在"；知识卡不存在时报"知识卡片不存在"。
   - 恢复会把目标修订的内容与治理字段写回当前卡片，同时把发布状态重置为 DRAFT、评审状态重置为 UNREVIEWED、来源版本重置为 UNVERIFIED，并把修订号加 1。
-  - 恢复不覆盖历史记录；恢复时会把被恢复修订所关联的附件重建到新修订上。
+  - 恢复不覆盖历史记录；恢复时会把被恢复修订所关联的附件和代码引用完整复制到新修订上，保留原代码位置、内容版本和哈希；发布时再核对当前分支代码是否匹配。
 - 证据：`backend/src/main/resources/mappers/KnowledgeHistoryMapper.xml:54-78`、`backend/src/main/java/com/analyzercoder/application/intelligence/KnowledgeCardHistoryService.java:63-116`
 
-### KNO-013 项目共享知识与分支专属知识
-- 需求：每条知识卡必须声明其适用分支范围，范围为二选一模式，不允许同时"共享且限定"。
-- 规则：
-  - 模式 `ALL_BRANCHES` 表示项目共享知识，`branch_ids` 必须为空；模式 `SELECTED_BRANCHES` 表示指定分支范围，`branch_ids` 必须非空。
-  - 指定分支数量上限 30；空模式、空列表（SELECTED_BRANCHES 但无分支）或 ALL_BRANCHES 携带分支列表均报"知识适用分支范围无效"。
-  - 每个分支必须属于当前项目，否则拒绝该适用分支。
-  - 新建知识卡时触发器自动把范围初始化为该项目默认分支的 SELECTED_BRANCHES 单分支。
-  - 数据库约束在表层面再次保证模式与分支列表的一致性。
-- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:73-96`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/test/java/com/analyzercoder/application/branch/BranchKnowledgeServiceTest.java:52-70`
+### KNO-013 多分支共享范围
+- 新建、编辑窗口提供“仅当前分支”“项目共享（所有分支）”“指定分支共享”。
+- `branchScope` 随创建/编辑请求原子保存；`ALL_BRANCHES` 的 `branchIds` 必须为空，自动包含后续新增分支；`SELECTED_BRANCHES` 接受同项目的 1–30 个分支。
+- 新建省略此字段时默认当前分支，编辑省略时保留原范围。原有数据通过 V2 迁移保持原分支，不自动扩大范围。
+- `knowledge_cards.branch_id` 记录创建来源；`knowledge_branch_scopes` 决定当前共享范围，`knowledge_branch_scope_history` 保存每个修订的范围。
+- 共享卡片只维护一份正文，当前范围覆盖的分支都读取同一张卡片。
 
-### KNO-014 分支范围编辑生成新修订并保留证据
-- 需求：修改分支范围必须是一次可审计的修订变更，且不得丢失代码引用与附件。
-- 规则：
-  - 修改范围需要 MANAGE 权限。
-  - 修改以乐观校验为前提：请求携带的期望修订号必须等于当前修订号，否则报 409 `KNOWLEDGE_REVISION_CONFLICT`（"知识已更新，请刷新后重试"）。
-  - 修改范围会把修订号加 1，并把上一修订的代码引用与附件关联原样复制到新修订。
-  - 修改范围不会复制分支验证结论。
-  - 每次修订都在 `knowledge_card_revisions.branch_id` 中保留与卡片一致的分支身份。
-- 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchKnowledgeService.java:73-136`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/test/java/com/analyzercoder/application/branch/BranchKnowledgeServiceTest.java:32-50`
+### KNO-014 共享范围、修订和分支验证
+- 维护者通过编辑卡片修改范围，保存为新草稿并重新发布；代码引用、附件和范围一起提交，非法分支导致整个保存回滚。
+- 编辑器提交 `expectedRevision`，有其他人先保存时返回 409，要求刷新后重新编辑；兼容旧请求未传修订号。
+- 历史恢复带回正文、共享范围、代码引用及附件，生成新草稿；分支验证结论不复制到新修订。
+- 通用参考知识（REFERENCE 且无代码引用）发布后可在覆盖的分支检索。关联代码或约束类知识需要对应分支/内容版本的 CURRENT 验证。
+- 分支验证、人工来源复核的 INVALID/REVIEW_REQUIRED 仅影响目标分支；代码与证据工作台也按当前分支验证显示可信状态。
+- 检索同时检查当前共享范围和阅读上下文固定修订的范围。收回共享后，旧阅读上下文也不会继续返回该知识。
+- 引用记录自己的代码来源分支，跨分支查看源码仍跳转到该来源分支。
 
 ### KNO-015 适用范围载荷与匹配规则
 - 需求：适用范围必须支持路径 glob、符号与模块三种载荷，路径匹配使用受控、跨操作系统一致的 glob 语义。
@@ -174,7 +173,7 @@
 - 证据：`backend/src/main/java/com/analyzercoder/application/knowledge/RepositoryGlobMatcher.java:11-95`、`backend/src/test/java/com/analyzercoder/application/knowledge/RepositoryGlobMatcherTest.java:11-45`
 
 ### KNO-016 绑定文件不等于全仓适用
-- 需求：把代码片段绑定到知识卡只证明该片段被引用，不表示知识在整个仓库或整条分支上适用；适用性必须单独由适用范围给出。
+- 需求：把代码片段绑定到知识卡只证明该片段被引用，不表示知识在整个仓库或整条分支上适用；卡片按共享范围展示，通过发布确认和分支复核维护适用性；独立路径、符号范围仅保留历史数据兼容。
 - 规则：
   - 代码证据上下文对同一条知识分别给出"直接绑定"与"范围命中"两类适用理由：直接绑定要求文件路径与绑定记录一致；路径命中要求文件路径匹配 `pathPatterns`；符号命中要求当前符号与 `symbols` 精确相等。
   - 只有当至少一类适用理由存在时，该知识才会出现在该文件的上下文中。
@@ -395,8 +394,8 @@
   - 卡片视图提供标题搜索、知识类型筛选、分支上下文下的验证状态筛选，以及新建、编辑、历史、分支范围、评审、发布/撤回/归档、查看详情、查看代码、查看图谱与来源复核动作。
   - Markdown 视图提供标题或路径搜索、状态筛选（待生成/已生成/已过期）、状态计数、单条生成与批量生成、查看原文与打开已生成卡片。
   - 生成动作按乐观校验失败（409）刷新列表并提示重新确认内容；来源复核冲突（`KNOWLEDGE_REVISION_CONFLICT`）刷新列表并提示重新核对。
-  - 编辑与新建仅对具备维护权限的账号可用；评审、发布与分支范围设置仅对具备管理权限的账号可用；分支验证面板在无管理权限时只读并提示。
-  - 编辑器按权限决定是否允许把新建卡片直接设为项目共享。
+  - 编辑与新建仅对具备维护权限的账号可用；评审、发布仅对具备管理权限的账号可用；共享范围随维护者的编辑一起保存；分支验证面板在无管理权限时只读并提示。
+  - 维护者可以在新建和编辑窗口选择项目共享或指定分支。
 - 证据：`frontend/src/views/KnowledgeView.vue:80-81,84-99,112-142,179-201,341-400,424-490,590-610,674-679`、`frontend/src/features/knowledge/KnowledgeCardListItem.vue:89-96`、`frontend/src/features/knowledge/KnowledgeBranchScopeDialog.vue:46-61`、`frontend/src/features/knowledge/KnowledgeBranchValidationPanel.vue:70-81`、`frontend/src/views/KnowledgeView.spec.ts:56-75`
 
 ## 3 数据与状态
@@ -458,8 +457,6 @@
 | POST | `/api/repositories/{repoId}/knowledge/markdown-sources/generate-pending` | 批量生成待处理来源 | MAINTAIN |
 | GET | `/api/repositories/{repoId}/knowledge/{cardId}/source-drift` | 读取最近一次漂移或复核事件（无事件返回 204） | READ |
 | POST | `/api/repositories/{repoId}/knowledge/{cardId}/source-review` | 来源复核（CONFIRM_CURRENT / MARK_STALE） | MAINTAIN |
-| GET | `/api/repositories/{repoId}/knowledge/branch-scopes` | 列出知识卡的分支范围 | READ |
-| PUT | `/api/repositories/{repoId}/knowledge/{cardId}/branch-scope` | 设置分支范围（生成新修订） | MANAGE |
 | GET | `/api/repositories/{repoId}/knowledge/branch-validations?contextId=` | 列出当前分支的适用知识与验证结论 | READ |
 | POST | `/api/repositories/{repoId}/knowledge/{cardId}/branch-validation` | 写入分支验证结论与说明 | MANAGE |
 

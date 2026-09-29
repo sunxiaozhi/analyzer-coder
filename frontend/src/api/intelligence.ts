@@ -2,7 +2,14 @@ import type { IndexJob } from '@/types/api';
 import { request } from './http';
 import { branchContextOptions, withBranchContext } from './branchContext';
 
+export interface KnowledgeBranchScope {
+  mode: 'ALL_BRANCHES' | 'SELECTED_BRANCHES';
+  branchIds: string[];
+}
+
 export interface CodeReference {
+  branchId?: string | null;
+  branchName?: string | null;
   repositoryId: string;
   chunkId: string | null;
   contentVersion: string | null;
@@ -293,6 +300,7 @@ export interface KnowledgeObligations {
   knowledgeUpdateRequired: boolean;
 }
 export interface KnowledgeCard {
+  branchScope?: KnowledgeBranchScope;
   id: string;
   repositoryId: string;
   title: string;
@@ -399,6 +407,8 @@ export interface MarkdownKnowledgeBatchGenerationResult {
   remaining: number;
 }
 export interface CardInput {
+  expectedRevision?: number;
+  branchScope?: KnowledgeBranchScope;
   title: string;
   cardType: string;
   content: string;
@@ -549,9 +559,9 @@ export const intelligenceApi = {
   publishCard: (repositoryId: string, id: string, expectedRevision: number, contextId: string) =>
     request<KnowledgeCard>(`/api/repositories/${repositoryId}/knowledge/${id}/publish`,
       withBranchContext(contextId, { method: 'POST', body: JSON.stringify({ expectedRevision }) })),
-  sourceDrift: (repositoryId: string, id: string) =>
+  sourceDrift: (repositoryId: string, id: string, contextId?: string | null) =>
     request<KnowledgeDriftEvent | null>(
-      `/api/repositories/${repositoryId}/knowledge/${id}/source-drift`,
+      `/api/repositories/${repositoryId}/knowledge/${id}/source-drift`, branchContextOptions(contextId),
     ).then(result => result ?? null),
   reviewKnowledgeSource: (
     repositoryId: string,

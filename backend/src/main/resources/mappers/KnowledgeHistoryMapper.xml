@@ -84,4 +84,21 @@
         verified_commit,source_version_status,source_version_checked_at,review_status,reviewed_by,reviewed_at
         FROM knowledge_cards WHERE repo_id=#{repositoryId} AND id=#{cardId}
     </select>
+    <insert id="copyCodeReferences">
+        INSERT INTO knowledge_code_refs(card_id,revision,position,repo_id,content_version,chunk_id,file_path,symbol_name,start_line,end_line,content_hash,branch_id)
+        SELECT card_id,#{targetRevision},position,repo_id,content_version,chunk_id,file_path,symbol_name,start_line,end_line,content_hash,branch_id
+        FROM knowledge_code_refs
+        WHERE repo_id=#{repositoryId} AND card_id=#{cardId} AND revision=#{sourceRevision}
+    </insert>
+    <update id="restoreBranchScope">
+        WITH restored AS (
+            UPDATE knowledge_branch_scopes s SET mode=h.mode,branch_ids=h.branch_ids
+            FROM knowledge_branch_scope_history h, knowledge_cards k
+            WHERE s.card_id=h.card_id AND k.id=s.card_id AND k.repo_id=#{repositoryId}
+              AND h.card_id=#{cardId} AND h.revision=#{sourceRevision}
+            RETURNING s.card_id,s.mode,s.branch_ids
+        )
+        UPDATE knowledge_branch_scope_history h SET mode=r.mode,branch_ids=r.branch_ids FROM restored r
+        WHERE h.card_id=r.card_id AND h.revision=#{targetRevision}
+    </update>
 </mapper>

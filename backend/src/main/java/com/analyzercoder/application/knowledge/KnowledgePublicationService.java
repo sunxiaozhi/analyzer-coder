@@ -44,7 +44,7 @@ public class KnowledgePublicationService {
                 db.queryForList(
                         """
                 SELECT revision FROM knowledge_cards
-                WHERE id=? AND repo_id=? AND branch_id=? FOR UPDATE
+                WHERE id=? AND repo_id=? AND knowledge_applies_to_branch(id,?) FOR UPDATE
                 """,
                         Integer.class,
                         cardId,

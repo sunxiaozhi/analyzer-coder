@@ -17,6 +17,7 @@ class BranchContextInterceptorTest {
         for (var route :
                 new String[][] {
                     {"GET", "/chunks"},
+                    {"GET", cardPath + "/source-drift"},
                     {"PUT", cardPath},
                     {"POST", cardPath + "/review"},
                     {"POST", cardPath + "/publication"},

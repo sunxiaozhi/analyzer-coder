@@ -15,6 +15,8 @@ import KnowledgeCardContentSection from './KnowledgeCardContentSection.vue';
 import KnowledgeCardPolicySection from './KnowledgeCardPolicySection.vue';
 import KnowledgeCodeAssociationSection from './KnowledgeCodeAssociationSection.vue';
 import { useKnowledgeCardEditor } from './useKnowledgeCardEditor';
+import KnowledgeBranchScopeSection from './KnowledgeBranchScopeSection.vue';
+import type { RepositoryBranch } from '@/api/branches';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -23,6 +25,8 @@ const props = defineProps<{
   card: KnowledgeCard | null;
   busy: boolean;
   branchName?: string | null;
+  branchId?: string | null;
+  branches?: RepositoryBranch[];
   initialReference?: {
     filePath: string;
     symbolName: string | null;
@@ -36,7 +40,7 @@ const emit = defineEmits<{
 }>();
 
 const auth = useAuthStore();
-const { form, reset, toPayload } = useKnowledgeCardEditor(() => auth.account?.id ?? null);
+const { form, reset, toPayload } = useKnowledgeCardEditor(() => auth.account?.id ?? null, () => props.branchId ?? null);
 const attachments = shallowRef<KnowledgeAttachment[]>([]);
 const uploading = shallowRef(false);
 const codeReferences = shallowRef<CodeReference[]>([]);
@@ -186,10 +190,8 @@ function save() {
     <p class="editor-intro">记录一条可检索、可回到源码的项目知识。新卡片会先保存为草稿。</p>
 
     <el-form label-position="top" class="knowledge-card-form">
-      <section v-if="!card && branchName" class="knowledge-ownership">
-        <div><b>知识归属</b><small>知识与代码共同归属当前分支。</small></div>
-        <strong>分支 · {{ branchName }}</strong>
-      </section>
+      <KnowledgeBranchScopeSection v-if="branchId" v-model="form.branchScope"
+        :key="card?.id ?? 'new'" :current-branch-id="branchId" :branch-name="branchName" :branches="branches ?? []" />
       <KnowledgeCardContentSection
         v-model:title="form.title"
         v-model:knowledge-kind="form.knowledgeKind"
@@ -232,7 +234,7 @@ function save() {
       <el-button
         type="primary"
         :loading="busy"
-        :disabled="uploading || !form.title.trim() || !form.content.trim()"
+        :disabled="uploading || !form.title.trim() || !form.content.trim() || (Boolean(branchId) && form.branchScope?.mode === 'SELECTED_BRANCHES' && !form.branchScope.branchIds.length)"
         @click="save"
       >
         {{ card ? '保存新修订' : '创建草稿' }}
@@ -259,8 +261,4 @@ function save() {
   overscroll-behavior: contain;
 }
 .draft-note { margin-bottom: 2px; }
-.knowledge-ownership { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid #cdddea; border-left: 3px solid #2f6f94; border-radius: 5px; background: #f7fafc; }
-.knowledge-ownership > div { display: grid; gap: 3px; }
-.knowledge-ownership b { color: #31475a; font-size: 14px; }
-.knowledge-ownership small { color: #68798a; font-size: 12px; }
 </style>

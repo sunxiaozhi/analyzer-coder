@@ -171,8 +171,6 @@
 | POST | /contexts | 解析或复用分支阅读上下文 | READ + CSRF | `Context{branchId,contextId}` | `BranchReadContext{contextId,repositoryId,branchId,branchName,contentVersion,commitSha,expiresAt}` | RepositoryBranchController.java:108-115；RepositoryBranchService.java:347-349 |
 | GET | /branches/{branchId}/contentVersions/{contentVersion}/retention | 检查内容版本产物保留状态 | MANAGE | - | `Retention` | RepositoryBranchController.java:121-129；BranchArtifactRetentionService.java:44 |
 | DELETE | /branches/{branchId}/contentVersions/{contentVersion} | 删除分支内容版本 | MANAGE + CSRF | - | `Retention` | RepositoryBranchController.java:131-139；BranchArtifactRetentionService.java:50 |
-| GET | /knowledge/branch-scopes | 列出知识卡分支作用域 | READ | - | `List<Scope{cardId,revision,mode,branchIds}>` | RepositoryBranchController.java:141-145,180；BranchKnowledgeService.java:60-61 |
-| PUT | /knowledge/{cardId}/branch-scope | 设置分支作用域 | MANAGE + CSRF | `Scope{revision,mode,branchIds}` | 无响应体；HTTP 204 | RepositoryBranchController.java:147-161；BranchKnowledgeService.java:81 |
 | POST | /knowledge/{cardId}/branch-validation | 提交分支校验结论 | MANAGE + CSRF | `Validation{revision,contextId,state,note}` | 无响应体；HTTP 204 | RepositoryBranchController.java:163-178,182；BranchKnowledgeService.java:164-165 |
 | GET | /branch-preparation-jobs/history | 任务历史分页 | READ | `branchId`（可选）、`pageNum=1`、`pageSize=15` | `PageResult<Job>` | RepositoryBranchController.java:184-192；BranchPreparationJobs.java:57-59 |
 | GET | /knowledge/branch-validations | 列出待校验知识卡 | READ | `contextId`（必填） | `List<ValidationCard{cardId,revision,title,content,state,note}>` | RepositoryBranchController.java:194-201；BranchKnowledgeService.java:29-34 |
@@ -274,6 +272,9 @@
 | PUT | /api/repositories/{repoId}/knowledge/{cardId} | 更新知识卡 | MAINTAIN + CSRF | `CardInput` | `KnowledgeCard` | IntelligenceController.java:203-211 |
 | POST | /api/repositories/{repoId}/knowledge/{cardId}/review | 审核知识卡 | MANAGE + CSRF | `ReviewCardRequest{reviewStatus}` | `KnowledgeCard` | IntelligenceController.java:213-221,239 |
 | POST | /api/repositories/{repoId}/knowledge/{cardId}/publication | 设置发布状态 | MANAGE + CSRF | `PublicationRequest{publicationStatus}` | `KnowledgeCard` | IntelligenceController.java:223-231,241 |
+| POST | /api/repositories/{repoId}/knowledge/{cardId}/publish | 一次确认并发布 | MANAGE + CSRF + X-Branch-Context | `{expectedRevision}` | `KnowledgeCard`；评审、分支确认和发布为同一事务 | IntelligenceController.publishCard；KnowledgePublicationService.publish |
+
+2026-09-29：代码片段列表 `/chunks`、知识卡编辑、评审、发布及 `/source-review` 均使用 `X-Branch-Context`。前端发布后刷新阅读上下文，使新发布修订立即参与后续检索。
 
 ### 9.2 `/api/repositories/{repoId}/knowledge/{cardId}/history`（KnowledgeCardHistoryController.java:20）
 
@@ -389,7 +390,7 @@
   `/restore`、`/prepare`、`/index-status`、`/code-jobs`、
   `/branches/{branchId}/contentVersions/{contentVersion}/retention`、
   `DELETE /branches/{branchId}/contentVersions/{contentVersion}`、
-  `/knowledge/{cardId}/branch-scope`、`/knowledge/{cardId}/branch-validation`
+  `/knowledge/{cardId}/branch-validation`
   （RepositoryBranchController.java:65-178；BranchCodeOperationsController.java:42-68）。
 - 代码与知识：`/api/repositories/{repositoryId}/code-evidence-context`、
   `/api/repositories/{repositoryId}/knowledge/attachments/{attachmentId}`、
@@ -492,3 +493,11 @@
 - `GET /api/mcp` 无调用方，是协议层桩：显式声明不支持 SSE 并返回 405，
   供 MCP 客户端探测（McpController.java:39-42）。
 - `POST /api/mcp` 由 `mcp-server/src/server.mjs:83` 与外部 MCP 客户端调用，不属于死接口。
+
+
+### 多分支共享恢复（2026-09-29）
+- 创建和编辑知识卡片请求增加可选 `branchScope: { mode: "ALL_BRANCHES" | "SELECTED_BRANCHES", branchIds: UUID[] }`，卡片响应返回相同字段。
+- 创建省略范围默认当前阅读分支；编辑省略保留原范围。范围与正文在同一事务保存，无需单独调用 branch-scope 接口。
+- 编辑请求支持 `expectedRevision`；旧修订返回 409 `KNOWLEDGE_REVISION_CONFLICT`。
+- `CodeReference` 返回 `branchId`、`branchName`，定位引用的来源代码分支。
+- `GET /knowledge/{cardId}/source-drift` 携带 `X-Branch-Context`，返回目标分支内容版本的漂移证据。

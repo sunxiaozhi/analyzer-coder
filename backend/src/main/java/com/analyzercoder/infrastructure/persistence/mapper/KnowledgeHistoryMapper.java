@@ -57,4 +57,16 @@ public interface KnowledgeHistoryMapper {
      */
     KnowledgeCardRow findCard(
             @Param("repositoryId") UUID repositoryId, @Param("cardId") UUID cardId);
+
+    int restoreBranchScope(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("cardId") UUID cardId,
+            @Param("sourceRevision") int sourceRevision,
+            @Param("targetRevision") int targetRevision);
+
+    int copyCodeReferences(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("cardId") UUID cardId,
+            @Param("sourceRevision") int sourceRevision,
+            @Param("targetRevision") int targetRevision);
 }

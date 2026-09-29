@@ -224,10 +224,12 @@ public class RepositoryBranchService {
                                     ? remote.fetch(actor, repository, branch.name())
                                     : repository.sourceType() == RepositorySourceType.ZIP
                                             ? contentVersions.resolveWorkspace(repository.path())
-                                            : contentVersions.resolve(repository.path(), branch.name());
+                                            : contentVersions.resolve(
+                                                    repository.path(), branch.name());
             progress.accept("SYNC", commit);
             ManagedRepositoryContentVersion contentVersion =
-                    contentVersions.createLatest(repository.id(), branchId, repository.path(), commit);
+                    contentVersions.createLatest(
+                            repository.id(), branchId, repository.path(), commit);
             unpublished = contentVersion;
             CodeRepository source =
                     repository.withManagedContentVersion(
@@ -426,7 +428,7 @@ public class RepositoryBranchService {
                 INSERT INTO branch_context_knowledge(context_id,card_id,revision)
                 SELECT ?,k.id,k.revision FROM knowledge_cards k
                 WHERE k.repo_id=? AND k.publication_status='PUBLISHED' AND k.review_status='APPROVED'
-                AND k.branch_id=?
+                AND knowledge_applies_to_branch(k.id,?)
                 """,
                             context.contextId(),
                             repoId,
