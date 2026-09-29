@@ -2,7 +2,8 @@
 import { Connection, Document, Reading, View } from '@element-plus/icons-vue';
 import type { Citation, CodeReference } from '@/api/intelligence';
 
-defineProps<{ citations: Citation[] }>();
+const props = defineProps<{ citations: Citation[]; branchId?: string | null; branchName?: string | null }>();
+const expanded = defineModel<boolean>('expanded', { default: false });
 const emit = defineEmits<{
   openKnowledge: [citation: Citation];
   openCode: [reference: CodeReference];
@@ -12,6 +13,7 @@ const emit = defineEmits<{
 function citationReference(citation: Citation): CodeReference | null {
   if (citation.sourceType !== 'CODE' || !citation.chunkId) return null;
   return {
+    branchId: props.branchId, branchName: props.branchName,
     repositoryId: citation.repositoryId,
     chunkId: citation.chunkId,
     contentVersion: citation.contentVersion,
@@ -26,7 +28,7 @@ function citationReference(citation: Citation): CodeReference | null {
 </script>
 
 <template>
-  <details class="answer-evidence">
+  <details class="answer-evidence" :open="expanded" @toggle="expanded = ($event.target as HTMLDetailsElement).open">
     <summary><b>引用证据 {{ citations.length }} 条</b><span>展开查看知识与代码来源</span></summary>
     <article
       v-for="citation in citations"
@@ -36,9 +38,9 @@ function citationReference(citation: Citation): CodeReference | null {
       <div class="evidence-heading">
         <span :class="['source-badge', citation.sourceType.toLowerCase()]">
           <el-icon><Reading v-if="citation.sourceType === 'KNOWLEDGE'" /><Document v-else /></el-icon>
-          {{ citation.sourceType === 'KNOWLEDGE' ? (citation.sourceScope || '团队知识') : '当前代码' }}
+          {{ citation.sourceType === 'KNOWLEDGE' ? (citation.sourceScope || '团队知识') : '代码' }}
         </span>
-        <small>S{{ citation.rank }}</small>
+        <small>S{{ citation.rank }} · {{ branchName || branchId || '来源分支未提供' }}</small>
       </div>
       <div class="evidence-title">
         <b>{{ citation.title }}</b>
@@ -69,10 +71,11 @@ function citationReference(citation: Citation): CodeReference | null {
           v-for="reference in citation.codeReferences"
           :key="reference.chunkId ?? reference.filePath"
           type="button"
-          @click="emit('openCode', reference)"
+          @click="emit('openCode', { ...reference, branchId: reference.branchId ?? branchId, branchName: reference.branchName ?? branchName })"
         >
           <span class="code-reference-main">
             <b>{{ reference.symbolName || reference.filePath.split('/').pop() }}</b>
+            <small>{{ reference.branchName || reference.branchId || branchName || '来源分支未提供' }}</small>
             <small class="mono">{{ reference.filePath }}</small>
           </span>
           <span class="code-reference-meta">

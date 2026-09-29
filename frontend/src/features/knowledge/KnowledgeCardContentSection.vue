@@ -8,6 +8,9 @@ defineProps<{
   repositoryId: string;
   attachments: KnowledgeAttachment[];
   uploading: boolean;
+  part?: 'content' | 'settings';
+  titleError?: string;
+  contentError?: string;
 }>();
 
 const emit = defineEmits<{
@@ -38,18 +41,18 @@ const kindOptions: { value: KnowledgeKind; label: string }[] = [
 
 <template>
   <section class="editor-section content-section">
-    <header class="section-heading">
+    <header v-if="part !== 'settings'" class="section-heading">
       <div>
         <h3>知识内容</h3>
         <p>写清楚规则、背景或决策，让开发者可以通过业务术语找到它。</p>
       </div>
     </header>
 
-    <div class="title-grid">
-      <el-form-item label="标题" required>
+    <div>
+      <el-form-item v-if="part !== 'settings'" label="标题" required :error="titleError">
         <el-input v-model="title" maxlength="200" show-word-limit placeholder="一句话说明这条知识" />
       </el-form-item>
-      <el-form-item label="知识类型">
+      <el-form-item v-if="part === 'settings'" label="知识类型">
         <el-select v-model="knowledgeKind" class="full-width" filterable>
           <el-option
             v-for="option in kindOptions"
@@ -61,11 +64,11 @@ const kindOptions: { value: KnowledgeKind; label: string }[] = [
       </el-form-item>
     </div>
 
-    <el-form-item label="知识正文（Markdown）" required>
+    <el-form-item v-if="part !== 'settings'" label="知识正文（Markdown）" required :error="contentError">
       <KnowledgeMarkdownEditor v-model="content" :repository-id="repositoryId" class="full-width" />
     </el-form-item>
 
-    <el-form-item label="标签">
+    <el-form-item v-if="part === 'settings'" label="标签">
       <el-select
         v-model="tags"
         class="full-width"
@@ -77,6 +80,7 @@ const kindOptions: { value: KnowledgeKind; label: string }[] = [
       />
     </el-form-item>
 
+    <details v-if="part === 'settings'" class="attachment-details"><summary>附件 · {{ attachments.length }} 个</summary>
     <el-form-item label="附件（可选）" class="attachment-field">
       <div class="upload-area">
         <label class="upload-button" :class="{ disabled: uploading }">
@@ -94,6 +98,7 @@ const kindOptions: { value: KnowledgeKind; label: string }[] = [
         @insert="emit('insertAttachment', $event)"
       />
     </el-form-item>
+    </details>
   </section>
 </template>
 
@@ -125,7 +130,11 @@ const kindOptions: { value: KnowledgeKind; label: string }[] = [
   cursor: pointer;
 }
 .upload-button.disabled { cursor: wait; opacity: .65; }
-.upload-button input { display: none; }
+.upload-button { position: relative; }
+.upload-button input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.upload-button:focus-within { outline: 2px solid var(--app-color-action); outline-offset: 2px; }
+.attachment-details summary { cursor: pointer; margin-bottom: 12px; color: var(--app-text-regular); }
+.upload-area { flex-wrap: wrap; }
 @media (max-width: 760px) {
   .editor-section { padding: 14px; }
   .title-grid { grid-template-columns: 1fr; gap: 0; }

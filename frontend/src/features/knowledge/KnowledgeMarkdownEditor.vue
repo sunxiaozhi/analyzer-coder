@@ -10,12 +10,12 @@ const html = computed(() => renderMarkdown(props.modelValue, props.repositoryId)
 
 <template>
   <div class="markdown-editor">
-    <div class="editor-tabs">
-      <button type="button" :class="{ active: tab === 'write' }" @click="tab='write'">编写</button>
-      <button type="button" :class="{ active: tab === 'preview' }" @click="tab='preview'">预览</button>
+    <div class="editor-tabs" role="group" aria-label="正文编辑模式">
+      <button type="button" :class="{ active: tab === 'write' }" :aria-pressed="tab === 'write'" @click="tab='write'">编写</button>
+      <button type="button" :class="{ active: tab === 'preview' }" :aria-pressed="tab === 'preview'" @click="tab='preview'">预览</button>
       <span>支持标题、列表、引用、代码块、链接与图片</span>
     </div>
-    <el-input v-if="tab==='write'" :model-value="modelValue" type="textarea" :rows="14"
+    <el-input v-if="tab==='write'" :model-value="modelValue" type="textarea" :rows="20" aria-label="知识正文"
               placeholder="使用 Markdown 编写知识正文…" @update:model-value="emit('update:modelValue', $event)" />
     <div v-else class="markdown-preview" v-html="html" />
   </div>
@@ -28,8 +28,9 @@ const html = computed(() => renderMarkdown(props.modelValue, props.repositoryId)
 .editor-tabs button.active{background:var(--el-bg-color);color:var(--el-color-primary);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .editor-tabs span{margin-left:auto;font-size:14px;color:var(--el-text-color-placeholder)}
 .markdown-editor :deep(.el-textarea__inner){border:0;box-shadow:none;border-radius:0;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
-.markdown-preview{min-height:304px;max-height:440px;overflow:auto;padding:16px 20px;line-height:1.7;background:var(--el-bg-color)}
+.markdown-preview{min-height:440px;padding:16px 20px;line-height:1.7;background:var(--el-bg-color)}
 .markdown-preview :deep(img){max-width:100%;border-radius:8px}
 .markdown-preview :deep(pre){overflow:auto;padding:12px;border-radius:8px;background:#18212f;color:#e6edf3}
 .markdown-preview :deep(blockquote){margin:10px 0;padding-left:14px;border-left:3px solid var(--el-color-primary);color:var(--el-text-color-secondary)}
+@media (max-width: 760px) { .editor-tabs span { display: none; } }
 </style>

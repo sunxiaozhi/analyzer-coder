@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { shallowRef, watch } from 'vue';
+import { computed, shallowRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   intelligenceApi,
@@ -24,6 +24,7 @@ const props = defineProps<{
   contextId?: string | null;
   card: KnowledgeCard | null;
   busy: boolean;
+  saveError?: string | null;
   branchName?: string | null;
   branchId?: string | null;
   branches?: RepositoryBranch[];
@@ -41,6 +42,17 @@ const emit = defineEmits<{
 
 const auth = useAuthStore();
 const { form, reset, toPayload } = useKnowledgeCardEditor(() => auth.account?.id ?? null, () => props.branchId ?? null);
+const submitted = shallowRef(false);
+const titleError = computed(() => submitted.value && !form.title.trim() ? '请填写标题' : '');
+const contentError = computed(() => submitted.value && !form.content.trim() ? '请填写知识正文' : '');
+const scopeError = computed(() => submitted.value && props.branchId && form.branchScope?.mode === 'SELECTED_BRANCHES' && !form.branchScope.branchIds.length ? '请选择至少一个共享分支' : '');
+const policySummary = computed(() => {
+  const legacyCount = form.scope.pathPatterns.length + form.scope.symbols.length + form.scope.modules.length
+    + form.obligations.requiredTests.length + form.obligations.requiredApproverAccountIds.length
+    + form.obligations.instructions.length + form.obligations.prohibitedPathPatterns.length
+    + Number(form.obligations.knowledgeUpdateRequired);
+  return `${form.enforcement === 'REQUIRED' ? '强约束' : form.enforcement === 'ADVISORY' ? '重点提醒' : '参考'}${legacyCount ? ` · 保留 ${legacyCount} 项已有规则` : ''}`;
+});
 const attachments = shallowRef<KnowledgeAttachment[]>([]);
 const uploading = shallowRef(false);
 const codeReferences = shallowRef<CodeReference[]>([]);
@@ -58,6 +70,7 @@ watch(
       return;
     }
     reset(props.card);
+    submitted.value = false;
     const cardReferences = props.card?.codeReferences ?? [];
     attachments.value = props.card ? [...props.card.attachments] : [];
     codeReferences.value = [...cardReferences];
@@ -171,6 +184,8 @@ function insertAttachment(item: KnowledgeAttachment) {
 }
 
 function save() {
+  submitted.value = true;
+  if (titleError.value || contentError.value || scopeError.value || props.busy || uploading.value) return;
   emit('submit', toPayload({
     attachmentIds: attachments.value.map(item => item.id),
     codeReferences: codeReferences.value,
@@ -179,86 +194,55 @@ function save() {
 </script>
 
 <template>
-  <el-dialog
-    :model-value="modelValue"
-    :title="card ? '编辑知识卡片' : '新建知识卡片'"
-    width="920"
-    top="3vh"
-    destroy-on-close
-    @update:model-value="emit('update:modelValue', $event)"
-  >
-    <p class="editor-intro">记录一条可检索、可回到源码的项目知识。新卡片会先保存为草稿。</p>
-
+  <el-dialog :model-value="modelValue" :title="card ? '编辑知识卡片' : '新建知识卡片'"
+    width="min(1200px, 96vw)" top="3vh" destroy-on-close
+    :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy"
+    @update:model-value="emit('update:modelValue', $event)">
+    <p class="editor-intro">保存生成草稿修订，确认后通过列表发布。</p>
     <el-form label-position="top" class="knowledge-card-form">
-      <KnowledgeBranchScopeSection v-if="branchId" v-model="form.branchScope"
-        :key="card?.id ?? 'new'" :current-branch-id="branchId" :branch-name="branchName" :branches="branches ?? []" />
-      <KnowledgeCardContentSection
-        v-model:title="form.title"
-        v-model:knowledge-kind="form.knowledgeKind"
-        v-model:content="form.content"
-        v-model:tags="form.tags"
-        :repository-id="repositoryId"
-        :attachments="attachments"
-        :uploading="uploading"
-        @choose-files="chooseFiles"
-        @remove-attachment="removeAttachment"
-        @insert-attachment="insertAttachment"
-      />
-
-      <KnowledgeCodeAssociationSection
-        v-model:references="codeReferences"
-        :context-id="contextId"
-        :repository-id="repositoryId"
-        @open-code="emit('openCode', $event)"
-      />
-
-      <KnowledgeCardPolicySection
-        v-model:enforcement="form.enforcement"
-        v-model:owner-account-id="form.ownerAccountId"
-        :members="members"
-        :members-loading="membersLoading"
-        :current-account-available="Boolean(auth.account)"
-        @use-current-account="useCurrentAccount"
-      />
-
-      <el-alert
-        class="draft-note"
-        type="info"
-        :closable="false"
-        title="保存后，在卡片列表点击“确认并发布”即可用于检索和问答。"
-      />
+      <KnowledgeBranchScopeSection v-if="branchId" v-model="form.branchScope" class="editor-scope"
+        :key="card?.id ?? 'new'" :current-branch-id="branchId" :branch-name="branchName" :branches="branches ?? []" :error="scopeError" />
+      <KnowledgeCardContentSection class="editor-content"
+        v-model:title="form.title" v-model:knowledge-kind="form.knowledgeKind" v-model:content="form.content" v-model:tags="form.tags"
+        :repository-id="repositoryId" :attachments="attachments" :uploading="uploading" :title-error="titleError" :content-error="contentError" />
+      <aside class="editor-settings" aria-label="知识设置">
+        <KnowledgeCardContentSection part="settings"
+          v-model:title="form.title" v-model:knowledge-kind="form.knowledgeKind" v-model:content="form.content" v-model:tags="form.tags"
+          :repository-id="repositoryId" :attachments="attachments" :uploading="uploading"
+          @choose-files="chooseFiles" @remove-attachment="removeAttachment" @insert-attachment="insertAttachment" />
+        <details class="settings-group">
+          <summary>关联代码 · {{ codeReferences.length }} 处</summary>
+          <KnowledgeCodeAssociationSection v-model:references="codeReferences" :context-id="contextId"
+            :repository-id="repositoryId" @open-code="emit('openCode', $event)" />
+        </details>
+        <details class="settings-group">
+          <summary>约束设置 · {{ policySummary }}</summary>
+          <KnowledgeCardPolicySection v-model:enforcement="form.enforcement" v-model:owner-account-id="form.ownerAccountId"
+            :members="members" :members-loading="membersLoading" :current-account-available="Boolean(auth.account)"
+            @use-current-account="useCurrentAccount" />
+        </details>
+      </aside>
     </el-form>
-
     <template #footer>
-      <el-button @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button
-        type="primary"
-        :loading="busy"
-        :disabled="uploading || !form.title.trim() || !form.content.trim() || (Boolean(branchId) && form.branchScope?.mode === 'SELECTED_BRANCHES' && !form.branchScope.branchIds.length)"
-        @click="save"
-      >
-        {{ card ? '保存新修订' : '创建草稿' }}
-      </el-button>
+      <el-alert v-if="saveError" class="save-error" type="error" :closable="false" :title="saveError" role="alert" />
+      <el-button :disabled="busy" @click="emit('update:modelValue', false)">取消</el-button>
+      <el-button type="primary" :loading="busy" :disabled="uploading" @click="save">{{ card ? '保存新修订' : '创建草稿' }}</el-button>
     </template>
   </el-dialog>
 </template>
 
 <style scoped>
-.editor-intro {
-  margin: -6px 0 16px;
-  padding-left: 11px;
-  color: #5f707c;
-  border-left: 3px solid #2f6f94;
-  font-size: 14px;
-  line-height: 1.55;
+.editor-intro { margin: 0 0 16px; color: var(--app-text-muted); font-size: 14px; }
+.knowledge-card-form { display: grid; grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr); grid-template-rows: auto 1fr; align-items: start; max-height: calc(94dvh - 190px); gap: 16px; overflow: auto; overscroll-behavior: contain; padding: 2px; }
+.editor-content { grid-column: 1; grid-row: 1 / 3; min-width: 0; }
+.editor-scope { grid-column: 2; grid-row: 1; min-width: 0; }
+.editor-settings { grid-column: 2; display: grid; gap: 12px; min-width: 0; }
+.settings-group { border: 1px solid var(--app-border); border-radius: 8px; }
+.settings-group > summary { padding: 12px; cursor: pointer; font-size: 14px; overflow-wrap: anywhere; }
+.settings-group :deep(.editor-section) { padding: 12px; border: 0; }
+.save-error { margin-bottom: 12px; text-align: left; }
+@media (max-width: 900px) {
+  .knowledge-card-form { grid-template-columns: minmax(0, 1fr); }
+  .editor-scope, .editor-content, .editor-settings { grid-column: 1; grid-row: auto; }
 }
-.knowledge-card-form {
-  display: grid;
-  max-height: calc(94vh - 176px);
-  gap: 14px;
-  padding: 2px 8px 2px 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-.draft-note { margin-bottom: 2px; }
 </style>

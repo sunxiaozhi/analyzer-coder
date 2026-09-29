@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, shallowRef, watch } from 'vue';
+import { computed, nextTick, onMounted, onDeactivated, onScopeDispose, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Close, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+import SearchExcerpt from '@/components/SearchExcerpt.vue';
+import { knowledgeExcerpt } from '@/features/knowledge/knowledgePresentation';
+import { usePageMemoryStore } from '@/stores/pageMemory';
 import RepositoryFilePreview from '@/components/RepositoryFilePreview.vue';
 import RepositoryFileTree from '@/components/RepositoryFileTree.vue';
 import CodeEvidencePanel from '@/features/code/CodeEvidencePanel.vue';
@@ -20,7 +23,7 @@ import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
 import type { RepositoryFileContent, RepositoryContentVersionFiles } from '@/types/api';
 
-type MobilePane = 'tree' | 'code' | 'results';
+type MobilePane = 'tree' | 'code' | 'results' | 'context';
 type RightPane = 'results' | 'context' | null;
 
 const repositories = useRepositoryStore();
@@ -41,6 +44,12 @@ const retrieval = shallowRef<RetrievalDiagnostics | null>(null);
 const totalHits = shallowRef(0);
 const staleHits = shallowRef(0);
 const searchLoading = shallowRef(false);
+const searchError = shallowRef<string | null>(null);
+const treeOpen = shallowRef(true);
+const resultList = shallowRef<HTMLElement | null>(null);
+const resultTop = shallowRef(0);
+const selectedHit = shallowRef<string | null>(null);
+const previewTop = shallowRef(0);
 const rightPane = shallowRef<RightPane>(null);
 const searchPerformed = shallowRef(false);
 const selectedSymbol = shallowRef<string | null>(null);
@@ -91,15 +100,28 @@ const resultSummary = computed(() => {
   const summary = `命中 ${codeCount} 个代码片段、${knowledgeCount} 条知识`;
   return staleHits.value ? `${summary}，忽略旧内容版本 ${staleHits.value} 条` : summary;
 });
-const evidenceDrawerOpen = computed({
-  get: () => rightPane.value === 'context',
-  set: (open: boolean) => {
-    if (open) rightPane.value = 'context';
-    else if (rightPane.value === 'context') rightPane.value = null;
-  },
-});
+const memory = usePageMemoryStore();
+const evidenceWidth = shallowRef(memory.read<number>('code:evidence-width') ?? 36);
+watch(evidenceWidth, value => memory.write('code:evidence-width', value));
+type SearchState = { query: string; path: string | null; line: number | null; endLine: number | null; contentVersion: string | null; top: number; previewTop: number; selected: string | null; pane: RightPane; mobile: MobilePane; tree: boolean };
+const scopeKey = () => `search:${repositories.selectedRepositoryId}:${branchContext.selectedBranchId ?? 'default'}`;
+let stateKey = scopeKey();
+function rememberSearch() {
+  if (!contentVersion.value) return;
+  memory.write<SearchState>(stateKey, { query: query.value, path: selectedPath.value, line: focusLine.value, endLine: focusEndLine.value,
+    contentVersion: contentVersion.value.contentVersion, top: resultTop.value, previewTop: previewTop.value, selected: selectedHit.value,
+    pane: rightPane.value, mobile: mobilePane.value, tree: treeOpen.value });
+}
+const hitKey = (hit: UnifiedSearchHit) => `${hit.sourceType}:${hit.chunkId ?? hit.knowledgeCardId}`;
+function toggleEvidence() {
+  rightPane.value = rightPane.value === 'context' ? null : 'context';
+  mobilePane.value = rightPane.value === 'context' ? 'context' : 'code';
+}
 
 async function loadContentVersion(repositoryId: string | null) {
+  rememberSearch();
+  stateKey = scopeKey();
+  const saved = memory.read<SearchState>(stateKey);
   const requestId = ++contentVersionRequest;
   fileRequest++;
   searchRequest++;
@@ -120,7 +142,9 @@ async function loadContentVersion(repositoryId: string | null) {
   searchPerformed.value = false;
   rightPane.value = null;
   selectedSymbol.value = null;
-  query.value = '';
+  query.value = saved?.query ?? '';
+  selectedHit.value = saved?.selected ?? null;
+  searchError.value = null;
   fileCache.clear();
   if (!repositoryId) return;
   if (readScope.blocked.value) { contentVersionError.value = readScope.reason.value; return; }
@@ -140,7 +164,9 @@ async function loadContentVersion(repositoryId: string | null) {
       mobilePane.value = 'code';
       return;
     }
-    const routePath = typeof route.query.path === 'string' ? route.query.path : null;
+    const explicitPath = typeof route.query.path === 'string' ? route.query.path : null;
+    const restored = saved?.contentVersion === result.contentVersion ? saved : undefined;
+    const routePath = explicitPath ?? (restored?.path && result.files.some(file => file.path === restored.path) ? restored.path : null);
     if (routePath && !result.files.some(file => file.path === routePath)) {
       selectedPath.value = routePath;
       previewError.value = '当前内容版本中找不到该文件，文件可能已删除或重命名。请从目录重新选择。';
@@ -149,15 +175,23 @@ async function loadContentVersion(repositoryId: string | null) {
     const preferred = result.files.find(file => file.path === routePath) ?? result.files.find(file =>
       /\.(vue|tsx?|jsx?|java|kt|py|go|rs|md)$/i.test(file.path),
     ) ?? result.files[0];
-    const startLine = routePath ? routeNumber(route.query.startLine) : null;
-    const endLine = routePath ? routeNumber(route.query.endLine) : null;
+    const startLine = explicitPath ? routeNumber(route.query.startLine) : restored?.line ?? null;
+    const endLine = explicitPath ? routeNumber(route.query.endLine) : restored?.endLine ?? null;
     const routeSymbol = typeof route.query.symbol === 'string' ? route.query.symbol : null;
     if (preferred) await openFile(preferred.path, startLine, endLine, Boolean(routePath), routeSymbol);
     if (requestId !== contentVersionRequest) return;
-    const routeQuery = typeof route.query.q === 'string' ? route.query.q : null;
+    if (routePath && (routeSymbol || route.query.relation === '1')) rightPane.value = 'context';
+    const routeQuery = typeof route.query.q === 'string' ? route.query.q : saved?.query;
     if (routeQuery) {
       query.value = routeQuery;
       await search();
+    }
+    if (requestId !== contentVersionRequest) return;
+    if (restored && !explicitPath) {
+      rightPane.value = restored.pane; mobilePane.value = restored.mobile; treeOpen.value = restored.tree;
+      resultTop.value = restored.top; previewTop.value = restored.previewTop;
+      await nextTick();
+      if (resultList.value) resultList.value.scrollTop = restored.top;
     }
   } catch (error) {
     if (requestId === contentVersionRequest) {
@@ -238,6 +272,9 @@ async function search() {
   const requestId = ++searchRequest;
   const pinnedVersion = contentVersion.value?.contentVersion;
   searchLoading.value = true;
+  searchError.value = null;
+  hits.value = []; retrieval.value = null;
+  rightPane.value = 'results'; searchPerformed.value = true;
   try {
     const result = branchContext.context?.contextId
       ? await intelligenceApi.unifiedSearch(repositoryId, keyword, 50, branchContext.context.contextId)
@@ -255,7 +292,7 @@ async function search() {
     mobilePane.value = 'results';
   } catch (error) {
     if (requestId !== searchRequest) return;
-    ElMessage.error(error instanceof Error ? error.message : '代码与知识检索失败');
+    searchError.value = error instanceof Error ? error.message : '代码与知识检索失败';
   } finally {
     if (requestId === searchRequest) searchLoading.value = false;
   }
@@ -275,11 +312,12 @@ function clearSearch() {
 }
 
 function openHit(hit: UnifiedSearchHit) {
+  selectedHit.value = hitKey(hit);
   if (hit.sourceType === 'KNOWLEDGE' && hit.knowledgeCardId) {
     openKnowledge(hit.knowledgeCardId);
     return;
   }
-  rightPane.value = 'context';
+  rightPane.value = 'results';
   mobilePane.value = 'code';
   void openFile(hit.filePath, hit.startLine, hit.endLine, true, hit.symbolName);
 }
@@ -297,13 +335,10 @@ function channelLabel(channel: string) {
   } as Record<string, string>)[channel] ?? channel;
 }
 
-function excerpt(content: string) {
-  return content.replace(/\s+/g, ' ').trim().slice(0, 150);
-}
-
 watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const,
   ([repositoryId]) => loadContentVersion(repositoryId), { immediate: true });
-onScopeDispose(() => { contentVersionRequest++; fileRequest++; searchRequest++; });
+onDeactivated(rememberSearch);
+onScopeDispose(() => { rememberSearch(); contentVersionRequest++; fileRequest++; searchRequest++; });
 function routeNumber(value: unknown) {
   const parsed = typeof value === 'string' ? Number.parseInt(value, 10) : Number.NaN;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -384,10 +419,11 @@ watch(
       <div class="contentVersion-context">
         <strong>{{ repository?.name ?? '未选择项目' }}</strong>
         <span>{{ contentVersion?.branch ?? repository?.branch ?? '无分支' }}</span>
-        <span class="mono">{{ shortCommit }}</span>
+        <span class="mono" :title="contentVersion?.commit ?? undefined">{{ shortCommit }}</span>
         <span>{{ contentVersion?.files.length ?? 0 }} 个文件</span>
       </div>
       <div class="workbench-search">
+        <el-button :aria-pressed="treeOpen" @click="treeOpen = !treeOpen">目录</el-button>
         <el-input
           v-model="query"
           :prefix-icon="Search"
@@ -409,17 +445,18 @@ watch(
           v-if="selectedPath"
           plain
           :type="rightPane === 'context' ? 'primary' : 'default'"
-          @click="rightPane = rightPane === 'context' ? null : 'context'"
+          @click="toggleEvidence"
         >
           文件关联证据
         </el-button>
       </div>
-      <div v-if="retrieval" class="retrieval-diagnostics" :data-degraded="retrieval.degraded">
-        <span>内容版本 {{ retrieval.contentVersion?.slice(0, 8) ?? '不可用' }}</span>
+      <p v-if="retrieval?.degraded" class="degradation-note">部分检索通道不可用，结果可能不完整。</p>
+      <details v-if="retrieval" class="retrieval-diagnostics" :data-degraded="retrieval.degraded">
+        <summary>检索详情</summary><span>内容版本 {{ retrieval.contentVersion?.slice(0, 8) ?? '不可用' }}</span>
         <span>{{ retrieval.retrievalCapability === 'SEMANTIC_EMBEDDING' ? '语义向量' : retrieval.retrievalCapability === 'CHARACTER_HASH' ? '字符相似度' : '无向量能力' }}</span>
         <span v-for="channel in retrieval.enabledChannels" :key="channel">{{ channelLabel(channel) }}</span>
         <strong v-if="retrieval.degraded">降级：{{ retrieval.degradationReasons.join('、') || retrieval.unavailableChannels.map(item => item.reason).join('、') }}</strong>
-      </div>
+      </details>
       <div class="mobile-pane-switch" role="tablist" aria-label="源码检索面板">
         <button :class="{ active: mobilePane === 'tree' }" @click="mobilePane = 'tree'">目录</button>
         <button :class="{ active: mobilePane === 'code' }" :disabled="!selectedPath" @click="mobilePane = 'code'">代码</button>
@@ -443,10 +480,13 @@ watch(
     <div
       class="workbench-grid"
       :class="{
-        'side-open': rightPane === 'results',
+        'side-open': Boolean(rightPane),
+        'context-open': rightPane === 'context',
+        'tree-closed': !treeOpen,
         'results-open': rightPane === 'results',
       }"
       :data-mobile-pane="mobilePane"
+      :style="{ '--evidence-width': `${evidenceWidth}%` }"
     >
       <RepositoryFileTree
         class="workbench-tree"
@@ -464,9 +504,11 @@ watch(
         :focus-line="focusLine"
         :focus-end-line="focusEndLine"
         :focus-version="focusVersion"
+        :scroll-top="previewTop" @scroll-position="previewTop = $event"
+        :branch-name="contentVersion?.branch ?? null"
       />
 
-      <aside v-if="rightPane === 'results'" class="workbench-results">
+      <aside v-show="rightPane === 'results'" class="workbench-results">
         <header class="results-head">
           <div>
             <b>检索结果</b>
@@ -474,57 +516,51 @@ watch(
           </div>
           <el-button :icon="Close" link title="收起检索结果" @click="rightPane = null" />
         </header>
-        <div class="search-hit-list">
+        <div ref="resultList" class="search-hit-list" :aria-busy="searchLoading" @scroll="resultTop = ($event.target as HTMLElement).scrollTop">
+          <p v-if="searchLoading" class="search-state" role="status">正在检索…</p>
+          <el-alert v-else-if="searchError" type="error" :closable="false" :title="searchError"><el-button @click="search">重试检索</el-button></el-alert>
           <el-empty
-            v-if="!searchLoading && !hits.length"
+            v-if="!searchLoading && !searchError && !hits.length"
             :image-size="56"
-            description="当前内容版本没有匹配结果"
+            :description="searchPerformed ? '未找到匹配内容，可调整关键词或筛选条件' : '输入关键词后开始检索'"
           />
           <button
             v-for="hit in hits"
             :key="`${hit.sourceType}:${hit.chunkId ?? hit.knowledgeCardId}`"
-            :class="{ active: hit.sourceType === 'CODE' && selectedPath === hit.filePath && focusLine === hit.startLine }"
+            :class="{ active: selectedHit === hitKey(hit) }" :aria-current="selectedHit === hitKey(hit) ? 'true' : undefined"
             :data-source="hit.sourceType"
             @click="openHit(hit)"
           >
             <span class="hit-title">
-              <b>{{ hit.sourceType === 'KNOWLEDGE' ? hit.title : fileName(hit.filePath) }}</b>
+              <b><span v-if="selectedHit === hitKey(hit)" aria-label="当前结果">✓ </span>{{ hit.sourceType === 'KNOWLEDGE' ? hit.title : fileName(hit.filePath) }}</b>
               <i>{{ hit.sourceType === 'KNOWLEDGE' ? '知识' : (hit.symbolKind ?? '代码') }}</i>
               <em v-if="hit.sourceType === 'CODE'">第 {{ hit.startLine ?? 1 }} 行</em>
             </span>
-            <small class="mono">{{ hit.sourceType === 'KNOWLEDGE' ? `关联 ${hit.codeReferences.length} 处代码` : hit.filePath }}</small>
-            <p>{{ excerpt(hit.content) }}</p>
-            <span class="hit-channels">{{ hit.channels.map(channelLabel).join(' + ') }}</span>
+            <SearchExcerpt :content="hit.sourceType === 'KNOWLEDGE' ? knowledgeExcerpt(hit.content) : hit.content" :query="query" />
+            <small class="mono" :title="hit.filePath">{{ hit.sourceType === 'KNOWLEDGE' ? `关联 ${hit.codeReferences.length} 处代码` : hit.filePath }}</small>
+            <small v-if="hit.sourceType === 'KNOWLEDGE'">{{ hit.sourceScope || '项目知识' }}</small>
           </button>
         </div>
       </aside>
 
-    </div>
-
-    <el-drawer
-      v-model="evidenceDrawerOpen"
-      class="file-evidence-drawer"
-      direction="rtl"
-      size="860px"
-      :with-header="false"
-      :modal="false"
-      :lock-scroll="false"
-      :destroy-on-close="false"
-    >
+      <aside v-show="rightPane === 'context'" class="workbench-evidence">
+        <label class="evidence-resize">证据宽度 <input v-model.number="evidenceWidth" type="range" min="28" max="48" aria-label="证据区域宽度" /> {{ evidenceWidth }}%</label>
       <CodeEvidencePanel
-        class="drawer-context"
+        class="inline-context"
         :repository-id="repositories.selectedRepositoryId"
         :file-path="selectedPath"
         :initial-symbol="selectedSymbol"
         :content-version="contentVersion?.contentVersion ?? null"
         :context-id="branchContext.context?.contextId ?? null"
         :can-maintain-knowledge="repository?.capabilities.canUpdate ?? false"
-        @close="evidenceDrawerOpen = false"
+        @close="rightPane = null; mobilePane = 'code'"
         @open-file="openFile"
         @open-knowledge="openKnowledge"
         @create-knowledge="createKnowledgeForFile"
       />
-    </el-drawer>
+      </aside>
+    </div>
+
     </template>
   </section>
 </template>
@@ -611,7 +647,7 @@ watch(
 }
 
 .retrieval-diagnostics {
-  display: flex;
+  display: block;
   grid-column: 1 / -1;
   flex-wrap: wrap;
   align-items: center;
@@ -651,9 +687,16 @@ watch(
   overflow: hidden;
 }
 
-.workbench-grid.results-open {
-  grid-template-columns: 250px minmax(360px, 1fr) 340px;
-}
+.workbench-grid.side-open { grid-template-columns: 200px minmax(0, 1fr) minmax(280px, var(--evidence-width, 36%)); }
+.workbench-grid.tree-closed { grid-template-columns: minmax(0, 1fr); }
+.workbench-grid.tree-closed.side-open { grid-template-columns: minmax(0, 1fr) minmax(280px, var(--evidence-width, 36%)); }
+.workbench-grid.tree-closed > .workbench-tree { display: none; }
+.workbench-evidence { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--app-border); background: white; }
+.evidence-resize { display: flex; gap: 8px; padding: 8px 12px; font-size: 12px; align-items: center; }
+.evidence-resize input { flex: 1; min-width: 0; }
+.inline-context { min-width: 0; min-height: 0; height: 100%; }
+.degradation-note { grid-column: 1 / -1; margin: 0; color: #986012; font-size: 12px; }
+.search-state { padding: 16px; color: var(--app-text-muted); }
 
 .workbench-preview {
   border-right: 1px solid #dedee3;
@@ -669,25 +712,6 @@ watch(
   border-block: 1px solid #dedee3;
   border-right: 1px solid #dedee3;
   border-radius: 0 0 7px 0;
-}
-
-.drawer-context {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-}
-
-:global(.file-evidence-drawer.el-drawer) {
-  max-width: calc(100vw - 24px);
-  border-left: 1px solid #cfd9df;
-  box-shadow: -14px 0 36px rgb(28 48 64 / 16%);
-}
-
-:global(.file-evidence-drawer .el-drawer__body) {
-  min-height: 0;
-  padding: 0;
-  overflow: hidden;
 }
 
 .results-head {
@@ -820,9 +844,8 @@ watch(
     display: none;
   }
 
-  .workbench-grid.side-open {
-    grid-template-columns: 220px minmax(330px, 1fr) 270px;
-  }
+  .workbench-grid.side-open { grid-template-columns: minmax(0, 1fr) minmax(280px, var(--evidence-width, 36%)); }
+  .workbench-grid.side-open > .workbench-tree { display: none; }
 
 }
 
@@ -845,6 +868,7 @@ watch(
 }
 
 @media (max-width: 760px) {
+  .evidence-resize { display: none; }
   .code-workbench {
     min-height: calc(100vh - 110px);
   }
@@ -859,7 +883,9 @@ watch(
 
   .workbench-search {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .workbench-search .el-input { grid-column: 1 / -1;
   }
 
   .mobile-pane-switch {
@@ -907,7 +933,8 @@ watch(
 
   .workbench-grid[data-mobile-pane="tree"] > .workbench-tree,
   .workbench-grid[data-mobile-pane="code"] > .workbench-preview,
-  .workbench-grid[data-mobile-pane="results"] > .workbench-results {
+  .workbench-grid[data-mobile-pane="results"] > .workbench-results,
+  .workbench-grid[data-mobile-pane="context"] > .workbench-evidence {
     display: grid;
   }
 }

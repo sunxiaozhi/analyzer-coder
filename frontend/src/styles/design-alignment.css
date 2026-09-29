@@ -426,17 +426,7 @@
   padding: 16px 0 0;
 }
 
-.route-view .knowledge-card {
-  background: #fff;
-  border-color: #d6dbe2;
-  box-shadow: 0 2px 8px rgb(24 39 58 / 6%);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
-}
 
-.route-view .knowledge-card:hover {
-  border-color: #b9c5d3;
-  box-shadow: 0 6px 16px rgb(24 39 58 / 10%);
-}
 
 .code-search-design {
   display: grid;

@@ -7,6 +7,7 @@ const props = defineProps<{
   currentBranchId?: string | null;
   branchName?: string | null;
   branches: RepositoryBranch[];
+  error?: string;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [value: KnowledgeBranchScope] }>();
 const choice = shallowRef<'CURRENT' | 'ALL_BRANCHES' | 'SELECTED_BRANCHES'>('CURRENT');
@@ -42,7 +43,8 @@ function selectChoice(value: 'CURRENT' | 'ALL_BRANCHES' | 'SELECTED_BRANCHES') {
     <small v-if="choice === 'ALL_BRANCHES'">所有分支共用这一张卡片，以后新增的分支也会包含它。修改正文后，各分支看到同一份新修订。</small>
     <small v-else-if="choice === 'SELECTED_BRANCHES'">只在选中的分支展示和检索，后续可以调整。</small>
     <small v-else>只在当前分支展示和检索。</small>
-    <small>通用说明发布后即可检索；关联代码或约束类知识，需要在各使用分支确认适用性。验证结论互不影响。</small>
+    <small v-if="error" role="alert" class="scope-error">{{ error }}</small>
+    <details><summary>共享与验证规则</summary><small>通用说明发布后即可检索；关联代码或约束类知识，需要在各使用分支确认适用性。验证结论互不影响。</small></details>
   </section>
 </template>
 
@@ -50,4 +52,9 @@ function selectChoice(value: 'CURRENT' | 'ALL_BRANCHES' | 'SELECTED_BRANCHES') {
 .branch-scope-section { display: grid; gap: 8px; padding: 14px; border: 1px solid #cdddea; border-left: 3px solid #2f6f94; border-radius: 5px; background: #f7fafc; }
 .branch-scope-section b { color: #31475a; font-size: 14px; }
 .branch-scope-section small { color: #68798a; font-size: 12px; line-height: 1.6; }
+.branch-scope-section :deep(.el-radio-group) { display: grid; gap: 4px; }
+.branch-scope-section :deep(.el-radio) { margin-right: 0; height: auto; min-height: 32px; white-space: normal; }
+.branch-scope-section :deep(.el-radio__label) { overflow-wrap: anywhere; }
+.branch-scope-section summary { cursor: pointer; font-size: 12px; color: var(--app-text-muted); }
+.branch-scope-section .scope-error { color: var(--app-color-danger); }
 </style>

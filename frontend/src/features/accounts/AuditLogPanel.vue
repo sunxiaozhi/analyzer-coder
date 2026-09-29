@@ -39,6 +39,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
     </div>
     <div class="audit-table-region">
       <el-table :data="pagedRows" v-loading="loading" empty-text="没有符合条件的审计事件">
+        <el-table-column type="expand" width="44"><template #default="{row}"><pre class="audit-event-detail">{{ JSON.stringify(row, null, 2) }}</pre></template></el-table-column>
         <el-table-column label="事件" min-width="180"><template #default="{row}"><div class="primary-cell"><b>{{eventLabels[row.eventType]??row.eventType}}</b><span class="mono">{{row.eventType}}</span></div></template></el-table-column>
         <el-table-column label="结果" width="100"><template #default="{row}"><el-tag :type="row.result==='SUCCESS'?'success':'danger'" effect="plain">{{row.result==='SUCCESS'?'成功':'拒绝'}}</el-tag></template></el-table-column>
         <el-table-column prop="actorUsername" label="操作者" min-width="120"><template #default="{row}">{{row.actorUsername??'系统'}}</template></el-table-column>
@@ -74,4 +75,5 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
   .audit-toolbar .audit-date-range{width:100%}
   .audit-table-region{overflow:visible}
 }
+.audit-event-detail { margin: 12px 16px; padding: 16px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--app-surface-subtle); font-size: 12px; }
 </style>

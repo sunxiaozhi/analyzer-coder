@@ -19,6 +19,9 @@ const providers = shallowRef<LlmProvider[]>([]);
 const vectorModels = shallowRef<VectorModel[]>([]);
 const loading = shallowRef(false);
 const saving = shallowRef(false);
+const connectionFeedback = shallowRef<Record<string, string>>({});
+const saveError = shallowRef('');
+function setFeedback(id: string, message: string) { connectionFeedback.value = { ...connectionFeedback.value, [id]: message }; }
 const checkingId = shallowRef<string | null>(null);
 const checkingVectorId = shallowRef<string | null>(null);
 const providerDialog = shallowRef(false);
@@ -108,6 +111,7 @@ async function saveProvider() {
     return ElMessage.warning('请填写名称、服务地址和模型标识');
   }
   saving.value = true;
+  saveError.value = '';
   try {
     const input: LlmProviderInput = {
       ...providerForm,
@@ -126,7 +130,7 @@ async function saveProvider() {
     providerDialog.value = false;
     await load();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败');
+    saveError.value = error instanceof Error ? error.message : '保存失败，当前输入保留';
   } finally {
     apiKey.value = '';
     saving.value = false;
@@ -135,27 +139,29 @@ async function saveProvider() {
 
 async function testProvider(item: LlmProvider) {
   if (!item.id) return;
+  if (checkingId.value) return;
   checkingId.value = item.id;
+  setFeedback(item.id, '正在检测连接…');
   try {
     let result = await llmSettingsApi.startCheck(item.id);
     const poll = async () => {
       result = await llmSettingsApi.check(result.id);
       if (['QUEUED', 'RUNNING'].includes(result.status)) {
-        checkTimer = window.setTimeout(() => void poll(), 700);
+        checkTimer = window.setTimeout(() => void poll().catch(error => { checkingId.value = null; setFeedback(item.id!, error instanceof Error ? error.message : '连接检测失败'); }), 700);
         return;
       }
       checkingId.value = null;
       await load();
       if (result.status === 'SUCCEEDED' && result.availability === 'AVAILABLE') {
-        ElMessage.success(`${item.name} 连接检测通过`);
+        setFeedback(item.id!, '连接检测通过');
       } else {
-        ElMessage.warning(result.errorSummary ?? '连接检测未通过');
+        setFeedback(item.id!, result.errorSummary ?? '连接检测未通过');
       }
     };
     await poll();
   } catch (error) {
     checkingId.value = null;
-    ElMessage.error(error instanceof Error ? error.message : '无法开始连接检测');
+    setFeedback(item.id!, error instanceof Error ? error.message : '无法开始连接检测');
   }
 }
 
@@ -189,6 +195,7 @@ async function saveVector() {
     return ElMessage.warning('请填写名称和模型标识');
   }
   saving.value = true;
+  saveError.value = '';
   try {
     const input: VectorModelInput = {
       ...vectorForm,
@@ -206,7 +213,7 @@ async function saveVector() {
     vectorDialog.value = false;
     await load();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败');
+    saveError.value = error instanceof Error ? error.message : '保存失败，当前输入保留';
   } finally {
     vectorApiKey.value = '';
     saving.value = false;
@@ -224,16 +231,18 @@ async function activateVector(item: VectorModel) {
 }
 
 async function testVector(item: VectorModel) {
+  if (checkingVectorId.value) return;
   checkingVectorId.value = item.id;
+  setFeedback(item.id, '正在检测向量模型…');
   try {
     const result = await llmSettingsApi.checkVectorModel(item.id);
     if (result.available) {
-      ElMessage.success(`${item.name} 检测通过：${result.capabilityLabel}，${result.dimension} 维，${result.durationMs} ms`);
+      setFeedback(item.id, `检测通过：${result.capabilityLabel}，${result.dimension} 维，${result.durationMs} ms`);
     } else {
-      ElMessage.warning(result.errorSummary ?? '向量模型检测未通过');
+      setFeedback(item.id, result.errorSummary ?? '向量模型检测未通过');
     }
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '向量模型检测失败');
+    setFeedback(item.id, error instanceof Error ? error.message : '向量模型检测失败');
   } finally {
     checkingVectorId.value = null;
   }
@@ -288,6 +297,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
             <div><dt>最近成功</dt><dd>{{ formatTime(item.lastSuccessAt) }}</dd></div>
             <div><dt>输出上限</dt><dd>{{ item.maxOutputTokens }} 词元</dd></div>
           </dl>
+          <p v-if="item.id && connectionFeedback[item.id]" class="connection-feedback" role="status">{{ connectionFeedback[item.id] }}</p>
           <footer class="card-actions">
             <el-button link :loading="checkingId === item.id" @click="testProvider(item)">
               <Activity :size="14" />检测
@@ -321,6 +331,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
             <div><dt>数据外发</dt><dd>{{ item.providerType === 'LOCAL_HASH' ? '无' : '索引文本' }}</dd></div>
             <div><dt>备案时间</dt><dd>{{ formatTime(item.createdAt) }}</dd></div>
           </dl>
+          <p v-if="item.id && connectionFeedback[item.id]" class="connection-feedback" role="status">{{ connectionFeedback[item.id] }}</p>
           <footer class="card-actions">
             <el-button link :loading="checkingVectorId === item.id" @click="testVector(item)"><Activity :size="14" />检测</el-button>
             <el-button v-if="!item.active" link type="primary" @click="activateVector(item)"><ArrowRightLeft :size="14" />切换使用</el-button>
@@ -354,7 +365,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
         </div>
         <div class="switch-field"><span><b>检测流式能力</b><small>连接检测会验证流式响应与首个输出片段。</small></span><el-switch v-model="providerForm.streamingEnabled" /></div>
       </el-form>
-      <template #footer><el-button @click="providerDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveProvider"><Save :size="14" />保存备案</el-button></template>
+      <template #footer><el-alert v-if="saveError" type="error" :closable="false" :title="saveError" /><el-button @click="providerDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveProvider"><Save :size="14" />保存备案</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="vectorDialog" :title="editingVectorId ? '编辑向量模型' : '新增向量模型'" width="520px" destroy-on-close>
@@ -380,7 +391,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
             : '请填写模型实际支持的维度；检测会调用 OpenAI 兼容协议的 /embeddings 接口并校验返回长度。'"
         />
       </el-form>
-      <template #footer><el-button @click="vectorDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveVector"><Save :size="14" />保存备案</el-button></template>
+      <template #footer><el-alert v-if="saveError" type="error" :closable="false" :title="saveError" /><el-button @click="vectorDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveVector"><Save :size="14" />保存备案</el-button></template>
     </el-dialog>
   </section>
 </template>
@@ -610,4 +621,5 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
     grid-template-columns: 1fr;
   }
 }
+.connection-feedback { margin: 12px 0; padding: 8px 12px; background: var(--app-surface-subtle); color: var(--app-text-regular); font-size: 13px; overflow-wrap: anywhere; }
 </style>

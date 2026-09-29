@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
-import { ElMessage } from 'element-plus';
 import { useRoute } from 'vue-router';
 import { accountsApi } from '@/api/accounts';
 import AuditLogPanel from '@/features/accounts/AuditLogPanel.vue';
@@ -10,17 +9,18 @@ import type { AuditEvent } from '@/types/security';
 const route = useRoute();
 const rows = shallowRef<AuditEvent[]>([]);
 const loading = shallowRef(false);
+const loadError = shallowRef<string | null>(null);
 const focusUsername = shallowRef(
   typeof route.query.username === 'string' ? route.query.username : '',
 );
 const focusVersion = shallowRef(1);
 
 async function load() {
-  loading.value = true;
+  loading.value = true; loadError.value = null;
   try {
     rows.value = await accountsApi.audit();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '审计日志加载失败');
+    loadError.value = error instanceof Error ? error.message : '审计日志加载失败';
   } finally {
     loading.value = false;
   }
@@ -32,6 +32,7 @@ onMounted(() => void load());
 <template>
   <section class="page audit-page">
     <div class="surface audit-surface">
+      <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" />
       <AuditLogPanel
         :rows="rows"
         :loading="loading"

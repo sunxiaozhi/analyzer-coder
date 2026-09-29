@@ -34,7 +34,11 @@ const props = defineProps<{
   focusLine: number | null;
   focusEndLine: number | null;
   focusVersion: number;
+  branchName?: string | null;
+  scrollTop?: number;
 }>();
+const emit = defineEmits<{ scrollPosition: [top: number] }>();
+watch(() => props.scrollTop, async top => { await nextTick(); const el = root.value?.querySelector('.file-code-scroll'); if (el && top !== undefined) el.scrollTop = top; });
 const root = ref<HTMLElement>();
 const previewMode = shallowRef<'preview' | 'source'>('source');
 
@@ -97,7 +101,7 @@ watch(
         <div class="file-title">
           <div>
             <h2>{{ file.name }}</h2>
-            <p class="mono">{{ file.path }}</p>
+            <p class="mono" :title="file.path">{{ file.path }}</p>
           </div>
           <div class="file-actions">
             <el-button-group v-if="isMarkdown" aria-label="Markdown 查看方式">
@@ -120,6 +124,7 @@ watch(
           </div>
         </div>
         <div class="file-facts">
+          <span v-if="branchName">{{ branchName }}</span>
           <span>{{ file.language || '文本' }}</span>
           <span>{{ file.lineCount }} 行</span>
           <span>{{ formatBytes(file.sizeBytes) }}</span>
@@ -132,7 +137,7 @@ watch(
         v-if="isMarkdown && previewMode === 'preview'"
         :content="file.content"
       />
-      <div v-else class="file-code-scroll" role="region" :aria-label="`${file.name} 完整代码`">
+      <div v-else class="file-code-scroll" @scroll="emit('scrollPosition', ($event.target as HTMLElement).scrollTop)" role="region" :aria-label="`${file.name} 完整代码`">
         <div class="file-code-lines">
           <div
             v-for="line in highlightedLines"
@@ -430,4 +435,5 @@ watch(
     padding-inline: 10px;
   }
 }
+.file-title .mono { white-space: normal; overflow-wrap: anywhere; }
 </style>

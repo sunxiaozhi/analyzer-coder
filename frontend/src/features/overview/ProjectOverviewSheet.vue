@@ -126,8 +126,8 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 
       <div class="version-line" aria-label="项目版本">
         <span><GitBranch :size="13" />{{ preparation?.branch ?? '—' }}</span>
-        <span><GitCommit :size="13" />{{ short(preparation?.commitSha, 10) }}</span>
-        <span>内容版本 {{ short(preparation?.contentVersion, 8) }}</span>
+        <span :title="preparation?.commitSha ?? undefined"><GitCommit :size="13" />{{ short(preparation?.commitSha, 10) }}</span>
+        <span :title="preparation?.contentVersion ?? undefined">内容版本 {{ short(preparation?.contentVersion, 8) }}</span>
         <span v-if="preparation?.dirty" class="dirty-flag">内容版本采集时含未提交改动</span>
       </div>
 
@@ -147,7 +147,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <button
           type="button"
           class="review-action"
-          :title="searchActionTitle"
+          :title="searchActionTitle" :class="{ 'is-primary': health?.readyForSearch }"
           :disabled="loading || preparing || !health?.readyForSearch"
           @click="emit('openSearch')"
         >
@@ -157,7 +157,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <button
           v-if="repository.capabilities?.canIndex"
           type="button"
-          class="prepare-action"
+          class="prepare-action" :class="{ 'is-primary': !health?.readyForSearch }"
           :disabled="loading || preparing"
           @click="emit('prepare')"
         >
@@ -177,11 +177,16 @@ function canResolveIssue(issue: ProjectHealthIssue) {
       </div>
     </header>
 
+    <section class="availability-summary" aria-label="当前分支可用能力">
+      <div><b>代码检索</b><span>{{ loading ? '正在读取状态' : health ? health.readyForSearch ? '可开始联合检索' : '准备完成后可检索' : '尚未获取' }}</span></div>
+      <div><b>项目知识</b><span>{{ knowledge ? `已审核的当前知识 ${knowledge.trusted} 条 · 未归档 ${knowledge.total} 条` : '尚未获取' }}</span><button type="button" @click="emit('openKnowledge')">查看知识</button></div>
+    </section>
+    <details class="technical-statistics"><summary>代码、图谱与向量统计</summary>
     <section class="capability-strip" aria-label="项目核心数据">
       <article data-accent="blue">
         <span><Network :size="17" />代码图谱</span>
-        <strong>{{ profile && profile.graphNodes > 0 ? profile.graphNodes : '—' }}</strong>
-        <small>节点 · {{ profile && profile.graphNodes > 0 ? profile.graphEdges : '—' }} 条关系</small>
+        <strong>{{ profile?.graphNodes ?? '—' }}</strong>
+        <small>节点 · {{ profile?.graphEdges ?? '—' }} 条关系</small>
       </article>
       <article data-accent="cyan">
         <span><Database :size="17" />向量数据</span>
@@ -202,6 +207,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
       </article>
     </section>
 
+    </details>
     <p class="data-note">更新于 {{ preparation ? formatTime(preparation.generatedAt) : '尚未获取' }} · 刷新只重新读取统计</p>
 
     <div class="overview-body">
@@ -447,4 +453,12 @@ function canResolveIssue(issue: ProjectHealthIssue) {
   .review-row { grid-template-columns: auto minmax(0, 1fr); }
   .review-row time { grid-column: 2; }
 }
+.availability-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 16px 0; }
+.availability-summary > div { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.availability-summary b { font-size: 16px; }
+.availability-summary span { color: var(--app-text-muted); font-size: 14px; }
+.availability-summary button { border: 0; background: transparent; color: var(--app-color-action); font-size: 14px; }
+.technical-statistics > summary { cursor: pointer; padding: 12px 0; font-size: 14px; color: var(--app-text-muted); }
+.hero-actions .is-primary { color: #fff; background: var(--app-color-action); border-color: var(--app-color-action); }
+@media (max-width: 760px) { .availability-summary { grid-template-columns: minmax(0, 1fr); } }
 </style>

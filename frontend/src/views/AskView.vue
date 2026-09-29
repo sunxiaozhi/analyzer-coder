@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { computed, onMounted, shallowRef, watch } from 'vue';
+import { computed, onMounted, onBeforeUnmount, onDeactivated, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   intelligenceApi,
@@ -12,6 +12,7 @@ import {
 } from '@/api/intelligence';
 import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
 import AskHistorySidebar from '@/features/ask/AskHistorySidebar.vue';
+import { usePageMemoryStore } from '@/stores/pageMemory';
 import { useAskConversation } from '@/features/ask/useAskConversation';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
@@ -35,6 +36,25 @@ const askModels = shallowRef<AskModel[]>([]);
 const selectedModelId = shallowRef('');
 const modelsLoading = shallowRef(false);
 let contextVersion = 0;
+let historyRequest = 0;
+const historyOpen = shallowRef(true);
+const readingTop = shallowRef(0);
+const expandedEvidence = shallowRef<string[]>([]);
+const memory = usePageMemoryStore();
+const scopeKey = () => `ask:${repositories.selectedRepositoryId}:${branchContext.selectedBranchId ?? 'default'}`;
+let stateKey = scopeKey();
+let hasContext = false;
+type AskState = { thread: string | null; question: string; answer: string | null; top: number; expanded: string[]; history: boolean; model: string };
+function rememberConversation() {
+  if (!hasContext) return;
+  memory.write<AskState>(stateKey, { thread: conversation.threadId.value, question: conversation.question.value,
+    answer: conversation.activeAnswerId.value, top: readingTop.value, expanded: [...expandedEvidence.value], history: historyOpen.value, model: selectedModelId.value });
+}
+function expandEvidence(id: string, open: boolean) {
+  expandedEvidence.value = open ? [...new Set([...expandedEvidence.value, id])] : expandedEvidence.value.filter(item => item !== id);
+}
+onDeactivated(rememberConversation);
+onBeforeUnmount(() => { rememberConversation(); contextVersion++; historyRequest++; conversation.invalidate(); });
 
 const repository = computed(() => repositories.selectedRepository);
 const canAsk = computed(() => Boolean(repository.value && !readScope.blocked.value && branchContentReady.value));
@@ -47,6 +67,14 @@ const readinessCopy = computed(() => {
 });
 
 async function loadContext(repositoryId: string | null) {
+  rememberConversation();
+  hasContext = false;
+  stateKey = scopeKey();
+  const saved = memory.read<AskState>(stateKey);
+  selectedModelId.value = saved?.model ?? '';
+  historyOpen.value = saved?.history ?? true;
+  expandedEvidence.value = saved?.expanded ?? [];
+  readingTop.value = saved?.top ?? 0;
   const version = ++contextVersion;
   const branchIdentity = branchContext.identity;
   conversation.invalidate();
@@ -89,6 +117,16 @@ async function loadContext(repositoryId: string | null) {
     })
     .finally(() => { if (isCurrent()) modelsLoading.value = false; });
   await Promise.allSettled([profileTask, historyTask, modelsTask]);
+  if (!isCurrent()) return;
+  hasContext = true;
+  const record = history.value.find(item => item.threadId === saved?.thread);
+  if (record) {
+    await openHistory(record, true);
+    if (!isCurrent()) return;
+    if (saved?.answer) conversation.selectAnswer(saved.answer);
+  }
+  if (typeof route.query.q === 'string') conversation.question.value = route.query.q;
+  else conversation.question.value = saved?.question ?? '';
 }
 
 async function reloadHistory() {
@@ -124,6 +162,7 @@ async function send() {
   try {
     const result = await conversation.send(repositoryId, selectedModelId.value || null, branchContext.context?.contextId ?? null);
     if (!result || result.repositoryId !== repositories.selectedRepositoryId) return;
+    readingTop.value = Number.MAX_SAFE_INTEGER;
     await reloadHistory();
   } catch { /* 错误保留在回答区，可直接重试。 */ }
 }
@@ -137,13 +176,16 @@ async function retry() {
   } catch { /* 错误保留在回答区。 */ }
 }
 
-async function openHistory(record: QaHistoryRecord) {
+async function openHistory(record: QaHistoryRecord, preservePosition = false) {
+  const request = ++historyRequest;
+  const identity = branchContext.identity;
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId || record.repositoryId !== repositoryId) return;
   try {
     const result = await intelligenceApi.historyDetail(repositoryId, record.threadId, branchContext.context?.contextId);
-    if (repositoryId !== repositories.selectedRepositoryId) return;
+    if (request !== historyRequest || identity !== branchContext.identity || repositoryId !== repositories.selectedRepositoryId) return;
     conversation.restore(result);
+    if (!preservePosition) { readingTop.value = 0; expandedEvidence.value = []; }
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法打开历史记录'); }
 }
 
@@ -184,35 +226,47 @@ function openModelSettings() {
   void router.push('/settings');
 }
 
+async function resolveReference(reference: CodeReference) {
+  const branchId = reference.branchId ?? conversation.activeAnswer.value?.branchId;
+  return branchId ? branchesApi.context(reference.repositoryId, branchId) : branchContext.context;
+}
 async function openCode(reference: CodeReference) {
   try {
+    rememberConversation();
     await selectTargetRepository(reference.repositoryId);
+    const context = await resolveReference(reference);
     await router.push({ name: 'search', query: {
+      branchId: context?.branchId, contextId: context?.contextId,
       contentVersion: reference.contentVersion ?? undefined,
       path: reference.filePath, startLine: String(reference.startLine ?? 1), endLine: String(reference.endLine ?? reference.startLine ?? 1),
     }});
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法打开源码'); }
 }
 
-async function openKnowledge(citation: Citation) {
+async function openKnowledge(citation: Citation, sourceBranchId?: string | null) {
   if (!citation.knowledgeCardId) return;
   try {
+    rememberConversation();
     await selectTargetRepository(citation.repositoryId);
-    await router.push({ name: 'knowledge', query: { cardId: citation.knowledgeCardId } });
+    const branchId = sourceBranchId ?? branchContext.context?.branchId;
+    await router.push({ name: 'knowledge', query: { cardId: citation.knowledgeCardId, branchId } });
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '无法打开知识卡片'); }
 }
 
 async function openGraph(reference: CodeReference) {
   try {
     await selectTargetRepository(reference.repositoryId);
+    rememberConversation();
+    const context = await resolveReference(reference);
     const target = reference.chunkId
-      ? await intelligenceApi.graphTarget(reference.repositoryId, reference.chunkId, branchContext.context?.contextId)
+      ? await intelligenceApi.graphTarget(reference.repositoryId, reference.chunkId, context?.contextId)
       : { symbol: reference.symbolName || reference.filePath };
     await router.push({ name: 'search', query: {
       path: ('filePath' in target ? target.filePath : null) || reference.filePath,
       startLine: String(('startLine' in target ? target.startLine : null) ?? reference.startLine ?? 1),
       contentVersion: reference.contentVersion ?? undefined,
       symbol: target.symbol,
+      branchId: context?.branchId, contextId: context?.contextId,
       depth: '3',
       relation: '1',
     } });
@@ -237,8 +291,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="qa-page">
+  <section class="qa-page" :class="{ 'history-closed': !historyOpen }">
     <header class="qa-command surface">
+      <el-button :aria-expanded="historyOpen" @click="historyOpen = !historyOpen">{{ historyOpen ? '收起历史' : '展开历史' }}</el-button>
       <div class="scope-copy">
         <span>问答范围</span>
         <strong>{{ repository?.name ?? '未选择项目' }}</strong>
@@ -279,12 +334,14 @@ onMounted(async () => {
       </div>
     </header>
 
-    <AskHistorySidebar :records="history" :active-thread-id="conversation.threadId.value" :loading="historyLoading"
+    <AskHistorySidebar v-show="historyOpen" :records="history" :active-thread-id="conversation.threadId.value" :loading="historyLoading"
       @open="openHistory" @refresh="reloadHistory" @rename="renameHistory" @delete="deleteHistory" />
 
     <AskConversationPanel
       v-model="conversation.question.value"
       :turns="conversation.turns.value"
+      :scroll-top="readingTop" :expanded-evidence="expandedEvidence"
+      @scroll-position="readingTop = $event" @expand-evidence="expandEvidence"
       :active-answer-id="conversation.activeAnswerId.value"
       :restored-thread-id="conversation.threadId.value"
       :pending-question="conversation.pendingQuestion.value"
@@ -308,4 +365,6 @@ onMounted(async () => {
 .model-selector { display:flex; align-items:center; gap:7px; }.model-selector>span { color: var(--app-text-muted); font-size: 13px; white-space:nowrap; }.model-selector :deep(.el-select) { width:240px; }.model-selector :deep(.el-select-dropdown__item) { display:flex; justify-content:space-between; gap:12px; }.model-selector small { color: var(--app-text-muted); }
 @media (max-width:900px) { .qa-page { grid-template-columns:1fr; grid-template-rows:auto auto minmax(620px,1fr); gap:10px; overflow:auto; }.qa-command { grid-column:1; }.command-notice { width:100%; order:3; } }
 @media (max-width:760px) { .qa-page { height:auto; }.qa-command { flex-wrap:wrap; }.scope-copy { flex:1; }.command-actions { width:100%; margin-left:0; }.model-selector { flex:1; }.model-selector :deep(.el-select) { width:100%; }.command-actions .el-button { flex:0 0 auto; } }
+.qa-page.history-closed { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+@media (max-width: 1200px) { .qa-command { flex-wrap: wrap; } }
 </style>

@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
         @contextmenu.prevent
       >
         <button role="menuitem" @click="run(tab => emit('refresh', tab))">
-          <RefreshCw :size="14" /><span>刷新当前页签</span>
+          <RefreshCw :size="14" /><span>刷新页面数据</span>
         </button>
         <button role="menuitem" @click="run(tab => emit('copyLink', tab))">
           <Clipboard :size="14" /><span>复制页面链接</span>

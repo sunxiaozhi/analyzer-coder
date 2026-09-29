@@ -2,7 +2,7 @@
 import { Plus, Search } from '@element-plus/icons-vue';
 import { BookOpenCheck } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
-import { computed, onMounted, shallowRef, watch } from 'vue';
+import { computed, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ApiError } from '@/api/http';
 import { branchesApi, type BranchValidationCard, type BranchValidationState } from '@/api/branches';
@@ -17,6 +17,8 @@ import {
   type MarkdownKnowledgeSourceList as MarkdownKnowledgeSourceOverview,
   type MarkdownKnowledgeSourceStatus,
 } from '@/api/intelligence';
+import { usePageMemoryStore } from '@/stores/pageMemory';
+import { branchScopeLabel } from '@/features/knowledge/knowledgePresentation';
 import { cardForBranch } from '@/features/knowledge/knowledgeBranchScope';
 import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
@@ -55,6 +57,8 @@ const dialog = shallowRef(false);
 const detailDialog = shallowRef(false);
 const historyDialog = shallowRef(false);
 const busy = shallowRef(false);
+const saveError = shallowRef<string | null>(null);
+const cardLoadError = shallowRef<string | null>(null);
 const cardsLoading = shallowRef(false);
 const sourcesLoading = shallowRef(false);
 const sourceBusyPath = shallowRef<string | null>(null);
@@ -73,6 +77,50 @@ const sourceReviewLoading = shallowRef(false);
 const historyCard = shallowRef<KnowledgeCard | null>(null);
 const revisions = shallowRef<CardRevision[]>([]);
 let handledCreateRequest = '';
+const memory = usePageMemoryStore();
+const listElement = shallowRef<HTMLElement | null>(null);
+const scrollTop = shallowRef(0);
+const resumeCardId = shallowRef<string | null>(null);
+const selectedCardId = shallowRef<string | null>(null);
+let triggerElement: HTMLElement | null = null;
+const pageKey = () => `knowledge:${repositories.selectedRepositoryId}:${branchContext.selectedBranchId ?? 'default'}`;
+let stateKey = pageKey();
+type ReadingState = { query: string; sourceQuery: string; kind: typeof selectedKnowledgeKind.value; sourceStatus: typeof selectedSourceStatus.value; validation: typeof validationFilter.value; mode: KnowledgeMode; top: number; selected: string | null; resume: string | null };
+function remember() {
+  memory.write<ReadingState>(stateKey, { query: cardQuery.value, sourceQuery: sourceQuery.value, kind: selectedKnowledgeKind.value,
+    sourceStatus: selectedSourceStatus.value, validation: validationFilter.value, mode: activeMode.value,
+    top: scrollTop.value, selected: selectedCardId.value, resume: resumeCardId.value });
+}
+function restoreReadingState() {
+  const state = memory.read<ReadingState>(stateKey);
+  cardQuery.value = state?.query ?? ''; sourceQuery.value = state?.sourceQuery ?? '';
+  selectedKnowledgeKind.value = state?.kind ?? allKnowledgeKinds;
+  selectedSourceStatus.value = state?.sourceStatus ?? allSourceStatuses;
+  validationFilter.value = state?.validation ?? 'ALL'; activeMode.value = state?.mode ?? 'cards';
+  scrollTop.value = state?.top ?? 0; selectedCardId.value = state?.selected ?? null; resumeCardId.value = state?.resume ?? null;
+}
+restoreReadingState();
+onBeforeUnmount(remember);
+onDeactivated(remember);
+onActivated(() => { const card = cards.value.find(item => item.id === resumeCardId.value); if (card) openDetail(card); void restoreListPosition(); });
+function trackScroll(event: Event) { scrollTop.value = (event.target as HTMLElement).scrollTop; }
+async function restoreListPosition() {
+  await nextTick();
+  if (listElement.value) listElement.value.scrollTop = scrollTop.value;
+}
+function detailClosed() {
+  if (route.name === 'knowledge') resumeCardId.value = null;
+  if (triggerElement?.isConnected) triggerElement.focus({ preventScroll: true });
+}
+async function locateCard(card: KnowledgeCard) {
+  selectedCardId.value = card.id;
+  await nextTick();
+  const row = Array.from(listElement.value?.querySelectorAll<HTMLElement>('[data-card-id]') ?? [])
+    .find(item => item.dataset.cardId === card.id);
+  row?.scrollIntoView?.({ block: 'nearest' });
+  row?.querySelector<HTMLButtonElement>('.card-title')?.focus({ preventScroll: true });
+  if (!row) { viewing.value = card; detailDialog.value = true; }
+}
 const emptySourceCounts = { total: 0, pending: 0, current: 0, stale: 0 };
 const canMaintain = computed(() => repositories.selectedRepository?.capabilities.canUpdate ?? false);
 const canManage = computed(() => repositories.selectedRepository?.capabilities.canConfigure ?? false);
@@ -125,8 +173,8 @@ async function loadCards() {
   const version=++cardsVersion;
   const identity=branchContext.identity;
   const repositoryId=repositories.selectedRepositoryId;
-  cards.value=[]; branchValidations.value=[]; cardsLoading.value=false;
-  if(!repositoryId || readScope.blocked.value) return;
+  cardLoadError.value=null; cardsLoading.value=false;
+  if(!repositoryId || readScope.blocked.value) { cards.value=[]; branchValidations.value=[]; return; }
   const isCurrent=()=>version===cardsVersion && repositoryId===repositories.selectedRepositoryId && identity===branchContext.identity;
   cardsLoading.value=true;
   try {
@@ -138,8 +186,10 @@ async function loadCards() {
     if(!isCurrent())return;
     cards.value=loadedCards.map(card => cardForBranch(card, branchContext.context, loadedValidations)); branchValidations.value=loadedValidations;
     syncRequestedCard(); syncRequestedCreate();
+    if (resumeCardId.value && !route.query.cardId) { const card = cards.value.find(item => item.id === resumeCardId.value); if (card) openDetail(card); }
+    await restoreListPosition();
   }catch(error){
-    if(isCurrent())ElMessage.error(error instanceof Error?error.message:'知识卡片加载失败');
+    if(isCurrent()) { cardLoadError.value=error instanceof Error?error.message:'知识卡片加载失败'; cards.value=[]; branchValidations.value=[]; }
   }finally{if(isCurrent())cardsLoading.value=false;}
 }
 
@@ -178,15 +228,11 @@ function syncRequestedCard() {
   detailDialog.value = true;
   void loadDrift(card);
 }
-function openCreate() { initialReference.value = null; editing.value = null; dialog.value = true; }
+function openCreate() { saveError.value = null; initialReference.value = null; editing.value = null; dialog.value = true; }
 function scopeLabel(card: KnowledgeCard) {
-  const scope = card.branchScope;
-  if (scope?.mode === 'ALL_BRANCHES') return '项目共享 · 所有分支';
-  const names = scope?.branchIds.map(id => branchContext.branches.find(branch => branch.id === id)?.name ?? '未知分支');
-  if (names && names.length > 1) return `指定分支 · ${names.join('、')}`;
-  return `分支 · ${names?.[0] ?? branchContext.context?.branchName ?? '未选择'}`;
+  return branchScopeLabel(card.branchScope, branchContext.branches, branchContext.context?.branchName);
 }
-function openEdit(card: KnowledgeCard) { initialReference.value = null; editing.value = card; dialog.value = true; }
+function openEdit(card: KnowledgeCard) { saveError.value = null; initialReference.value = null; editing.value = card; detailDialog.value = false; dialog.value = true; }
 function syncRequestedCreate() {
   const path = typeof route.query.path === 'string' ? route.query.path : null;
   if (route.query.create !== '1' || !path || !canMaintain.value) return;
@@ -201,6 +247,8 @@ function syncRequestedCreate() {
   dialog.value = true;
 }
 function openDetail(card: KnowledgeCard) {
+  triggerElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  selectedCardId.value = card.id;
   viewing.value = card;
   detailDialog.value = true;
   void loadDrift(card);
@@ -298,6 +346,8 @@ async function referenceContext(reference: CodeReference) {
 async function openCode(reference: CodeReference) {
   try {
   const context = await referenceContext(reference);
+  resumeCardId.value = viewing.value?.id ?? null;
+  remember();
   detailDialog.value = false;
   dialog.value = false;
   await router.push({
@@ -419,6 +469,8 @@ async function openGraph(reference: CodeReference) {
     const target = reference.chunkId
       ? await intelligenceApi.graphTarget(repositoryId, reference.chunkId, context?.contextId)
       : { symbol: reference.symbolName || reference.filePath, filePath: reference.filePath, startLine: reference.startLine };
+    resumeCardId.value = viewing.value?.id ?? null;
+    remember();
     detailDialog.value = false;
     await router.push({ name: 'search', query: {
       path: target.filePath || reference.filePath,
@@ -438,14 +490,18 @@ async function save(input: CardInput) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
   busy.value = true;
+  saveError.value = null;
   try {
-    if (editing.value) await intelligenceApi.updateCard(repositoryId, editing.value.id, input, branchContext.context?.contextId);
-    else await intelligenceApi.createCard(repositoryId, input, branchContext.context?.contextId);
+    const saved = editing.value ? await intelligenceApi.updateCard(repositoryId, editing.value.id, input, branchContext.context?.contextId)
+      : await intelligenceApi.createCard(repositoryId, input, branchContext.context?.contextId);
     dialog.value = false;
     await load();
-    ElMessage.success(editing.value ? '新修订已保存' : '知识卡片已创建');
+    await locateCard(cards.value.find(item => item.id === saved.id) ?? saved);
+    ElMessage.success(editing.value ? '已保存为新修订，请确认后发布' : '已保存为草稿，可确认并发布');
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败');
+    saveError.value = error instanceof ApiError && error.status === 409
+      ? '知识已被修改，请刷新后重新核对；当前输入保留'
+      : error instanceof Error ? error.message : '保存失败，当前输入保留';
   } finally { busy.value = false; }
 }
 async function reviewCard(card: KnowledgeCard, reviewStatus: 'APPROVED' | 'CHANGES_REQUESTED') {
@@ -477,7 +533,7 @@ async function setPublication(card: KnowledgeCard, publicationStatus: 'DRAFT' | 
       await intelligenceApi.setCardPublication(repositoryId, card.id, publicationStatus, context.contextId);
     }
     await branchValidationSaved();
-    ElMessage.success(`${action}完成`);
+    ElMessage.success(publicationStatus === 'PUBLISHED' ? `已发布，共享范围：${scopeLabel(card)}；其他使用分支需分别确认适用性` : `${action}完成`);
   } catch (error) {
     if (error instanceof Error) ElMessage.error(error.message);
   }
@@ -497,14 +553,15 @@ async function restore(revision: number) {
   revisions.value = await intelligenceApi.cardHistory(repositoryId, card.id);
   await load();
   historyCard.value = cards.value.find(item => item.id === card.id) ?? null;
+  historyDialog.value = false;
+  if (historyCard.value) await locateCard(historyCard.value);
   ElMessage.success('历史内容及附件已恢复为新草稿');
 }
 watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const, () => {
   handledCreateRequest = '';
-  selectedKnowledgeKind.value = allKnowledgeKinds;
-  selectedSourceStatus.value = allSourceStatuses;
-  cardQuery.value = '';
-  sourceQuery.value = '';
+  if (stateKey !== pageKey()) { remember(); stateKey = pageKey(); restoreReadingState(); }
+  cards.value = []; branchValidations.value = [];
+  dialog.value = false; historyDialog.value = false;
   viewing.value = null;
   driftEvent.value = null;
   detailDialog.value = false;
@@ -623,11 +680,14 @@ onMounted(() => void load());
 
       <div
         v-if="activeMode === 'cards'"
+        ref="listElement"
         class="knowledge-scroll"
+        @scroll="trackScroll"
         role="tabpanel"
         v-loading="cardsLoading"
       >
-        <el-empty v-if="!cardRows.length" :description="cardEmptyDescription" />
+        <el-alert v-if="cardLoadError" type="error" :closable="false" :title="cardLoadError"><el-button @click="loadCards">重新加载</el-button></el-alert>
+        <el-empty v-else-if="!cardsLoading && !cardRows.length" :description="cardEmptyDescription" />
         <div v-else class="knowledge-grid">
           <KnowledgeCardListItem
             v-for="card in cardRows"
@@ -636,6 +696,8 @@ onMounted(() => void load());
             :can-manage="canManage"
             :can-maintain="canMaintain"
             :scope-label="scopeLabel(card)"
+            :selected="selectedCardId === card.id"
+            :branch-context="branchContext.context" :validation-state="validationState(card)"
             :validation-label="readScope.requiresContext.value ? validationLabels[validationState(card)] : undefined"
             @view="openDetail"
             @edit="openEdit"
@@ -668,6 +730,8 @@ onMounted(() => void load());
     <KnowledgeCardDetailDialog
       v-model="detailDialog"
       :card="viewing"
+      :validation-state="viewing ? validationState(viewing) : undefined"
+      @edit="openEdit" @closed="detailClosed"
       :scope-label="viewing ? scopeLabel(viewing) : undefined"
       :drift-event="driftEvent"
       :drift-loading="driftLoading"
@@ -683,7 +747,7 @@ onMounted(() => void load());
     />
     <KnowledgeCardEditorDialog v-if="canMaintain && repositories.selectedRepositoryId" v-model="dialog"
       :context-id="branchContext.context?.contextId"
-      :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy"
+      :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy" :save-error="saveError"
       :initial-reference="initialReference"
       :branch-name="branchContext.context?.branchName ?? null"
       :branch-id="branchContext.context?.branchId" :branches="branchContext.branches"
@@ -773,9 +837,7 @@ onMounted(() => void load());
   color: #005eb8;
   background: var(--app-color-action-soft);
 }
-.knowledge-scroll .knowledge-grid {
-  padding-top: 0;
-}
+.knowledge-scroll .knowledge-grid { grid-template-columns: minmax(0, 1fr); padding: 0 0 12px; }
 .knowledge-type-filter,
 .knowledge-status-filter {
   width: 168px;

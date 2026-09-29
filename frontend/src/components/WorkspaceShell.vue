@@ -69,23 +69,27 @@ async function logout() { await auth.logout(); workspaceTabs.closeAll(); await r
 async function changeRepository(repositoryId: string | null) {
   try {
     await repositoryStore.selectRepository(repositoryId);
-    const query = { ...route.query };
-    delete query.branchId;
-    delete query.contextId;
+    const query = unscopedQuery();
     await router.replace({ query });
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '保存当前项目失败');
   }
 }
-async function changeBranch(branchId: string) {
+function unscopedQuery() {
+  const query = { ...route.query };
+  for (const key of ['branchId', 'contextId', 'path', 'startLine', 'endLine', 'contentVersion', 'symbol', 'cardId', 'create', 'q', 'relation', 'depth']) delete query[key];
+  return query;
+}
+async function changeBranch(branchId: string, preserveTarget = false) {
   try {
     await branchContext.select(branchId);
     const query = {
-      ...route.query,
+      ...(preserveTarget ? route.query : unscopedQuery()),
       branchId,
       contextId: branchContext.context?.contextId ?? undefined,
     };
     await router.replace({ query });
+    if (!preserveTarget) ElMessage.success(`已切换到 ${branchContext.selectedBranch?.name ?? '所选分支'}`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '切换分支失败');
   }
@@ -102,6 +106,7 @@ async function refreshBranchContext() {
         },
       });
     }
+    if (branchContext.context) ElMessage.success(`已读取最新分支版本 ${branchContext.context.commitSha.slice(0, 8)}`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '刷新分支版本失败');
   }
@@ -210,7 +215,7 @@ watch(
   () => route.query.branchId,
   branchId => {
     if (typeof branchId !== 'string' || branchId === branchContext.selectedBranchId) return;
-    if (branchContext.activeBranches.some(item => item.id === branchId)) void changeBranch(branchId);
+    if (branchContext.activeBranches.some(item => item.id === branchId)) void changeBranch(branchId, true);
   },
 );
 onMounted(() => {
@@ -244,7 +249,7 @@ onMounted(() => {
       </section>
     </nav>
   </aside>
-  <main class="workspace"><header class="topbar"><span class="repository-label">当前项目</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" placeholder="请选择项目" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select>
+  <main class="workspace"><header class="topbar"><span class="repository-label">当前项目</span><el-select :model-value="repositoryStore.selectedRepositoryId" class="global-repository-switcher" aria-label="当前项目" placeholder="请选择项目" filterable @change="changeRepository"><el-option v-for="repository in repositoryStore.repositories" :key="repository.id" :label="repository.name" :value="repository.id" /></el-select>
     <div v-if="repositoryStore.selectedRepositoryId && branchAwareRepository" class="branch-lock" :data-ready="branchContext.ready">
       <GitBranch :size="15" />
       <el-select
@@ -252,7 +257,7 @@ onMounted(() => {
         class="global-branch-switcher"
         placeholder="选择分支"
         :loading="branchContext.loading"
-        @change="changeBranch"
+        @change="changeBranch($event)" aria-label="当前阅读分支"
       >
         <el-option
           v-for="branch in branchContext.activeBranches"
@@ -262,11 +267,11 @@ onMounted(() => {
           :disabled="branch.status !== 'READY'"
         />
       </el-select>
-      <span v-if="branchContext.context" class="locked-commit mono" title="当前页面数据锁定到该提交">
+      <span v-if="branchContext.context" class="locked-commit mono" :title="`提交 ${branchContext.context.commitSha} · 内容版本 ${branchContext.context.contentVersion}`">
         锁定 {{ branchContext.context.commitSha.slice(0, 8) }}
       </span>
-      <span v-else class="locked-commit">{{ branchContext.error ?? '版本未就绪' }}</span>
-      <button class="branch-refresh" type="button" title="刷新分支和锁定版本" @click="refreshBranchContext"><RefreshCw :size="14" /></button>
+      <span v-else class="locked-commit">{{ branchContext.loading ? '正在切换分支…' : branchContext.error ?? '版本未就绪' }}</span>
+      <button class="branch-refresh" type="button" title="读取最新分支版本" aria-label="读取最新分支版本" :disabled="branchContext.loading" @click="refreshBranchContext"><RefreshCw :size="14" /></button>
     </div>
     <div class="topbar-spacer" /><RouterLink class="help-entry" to="/help" title="查看功能导航和数据来源"><CircleHelp :size="16" /><span>帮助说明</span></RouterLink><RouterLink class="mcp-entry" to="/mcp" title="查看 MCP 接入指导"><Plug :size="16" /><span>MCP 接入</span></RouterLink><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
     <div class="page-frame">
@@ -339,7 +344,10 @@ onMounted(() => {
   .nav-section[data-group='system'] .nav-link { padding-left: 0; }
 }
 @media (max-width: 760px) {
-  .branch-lock { display: none; }
+  .topbar { display: flex; flex-wrap: wrap; height: auto; min-height: 96px; padding: 8px 10px; }
+  .branch-lock { display: flex; margin-left: 0; }
+  .global-branch-switcher { width: 140px; }
+  .repository-label { display: none; }
   .sidebar { overflow-x: auto; overflow-y: hidden; }
   .nav-list, .nav-section, .nav-section-links { display: flex; flex: none; }
   .nav-list { min-height: auto; overflow: visible; scrollbar-gutter: auto; }

@@ -103,15 +103,15 @@ describe('code browsing continuity', () => {
     wrapper.unmount();
   });
 
-  it('opens file evidence in a drawer without shrinking the source grid', async () => {
+  it('keeps source and evidence side by side for a referenced symbol', async () => {
     route.query = { path: 'a.ts', symbol: 'caller', relation: '1' };
     const wrapper = mountCode();
     await flushPromises();
 
     expect(wrapper.findComponent(CodeEvidencePanel).exists()).toBe(true);
-    expect(wrapper.find('.drawer-stub').exists()).toBe(true);
-    expect(wrapper.find('.workbench-grid').classes()).not.toContain('side-open');
-    expect(wrapper.find('.workbench-grid').classes()).not.toContain('evidence-open');
+    expect(wrapper.find('.workbench-evidence').exists()).toBe(true);
+    expect(wrapper.find('.workbench-grid').classes()).toContain('side-open');
+    expect(wrapper.find('.workbench-grid').classes()).toContain('context-open');
     wrapper.unmount();
   });
 });

@@ -16,12 +16,16 @@ const props = defineProps<{
   error: string | null;
   disabled?: boolean;
   restoredThreadId?: string | null;
+  scrollTop?: number;
+  expandedEvidence?: string[];
 }>();
 const emit = defineEmits<{
   send: [];
   retry: [];
   selectAnswer: [conversationId: string];
-  openKnowledge: [citation: Citation];
+  openKnowledge: [citation: Citation, branchId?: string | null];
+  scrollPosition: [top: number];
+  expandEvidence: [id: string, open: boolean];
   openCode: [reference: CodeReference];
   openGraph: [reference: CodeReference];
 }>();
@@ -43,8 +47,12 @@ watch(() => props.restoredThreadId, async (threadId, previousThreadId) => {
   await nextTick();
   if (messagesElement.value) messagesElement.value.scrollTop = 0;
 });
-watch(() => [props.turns.length, props.requestState], scrollToLatest);
-onActivated(scrollToLatest);
+watch(() => [props.turns.length, props.requestState], async () => {
+  if (props.scrollTop === undefined || props.requestState === 'sending') await scrollToLatest();
+  else { await nextTick(); if (messagesElement.value) messagesElement.value.scrollTop = props.scrollTop; }
+});
+watch(() => props.scrollTop, async top => { await nextTick(); if (messagesElement.value && top !== undefined) messagesElement.value.scrollTop = top; });
+onActivated(async () => { await nextTick(); if (messagesElement.value && props.scrollTop !== undefined) messagesElement.value.scrollTop = props.scrollTop; });
 
 function statusLabel(status: Answer['evidenceStatus']) {
   return ({
@@ -67,7 +75,7 @@ function shortcut(event: KeyboardEvent) {
 
 <template>
   <main class="chat-column">
-    <div ref="messages" class="messages" aria-live="polite">
+    <div ref="messages" class="messages" aria-live="polite" @scroll="emit('scrollPosition', ($event.target as HTMLElement).scrollTop)">
       <el-empty
         v-if="!turns.length && !pendingQuestion && requestState === 'idle'"
         description="可以询问业务知识、实现位置或代码影响"
@@ -82,12 +90,18 @@ function shortcut(event: KeyboardEvent) {
           :class="['message', 'assistant', { selected: turn.conversationId === activeAnswerId }]"
           @click="emit('selectAnswer', turn.conversationId)"
         >
-          <span>助手</span>
+          <span>{{ turn.evidenceStatus === 'DEGRADED' ? '证据' : '助手' }}</span>
           <div class="assistant-content">
+            <small v-if="turn.evidenceStatus === 'DEGRADED'" class="local-evidence-label">本地证据摘录 · 未生成模型推理</small>
             <div class="answer-markdown" v-html="renderedAnswer(turn.answer)"></div>
+            <AnswerEvidencePanel v-if="turn.citations.length" :citations="turn.citations" :branch-id="turn.branchId" :branch-name="turn.branchName"
+              :expanded="expandedEvidence?.includes(turn.conversationId)" @update:expanded="emit('expandEvidence', turn.conversationId, $event)" @click.stop
+              @open-knowledge="emit('openKnowledge', $event, turn.branchId)" @open-code="emit('openCode', $event)"
+              @open-graph="emit('openGraph', $event)" />
             <div class="answer-trust">
               <strong :data-status="turn.evidenceStatus">{{ statusLabel(turn.evidenceStatus) }}</strong>
               <em v-if="turn.conversationId === activeAnswerId" class="current-turn">当前轮次</em>
+              <button type="button" class="select-turn" @click="emit('selectAnswer', turn.conversationId)">选择第 {{ turn.turnNo }} 轮</button>
               <small>第 {{ turn.turnNo }} 轮 · {{ turn.provider }} · {{ new Date(turn.createdAt).toLocaleString() }}</small>
             </div>
             <div
@@ -122,9 +136,6 @@ function shortcut(event: KeyboardEvent) {
                 </li>
               </ul>
             </details>
-            <AnswerEvidencePanel v-if="turn.citations.length" :citations="turn.citations" @click.stop
-              @open-knowledge="emit('openKnowledge', $event)" @open-code="emit('openCode', $event)"
-              @open-graph="emit('openGraph', $event)" />
           </div>
         </article>
       </template>
@@ -151,6 +162,7 @@ function shortcut(event: KeyboardEvent) {
     <div class="composer">
       <el-input
         v-model="question"
+        aria-label="问题"
         type="textarea"
         :autosize="{ minRows: 4, maxRows: 8 }"
         :disabled="disabled"
@@ -211,4 +223,7 @@ function shortcut(event: KeyboardEvent) {
 .composer { display:flex; align-items:flex-end; gap:10px; padding:12px; border-top:1px solid #ececef; background:#fff; }.composer .el-button { flex:none; margin-bottom:4px; }
 @keyframes spin { to { transform:rotate(360deg); } } @media (prefers-reduced-motion:reduce) { .answer-loading i { animation:none; } }
 @media (max-width:760px) { .chat-column { min-height:620px; border-radius:7px; }.messages { max-height:65vh; padding:16px; }.message.user>p { max-width:90%; } }
+.answer-trust { flex-wrap: wrap; }
+.local-evidence-label { color: var(--app-text-muted); font-size: 12px; }
+.select-turn { border: 0; background: transparent; color: var(--app-color-action); font-size: 12px; }
 </style>
