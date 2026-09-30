@@ -114,8 +114,14 @@ function rememberSearch() {
 }
 const hitKey = (hit: UnifiedSearchHit) => `${hit.sourceType}:${hit.chunkId ?? hit.knowledgeCardId}`;
 function toggleEvidence() {
-  rightPane.value = rightPane.value === 'context' ? null : 'context';
-  mobilePane.value = rightPane.value === 'context' ? 'context' : 'code';
+  const closing = rightPane.value === 'context' && mobilePane.value === 'context';
+  rightPane.value = closing ? null : 'context';
+  mobilePane.value = closing ? 'code' : 'context';
+}
+function toggleResults() {
+  const closing = rightPane.value === 'results' && mobilePane.value === 'results';
+  rightPane.value = closing ? null : 'results';
+  mobilePane.value = closing ? 'code' : 'results';
 }
 
 async function loadContentVersion(repositoryId: string | null) {
@@ -222,6 +228,7 @@ async function openFile(
   const requestId = ++fileRequest;
   fileLoading.value = false;
   const changedFile = selectedPath.value !== path;
+  if (changedFile) previewTop.value = 0;
   selectedPath.value = path;
   if (symbolName !== undefined) selectedSymbol.value = symbolName;
   else if (changedFile) selectedSymbol.value = null;
@@ -302,6 +309,9 @@ function clearSearch() {
   searchRequest++;
   searchLoading.value = false;
   query.value = '';
+  searchError.value = null;
+  selectedHit.value = null;
+  resultTop.value = 0;
   hits.value = [];
   retrieval.value = null;
   totalHits.value = 0;
@@ -423,7 +433,7 @@ watch(
         <span>{{ contentVersion?.files.length ?? 0 }} 个文件</span>
       </div>
       <div class="workbench-search">
-        <el-button :aria-pressed="treeOpen" @click="treeOpen = !treeOpen">目录</el-button>
+        <el-button :aria-pressed="treeOpen" @click="treeOpen = !treeOpen; mobilePane = 'tree'">目录</el-button>
         <el-input
           v-model="query"
           :prefix-icon="Search"
@@ -437,7 +447,7 @@ watch(
           v-if="searchPerformed"
           plain
           :type="rightPane === 'results' ? 'primary' : 'default'"
-          @click="rightPane = rightPane === 'results' ? null : 'results'"
+          @click="toggleResults"
         >
           结果 {{ hits.length }}
         </el-button>
@@ -468,9 +478,9 @@ watch(
           结果 {{ hits.length }}
         </button>
         <button
-          :class="{ active: rightPane === 'context' }"
+          :class="{ active: mobilePane === 'context' }"
           :disabled="!selectedPath"
-          @click="rightPane = rightPane === 'context' ? null : 'context'"
+          @click="rightPane = 'context'; mobilePane = 'context'"
         >
           证据
         </button>
@@ -514,7 +524,7 @@ watch(
             <b>检索结果</b>
             <span>{{ resultSummary }}</span>
           </div>
-          <el-button :icon="Close" link title="收起检索结果" @click="rightPane = null" />
+          <el-button :icon="Close" link title="收起检索结果" aria-label="收起检索结果" @click="rightPane = null; mobilePane = 'code'" />
         </header>
         <div ref="resultList" class="search-hit-list" :aria-busy="searchLoading" @scroll="resultTop = ($event.target as HTMLElement).scrollTop">
           <p v-if="searchLoading" class="search-state" role="status">正在检索…</p>
@@ -874,8 +884,8 @@ watch(
   }
 
   .workbench-command {
-    position: sticky;
-    top: 96px;
+    position: relative;
+    top: auto;
     z-index: 4;
     align-content: start;
     border-bottom: 1px solid #dedee3;
@@ -931,6 +941,8 @@ watch(
     border-radius: 0 0 7px 7px;
   }
 
+  .workbench-grid.side-open[data-mobile-pane="tree"] > .workbench-tree,
+  .workbench-grid.tree-closed[data-mobile-pane="tree"] > .workbench-tree,
   .workbench-grid[data-mobile-pane="tree"] > .workbench-tree,
   .workbench-grid[data-mobile-pane="code"] > .workbench-preview,
   .workbench-grid[data-mobile-pane="results"] > .workbench-results,

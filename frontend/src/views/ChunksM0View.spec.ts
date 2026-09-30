@@ -31,7 +31,7 @@ function mountCode() {
       stubs: {
         ElInput: true,
         ElButton: true,
-        ElEmpty: true,
+        ElEmpty: true, ElAlert: true,
         ElDrawer: { template: '<aside class="drawer-stub"><slot /></aside>' },
       },
     },
@@ -114,4 +114,30 @@ describe('code browsing continuity', () => {
     expect(wrapper.find('.workbench-grid').classes()).toContain('context-open');
     wrapper.unmount();
   });
+  it('opens evidence from the mobile switch and keeps directory navigation available', async () => {
+    const wrapper = mountCode();
+    await flushPromises();
+    const buttons = wrapper.findAll('.mobile-pane-switch button');
+    await buttons.find(button => button.text() === '证据')!.trigger('click');
+    expect(wrapper.find('.workbench-grid').attributes('data-mobile-pane')).toBe('context');
+    expect(wrapper.find('.workbench-grid').classes()).toContain('context-open');
+    await buttons.find(button => button.text() === '目录')!.trigger('click');
+    expect(wrapper.find('.workbench-grid').attributes('data-mobile-pane')).toBe('tree');
+    await buttons.find(button => button.text() === '证据')!.trigger('click');
+    expect(wrapper.find('.workbench-grid').attributes('data-mobile-pane')).toBe('context');
+    wrapper.unmount();
+  });
+
+  it('resets the reading offset when opening another file', async () => {
+    const wrapper = mountCode();
+    await flushPromises();
+    wrapper.findComponent(RepositoryFilePreview).vm.$emit('scrollPosition', 480);
+    await flushPromises();
+    expect(wrapper.findComponent(RepositoryFilePreview).props('scrollTop')).toBe(480);
+    wrapper.findComponent(RepositoryFileTree).vm.$emit('select', 'b.ts');
+    await flushPromises();
+    expect(wrapper.findComponent(RepositoryFilePreview).props('scrollTop')).toBe(0);
+    wrapper.unmount();
+  });
+
 });

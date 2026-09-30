@@ -35,6 +35,8 @@ const branchContext = useBranchContextStore();
 const readScope = useBranchReadScope();
 let cardsVersion=0;
 let sourcesVersion=0;
+let driftVersion=0;
+let saveVersion=0;
 const router = useRouter();
 const route = useRoute();
 type KnowledgeMode = 'cards' | 'markdown';
@@ -100,7 +102,7 @@ function restoreReadingState() {
   scrollTop.value = state?.top ?? 0; selectedCardId.value = state?.selected ?? null; resumeCardId.value = state?.resume ?? null;
 }
 restoreReadingState();
-onBeforeUnmount(remember);
+onBeforeUnmount(() => { remember(); cardsVersion++; sourcesVersion++; driftVersion++; saveVersion++; });
 onDeactivated(remember);
 onActivated(() => { const card = cards.value.find(item => item.id === resumeCardId.value); if (card) openDetail(card); void restoreListPosition(); });
 function trackScroll(event: Event) { scrollTop.value = (event.target as HTMLElement).scrollTop; }
@@ -255,20 +257,24 @@ function openDetail(card: KnowledgeCard) {
 }
 async function loadDrift(card: KnowledgeCard) {
   const repositoryId = repositories.selectedRepositoryId;
+  const request = ++driftVersion;
+  const identity = branchContext.identity;
+  const isCurrent = () => request === driftVersion && repositoryId === repositories.selectedRepositoryId
+    && identity === branchContext.identity && viewing.value?.id === card.id;
   if (!repositoryId) return;
   driftEvent.value = null;
   driftLoading.value = true;
   try {
     const result = await intelligenceApi.sourceDrift(repositoryId, card.id, branchContext.context?.contextId);
-    if (repositoryId === repositories.selectedRepositoryId && viewing.value?.id === card.id) {
+    if (isCurrent()) {
       driftEvent.value = result;
     }
   } catch (error) {
-    if (repositoryId === repositories.selectedRepositoryId) {
+    if (isCurrent()) {
       ElMessage.error(error instanceof Error ? error.message : '知识漂移证据加载失败');
     }
   } finally {
-    if (repositoryId === repositories.selectedRepositoryId) driftLoading.value = false;
+    if (isCurrent()) driftLoading.value = false;
   }
 }
 function openDrift(event: KnowledgeDriftEvent) {
@@ -488,21 +494,30 @@ async function openGraph(reference: CodeReference) {
 }
 async function save(input: CardInput) {
   const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId) return;
+  if (!repositoryId || busy.value) return;
+  const card = editing.value;
+  const contextId = branchContext.context?.contextId;
+  const identity = branchContext.identity;
+  const request = ++saveVersion;
+  const isCurrent = () => request === saveVersion && repositoryId === repositories.selectedRepositoryId
+    && identity === branchContext.identity;
   busy.value = true;
   saveError.value = null;
   try {
-    const saved = editing.value ? await intelligenceApi.updateCard(repositoryId, editing.value.id, input, branchContext.context?.contextId)
-      : await intelligenceApi.createCard(repositoryId, input, branchContext.context?.contextId);
+    const saved = card ? await intelligenceApi.updateCard(repositoryId, card.id, input, contextId)
+      : await intelligenceApi.createCard(repositoryId, input, contextId);
+    if (!isCurrent()) return;
     dialog.value = false;
     await load();
+    if (!isCurrent()) return;
     await locateCard(cards.value.find(item => item.id === saved.id) ?? saved);
-    ElMessage.success(editing.value ? '已保存为新修订，请确认后发布' : '已保存为草稿，可确认并发布');
+    ElMessage.success(card ? '已保存为新修订，请确认后发布' : '已保存为草稿，可确认并发布');
   } catch (error) {
+    if (!isCurrent()) return;
     saveError.value = error instanceof ApiError && error.status === 409
       ? '知识已被修改，请刷新后重新核对；当前输入保留'
       : error instanceof Error ? error.message : '保存失败，当前输入保留';
-  } finally { busy.value = false; }
+  } finally { if (isCurrent()) busy.value = false; }
 }
 async function reviewCard(card: KnowledgeCard, reviewStatus: 'APPROVED' | 'CHANGES_REQUESTED') {
   const repositoryId = repositories.selectedRepositoryId;
@@ -559,6 +574,8 @@ async function restore(revision: number) {
 }
 watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const, () => {
   handledCreateRequest = '';
+  driftVersion++; saveVersion++;
+  driftLoading.value = false; busy.value = false; saveError.value = null;
   if (stateKey !== pageKey()) { remember(); stateKey = pageKey(); restoreReadingState(); }
   cards.value = []; branchValidations.value = [];
   dialog.value = false; historyDialog.value = false;

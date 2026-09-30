@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue';
 import { branchesApi, type BranchContext, type BranchValidationCard, type BranchValidationState } from '@/api/branches';
 
-const props = defineProps<{ context: BranchContext; canManage: boolean; cardId?: string; cardRevision?: number }>();
+const props = defineProps<{ context: BranchContext; canManage: boolean; cardId?: string; cardRevision?: number; initiallyOpen?: boolean }>();
 const emit = defineEmits<{ saved: [] }>();
 const cards = shallowRef<BranchValidationCard[]>([]);
 const selectedId = shallowRef('');
@@ -52,7 +52,7 @@ onBeforeUnmount(() => { ++sequence; });
 </script>
 
 <template>
-  <details class="validation-panel">
+  <details class="validation-panel" :open="initiallyOpen">
     <summary>知识分支验证 <span>{{ cards.length }} 条适用知识</span></summary>
     <div class="validation-body">
       <p class="validation-target">验证目标 <strong>{{ context.branchName }}</strong> <code>{{ context.commitSha.slice(0, 12) }}</code></p>

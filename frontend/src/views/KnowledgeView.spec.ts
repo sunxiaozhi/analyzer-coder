@@ -10,17 +10,18 @@ import { intelligenceApi } from '@/api/intelligence';
 import { branchesApi } from '@/api/branches';
 import { useBranchContextStore } from '@/stores/branchContextStore';
 
+let route: { name: string; query: Record<string, string> };
 let repositories: {
   selectedRepositoryId: string;
   selectedRepository: { capabilities: { canUpdate: boolean; canConfigure: boolean } };
 };
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => repositories }));
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ query: { cardId: 'card-1' } }),
+  useRoute: () => route,
   useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock('@/api/intelligence', () => ({
-  intelligenceApi: { cards: vi.fn(), markdownSources: vi.fn(), sourceDrift: vi.fn() },
+  intelligenceApi: { cards: vi.fn(), markdownSources: vi.fn(), sourceDrift: vi.fn(), updateCard: vi.fn(), createCard: vi.fn() },
 }));
 vi.mock('@/api/branches', () => ({ branchesApi: { validations: vi.fn() } }));
 
@@ -28,12 +29,13 @@ describe('knowledge evidence access', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     setActivePinia(createPinia());
+    route = reactive({ name: 'knowledge', query: { cardId: 'card-1' } });
     repositories = reactive({
       selectedRepositoryId: 'repo-1',
       selectedRepository: { capabilities: { canUpdate: false, canConfigure: false } },
     });
     vi.mocked(intelligenceApi.cards).mockResolvedValue([
-      { id: 'card-1', title: 'Published rule', cardType: '规则', knowledgeKind: 'BUSINESS_RULE', tags: [] },
+      { id: 'card-1', title: 'Published rule', content: 'Rule body', revision: 1, cardType: '规则', knowledgeKind: 'BUSINESS_RULE', tags: [] },
     ] as unknown as Awaited<ReturnType<typeof intelligenceApi.cards>>);
     vi.mocked(intelligenceApi.sourceDrift).mockResolvedValue(null);
     vi.mocked(branchesApi.validations).mockResolvedValue([]);
@@ -51,7 +53,7 @@ describe('knowledge evidence access', () => {
       global: {
         directives: { loading: () => {} },
         stubs: {
-          ElInput: true, ElSelect: true, ElOption: true, ElButton: true, ElEmpty: true,
+          ElInput: true, ElSelect: true, ElOption: true, ElButton: true, ElEmpty: true, ElAlert: true,
           ElDialog: true, ElTimeline: true, ElTimelineItem: true, ElCard: true,
         },
       },
@@ -80,5 +82,45 @@ describe('knowledge evidence access', () => {
     expect(wrapper.findComponent(KnowledgeCardEditorDialog).exists()).toBe(true);
     wrapper.unmount();
   });
+  it('does not apply an old drift response to the same card in another branch', async () => {
+    let resolveDrift!: (value: any) => void;
+    vi.mocked(intelligenceApi.sourceDrift).mockReturnValueOnce(new Promise(resolve => { resolveDrift = resolve; }));
+    const wrapper = mountView();
+    await flushPromises();
+    const branches = useBranchContextStore();
+    branches.selectedBranchId = 'legacy';
+    branches.context = { ...branches.context!, contextId: 'ctx-legacy', branchId: 'legacy', branchName: 'legacy', contentVersion: 'legacy-version' };
+    await flushPromises();
+    resolveDrift({ id: 'old-main-event' });
+    await flushPromises();
+    expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('driftEvent')).toBeNull();
+    expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('driftLoading')).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('ignores a completed save after the user switches project', async () => {
+    repositories.selectedRepository.capabilities.canUpdate = true;
+    let resolveSave!: (value: any) => void;
+    vi.mocked(intelligenceApi.updateCard).mockReturnValueOnce(new Promise(resolve => { resolveSave = resolve; }));
+    const wrapper = mountView();
+    await flushPromises();
+    const card = wrapper.findComponent(KnowledgeCardListItem).props('card');
+    wrapper.findComponent(KnowledgeCardListItem).vm.$emit('edit', card);
+    await flushPromises();
+    wrapper.findComponent(KnowledgeCardEditorDialog).vm.$emit('submit', { title: 'Updated', content: 'New body' });
+    await flushPromises();
+    expect(wrapper.findComponent(KnowledgeCardEditorDialog).props('busy')).toBe(true);
+    route.query = {};
+    repositories.selectedRepositoryId = 'repo-2';
+    useBranchContextStore().clear();
+    await flushPromises();
+    resolveSave({ ...card, id: 'old-saved-card', title: 'Updated' });
+    await flushPromises();
+    expect(wrapper.findComponent(KnowledgeCardEditorDialog).props('busy')).toBe(false);
+    expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('card')).toBeNull();
+    expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('modelValue')).toBe(false);
+    wrapper.unmount();
+  });
+
 });
 

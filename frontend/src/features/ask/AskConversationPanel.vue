@@ -222,7 +222,7 @@ function shortcut(event: KeyboardEvent) {
 .answer-loading { display:flex; gap:10px; align-items:center; padding:4px 0; }.answer-loading i { width:13px; height:13px; border:2px solid #b9d2e8; border-top-color:var(--app-color-action); border-radius:50%; animation:spin .8s linear infinite; }.answer-loading div { display:grid; gap:3px; }.answer-loading b { font-size:14px; }.answer-loading small { color: var(--app-text-muted); font-size: 13px; }.message.failed :deep(.el-alert) { width:min(100%,680px); }
 .composer { display:flex; align-items:flex-end; gap:10px; padding:12px; border-top:1px solid #ececef; background:#fff; }.composer .el-button { flex:none; margin-bottom:4px; }
 @keyframes spin { to { transform:rotate(360deg); } } @media (prefers-reduced-motion:reduce) { .answer-loading i { animation:none; } }
-@media (max-width:760px) { .chat-column { min-height:620px; border-radius:7px; }.messages { max-height:65vh; padding:16px; }.message.user>p { max-width:90%; } }
+@media (max-width:760px) { .chat-column { height: max(440px, calc(100dvh - 280px)); min-height: 0; border-radius:7px; }.messages { padding:16px; }.message.assistant { padding:8px; }.composer { padding:10px; }.message.user>p { max-width:90%; } }
 .answer-trust { flex-wrap: wrap; }
 .local-evidence-label { color: var(--app-text-muted); font-size: 12px; }
 .select-turn { border: 0; background: transparent; color: var(--app-color-action); font-size: 12px; }

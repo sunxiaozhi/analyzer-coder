@@ -225,7 +225,7 @@ onMounted(() => {
 </script>
 
 <template><div class="app-shell">
-  <aside class="sidebar"><RouterLink class="brand" to="/overview"><span class="brand-mark"><ProductLogo /></span><span>代码知识平台</span></RouterLink>
+  <aside class="sidebar"><RouterLink class="brand" to="/overview" aria-label="代码知识平台首页"><span class="brand-mark"><ProductLogo /></span><span>代码知识平台</span></RouterLink>
     <nav class="nav-list" aria-label="主导航">
       <section v-for="group in navGroups" :key="group.key" class="nav-section" :data-group="group.key">
         <button
@@ -241,7 +241,7 @@ onMounted(() => {
         </button>
         <span v-else class="nav-section-label">{{ group.label }}</span>
         <div v-show="!group.collapsible || systemOpen" class="nav-section-links">
-          <RouterLink v-for="item in group.items" :key="item.to" class="nav-link" :to="item.to">
+          <RouterLink v-for="item in group.items" :key="item.to" class="nav-link" :to="item.to" :aria-label="item.label">
             <component :is="iconComponents[item.icon]" :size="16" />
             <span>{{ item.label }}</span>
           </RouterLink>

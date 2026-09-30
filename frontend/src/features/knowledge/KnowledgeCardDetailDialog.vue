@@ -35,9 +35,11 @@ const visible = defineModel<boolean>({ required: true });
 const auth = useAuthStore();
 const status = computed(() => props.card ? knowledgeStatus(props.card, props.branchContext, props.validationState) : null);
 const maintenanceOpen = ref(false);
+const needsValidation = computed(() => Boolean(props.card?.publicationStatus === 'PUBLISHED'
+  && ['UNVERIFIED', 'REVIEW_REQUIRED', 'INVALID'].includes(props.validationState ?? '')
+  && !(props.validationState === 'UNVERIFIED' && props.card.enforcement === 'REFERENCE' && !props.card.codeReferences.length)));
 watch(() => [visible.value, props.card?.id], () => {
-  maintenanceOpen.value = Boolean(visible.value && props.card?.publicationStatus === 'PUBLISHED'
-    && ['UNVERIFIED', 'REVIEW_REQUIRED', 'INVALID'].includes(props.validationState ?? ''));
+  maintenanceOpen.value = visible.value && needsValidation.value;
 });
 const ownerLabel = computed(() => props.card?.ownerAccountId === auth.account?.id
   ? auth.account?.displayName || auth.account?.username : null);
@@ -73,7 +75,7 @@ const hasScope = computed(() => Boolean(props.card && (
         <span>{{ scopeLabel }}</span>
         <span v-if="card.branchScope?.mode === 'ALL_BRANCHES'">包括后续新增分支</span>
         <span>{{ kindLabels[card.knowledgeKind] }} · {{ enforcementLabels[card.enforcement] }}</span>
-        <span>修订 v{{ card.revision }}</span><time>{{ new Date(card.updatedAt).toLocaleString() }}</time>
+        <span>修订 v{{ card.revision }}</span><time :datetime="card.updatedAt">{{ new Date(card.updatedAt).toLocaleString() }}</time>
       </div>
       <div class="detail-content" v-html="card.renderedContent" />
       <div v-if="card.tags.length" class="detail-tags">
@@ -93,7 +95,7 @@ const hasScope = computed(() => Boolean(props.card && (
           <el-button link @click="emit('openGraph', reference)">调用图谱</el-button>
         </article>
       </section>
-      <details class="maintenance-details" :open="maintenanceOpen">
+      <details class="maintenance-details" :open="maintenanceOpen" @toggle="maintenanceOpen = ($event.target as HTMLDetailsElement).open">
         <summary>维护信息与复核</summary>
       <dl class="engineering-facts">
         <div><dt>负责人</dt><dd :title="card.ownerAccountId || undefined">{{ ownerLabel || card.ownerAccountId || '未指定' }} <el-button v-if="card.ownerAccountId && !ownerLabel" link @click="copyOwner">复制标识</el-button></dd></div>
@@ -113,7 +115,7 @@ const hasScope = computed(() => Boolean(props.card && (
         @review="emit('sourceReview', $event)"
       />
       <KnowledgeBranchValidationPanel v-if="visible && branchContext && branchContext.repositoryId === card.repositoryId"
-        :context="branchContext" :card-id="card.id" :card-revision="card.revision" :can-manage="canManage ?? false"
+        :context="branchContext" :initially-open="maintenanceOpen" :card-id="card.id" :card-revision="card.revision" :can-manage="canManage ?? false"
         @saved="emit('branchValidated')" />
       </details>
       <section v-if="hasScope" class="engineering-detail">

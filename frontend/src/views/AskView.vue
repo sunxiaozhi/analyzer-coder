@@ -37,7 +37,8 @@ const selectedModelId = shallowRef('');
 const modelsLoading = shallowRef(false);
 let contextVersion = 0;
 let historyRequest = 0;
-const historyOpen = shallowRef(true);
+const defaultHistoryOpen = () => typeof window.matchMedia !== 'function' || !window.matchMedia('(max-width: 900px)').matches;
+const historyOpen = shallowRef(defaultHistoryOpen());
 const readingTop = shallowRef(0);
 const expandedEvidence = shallowRef<string[]>([]);
 const memory = usePageMemoryStore();
@@ -72,7 +73,7 @@ async function loadContext(repositoryId: string | null) {
   stateKey = scopeKey();
   const saved = memory.read<AskState>(stateKey);
   selectedModelId.value = saved?.model ?? '';
-  historyOpen.value = saved?.history ?? true;
+  historyOpen.value = saved?.history ?? defaultHistoryOpen();
   expandedEvidence.value = saved?.expanded ?? [];
   readingTop.value = saved?.top ?? 0;
   const version = ++contextVersion;
@@ -358,12 +359,20 @@ onMounted(async () => {
 <style scoped>
 .qa-page { display:grid; grid-template-columns:280px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:12px; min-height:0; height:100%; }
 .qa-command { grid-column:1/-1; display:flex; min-height:62px; align-items:center; gap:12px; padding:9px 14px; border:1px solid #dedee3; border-radius:7px; background:#fff; }
-.scope-copy { display:grid; grid-template-columns:auto auto; align-items:baseline; gap:2px 9px; min-width:0; }.scope-copy>span { grid-row:1/3; align-self:center; padding-right:10px; color:var(--app-color-action); border-right:2px solid #90bde5; font-size: 13px; font-weight:700; letter-spacing:.08em; }.scope-copy strong { overflow:hidden; color:#2d3035; font-size:15px; text-overflow:ellipsis; white-space:nowrap; }.scope-copy small { color: var(--app-text-muted); font-size: 13px; }
+.scope-copy { display:grid; grid-template-columns:auto auto; align-items:baseline; gap:2px 9px; min-width:0; }.scope-copy>span { white-space:nowrap; grid-row:1/3; align-self:center; padding-right:10px; color:var(--app-color-action); border-right:2px solid #90bde5; font-size: 13px; font-weight:700; letter-spacing:.08em; }.scope-copy strong { overflow:hidden; color:#2d3035; font-size:15px; text-overflow:ellipsis; white-space:nowrap; }.scope-copy small { color: var(--app-text-muted); font-size: 13px; }
 .command-notice { display:flex; align-items:center; gap:4px; margin:0; color:#7b5a1b; font-size:13px; }
 .command-notice small { color:var(--app-text-muted); }
 .command-actions { display:flex; gap:8px; margin-left:auto; }
 .model-selector { display:flex; align-items:center; gap:7px; }.model-selector>span { color: var(--app-text-muted); font-size: 13px; white-space:nowrap; }.model-selector :deep(.el-select) { width:240px; }.model-selector :deep(.el-select-dropdown__item) { display:flex; justify-content:space-between; gap:12px; }.model-selector small { color: var(--app-text-muted); }
-@media (max-width:900px) { .qa-page { grid-template-columns:1fr; grid-template-rows:auto auto minmax(620px,1fr); gap:10px; overflow:auto; }.qa-command { grid-column:1; }.command-notice { width:100%; order:3; } }
+@media (max-width:900px) {
+  .qa-page { grid-template-columns:1fr; grid-template-rows:auto auto minmax(420px,1fr); gap:10px; overflow:auto; }
+  .qa-command { grid-column:1; }
+  .command-notice { width:100%; order:3; }
+  .scope-copy { flex: 1 1 200px; }
+  .scope-copy strong { white-space:normal; overflow-wrap:anywhere; }
+  .scope-copy small { overflow-wrap:anywhere; }
+  .qa-page.history-closed { grid-template-rows:auto minmax(420px,1fr); }
+}
 @media (max-width:760px) { .qa-page { height:auto; }.qa-command { flex-wrap:wrap; }.scope-copy { flex:1; }.command-actions { width:100%; margin-left:0; }.model-selector { flex:1; }.model-selector :deep(.el-select) { width:100%; }.command-actions .el-button { flex:0 0 auto; } }
 .qa-page.history-closed { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
 @media (max-width: 1200px) { .qa-command { flex-wrap: wrap; } }

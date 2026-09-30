@@ -25,10 +25,11 @@ const excerpt = computed(() => knowledgeExcerpt(props.card.content || ''));
       <el-tag :type="status.type" size="small">{{ status.label }}</el-tag>
       <span v-if="selected" class="selected-label">当前阅读</span>
     </header>
+    <p v-if="card.publicationStatus === 'DRAFT'" class="muted publication-note">尚未用于检索和问答</p>
     <p class="card-excerpt">{{ excerpt || '暂无正文摘要' }}</p>
     <p v-if="['STALE', 'SUSPECT'].includes(card.sourceVersionStatus)" class="source-warning">来源代码已变化，请查看维护信息与复核。</p>
     <div class="card-meta">
-      <span class="branch-scope" :title="scopeLabel">{{ scopeLabel }}</span>
+      <span class="branch-scope" :title="card.branchScope?.mode === 'ALL_BRANCHES' ? '包括后续新增分支' : scopeLabel">{{ scopeLabel }}</span>
       <span v-if="!card.tags.length" class="muted">暂无标签</span>
       <span v-for="tag in (expanded ? card.tags : card.tags.slice(0, 3))" :key="tag" class="card-tag"># {{ tag }}</span>
       <button v-if="card.tags.length > 3" type="button" class="tags-toggle" :aria-expanded="expanded" @click="expanded = !expanded">{{ expanded ? '收起标签' : `+${card.tags.length - 3}` }}</button>
@@ -56,6 +57,7 @@ const excerpt = computed(() => knowledgeExcerpt(props.card.content || ''));
 .card-header h3 { flex: 1 1 300px; min-width: 0; margin: 0; }
 .card-title { padding: 0; border: 0; background: transparent; color: var(--app-text-primary); font-size: 17px; font-weight: 650; line-height: 1.5; text-align: left; overflow-wrap: anywhere; }
 .card-title:hover { color: var(--app-color-action); }
+.publication-note { margin: 0; font-size: 12px; }
 .card-excerpt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 0; color: var(--app-text-regular); font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
 .card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--app-text-muted); font-size: 12px; }
 .branch-scope { overflow-wrap: anywhere; }
