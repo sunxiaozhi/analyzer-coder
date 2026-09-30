@@ -373,7 +373,7 @@ onMounted(async () => {
   .scope-copy small { overflow-wrap:anywhere; }
   .qa-page.history-closed { grid-template-rows:auto minmax(420px,1fr); }
 }
-@media (max-width:760px) { .qa-page { height:auto; }.qa-command { flex-wrap:wrap; }.scope-copy { flex:1; }.command-actions { width:100%; margin-left:0; }.model-selector { flex:1; }.model-selector :deep(.el-select) { width:100%; }.command-actions .el-button { flex:0 0 auto; } }
+@media (max-width:760px) { .qa-page { height:auto; }.qa-command { flex-wrap:wrap; }.scope-copy { flex:1 0 100%; order:-1; grid-template-columns:auto minmax(0,1fr); }.command-actions { width:100%; margin-left:0; }.model-selector { flex:1; }.model-selector :deep(.el-select) { width:100%; }.command-actions .el-button { flex:0 0 auto; } }
 .qa-page.history-closed { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
 @media (max-width: 1200px) { .qa-command { flex-wrap: wrap; } }
 </style>

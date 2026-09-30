@@ -1,0 +1,32 @@
+[
+  {
+    "route": "knowledge",
+    "width": 1440,
+    "errors": []
+  },
+  {
+    "route": "search",
+    "width": 1440,
+    "errors": []
+  },
+  {
+    "route": "ask",
+    "width": 1440,
+    "errors": []
+  },
+  {
+    "route": "knowledge",
+    "width": 390,
+    "errors": []
+  },
+  {
+    "route": "search",
+    "width": 390,
+    "errors": []
+  },
+  {
+    "route": "ask",
+    "width": 390,
+    "errors": []
+  }
+]

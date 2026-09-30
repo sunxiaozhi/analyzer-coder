@@ -78,6 +78,7 @@ async function load() {
 }
 
 function openCreateProvider() {
+  saveError.value = '';
   editingProviderId.value = null;
   Object.assign(providerForm, {
     name: '', providerType: 'OPENAI_COMPATIBLE', baseUrl: '', model: '',
@@ -89,6 +90,7 @@ function openCreateProvider() {
 }
 
 function openEditProvider(item: LlmProvider) {
+  saveError.value = '';
   editingProviderId.value = item.id;
   Object.assign(providerForm, {
     name: item.name,
@@ -127,12 +129,12 @@ async function saveProvider() {
       await llmSettingsApi.createProvider(input);
       ElMessage.success('模型已备案');
     }
+    apiKey.value = '';
     providerDialog.value = false;
     await load();
   } catch (error) {
     saveError.value = error instanceof Error ? error.message : '保存失败，当前输入保留';
   } finally {
-    apiKey.value = '';
     saving.value = false;
   }
 }
@@ -166,6 +168,7 @@ async function testProvider(item: LlmProvider) {
 }
 
 function openCreateVector() {
+  saveError.value = '';
   editingVectorId.value = null;
   Object.assign(vectorForm, {
     name: '', providerType: 'LOCAL_HASH', baseUrl: '', model: '', dimension: 64,
@@ -176,6 +179,7 @@ function openCreateVector() {
 }
 
 function openEditVector(item: VectorModel) {
+  saveError.value = '';
   editingVectorId.value = item.id;
   Object.assign(vectorForm, {
     name: item.name, providerType: item.providerType, model: item.model, dimension: item.dimension,
@@ -210,12 +214,12 @@ async function saveVector() {
       await llmSettingsApi.createVectorModel(input);
       ElMessage.success('向量模型已备案');
     }
+    vectorApiKey.value = '';
     vectorDialog.value = false;
     await load();
   } catch (error) {
     saveError.value = error instanceof Error ? error.message : '保存失败，当前输入保留';
   } finally {
-    vectorApiKey.value = '';
     saving.value = false;
   }
 }

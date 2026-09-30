@@ -1,0 +1,70 @@
+[
+  {
+    "name": "知识筛选、详情焦点、跨分支源码往返",
+    "status": "PASS"
+  },
+  {
+    "name": "知识必填校验、预览、上传、保存、发布、历史恢复",
+    "status": "PASS"
+  },
+  {
+    "name": "知识修订冲突保留输入及引用标识",
+    "status": "PASS"
+  },
+  {
+    "name": "源码检索高亮、失败重试、无结果、证据并排",
+    "status": "PASS"
+  },
+  {
+    "name": "问答失败保留、重试、引用展开及源码往返",
+    "status": "PASS"
+  },
+  {
+    "name": "当前分支范围、跨分支验证与独立状态",
+    "status": "PASS"
+  },
+  {
+    "name": "Markdown 来源查看、返回和生成草稿",
+    "status": "PASS"
+  },
+  {
+    "name": "账号更多操作与审计跨账号定位",
+    "status": "PASS"
+  },
+  {
+    "name": "模型检测、失败输入保留与成功重试",
+    "status": "PASS"
+  },
+  {
+    "name": "任务失败详情与对应分支管理入口",
+    "status": "PASS"
+  },
+  {
+    "name": "图谱节点、关联、源码摘录和原行跳转",
+    "status": "PASS"
+  },
+  {
+    "name": "响应式和键盘 1440",
+    "status": "PASS"
+  },
+  {
+    "name": "响应式和键盘 1366",
+    "status": "PASS"
+  },
+  {
+    "name": "响应式和键盘 1024",
+    "status": "PASS"
+  },
+  {
+    "name": "响应式和键盘 390",
+    "status": "PASS"
+  },
+  {
+    "name": "键盘筛选、Tab 到查看、Enter 打开与 Escape 返回",
+    "status": "PASS"
+  },
+  {
+    "name": "只读权限保留查看入口",
+    "status": "PASS"
+  }
+]

@@ -1,0 +1,218 @@
+[
+  {
+    "route": "repositories",
+    "width": 1440,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "indexing",
+    "width": 1440,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "settings",
+    "width": 1440,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "accounts",
+    "width": 1440,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "audit",
+    "width": 1440,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "atlas",
+    "width": 1440,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "help",
+    "width": 1440,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "mcp",
+    "width": 1440,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "login",
+    "width": 1440,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "repositories",
+    "width": 1366,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "indexing",
+    "width": 1366,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "settings",
+    "width": 1366,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "accounts",
+    "width": 1366,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "audit",
+    "width": 1366,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "atlas",
+    "width": 1366,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "help",
+    "width": 1366,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "mcp",
+    "width": 1366,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "login",
+    "width": 1366,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "repositories",
+    "width": 1024,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "indexing",
+    "width": 1024,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "settings",
+    "width": 1024,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "accounts",
+    "width": 1024,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "audit",
+    "width": 1024,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "atlas",
+    "width": 1024,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "help",
+    "width": 1024,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "mcp",
+    "width": 1024,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "login",
+    "width": 1024,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "repositories",
+    "width": 390,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "indexing",
+    "width": 390,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "settings",
+    "width": 390,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "accounts",
+    "width": 390,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "audit",
+    "width": 390,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "atlas",
+    "width": 390,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "help",
+    "width": 390,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "mcp",
+    "width": 390,
+    "status": "PASS",
+    "errors": []
+  },
+  {
+    "route": "login",
+    "width": 390,
+    "status": "PASS",
+    "errors": []
+  }
+]

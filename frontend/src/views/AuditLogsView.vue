@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, shallowRef } from 'vue';
+import { onMounted, shallowRef, watch } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
 import { useRoute } from 'vue-router';
 import { accountsApi } from '@/api/accounts';
@@ -14,6 +14,11 @@ const focusUsername = shallowRef(
   typeof route.query.username === 'string' ? route.query.username : '',
 );
 const focusVersion = shallowRef(1);
+
+watch(() => route.query.username, value => {
+  focusUsername.value = typeof value === 'string' ? value : '';
+  focusVersion.value += 1;
+});
 
 async function load() {
   loading.value = true; loadError.value = null;

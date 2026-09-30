@@ -51,31 +51,24 @@ const labels: Record<string, string> = {
         {{ row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleString() : '—' }}
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="440" fixed="right">
+    <el-table-column label="操作" width="220" fixed="right">
       <template #default="{ row }">
         <div class="account-actions">
           <el-button class="action-button" link type="primary" @click="emit('edit', row)">编辑</el-button>
-          <el-button class="action-button" link type="primary" @click="emit('tokens', row)">访问令牌</el-button>
           <el-button class="action-button" link type="primary" @click="emit('audit', row)">查看审计</el-button>
-          <el-button
-            v-if="row.status === 'LOCKED'"
-            class="action-button"
-            link
-            type="primary"
-            @click="emit('unlock', row)"
-          >
-            解锁账号
-          </el-button>
-          <el-button class="action-button" link type="primary" @click="emit('reset', row)">重置密码</el-button>
-          <el-button
-            class="action-button"
-            link
-            :type="row.status === 'DISABLED' ? 'success' : 'danger'"
-            :disabled="row.id === currentAccountId"
-            @click="emit('toggle', row)"
-          >
-            {{ row.status === 'DISABLED' ? '启用账号' : '停用账号' }}
-          </el-button>
+          <el-dropdown trigger="click">
+            <el-button class="action-button" link type="primary" :aria-label="`${row.displayName || row.username}的更多操作`">更多</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="emit('tokens', row)">访问令牌</el-dropdown-item>
+                <el-dropdown-item v-if="row.status === 'LOCKED'" @click="emit('unlock', row)">解锁账号</el-dropdown-item>
+                <el-dropdown-item @click="emit('reset', row)">重置密码</el-dropdown-item>
+                <el-dropdown-item divided :disabled="row.id === currentAccountId" @click="emit('toggle', row)">
+                  {{ row.status === 'DISABLED' ? '启用账号' : '停用账号' }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </template>
     </el-table-column>

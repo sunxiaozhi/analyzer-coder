@@ -148,7 +148,7 @@ const primaryModules = computed(() => (
 
 .panel-heading span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .code-type-list {
@@ -178,7 +178,7 @@ const primaryModules = computed(() => (
 
 .code-type-heading span {
   color: var(--muted);
-  font: 600 11px/1.2 "SFMono-Regular", Consolas, monospace;
+  font: 600 12px/1.2 "SFMono-Regular", Consolas, monospace;
   white-space: nowrap;
 }
 
@@ -211,7 +211,7 @@ const primaryModules = computed(() => (
 .project-kind span,
 .module-line > span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .project-kind strong {
@@ -250,7 +250,7 @@ const primaryModules = computed(() => (
 
 .structure-layer span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -279,7 +279,7 @@ const primaryModules = computed(() => (
   border: 1px solid #dce5e9;
   border-radius: 3px;
   background: #f6f8f9;
-  font: 500 11px/1.4 "SFMono-Regular", Consolas, monospace;
+  font: 500 12px/1.4 "SFMono-Regular", Consolas, monospace;
 }
 
 .empty-copy {
