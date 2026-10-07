@@ -771,11 +771,6 @@ watch(
   background: #f7f9fb;
 }
 
-.search-hit-list > button.active {
-  background: #edf5fd;
-  box-shadow: inset 3px 0 var(--app-color-action);
-}
-
 .search-hit-list > button[data-source='KNOWLEDGE'] {
   background: #fffdf8;
   box-shadow: inset 3px 0 #b3843d;
@@ -783,6 +778,12 @@ watch(
 
 .search-hit-list > button[data-source='KNOWLEDGE']:hover {
   background: #fbf5ea;
+}
+
+.search-hit-list > button.active,
+.search-hit-list > button.active:hover {
+  background: var(--app-selection-bg);
+  box-shadow: inset 3px 0 var(--app-color-action);
 }
 
 .search-hit-list > button[data-source='KNOWLEDGE'] .hit-title i {
@@ -856,7 +857,6 @@ watch(
 
   .workbench-grid.side-open { grid-template-columns: minmax(0, 1fr) minmax(280px, var(--evidence-width, 36%)); }
   .workbench-grid.side-open > .workbench-tree { display: none; }
-
 }
 
 @media (max-width: 900px) {
@@ -917,10 +917,10 @@ watch(
   }
 
   .mobile-pane-switch button.active {
-    color: #005eb8;
+    color: var(--app-selection-text);
     font-weight: 600;
-    background: #fff;
-    box-shadow: 0 1px 3px rgb(24 39 58 / 12%);
+    background:var(--app-selection-bg);
+    box-shadow:inset 0 0 0 1px var(--app-selection-border);
   }
 
   .mobile-pane-switch button:disabled {

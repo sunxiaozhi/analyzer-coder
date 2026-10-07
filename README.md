@@ -27,7 +27,9 @@
 
 ## 打包与部署
 
-PG/pgvector、Nginx 使用 Docker，后端运行 JAR，前端发布 dist。服务器只接收完整发布包，不需要下载源码。
+可将整个运行环境打成一个 Docker 镜像：前端、后端、Java、PostgreSQL/pgvector、Nginx、Git、Node.js、CodeGraph 和 MCP 适配器全部封装，目标机只需 Docker。Windows 执行 `pwsh -File scripts/build-docker-image.ps1 -Version 1.0.0`，Linux 执行 `bash scripts/build-docker-image.sh --version 1.0.0`，输出可离线导入的 `release/analyzer-coder-docker-1.0.0/image.tar`。启动与数据卷说明见 [一体化 Docker 部署](deploy/all-in-one/README.md)。
+
+也保留原有分离部署：PG/pgvector、Nginx 使用 Docker，后端运行 JAR，前端发布 dist。服务器只接收完整发布包，不需要下载源码。
 
 Windows：pwsh -File scripts/build-release.ps1 -Version 1.0.0。
 

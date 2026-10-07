@@ -191,8 +191,9 @@ watch(treeData, () => revealSelected(props.selectedPath));
 }
 
 .repository-tree-scroll :deep(.el-tree-node.is-current > .el-tree-node__content) {
-  color: #005eb8;
-  background: var(--app-color-action-soft);
+  color: var(--app-selection-text);
+  background: var(--app-selection-bg);
+  box-shadow: inset 3px 0 var(--app-color-action);
 }
 
 .tree-node {

@@ -54,7 +54,7 @@ const referenceSummary = computed(() => references.value.length
   background: #f7f9fa;
   font-size: 13px;
 }
-.source-heading > span[data-active='true'] { color: #1f668f; border-color: #a9cce1; background: #edf7fc; }
+.source-heading > span[data-active='true'] { color: var(--app-selection-text); border-color: var(--app-color-action); background: var(--app-selection-bg); }
 @media (max-width: 760px) {
   .editor-section { padding: 14px; }
   .source-heading { align-items: flex-start; flex-direction: column; gap: 10px; }

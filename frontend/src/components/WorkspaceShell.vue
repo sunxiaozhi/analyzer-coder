@@ -315,8 +315,9 @@ onMounted(() => {
 .branch-refresh { display: inline-grid; width: 28px; height: 28px; place-content: center; color: inherit; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
 .branch-refresh:hover { background: rgb(255 255 255 / 80%); }
 .help-entry, .mcp-entry { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 10px; border-radius: 6px; color: #526071; font-size: 13px; text-decoration: none; }
-.help-entry:hover, .help-entry.router-link-active, .mcp-entry:hover, .mcp-entry.router-link-active { color: #2563eb; background: #eff6ff; }
-.help-entry:focus-visible, .mcp-entry:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+.help-entry:hover, .mcp-entry:hover { color: var(--app-text-primary); background: var(--app-hover-bg); }
+.help-entry.router-link-active, .mcp-entry.router-link-active { color: var(--app-selection-text); background: var(--app-selection-bg); }
+.help-entry:focus-visible, .mcp-entry:focus-visible { outline: 2px solid var(--app-color-action); outline-offset: 2px; }
 .sidebar { min-height: 0; overflow: hidden; }
 .brand { flex: none; }
 .nav-list {

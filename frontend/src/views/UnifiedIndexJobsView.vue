@@ -160,7 +160,7 @@ onMounted(async () => {
 
 .index-view-tabs button.active {
   border-color: var(--app-color-action);
-  color: #005eb8;
+  color: var(--app-selection-text);
   font-weight: 600;
 }
 

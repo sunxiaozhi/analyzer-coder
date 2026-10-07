@@ -1,6 +1,8 @@
 # 部署与启动操作手册
 
-本项目只维护一种部署方式：PostgreSQL/pgvector 和 Nginx 使用 Docker，后端在宿主机运行 JAR，前端 dist 只读挂载给 Nginx。先在构建机打包，再把整个发布目录或压缩包上传服务器。服务器不需要下载项目源码。
+项目提供 [一体化 Docker 镜像](../deploy/all-in-one/README.md)，可将前后端、数据库和 CodeGraph 等运行依赖封装进一个镜像，导出 TAR 后离线部署。
+
+本手册说明原有分离部署方式：PostgreSQL/pgvector 和 Nginx 使用 Docker，后端在宿主机运行 JAR，前端 dist 只读挂载给 Nginx。先在构建机打包，再把整个发布目录或压缩包上传服务器。服务器不需要下载项目源码。
 
 ## 1. 环境准备
 

@@ -27,11 +27,11 @@ const sources = { LOCAL_GIT: '本地 Git', REMOTE_GIT: '远程 Git', GITLAB: 'Gi
 .project-selection { display: grid; align-content: start; gap: 8px; padding: 12px; min-height: 0; }
 .project-item { position: relative; display: flex; align-items: flex-start; border: 1px solid transparent; border-radius: 9px; background: var(--app-surface); transition: background .15s; }
 .project-item:hover { background: var(--app-surface-subtle); }
-.project-item-active { border-color: #c2d9ef; background: var(--app-color-action-soft); box-shadow: inset 3px 0 var(--app-color-action); }
+.project-item-active { border-color: var(--app-color-action); background: var(--app-color-action-soft); box-shadow: inset 3px 0 var(--app-color-action); }
 .project-item-active:hover { background: var(--app-color-action-soft); }
 .project-choice { display: flex; align-items: flex-start; gap: 12px; flex: 1; min-width: 0; padding: 18px 42px 18px 15px; text-align: left; border: 0; border-radius: 8px; background: transparent; color: var(--app-text-primary); font: inherit; }
 .project-icon { display: grid; place-items: center; flex: none; width: 33px; height: 33px; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface); color: var(--app-text-muted); }
-.project-item-active .project-icon { color: var(--app-color-action); border-color: #c2d9ef; }
+.project-item-active .project-icon { color: var(--app-color-action); border-color: var(--app-color-action); }
 .project-copy { display: grid; min-width: 0; gap: 7px; }
 .project-name { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .project-source { color: var(--app-text-muted); font-size: 12px; }

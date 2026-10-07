@@ -271,8 +271,8 @@
 - 需求：前端提供项目分页列表、单页接入表单、凭据管理、草稿续接与统一分支操作入口。
 - 规则：
   - 管理页按 `pageSize=15` 分页、搜索 300ms 防抖，使用分页接口；页面右侧统一渲染分支工作区，ZIP 使用 `WORKSPACE` 且隐藏添加分支入口。
-  - 接入表单同时展示项目资料与代码来源；来源类型为 `GITLAB`/`REMOTE_GIT`/`ZIP`/`LOCAL_GIT` 四选一。本地 Git 输入服务端路径，远程输入 HTTPS 地址与分支并可选凭据，ZIP 选择文件；提交前校验项目名称及所选来源必填项。
-  - 四种来源的前端接入流程统一先建草稿、再 `PATCH .../source`：本地 Git 调 `POST /api/repositories` 后 `complete`；ZIP 调 `POST /api/repository-imports/zip` 后 `complete`；远程 Git/GitLab 走 `POST /api/repository-imports/remote-jobs` 并轮询作业（最多 120 次、每次 1 秒），作业完成后由后端自动 `complete` 草稿。
+  - 接入表单同时展示项目资料与代码来源；来源类型为 `GITLAB`/`REMOTE_GIT`/`ZIP` 三选一。远程输入 HTTPS 地址与分支并可选凭据，ZIP 选择文件；提交前校验项目名称及所选来源必填项。页面不再提供本地 Git 接入；已有本地 Git 草稿续接时保留项目资料，重新选择来源并填写地址。
+  - 三种来源的前端接入流程统一先建草稿、再 `PATCH .../source`：ZIP 调 `POST /api/repository-imports/zip` 后 `complete`；远程 Git/GitLab 走 `POST /api/repository-imports/remote-jobs` 并轮询作业（最多 120 次、每次 1 秒），作业完成后由后端自动 `complete` 草稿。
   - 未完成草稿在列表上方最多展示 3 条并提供"继续接入"，复用同一草稿 id 重新配置；旁边提供"删除"，确认后删除该草稿并更新列表，取消或删除失败则保留记录。导入中的草稿禁用续接和删除。
   - 凭据对话框支持列表、新建、更新、检测、启用/停用、删除（删除前先查绑定关系提示）；仓库凭据绑定面板仅在远程来源且具备 `canManageCredential` 时渲染。
   - 编辑资料对话框只允许改名称、描述、默认分支，并回传 `version` 乐观锁；来源类型不可修改。

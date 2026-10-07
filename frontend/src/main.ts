@@ -7,6 +7,7 @@ import { router } from './router';
 import 'element-plus/dist/index.css';
 import './styles/main.css';
 import './styles/design-alignment.css';
+import './styles/interactions.css';
 
 createApp(App)
   .use(createPinia())

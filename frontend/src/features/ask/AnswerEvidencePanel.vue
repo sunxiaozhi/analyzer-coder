@@ -166,7 +166,7 @@ function citationReference(citation: Citation): CodeReference | null {
   transition: border-color .16s ease, background-color .16s ease;
 }
 .knowledge-code-links button:hover,
-.knowledge-code-links button:focus-visible { border-color: #8cb9e4; background: #eef6fd; outline: none; }
+.knowledge-code-links button:focus-visible { border-color: var(--app-color-action); background: var(--app-selection-bg); }
 .code-reference-main { display: grid; min-width: 0; gap: 3px; }
 .code-reference-main b { overflow-wrap: anywhere; color: #005eb8; font-size: 13px; }
 .code-reference-main small { overflow-wrap: anywhere; color: var(--app-text-muted); font-size: 13px; line-height: 1.45; }

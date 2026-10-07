@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue';
-import { renderMarkdown } from './markdown';
+import { shallowRef } from 'vue';
+import MarkdownPreview from '@/components/MarkdownPreview.vue';
 
 const props = defineProps<{ modelValue: string; repositoryId: string }>();
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const tab = shallowRef<'write' | 'preview'>('write');
-const html = computed(() => renderMarkdown(props.modelValue, props.repositoryId));
 </script>
 
 <template>
@@ -17,7 +16,7 @@ const html = computed(() => renderMarkdown(props.modelValue, props.repositoryId)
     </div>
     <el-input v-if="tab==='write'" :model-value="modelValue" type="textarea" :rows="20" aria-label="知识正文"
               placeholder="使用 Markdown 编写知识正文…" @update:model-value="emit('update:modelValue', $event)" />
-    <div v-else class="markdown-preview" v-html="html" />
+    <MarkdownPreview v-else class="markdown-preview" :content="modelValue" :repository-id="repositoryId" embedded />
   </div>
 </template>
 
@@ -25,12 +24,9 @@ const html = computed(() => renderMarkdown(props.modelValue, props.repositoryId)
 .markdown-editor{border:1px solid var(--el-border-color);border-radius:10px;overflow:hidden}
 .editor-tabs{display:flex;align-items:center;gap:4px;padding:7px 10px;background:var(--el-fill-color-light);border-bottom:1px solid var(--el-border-color)}
 .editor-tabs button{border:0;background:transparent;padding:6px 12px;border-radius:7px;cursor:pointer;color:var(--el-text-color-secondary)}
-.editor-tabs button.active{background:var(--el-bg-color);color:var(--el-color-primary);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.editor-tabs button.active{background:var(--app-selection-bg);color:var(--el-color-primary);box-shadow:inset 0 0 0 1px var(--app-selection-border)}
 .editor-tabs span{margin-left:auto;font-size:14px;color:var(--el-text-color-placeholder)}
 .markdown-editor :deep(.el-textarea__inner){border:0;box-shadow:none;border-radius:0;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
 .markdown-preview{min-height:440px;padding:16px 20px;line-height:1.7;background:var(--el-bg-color)}
-.markdown-preview :deep(img){max-width:100%;border-radius:8px}
-.markdown-preview :deep(pre){overflow:auto;padding:12px;border-radius:8px;background:#18212f;color:#e6edf3}
-.markdown-preview :deep(blockquote){margin:10px 0;padding-left:14px;border-left:3px solid var(--el-color-primary);color:var(--el-text-color-secondary)}
 @media (max-width: 760px) { .editor-tabs span { display: none; } }
 </style>

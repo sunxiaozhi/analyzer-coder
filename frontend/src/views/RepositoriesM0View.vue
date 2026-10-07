@@ -49,7 +49,7 @@ let pageVersion = 0;
 let alive = true;
 let searchTimer: number | undefined;
 
-type Input = { sourceType: 'LOCAL_GIT' | 'REMOTE_GIT' | 'GITLAB' | 'ZIP'; name: string; description: string; path: string; url: string; branch: string; credentialId: string; file: File | null };
+type Input = { sourceType: 'REMOTE_GIT' | 'GITLAB' | 'ZIP'; name: string; description: string; url: string; branch: string; credentialId: string; file: File | null };
 const unfinishedDrafts = computed(() => projectDrafts.value.filter(draft => draft.lifecycleStatus !== 'READY'));
 
 async function loadPage() {
@@ -93,19 +93,14 @@ async function create(input: Input) {
     let draft = retryingDraft.value
       ?? await projectDraftsApi.create(input.name, input.description);
     retryingDraft.value = draft;
-    const sourceLocation = input.sourceType === 'LOCAL_GIT'
-      ? input.path
-      : input.sourceType === 'ZIP'
-        ? input.file?.name ?? ''
-        : input.url;
+    const sourceLocation = input.sourceType === 'ZIP'
+      ? input.file?.name ?? ''
+      : input.url;
     draft = await projectDraftsApi.configure(
       draft, input.sourceType, sourceLocation, input.credentialId || undefined,
     );
     retryingDraft.value = draft;
-    if (input.sourceType === 'LOCAL_GIT') {
-      const repository = await store.createRepository({ name: input.name, path: input.path });
-      await projectDraftsApi.complete(draft.id, repository);
-    } else if (input.sourceType === 'ZIP') {
+    if (input.sourceType === 'ZIP') {
       if (!input.file) throw new Error('请选择 ZIP 文件');
       const repository = await sourceImportsApi.zip(input.name, input.file);
       await projectDraftsApi.complete(draft.id, repository);

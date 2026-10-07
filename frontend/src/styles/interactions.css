@@ -1,0 +1,124 @@
+/* Shared interaction states. Keep semantic success, warning and error colors separate. */
+:root {
+  --app-selection-border: var(--app-color-action);
+  --app-selection-bg: var(--app-color-action-soft);
+  --app-selection-text: #245f99;
+  --app-hover-bg: #f4f8fb;
+  --app-control-radius: 8px;
+  --app-focus-shadow: 0 0 0 3px var(--app-focus-ring);
+  --app-menu-shadow: 0 8px 24px rgb(23 50 77 / 12%);
+  --el-color-primary-light-3: #6da5e0;
+  --el-color-primary-light-5: #97bfe9;
+  --el-color-primary-light-7: #c1d9f2;
+  --el-color-primary-light-8: #d5e5f6;
+  --el-color-primary-light-9: var(--app-selection-bg);
+  --el-color-primary-dark-2: #2666a9;
+  --el-border-radius-base: var(--app-control-radius);
+}
+
+:focus-visible {
+  outline: 2px solid var(--app-color-action);
+  outline-offset: 2px;
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  min-height: var(--el-component-size);
+  background: var(--app-surface);
+  box-shadow: 0 0 0 1px var(--app-border) inset;
+}
+
+.el-select__wrapper.is-hovering:not(.is-focused):not(.is-disabled),
+.el-input__wrapper:hover:not(.is-focus) {
+  box-shadow: 0 0 0 1px var(--app-border-strong) inset;
+}
+
+.el-select__wrapper.is-focused,
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus,
+.el-date-editor.el-input__wrapper.is-active {
+  box-shadow: 0 0 0 1px var(--app-color-action) inset, var(--app-focus-shadow);
+}
+
+/* The wrapper supplies focus feedback for composite form controls. */
+.el-select__input:focus-visible,
+.el-input__inner:focus-visible,
+.el-range-input:focus-visible,
+.el-textarea__inner:focus-visible {
+  outline: none;
+}
+
+.el-select__wrapper.is-disabled,
+.el-input.is-disabled .el-input__wrapper {
+  background: var(--el-disabled-bg-color);
+  box-shadow: 0 0 0 1px var(--el-disabled-border-color) inset;
+}
+
+.el-select__popper.el-popper,
+.el-dropdown__popper.el-popper {
+  border-radius: var(--app-control-radius);
+  border-color: var(--app-border);
+  box-shadow: var(--app-menu-shadow);
+}
+
+.el-select-dropdown__list,
+.el-dropdown-menu {
+  padding: 6px;
+}
+
+.el-select-dropdown__item,
+.el-dropdown-menu__item {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 5px;
+  font-size: var(--el-font-size-base);
+  line-height: 34px;
+}
+
+.el-select-dropdown.is-multiple .el-select-dropdown__item {
+  padding-right: 32px;
+}
+
+.el-select-dropdown__item.is-hovering:not(.is-disabled),
+.el-dropdown-menu__item:not(.is-disabled):hover {
+  color: var(--app-text-primary);
+  background: var(--app-hover-bg);
+}
+
+.el-select-dropdown__item.is-selected:not(.is-disabled),
+.el-select-dropdown__item.is-selected.is-hovering:not(.is-disabled),
+.el-dropdown-menu__item:not(.is-disabled):focus {
+  color: var(--app-selection-text);
+  background: var(--app-selection-bg);
+}
+
+.el-dropdown-menu__item:not(.is-disabled):focus-visible {
+  outline: 2px solid var(--app-color-action);
+  outline-offset: -2px;
+}
+
+.el-radio-button.is-active .el-radio-button__original-radio:not(:disabled) + .el-radio-button__inner {
+  color: var(--app-selection-text);
+  border-color: var(--app-selection-border);
+  background: var(--app-selection-bg);
+  box-shadow: -1px 0 0 0 var(--app-selection-border);
+}
+
+.el-radio-button__original-radio:disabled:checked + .el-radio-button__inner {
+  color: var(--el-disabled-text-color);
+  border-color: var(--el-disabled-border-color);
+  background: var(--el-disabled-bg-color);
+  box-shadow: -1px 0 0 0 var(--el-disabled-border-color);
+}
+
+.el-radio-button__original-radio:focus-visible + .el-radio-button__inner {
+  outline: 2px solid var(--app-color-action);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .el-input__wrapper,
+  .el-select__wrapper {
+    transition: none;
+  }
+}

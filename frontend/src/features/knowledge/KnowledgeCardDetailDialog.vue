@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { knowledgeStatus } from './knowledgePresentation';
 import KnowledgeAttachmentList from './KnowledgeAttachmentList.vue';
 import KnowledgeDriftPanel from './KnowledgeDriftPanel.vue';
+import MarkdownPreview from '@/components/MarkdownPreview.vue';
 
 const props = defineProps<{
   card: KnowledgeCard | null;
@@ -77,7 +78,7 @@ const hasScope = computed(() => Boolean(props.card && (
         <span>{{ kindLabels[card.knowledgeKind] }} · {{ enforcementLabels[card.enforcement] }}</span>
         <span>修订 v{{ card.revision }}</span><time :datetime="card.updatedAt">{{ new Date(card.updatedAt).toLocaleString() }}</time>
       </div>
-      <div class="detail-content" v-html="card.renderedContent" />
+      <MarkdownPreview class="detail-content" :content="card.content" :repository-id="card.repositoryId" embedded />
       <div v-if="card.tags.length" class="detail-tags">
         <span v-for="tag in card.tags" :key="tag"># {{ tag }}</span>
       </div>
@@ -132,8 +133,6 @@ const hasScope = computed(() => Boolean(props.card && (
 .reader-heading h2 { flex: 1; margin: 0; font-size: 20px; line-height: 1.5; overflow-wrap: anywhere; }
 :global(.knowledge-reader .el-drawer__header) { margin-bottom: 0; padding: 16px 20px; border-bottom: 1px solid var(--app-border); }
 :global(.knowledge-reader .el-drawer__body) { padding: 20px; }
-.detail-content { overflow-wrap: anywhere; }
-.detail-content :deep(table) { display: block; max-width: 100%; overflow: auto; }
 
 .maintenance-details { margin-top: 16px; }
 .maintenance-details > summary { cursor: pointer; padding: 10px 0; color: #50647a; }
@@ -147,10 +146,6 @@ const hasScope = computed(() => Boolean(props.card && (
   font-size: 15px;
 }
 
-.detail-content {
-  line-height: 1.7;
-  color: var(--el-text-color-primary);
-}
 .engineering-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 0 20px; border-top: 1px solid #dce4ea; border-bottom: 1px solid #dce4ea; }
 .engineering-facts > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; padding: 9px 4px; }
 .engineering-facts dt { color: #71808b; font-size: 14px; }
@@ -160,19 +155,6 @@ const hasScope = computed(() => Boolean(props.card && (
 .engineering-detail > div { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; }
 .engineering-detail b { width: 54px; color: #71808b; font-size: 14px; }
 .engineering-detail code, .engineering-detail span { padding: 3px 6px; color: #31566d; border-radius: 4px; background: #eef5f8; font-size: 14px; }
-
-.detail-content :deep(img) {
-  max-width: 100%;
-  border-radius: 8px;
-}
-
-.detail-content :deep(pre) {
-  overflow: auto;
-  padding: 10px;
-  border-radius: 8px;
-  background: #18212f;
-  color: #e6edf3;
-}
 
 .detail-tags {
   display: flex;

@@ -435,7 +435,7 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
 
 .registry-tabs button.active {
   border-color: var(--app-color-action);
-  color: #005eb8;
+  color: var(--app-selection-text);
   font-weight: 600;
 }
 
@@ -483,8 +483,8 @@ onBeforeUnmount(() => window.clearTimeout(checkTimer));
 }
 
 .model-card.active {
-  border-color: #9fc3df;
-  box-shadow: 0 0 0 1px rgb(0 102 204 / 10%), 0 2px 8px rgb(24 39 58 / 6%);
+  border-color: var(--app-color-action);
+  background: var(--app-selection-bg);
 }
 
 .card-header {

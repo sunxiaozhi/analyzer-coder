@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue';
+import { ElOption, ElSelect } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { branchesApi, type BranchPreparationJob, type RepositoryBranch } from '@/api/branches';
 import AppPagination from '@/components/AppPagination.vue';
@@ -72,8 +73,8 @@ onBeforeUnmount(() => { stopped = true; ++version; clearTimeout(timer); });
 <template>
   <section class="branch-tasks" aria-label="分支任务">
     <div class="task-filters">
-      <label>项目<select v-model="repositoryId" aria-label="任务所属项目"><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label>
-      <label>分支<select v-model="branchId" aria-label="任务所属分支"><option value="">全部分支</option><option v-for="branch in branches" :key="branch.id" :value="branch.id">{{ branch.name }}</option></select></label>
+      <label>项目<el-select v-model="repositoryId" aria-label="任务所属项目" filterable><el-option v-for="project in projects" :key="project.id" :value="project.id" :label="project.name" /></el-select></label>
+      <label>分支<el-select v-model="branchId" :empty-values="[null, undefined]" aria-label="任务所属分支" filterable><el-option value="" label="全部分支" /><el-option v-for="branch in branches" :key="branch.id" :value="branch.id" :label="branch.name" /></el-select></label>
       <el-button :disabled="loading || !repositoryId" @click="refresh">刷新</el-button>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
@@ -101,9 +102,9 @@ onBeforeUnmount(() => { stopped = true; ++version; clearTimeout(timer); });
 .branch-tasks { display: flex; flex-direction: column; gap: 20px; padding: 20px; overflow: auto; }
 .task-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .task-filters label { display: grid; gap: 6px; min-width: 180px; font-size: 13px; color: #68778a; }
-.task-filters select { padding: 8px; border: 1px solid #dbe3ec; border-radius: 4px; color: #334155; background: #fff; }
+.task-filters .el-select { min-width: 0; width: 100%; }
 .branch-task-table { flex: 1; min-height: 0; overflow: auto; } table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; color: #334155; }
-th, td { padding: 16px 14px; border-bottom: 1px solid #dbe3ec; } thead { background: #f5f7fa; } .selected { background: #eff6ff; }
+th, td { padding: 16px 14px; border-bottom: 1px solid #dbe3ec; } thead { background: #f5f7fa; } .selected { background: var(--app-selection-bg); } .selected > td:first-child { box-shadow: inset 3px 0 var(--app-color-action); }
 td button { background: none; border: 0; color: #2563eb; cursor: pointer; }
 code { overflow-wrap: anywhere; }
 @media (max-width: 760px) { .branch-task-table { flex: none; min-height: 160px; } table { min-width: 660px; } .task-filters label { min-width: 0; flex: 1 1 160px; } }

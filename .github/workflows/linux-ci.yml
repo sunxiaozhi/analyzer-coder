@@ -108,6 +108,19 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  docker-all-in-one:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Build complete runtime image
+        run: docker build --platform linux/amd64 -t analyzer-coder:ci .
+      - name: Verify startup, graph indexing and restart persistence
+        run: node scripts/smoke-docker-image.mjs analyzer-coder:ci
+
   deployment-scripts:
     strategy:
       matrix:

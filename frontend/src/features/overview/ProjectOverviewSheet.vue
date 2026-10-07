@@ -354,7 +354,8 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 .review-action { color: #fff; border: 1px solid var(--blue); background: var(--blue); }
 .prepare-action { color: #2d536e; border: 1px solid #c7d4dc; background: #fff; }
 .refresh-action { width: 34px; padding: 0 !important; color: #60727e; border: 1px solid #d1dce2; background: #f8fafb; }
-.hero-actions button:hover:not(:disabled), .hero-actions button:focus-visible { outline: 2px solid rgb(38 127 184 / 18%); outline-offset: 2px; }
+.hero-actions button:hover:not(:disabled) { border-color: var(--app-border-strong); }
+.hero-actions button:focus-visible { outline: 2px solid var(--app-color-action); outline-offset: 2px; }
 .capability-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); background: #fff; }
 .capability-strip article { display: grid; min-width: 0; gap: 4px; padding: 18px 21px; border-right: 1px solid var(--line); }
 .capability-strip article:last-child { border-right: 0; }

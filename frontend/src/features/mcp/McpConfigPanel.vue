@@ -32,8 +32,8 @@ h2 { margin: 0 0 12px; font-size: 18px; }
 p { line-height: 1.8; color: #526071; }
 .config-fields { display: grid; gap: 16px; margin: 20px 0 10px; }
 .config-fields label { display: grid; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; }
-.config-fields input { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #1e293b; font: inherit; }
-.config-fields input:focus { outline: 2px solid #93c5fd; outline-offset: 2px; }
+.config-fields input { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--app-border); border-radius: var(--app-control-radius); background: #fff; color: #1e293b; font: inherit; }
+.config-fields input:focus { outline: none; border-color: var(--app-color-action); box-shadow: var(--app-focus-shadow); }
 .hint { font-size: 13px; }
 .code-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 1px solid #e4e7ed; border-radius: 8px 8px 0 0; color: #64748b; font-size: 12px; }
 .config-code { margin: 0; padding: 18px; overflow-x: auto; border-radius: 0 0 8px 8px; background: #162235; color: #e2e8f0; font-size: 12px; line-height: 1.75; }

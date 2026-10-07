@@ -88,7 +88,7 @@ onBeforeUnmount(() => { ++sequence; });
 .validation-panel { border-top: 1px solid #dbe3ec; color: #334155; }
 .validation-panel summary { padding: 14px 0; cursor: pointer; font-weight: 600; }
 .validation-panel summary span { color: #68778a; font-size: 12px; font-weight: 400; margin-left: 12px; }
-.validation-panel summary:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.validation-panel summary:focus-visible { outline: 2px solid var(--app-color-action); outline-offset: 2px; }
 .validation-body { display: flex; flex-direction: column; gap: 12px; }
 .validation-target { margin: 0; border-left: 3px solid #2563eb; padding: 8px 12px; background: #eff6ff; overflow-wrap: anywhere; }
 .validation-target strong { margin: 0 8px; }

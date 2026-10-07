@@ -1,5 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import { reactive } from 'vue';
+import { ElSelect } from 'element-plus';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import CodeAtlasView from './CodeAtlasView.vue';
@@ -269,6 +270,43 @@ it('opens the source occurrence when a relation is clicked', async () => {
   await wrapper.get('[data-edge]').trigger('click'); await flushPromises();
   expect(wrapper.get('.atlas-source .marked').text()).toContain('line 8');
   expect(wrapper.get('.drawer-path').text()).toContain(':8');
+  wrapper.unmount();
+});
+
+it('filters relations and restores all relations through the shared selector', async () => {
+  const graph = view();
+  graph.nodes.push({ ...graph.nodes[0], id: 'other', label: 'caller' });
+  graph.edges = [
+    { source: 'other', target: 'n', kind: 'CALL', count: 1 },
+    { source: 'n', target: 'other', kind: 'IMPORT', count: 1 },
+  ];
+  vi.mocked(getCodeAtlas).mockResolvedValue(graph);
+  const wrapper = mount(CodeAtlasView);
+  await flushPromises();
+  expect(wrapper.get('.relation-select').text()).toContain('全部关系');
+  expect(wrapper.findAll('.atlas-link')).toHaveLength(2);
+  const relation = wrapper.findAllComponents(ElSelect)[0];
+  relation.vm.$emit('update:modelValue', 'CALL');
+  await flushPromises();
+  expect(wrapper.findAll('.atlas-link')).toHaveLength(1);
+  relation.vm.$emit('update:modelValue', '');
+  await flushPromises();
+  expect(wrapper.findAll('.atlas-link')).toHaveLength(2);
+  expect(wrapper.get('.relation-select').text()).toContain('全部关系');
+  wrapper.unmount();
+});
+
+it('passes the selected numeric depth to graph expansion', async () => {
+  vi.mocked(getCodeAtlas).mockResolvedValue(view());
+  const wrapper = mount(CodeAtlasView);
+  await flushPromises();
+  wrapper.findAllComponents(ElSelect)[1].vm.$emit('update:modelValue', 3);
+  await wrapper.get('[data-node]').trigger('click');
+  await wrapper.findAll('.selection-actions button').find(button => button.text().includes('出向'))!.trigger('click');
+  await flushPromises();
+  expect(getCodeAtlas).toHaveBeenLastCalledWith('a', '', '', 'ctx-main', {
+    focusId: 'n', direction: 'out', depth: 3, limit: 240,
+  });
   wrapper.unmount();
 });
 

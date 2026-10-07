@@ -10,7 +10,6 @@ const repositorySourceOptions = [
   { value: 'GITLAB', label: 'GitLab' },
   { value: 'REMOTE_GIT', label: 'Git' },
   { value: 'ZIP', label: 'ZIP' },
-  { value: 'LOCAL_GIT', label: '本地 Git' },
 ] as const;
 type RepositorySourceType = (typeof repositorySourceOptions)[number]['value'];
 const defaultRepositorySource = repositorySourceOptions[0].value;
@@ -22,7 +21,6 @@ const emit = defineEmits<{
     sourceType: RepositorySourceType;
     name: string;
     description: string;
-    path: string;
     url: string;
     branch: string;
     credentialId: string;
@@ -33,7 +31,6 @@ const form = reactive({
   sourceType: defaultRepositorySource as RepositorySourceType,
   name: '',
   description: '',
-  path: '',
   url: '',
   branch: '',
   credentialId: '',
@@ -56,8 +53,7 @@ watch(open, value => {
       sourceType,
       name: draft?.name ?? '',
       description: draft?.description ?? '',
-      path: sourceType === 'LOCAL_GIT' ? draft?.sourceLocation ?? '' : '',
-      url: sourceType === 'REMOTE_GIT' || sourceType === 'GITLAB' ? draft?.sourceLocation ?? '' : '',
+      url: draft?.sourceType === 'REMOTE_GIT' || draft?.sourceType === 'GITLAB' ? draft.sourceLocation ?? '' : '',
       branch: '',
       credentialId: draft?.credentialId ?? '',
     });
@@ -101,9 +97,6 @@ async function credentialSelected(credential: RepositoryCredential) {
 function submit() {
   if (submitLocked.value) return;
   if (!form.name.trim()) { ElMessage.warning('请先填写项目名称'); return; }
-  if (form.sourceType === 'LOCAL_GIT' && !form.path.trim()) {
-    ElMessage.warning('请填写服务端本地 Git 路径'); return;
-  }
   if (form.sourceType === 'ZIP' && !file.value) {
     ElMessage.warning('请选择 ZIP 文件'); return;
   }
@@ -143,10 +136,7 @@ function submit() {
             </el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="form.sourceType === 'LOCAL_GIT'" label="服务端本地 Git 路径" required>
-          <el-input v-model="form.path" placeholder="C:\workspace\project" />
-        </el-form-item>
-        <template v-else-if="form.sourceType !== 'ZIP'">
+        <template v-if="form.sourceType !== 'ZIP'">
           <el-form-item label="HTTPS Git 地址" required>
             <el-input v-model="form.url" placeholder="https://git.example.com/group/project.git" />
           </el-form-item>

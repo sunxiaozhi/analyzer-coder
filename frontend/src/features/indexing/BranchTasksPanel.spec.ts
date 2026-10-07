@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, expect, it, vi } from 'vitest';
+import { ElSelect } from 'element-plus';
 import { branchesApi, type BranchPreparationJob } from '@/api/branches';
 import type { Repository } from '@/types/api';
 import BranchTasksPanel from './BranchTasksPanel.vue';
@@ -13,6 +14,7 @@ it('shows task history and requests server-side branch filtering', async () => {
   vi.mocked(branchesApi.list).mockResolvedValue([{id:'b1',name:'release'}] as never);
   vi.mocked(branchesApi.preparationHistory).mockResolvedValue({items:[job],pageNum:1,pageSize:15,total:2,pages:1});
   const wrapper=panel(); await flushPromises();
+  expect(wrapper.findAllComponents(ElSelect)[1].text()).toContain('全部分支');
   expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   expect(wrapper.text()).not.toContain('索引错误');
   await wrapper.get('tbody button').trigger('click');
@@ -21,9 +23,12 @@ it('shows task history and requests server-side branch filtering', async () => {
   await wrapper.get('[role="dialog"] button').trigger('click');
   expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   await wrapper.get('tbody button').trigger('click');
-  await wrapper.get('select[aria-label="任务所属分支"]').setValue('b1'); await flushPromises();
+  wrapper.findAllComponents(ElSelect)[1].vm.$emit('update:modelValue', 'b1'); await flushPromises();
   expect(branchesApi.preparationHistory).toHaveBeenLastCalledWith('p1',1,15,'b1');
   expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  wrapper.findAllComponents(ElSelect)[1].vm.$emit('update:modelValue', ''); await flushPromises();
+  expect(branchesApi.preparationHistory).toHaveBeenLastCalledWith('p1',1,15,undefined);
+  expect(wrapper.findAllComponents(ElSelect)[1].text()).toContain('全部分支');
   wrapper.unmount();
 });
 it('ignores task responses from a previously selected project', async () => {
@@ -31,7 +36,7 @@ it('ignores task responses from a previously selected project', async () => {
   vi.mocked(branchesApi.list).mockResolvedValue([]);
   vi.mocked(branchesApi.preparationHistory).mockReturnValueOnce(new Promise(resolve=>{resolveOld=resolve;})).mockResolvedValue({items:[],pageNum:1,pageSize:15,total:0,pages:0});
   const wrapper=panel();
-  await wrapper.get('select[aria-label="任务所属项目"]').setValue('p2'); await flushPromises();
+  wrapper.findAllComponents(ElSelect)[0].vm.$emit('update:modelValue', 'p2'); await flushPromises();
   resolveOld({items:[job],pageNum:1,pageSize:15,total:1,pages:1}); await flushPromises();
   expect(wrapper.text()).not.toContain('索引错误');
   expect(branchesApi.preparationHistory).toHaveBeenLastCalledWith('p2',1,15,undefined);

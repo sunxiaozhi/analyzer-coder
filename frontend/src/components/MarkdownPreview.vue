@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { renderMarkdown } from '@/features/knowledge/markdown';
 
 const props = defineProps<{
   content: string;
   sourcePath?: string;
   repositoryId?: string;
+  embedded?: boolean;
 }>();
 const emit = defineEmits<{ openPath: [path: string] }>();
 
@@ -30,14 +31,16 @@ function repositoryPath(sourcePath: string, reference: string) {
 }
 
 const renderedMarkdown = computed(() => {
-  const sanitized = DOMPurify.sanitize(
-    marked.parse(props.content, { async: false, gfm: true }),
-    { USE_PROFILES: { html: true } },
-  );
-  if (!props.sourcePath) return sanitized;
+  const sanitized = renderMarkdown(props.content, props.repositoryId);
   const parsed = new DOMParser().parseFromString(sanitized, 'text/html');
+  parsed.querySelectorAll('table').forEach(table => {
+    const scroll = parsed.createElement('div');
+    scroll.className = 'markdown-table-scroll';
+    table.replaceWith(scroll);
+    scroll.appendChild(table);
+  });
   parsed.querySelectorAll<HTMLAnchorElement>('a[href]').forEach(anchor => {
-    const path = repositoryPath(props.sourcePath!, anchor.getAttribute('href') ?? '');
+    const path = props.sourcePath ? repositoryPath(props.sourcePath, anchor.getAttribute('href') ?? '') : null;
     if (path) {
       anchor.dataset.repositoryPath = path;
       anchor.href = '#';
@@ -48,7 +51,7 @@ const renderedMarkdown = computed(() => {
       anchor.rel = 'noopener noreferrer';
     }
   });
-  if (props.repositoryId) {
+  if (props.repositoryId && props.sourcePath) {
     parsed.querySelectorAll<HTMLImageElement>('img[src]').forEach(image => {
       const path = repositoryPath(props.sourcePath!, image.getAttribute('src') ?? '');
       if (path) {
@@ -72,7 +75,7 @@ function handleClick(event: MouseEvent) {
 </script>
 
 <template>
-  <section class="markdown-preview-scroll" role="document" aria-label="Markdown 预览">
+  <section class="markdown-preview-scroll" :class="{ 'markdown-preview-embedded': embedded }" role="document" aria-label="Markdown 预览">
     <!-- Markdown 先由 DOMPurify 清理，再作为受控 HTML 渲染。 -->
     <article class="markdown-body" v-html="renderedMarkdown" @click="handleClick"></article>
   </section>
@@ -97,10 +100,26 @@ function handleClick(event: MouseEvent) {
   overflow-wrap: anywhere;
 }
 
+.markdown-preview-embedded {
+  overflow: visible;
+  background: transparent;
+}
+
+.markdown-preview-embedded .markdown-body {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.markdown-body > :deep(:first-child) { margin-top: 0; }
+.markdown-body > :deep(:last-child) { margin-bottom: 0; }
+
 .markdown-body :deep(h1),
 .markdown-body :deep(h2),
 .markdown-body :deep(h3),
-.markdown-body :deep(h4) {
+.markdown-body :deep(h4),
+.markdown-body :deep(h5),
+.markdown-body :deep(h6) {
   color: #1f2933;
   line-height: 1.35;
 }
@@ -133,6 +152,12 @@ function handleClick(event: MouseEvent) {
   margin: 0 0 16px;
 }
 
+.markdown-body :deep(h5),
+.markdown-body :deep(h6) {
+  margin: 20px 0 8px;
+  font-size: 14px;
+}
+
 .markdown-body :deep(a) {
   color: var(--app-color-action);
   text-decoration: underline;
@@ -148,6 +173,13 @@ function handleClick(event: MouseEvent) {
 .markdown-body :deep(li + li) {
   margin-top: 5px;
 }
+
+.markdown-body :deep(li > ul),
+.markdown-body :deep(li > ol) {
+  margin: 6px 0;
+}
+
+.markdown-body :deep(li > p) { margin-bottom: 6px; }
 
 .markdown-body :deep(blockquote) {
   margin: 18px 0;
@@ -188,9 +220,15 @@ function handleClick(event: MouseEvent) {
   line-height: 1.7;
 }
 
+.markdown-body :deep(.markdown-table-scroll) {
+  max-width: 100%;
+  overflow: auto;
+  margin: 18px 0;
+}
+
 .markdown-body :deep(table) {
   width: 100%;
-  margin: 18px 0;
+  margin: 0;
   border-spacing: 0;
   border-collapse: collapse;
   font-size: 14px;
@@ -208,8 +246,14 @@ function handleClick(event: MouseEvent) {
   font-weight: 650;
 }
 
+.markdown-body :deep(td[align="center"]),
+.markdown-body :deep(th[align="center"]) { text-align: center; }
+.markdown-body :deep(td[align="right"]),
+.markdown-body :deep(th[align="right"]) { text-align: right; }
+
 .markdown-body :deep(img) {
   max-width: 100%;
+  height: auto;
   border-radius: 6px;
 }
 

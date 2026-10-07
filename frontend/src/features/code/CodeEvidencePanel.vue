@@ -203,7 +203,7 @@ onScopeDispose(() => {
 .section-toolbar { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; align-items: center; gap: 12px; margin-bottom: 11px; padding-bottom: 11px; border-bottom: 1px solid #dce4e9; }
 .filter-switch { display: flex; gap: 2px; padding: 3px; border: 1px solid #d7e0e5; border-radius: 5px; background: #eef2f4; }
 .filter-switch button { min-height: 27px; padding: 0 8px; color: #687781; border: 0; border-radius: 3px; background: transparent; font-size: 12px; cursor: pointer; }
-.filter-switch button.active { color: var(--blue); background: #fff; box-shadow: 0 1px 3px rgb(30 55 70 / 12%); font-weight: 700; }
+.filter-switch button.active { color: var(--app-selection-text); background:var(--app-selection-bg); box-shadow:inset 0 0 0 1px var(--app-selection-border); font-weight: 700; }
 .knowledge-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .knowledge-card { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 11px; border: 1px solid #e2d9c9; border-left: 4px solid #b3843d; background: #fffdf9; }
 .knowledge-card[data-trusted='true'] { border-color: #cfe0d8; border-left-color: var(--green); background: #fbfefd; }

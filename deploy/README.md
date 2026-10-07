@@ -1,6 +1,8 @@
 # 部署模板
 
-唯一部署流程见 [部署与启动操作手册](../docs/15-deployment-runbook.md)。
+完整运行环境可用 [一体化 Docker 部署](all-in-one/README.md)，单镜像包含前后端、数据库和 CodeGraph。
+
+原有分离部署流程见 [部署与启动操作手册](../docs/15-deployment-runbook.md)。
 
 - backend/：复制到发布包 backend，包含 Spring Boot 外部 YAML 和两平台启停脚本。
 - components/：复制到发布包 components，仅包含 PG/pgvector、Nginx 的编排及配置。

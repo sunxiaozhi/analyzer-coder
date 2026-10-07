@@ -251,7 +251,7 @@ onBeforeUnmount(() => {
   height: 44px;
   padding: 4px;
   border: 1px solid #dedee3;
-  border-radius: 7px;
+  border-radius: var(--app-control-radius);
   background: #fff;
   box-shadow: 0 2px 7px #24384c0d;
 }
@@ -292,9 +292,8 @@ onBeforeUnmount(() => {
 .tab-scroll-button:not(:disabled):hover,
 .tab-scroll-button:not(:disabled):focus-visible {
   color: var(--app-color-action);
-  border-color: #b8d2e7;
-  background: #edf6fd;
-  outline: none;
+  border-color: var(--app-color-action);
+  background: var(--app-selection-bg);
 }
 .tab-scroll-button:disabled {
   color: #bec6cd;
@@ -324,13 +323,13 @@ onBeforeUnmount(() => {
 .workspace-tab i { display: grid; flex: none; width: 20px; height: 20px; place-items: center; color: var(--app-text-muted); border-radius: 4px; font-style: normal; }
 .workspace-tab:hover { color: #263746; border-color: #dbe5ef; background: #f6f9fc; }
 .workspace-tab i:hover,
-.workspace-tab i:focus-visible { color: #263746; background: #e7eaed; outline: none; }
-.workspace-tab.active { color: #fff; border-color: var(--app-color-action); background: var(--app-color-action); box-shadow: 0 2px 5px var(--app-focus-ring); font-weight: 650; }
-.workspace-tab.active i { color: #dceeff; }
+.workspace-tab i:focus-visible { color: #263746; background: #e7eaed; }
+.workspace-tab.active { color: var(--app-selection-text); border-color: var(--app-color-action); background: var(--app-selection-bg); font-weight: 650; }
+.workspace-tab.active i { color: var(--app-selection-text); }
 .workspace-tab.active i:hover,
-.workspace-tab.active i:focus-visible { color: #fff; background: #ffffff26; }
+.workspace-tab.active i:focus-visible { color: var(--app-selection-text); background: var(--app-hover-bg); }
 .tab-menu { display: grid; width: 34px; height: 34px; place-items: center; color: #69727a; border: 1px solid transparent; border-radius: 5px; background: transparent; }
-.tab-menu:hover { color: #005eb8; border-color: #d3e1ee; background: #f3f8fc; }
+.tab-menu:hover { color: var(--app-selection-text); border-color: #d3e1ee; background: #f3f8fc; }
 @media (max-width: 760px) {
   .workspace-tabs { position: sticky; top: 96px; z-index: 8; margin-bottom: 10px; }
   .workspace-tabs-label span { display: none; }
@@ -345,10 +344,10 @@ onBeforeUnmount(() => {
   display: grid;
   width: 190px;
   padding: 6px;
-  border: 1px solid #d8e0e7;
-  border-radius: 7px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-control-radius);
   background: #fff;
-  box-shadow: 0 12px 28px #1f34491f, 0 2px 8px #1f344914;
+  box-shadow: var(--app-menu-shadow);
   outline: none;
 }
 .tab-context-menu button {
@@ -357,18 +356,18 @@ onBeforeUnmount(() => {
   gap: 7px;
   align-items: center;
   width: 100%;
-  height: 32px;
-  padding: 0 8px;
+  height: 34px;
+  padding: 0 12px;
   color: #384550;
   text-align: left;
   border: 0;
   border-radius: 5px;
   background: transparent;
-  font-size: 13px;
+  font-size: var(--el-font-size-base);
 }
 .tab-context-menu button svg { color: #687886; }
-.tab-context-menu button:hover,
-.tab-context-menu button:focus-visible { color: #005eb8; background: #edf5fd; outline: none; }
+.tab-context-menu button:hover { color: var(--app-text-primary); background: var(--app-hover-bg); }
+.tab-context-menu button:focus-visible { color: var(--app-selection-text); background: var(--app-selection-bg); outline-offset: -2px; }
 .tab-context-menu button:hover svg,
 .tab-context-menu button:focus-visible svg { color: var(--app-color-action); }
 .tab-context-menu button:disabled { color: #a6adb4; background: transparent; cursor: not-allowed; }

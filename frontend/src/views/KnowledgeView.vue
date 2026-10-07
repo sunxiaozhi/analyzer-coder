@@ -24,7 +24,7 @@ import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailD
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
 import MarkdownKnowledgeSourceList from '@/features/knowledge/MarkdownKnowledgeSourceList.vue';
-import { renderMarkdown } from '@/features/knowledge/markdown';
+import MarkdownPreview from '@/components/MarkdownPreview.vue';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
@@ -772,7 +772,7 @@ onMounted(() => void load());
     <el-dialog v-model="historyDialog" :title="`${historyCard?.title??''} · 修订历史`" width="760">
       <el-timeline><el-timeline-item v-for="item in revisions" :key="item.revision" :timestamp="new Date(item.changedAt).toLocaleString()" placement="top">
         <el-card shadow="never"><template #header><div class="toolbar"><b>v{{ item.revision }} · {{ statusLabel(item.publicationStatus) }}</b><span class="spacer" /><el-button link type="primary" @click="restore(item.revision)">恢复为新草稿</el-button></div></template>
-          <div class="history-markdown" v-html="renderMarkdown(item.content, item.repositoryId)" />
+          <MarkdownPreview class="history-markdown" :content="item.content" :repository-id="item.repositoryId" embedded />
           <small>{{ knowledgeKindLabel(item.knowledgeKind) }} · {{ enforcementLabel(item.enforcement) }} · {{ item.tags.join('、')||'无标签' }}</small>
         </el-card>
       </el-timeline-item></el-timeline>
@@ -831,13 +831,13 @@ onMounted(() => void load());
 }
 .knowledge-mode-switch button:hover { color: #1d1d1f; }
 .knowledge-mode-switch button:focus-visible {
-  outline: 2px solid #80b8eb;
-  outline-offset: 1px;
+  outline: 2px solid var(--app-color-action);
+  outline-offset: 2px;
 }
 .knowledge-mode-switch button.active {
-  color: #005eb8;
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(26 39 54 / 12%);
+  color: var(--app-selection-text);
+  background:var(--app-selection-bg);
+  box-shadow:inset 0 0 0 1px var(--app-selection-border);
 }
 .knowledge-mode-switch button span {
   display: inline-grid;
@@ -851,7 +851,7 @@ onMounted(() => void load());
   font-size: 13px;
 }
 .knowledge-mode-switch button.active span {
-  color: #005eb8;
+  color: var(--app-selection-text);
   background: var(--app-color-action-soft);
 }
 .knowledge-scroll .knowledge-grid { grid-template-columns: minmax(0, 1fr); padding: 0 0 12px; }
@@ -860,7 +860,6 @@ onMounted(() => void load());
   width: 168px;
 }
 .markdown-source-pane { padding-bottom: 12px; }
-.history-markdown :deep(pre){overflow:auto;padding:10px;border-radius:8px;background:#18212f;color:#e6edf3}.history-markdown{line-height:1.7}
 @media (max-width: 760px) {
   .knowledge-page,
   .knowledge-surface {

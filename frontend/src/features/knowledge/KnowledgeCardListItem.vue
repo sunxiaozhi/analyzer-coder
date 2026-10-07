@@ -52,7 +52,7 @@ const excerpt = computed(() => knowledgeExcerpt(props.card.content || ''));
 
 <style scoped>
 .knowledge-card { display: flex; flex-direction: column; gap: 12px; padding: 16px 20px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); }
-.knowledge-card.selected { border-color: var(--app-color-action); box-shadow: inset 3px 0 var(--app-color-action); }
+.knowledge-card.selected { border-color: var(--app-color-action); background: var(--app-selection-bg);}
 .card-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .card-header h3 { flex: 1 1 300px; min-width: 0; margin: 0; }
 .card-title { padding: 0; border: 0; background: transparent; color: var(--app-text-primary); font-size: 17px; font-weight: 650; line-height: 1.5; text-align: left; overflow-wrap: anywhere; }

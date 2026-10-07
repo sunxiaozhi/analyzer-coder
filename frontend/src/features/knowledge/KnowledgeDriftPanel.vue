@@ -88,7 +88,7 @@ const reasonLabels: Record<string, string> = {
 .drift-panel > p { margin: 0; color: #756959; font-size: 13px; line-height: 1.5; }
 .diff-link { display: inline-flex; justify-self: start; align-items: center; gap: 6px; min-height: 32px; padding: 0 9px; color: #365c73; border: 1px solid #bfd0db; border-radius: 5px; background: #f7fafc; font-size: 13px; font-weight: 650; }
 .diff-link:hover { color: var(--app-color-action); border-color: #7ca6c7; }
-.diff-link:focus-visible { outline: 3px solid var(--app-focus-ring); outline-offset: 2px; }
+.diff-link:focus-visible { outline: 2px solid var(--app-color-action); outline-offset: 2px; }
 .drift-panel footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding-top: 3px; border-top: 1px solid #eadfce; }
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
