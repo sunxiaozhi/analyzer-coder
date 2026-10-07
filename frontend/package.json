@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "d3-force-3d": "^3.0.6",
     "dompurify": "^3.4.12",
     "element-plus": "^2.14.3",
     "highlight.js": "^11.11.1",

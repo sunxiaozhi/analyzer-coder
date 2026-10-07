@@ -122,6 +122,25 @@ it('keeps the manually chosen compatibility 3D mode available', async () => {
   wrapper.unmount();
 });
 
+it('clears the selected node and source drawer when the 3D module navigator takes focus', async () => {
+  vi.mocked(getCodeAtlas).mockResolvedValue(view());
+  vi.mocked(getRepositoryFile).mockResolvedValue({ contentVersion: 'contentVersion', content: 'save()' } as Awaited<ReturnType<typeof getRepositoryFile>>);
+  const wrapper = mount(CodeAtlasView, { global: { stubs: {
+    CodeAtlas3D: { props: ['nodes'], template: '<div><button data-pick-node @click="$emit(\'select\', nodes[0])">Node</button><button data-focus-module @click="$emit(\'clear-selection\')">Module</button></div>' },
+  } } });
+  await flushPromises();
+  await wrapper.get('[data-view-3d]').trigger('click'); await flushPromises();
+  await wrapper.get('[data-pick-node]').trigger('click');
+  await wrapper.get('.source-action').trigger('click'); await flushPromises();
+  expect(wrapper.find('.atlas-drawer').exists()).toBe(true);
+  await wrapper.get('[data-focus-module]').trigger('click');
+  expect(wrapper.find('.selection-bar').exists()).toBe(false);
+  expect(wrapper.find('.atlas-drawer').exists()).toBe(false);
+  expect(wrapper.get('[data-view-3d]').attributes('aria-pressed')).toBe('true');
+  expect(getCodeAtlas).toHaveBeenCalledTimes(1);
+  wrapper.unmount();
+});
+
 it('ignores a graph response from a previous repository', async () => {
   let resolve!: (value: AtlasView) => void;
   vi.mocked(getCodeAtlas).mockImplementationOnce(() => new Promise(r => { resolve = r; })).mockResolvedValue(view('b'));

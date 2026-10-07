@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>代码图谱 · 本地数据验收</title><style>body{margin:0;padding:20px;background:#eef2f7}#app{height:calc(100vh - 40px)}@media(max-width:760px){body{padding:8px}#app{height:auto}}</style></head><body><div id="app"></div><script type="module">
+import { createApp } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
+import CodeAtlasExplorer from '/src/features/graph/CodeAtlasExplorer.vue';
+import { useRepositoryStore } from '/src/stores/repositoryStore.ts';
+import { useBranchContextStore } from '/src/stores/branchContextStore.ts';
+import 'element-plus/dist/index.css';
+import '/src/styles/main.css';
+import '/src/styles/design-alignment.css';
+import '/src/styles/interactions.css';
+const pinia=createPinia();setActivePinia(pinia);
+const repositories=useRepositoryStore();repositories.repositories=[{id:'local-graph-qa',name:'RuoYi',sourceType:'LOCAL_GIT'}];repositories.selectedRepositoryId='local-graph-qa';repositories.initialized=true;
+const branches=useBranchContextStore();branches.repositoryId='local-graph-qa';branches.selectedBranchId='main';branches.branches=[{id:'main',name:'main',status:'READY',trackingStatus:'ACTIVE'}];branches.context={contextId:'local-qa',repositoryId:'local-graph-qa',branchId:'main',branchName:'main',contentVersion:'local-published-codegraph',commitSha:'local',expiresAt:''};
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/',component:CodeAtlasExplorer}]});
+const app=createApp(CodeAtlasExplorer);app.use(pinia);app.use(router);await router.isReady();app.mount('#app');
+</script></body></html>
