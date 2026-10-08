@@ -251,7 +251,7 @@
   - 未匹配的端点保持原规则：公网必须 HTTPS，私有、环回、链路本地等地址被拒绝。`APP_LLM_ALLOW_INSECURE_LOCAL`（缺省 false）的现有本机开发例外继续有效。
   - 地址仍必须含主机名，禁止用户凭据、查询参数和片段；端口必须合法。DNS 失败返回 `LLM_DNS_FAILED`，HTTP 客户端不跟随重定向。
 - 配置示例：在后端 `application.yml` 的 `app.llm.endpoint-exceptions` 中为目标 `base-url` 添加两个按需开启的布尔选项。
-- 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmEndpointPolicy.java`、`backend/src/main/java/com/analyzercoder/application/llm/OpenAiCompatibleClient.java`、`deploy/backend/config/application.yml`
+- 证据：`backend/src/main/java/com/analyzercoder/application/llm/LlmEndpointPolicy.java`、`backend/src/main/java/com/analyzercoder/application/llm/OpenAiCompatibleClient.java`、`deploy/all-in-one/application.yml`
 ### CFG-008 连通性检测的创建、查询、取消与单飞复用
 
 - 需求：检测以异步任务创建，同一账号同一配置指纹同时只存在一个在途检测。

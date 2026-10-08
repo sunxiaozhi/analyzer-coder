@@ -27,10 +27,8 @@ deploy/.env.production
 /release/*.gz
 /.local-data
 
-# Deployment templates must not accumulate runtime files or secrets.
-/deploy/backend/logs/
-/deploy/backend/run/
-/deploy/backend/data/
-/deploy/backend/repositories/
-/deploy/backend/app.jar
+# Deployment instances keep private configuration and data outside Git.
+/deploy/all-in-one/config/
+/deploy/all-in-one/data/
+/deploy/all-in-one/backups/
 /release-full/

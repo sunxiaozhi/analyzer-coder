@@ -27,18 +27,16 @@
 
 ## 打包与部署
 
-可将整个运行环境打成一个 Docker 镜像：前端、后端、Java、PostgreSQL/pgvector、Nginx、Git、Node.js、CodeGraph 和 MCP 适配器全部封装，目标机只需 Docker。Windows 执行 `pwsh -File scripts/build-docker-image.ps1 -Version 1.0.0`，Linux 执行 `bash scripts/build-docker-image.sh --version 1.0.0`，输出可离线导入的 `release/analyzer-coder-docker-1.0.0/image.tar`。启动与数据卷说明见 [一体化 Docker 部署](deploy/all-in-one/README.md)。
+唯一部署方式是一个完整 Docker 镜像，包含前后端、Java、PostgreSQL/pgvector、Nginx、Git、Node.js、CodeGraph 原生运行时和 MCP。安装和升级都交付一张镜像，业务数据写入宿主机 data 目录，配置放在 .env 和 config 目录。
 
-也保留原有分离部署：PG/pgvector、Nginx 使用 Docker，后端运行 JAR，前端发布 dist。服务器只接收完整发布包，不需要下载源码。
+Windows：`pwsh -File scripts/build-docker-image.ps1 -Version 1.0.0`。
+Linux：`bash scripts/build-docker-image.sh --version 1.0.0`。
 
-Windows：pwsh -File scripts/build-release.ps1 -Version 1.0.0。
+输出完整离线目录及同名 tar.gz。服务器解压后执行 `bash analyzer.sh start` 或 `pwsh -File analyzer.ps1 start`，自动导入镜像、初始化缺失配置并等待健康；默认访问 http://服务器IP:18081，管理员初始密码从 .env 读取。
 
-Linux：bash scripts/build-release.sh --version 1.0.0。
+修改配置用 restart，备份用 backup，升级用 upgrade 新包目录；已有数据、配置和密钥保留。运行机只需要 Docker/Compose，以及系统 Bash 或 PowerShell 7。
 
-输出 release/analyzer-coder-1.0.0/ 和同名 tar.gz。应用升级可加 --without-images（PowerShell：-WithoutImages）。后端通过 backend/config/application.yml 配置，启停脚本固定以 backend 为工作目录。
-
-首次部署、镜像导入、两平台启动和升级见 [部署手册](docs/15-deployment-runbook.md)。本地开发见 [后端说明](backend/README.md)，前端使用 npm --prefix frontend run dev。源码环境诊断可用 node scripts/check-runtime.mjs。
-
+安装、外挂配置、备份、单镜像升级和旧数据卷迁移见 [启动部署手册](deploy/all-in-one/README.md)。源码开发见 [后端说明](backend/README.md)，前端使用 `npm --prefix frontend run dev`。
 ## 验证
 
 ```sh

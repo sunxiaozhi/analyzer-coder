@@ -14,40 +14,17 @@ Java 17 + Spring Boot 3.5 后端，承载账号、仓库、索引、检索、问
 
 ## 发布运行
 
-通过源码根目录 scripts/build-release.sh / .ps1 生成发布包。后端位于 backend/app.jar，外部配置位于 backend/config/application.yml；backend.sh / backend.ps1 固定工作目录后使用 Spring Boot 默认配置查找规则。部署机无需 Maven 或源码。完整流程见 [部署手册](../docs/15-deployment-runbook.md)。
+后端与前端、PostgreSQL/pgvector、Nginx、Git、CodeGraph 和 MCP 一起封装在唯一完整 Docker 镜像中。使用源码根目录 scripts/build-docker-image.sh / .ps1 打包，服务器解压后运行 analyzer.sh / analyzer.ps1 start。业务数据外挂至宿主 data 目录，.env 和 config 目录保存可修改的启动配置；升级只更换完整镜像。
 
-## 本地启动
+配置、安装和维护统一见 [单镜像部署手册](../deploy/all-in-one/README.md)。Spring Boot 默认配置位于 src/main/resources/application.yml，外挂 config/application.yml 作为附加配置加载；数据库与后端内部地址/端口保持固定。
 
-敏感配置没有代码默认值。先复制并修改数据库环境文件：
+## 源码开发说明
 
-```bash
-cp deploy/components/components.env.example deploy/components/.env
-# 修改数据库密码和 POSTGRES_DATA_SOURCE 绝对目录，并先创建该目录。
-mkdir -p /opt/sunhuanshi/analyzer-coder/postgres
-# Compose V2；V1.29.2 将 `docker compose` 换成 `docker-compose`。
-docker compose --env-file deploy/components/.env -f deploy/components/compose.yaml up -d postgres
-```
+源码开发与测试需要 Java 17、Maven，以及独立测试数据库；生产启动入口统一使用完整镜像。开发环境诊断入口为 scripts/check-runtime.mjs，验证脚本为 scripts/verify-core.mjs，不作为部署机必需工具。
 
-至少设置以下后端变量：
+Flyway 的 V1 是空库初始化基线，既有数据库的迁移须遵守 docs/11-data-model.md 的版本约束，不能清空历史校验表绕过迁移。
 
-```bash
-export APP_DATASOURCE_PASSWORD='same-as-postgres-password'
-export APP_INITIAL_ADMIN_USERNAME='admin'
-export APP_INITIAL_ADMIN_PASSWORD='replace-with-a-strong-password'
-export APP_REPOSITORY_ALLOWED_ROOTS='/srv/analyzer-repositories'
-export APP_MANAGED_DATA_ROOT='/var/lib/analyzer-coder'
-export APP_LLM_MASTER_KEY='replace-with-at-least-24-random-characters'
-mvn -pl backend spring-boot:run
-```
-
-健康检查：`GET /actuator/health`。
-
-Flyway 仅保留合并后的 `V1__init_schema.sql`，只支持空库初始化。旧版 V1–V9 数据库须先停止后端、按需备份并重新建库，再启动后端执行迁移。跨仓工程项目与变更评审旧表不再创建。
-
-运行诊断：在加载上述环境变量的终端执行 `node scripts/check-runtime.mjs`。
-
-最小问答闭环不要求配置外部聊天模型。`POST /api/repositories/{id}/ask` 的 `modelConfigId` 可省略或传 `null`，此时返回带源码引用的本地证据回答，`fallbackReason=LOCAL_EVIDENCE_MODE`。传入具体模型 ID 时仍执行模型有效性校验。搜索请求只读已有索引，不会同步补建全仓库向量；切换向量模型后请执行项目准备或显式重试向量阶段。
-
+最小问答闭环不要求配置外部聊天模型。POST /api/repositories/{id}/ask 的 modelConfigId 可省略，此时返回带源码引用的本地证据回答；传入模型 ID 时仍校验模型有效性。搜索只读取已有索引，不会同步补建全仓向量，切换向量模型后执行项目准备或重试向量阶段。
 ## 验证
 
 ```bash
@@ -68,5 +45,5 @@ Linux CI 默认启动临时 pgvector 服务并执行这组集成测试；普通�
 
 - 管理员重置密码为只展示一次的随机临时密码，24 小时过期并强制改密。
 - 生产环境必须使用 HTTPS、`APP_SESSION_COOKIE_SECURE=true` 和受信反向代理。
-- PostgreSQL、部署后端 18082 和 Actuator 不得直接暴露公网。
+- PostgreSQL、容器内部后端 8081 和 Actuator 不得直接暴露公网。
 - `APP_LLM_MASTER_KEY` 必须稳定保管，不能在已有模型密钥后随意轮换。

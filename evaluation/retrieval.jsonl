@@ -42,6 +42,6 @@
 {"id":"RET-045","repositoryType":"VUE_TYPESCRIPT","question":"仓库导入任务 API 在哪里定义？","expectedPaths":["frontend/src/api/sourceImports.ts"],"tags":["frontend","import"]}
 {"id":"RET-046","repositoryType":"VUE_TYPESCRIPT","question":"前端路由和权限进入规则在哪里？","expectedPaths":["frontend/src/router/index.ts"],"tags":["frontend","router"]}
 {"id":"RET-047","repositoryType":"VUE_TYPESCRIPT","question":"工作区导航和标签页外壳在哪里实现？","expectedPaths":["frontend/src/components/WorkspaceShell.vue"],"tags":["frontend","shell"]}
-{"id":"RET-048","repositoryType":"OPS_AUTOMATION","question":"本地容器编排的服务定义在哪里？","expectedPaths":["deploy/components/compose.yaml"],"tags":["ops","compose"]}
-{"id":"RET-049","repositoryType":"OPS_AUTOMATION","question":"Linux 启动与环境检查脚本在哪里？","expectedPaths":["deploy/backend/backend.sh","scripts/check-runtime.mjs"],"tags":["ops","startup"]}
-{"id":"RET-050","repositoryType":"OPS_AUTOMATION","question":"Linux 发布包的组装脚本在哪里？","expectedPaths":["scripts/build-release.sh","scripts/build-release.mjs"],"tags":["ops","release"]}
+{"id":"RET-048","repositoryType":"OPS_AUTOMATION","question":"本地容器编排的服务定义在哪里？","expectedPaths":["deploy/all-in-one/compose.yaml"],"tags":["ops","compose"]}
+{"id":"RET-049","repositoryType":"OPS_AUTOMATION","question":"Linux 启动与环境检查脚本在哪里？","expectedPaths":["deploy/all-in-one/analyzer.sh","scripts/check-runtime.mjs"],"tags":["ops","startup"]}
+{"id":"RET-050","repositoryType":"OPS_AUTOMATION","question":"Linux 发布包的组装脚本在哪里？","expectedPaths":["scripts/build-docker-image.sh","scripts/build-docker-image.mjs"],"tags":["ops","release"]}

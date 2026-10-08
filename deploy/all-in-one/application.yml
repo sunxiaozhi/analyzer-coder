@@ -1,0 +1,12 @@
+# Additional Spring Boot configuration, loaded after the image defaults.
+# Keep managed files beneath /data so upgrades preserve them.
+# Internal database/backend addresses and ports are fixed by the entrypoint.
+app:
+  llm:
+    endpoint-exceptions: []
+  codegraph:
+    timeout-minutes: 30
+    task-timeout-minutes: 35
+  security:
+    session-idle-minutes: 30
+    session-max-hours: 12

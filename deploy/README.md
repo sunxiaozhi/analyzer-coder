@@ -1,11 +1,7 @@
-# 部署模板
+# 单镜像部署
 
-完整运行环境可用 [一体化 Docker 部署](all-in-one/README.md)，单镜像包含前后端、数据库和 CodeGraph。
+部署模板统一位于 [all-in-one](all-in-one/README.md)。镜像包含全部应用与运行依赖，data 和 config 通过宿主目录外挂，.env 管理密码、密钥、端口和启动选项。
 
-原有分离部署流程见 [部署与启动操作手册](../docs/15-deployment-runbook.md)。
+打包入口为 scripts/build-docker-image.sh / .ps1；安装、启停、备份和单镜像升级统一使用发布包中的 analyzer.sh / analyzer.ps1。
 
-- backend/：复制到发布包 backend，包含 Spring Boot 外部 YAML 和两平台启停脚本。
-- components/：复制到发布包 components，仅包含 PG/pgvector、Nginx 的编排及配置。
-- scripts/build-release.sh / .ps1 调用共享的 build-release.mjs 构建 JAR、前端并导出镜像。
-
-这里是模板目录，不是部署实例。不要将实际密码写回模板。组件的前端相对挂载路径按发布包结构设计；应先打包，再从发布目录启动。
+模板目录不保存业务数据和真实配置；启动时生成的 .env、data、config、backups 已加入 Git 和构建上下文排除规则。

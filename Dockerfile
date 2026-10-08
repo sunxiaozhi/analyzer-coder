@@ -57,6 +57,9 @@ COPY --from=frontend-build /build/frontend/dist/ /usr/share/nginx/html/
 COPY deploy/all-in-one/nginx.conf /etc/nginx/conf.d/analyzer-coder.conf
 COPY deploy/all-in-one/entrypoint.sh /usr/local/bin/analyzer-entrypoint
 COPY deploy/all-in-one/healthcheck.sh /usr/local/bin/analyzer-healthcheck
+COPY deploy/all-in-one/configure.mjs deploy/all-in-one/runtime.env.example \
+     deploy/all-in-one/application.yml deploy/all-in-one/postgresql.conf \
+     deploy/all-in-one/nginx.conf /opt/analyzer-coder/deploy/
 RUN chmod +x /usr/local/bin/analyzer-entrypoint /usr/local/bin/analyzer-healthcheck \
     && nginx -t
 EXPOSE 8080

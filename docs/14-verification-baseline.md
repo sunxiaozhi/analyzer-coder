@@ -318,7 +318,7 @@
   （`backend/src/main/resources/application.yml:85-87`），未在本次审计环境中运行。
 - **远端 Git / GitLab**：远端导入、分支探测与同步依赖真实远端与凭据，
   未做端到端验收；相关策略只有单元级覆盖。
-- **生产部署**：当前发布包为 PG/Nginx 容器加宿主机 JAR（见部署手册）；真实目标服务器上线、HTTPS、开机自启仍需按环境验收。旧全容器和纯宿主机方案已移除。
+- **生产部署**：本段原审计采用拆分部署，现已统一为完整单镜像（见 2026-10-08 验收记录及部署手册）；真实目标服务器上线、HTTPS、开机自启仍需按环境验收。
 - **历史库升级**：当前迁移已合并为仅面向空库的 V1；历史库须重新建库，旧版 V9 升级演练不再适用。
 
 ### 缺口 9：surefire 报告残留导致朴素汇总多算 7 项
@@ -379,14 +379,14 @@
 
 ## 8. 2026-09-20 部署流程改造验证
 
-本节补充部署改造后的结果；前文测试资产数量和审计结果保留其历史口径。
+本节保留当时部署改造的历史结果。此处拆分部署和宿主机 JAR 启动脚本已于 2026-10-08 移除，当前交付仅使用后文记录的完整单镜像方式。
 
 | 检查 | 本机结果 |
 | --- | --- |
 | npm ci、前端类型检查和 Vite 生产构建 | 通过；有既有分包体积和导入方式提示 |
 | Maven clean package -DskipTests | 通过，生成 Spring Boot JAR；本次未重跑业务单测 |
-| `scripts/build-release.test.mjs` | 5 项通过；覆盖无镜像包、凭据排除、校验、镜像标签与架构、失败不交付；另已完成真实镜像导出验证 |
-| `scripts/backend-launch.test.mjs` | Windows 下 1 项通过，使用实际测试 JAR 验证工作目录、空格路径、健康、重复启动、PID 身份保护、停止及启动失败清理 |
+| 当时的拆分发布打包测试（已移除） | 5 项通过；覆盖无镜像包、凭据排除、校验、镜像标签与架构、失败不交付；另已完成真实镜像导出验证 |
+| 当时的宿主机 JAR 启动测试（已移除） | Windows 下 1 项通过，使用实际测试 JAR 验证工作目录、空格路径、健康、重复启动、PID 身份保护、停止及启动失败清理 |
 | 实际 Spring Boot 外部配置加载 | 使用构建 JAR 内 Spring Boot 依赖验证：`backend/config/application.yml` 自动加载，覆盖外部数据库/密钥/端口配置，同时继承 JAR 内默认属性；不连接数据库 |
 | Compose 配置、PowerShell 解析、Bash `-n` | 通过；同一配置已由 Compose V2 和官方 `docker/compose:1.29.2` 分别执行 `config` 验证 |
 | Nginx 静态入口、SPA 与资源 MIME | 通过；实际启动 Nginx 后 `/index.html`、`/` 和不存在的前端路由均返回 200，真实 JS 返回 `application/javascript`，缺失 asset 返回 404；精确 `/index.html` location 防止内部重定向循环 |
@@ -407,3 +407,18 @@ CI 新增 `ubuntu-latest` / `windows-latest` 部署脚本测试矩阵。Windows 
 - 后端累计测试报告：276 项，失败 0、错误 0、跳过 5；其中 BranchIsolationDatabaseTest 使用独立测试数据库实际执行并回滚。
 - 前端全量回归 40 个文件、162 项通过；新增共享表单测试后专项 2 个文件、5 项通过；Vue 类型检查与生产构建通过。
 - 外部模型服务没有参与本次验证；问答使用本地回退和真实知识引用。
+
+## 2026-10-08 完整单镜像部署验收
+
+当前仅交付一个完整镜像和一个容器。旧拆分发布、独立数据库/代理启动和宿主机 JAR 部署脚本已移除。目录 `data/` bind 挂载到 `/data`，目录 `config/` 只读挂载到 `/config`，启动参数和独立密码/密钥保存在宿主 `.env`。
+
+| 检查 | 本机结果 |
+| --- | --- |
+| 当前前后端生产构建 | 通过；重新执行 npm ci/Vite 构建和 Maven clean package；本次未重跑业务单测 |
+| 完整镜像 `analyzer-coder:1.1.0-20261008` | 已构建 linux/amd64；复用已验证本地完整运行环境，仍重新编译当前应用；包含原生 CodeGraph 1.6.0、PG17/pgvector 和 MCP 依赖 |
+| `scripts/build-docker-image.test.mjs`、`scripts/deployment.test.mjs` | Windows PowerShell 与镜像内 Linux Bash 各 7 项通过；覆盖目录带空格、初始化、配置/数据保留、完整发布校验、升级、损坏/不完整包拒绝及实例身份保护 |
+| `scripts/smoke-docker-image.mjs` 实际容器验收 | 通过；三种外挂配置生效、前端、登录、内部健康接口隔离、pgvector、Git、原生 CodeGraph 索引、MCP；删除并重建容器后数据库、文件、会话和密钥保留 |
+| `scripts/verify-deployment.mjs` 实际启动脚本验收 | Windows Docker Desktop 下通过；首次初始化和启动、重复启动不重建、一致性目录备份/恢复运行、单镜像替换升级；数据库、文件、会话、密码/密钥与自定义配置保持 |
+| 质量数据引用校验 | 通过；47 条 retrieval、26 条 QA，引用更新到当前单镜像启动手册和脚本 |
+
+实际部署测试使用独立 Compose 项目和临时目录，不操作现有业务容器。Linux 脚本已在 Linux 容器环境测试；Linux 宿主机实际 Docker 启动链路纳入 CI，尚未在本机运行 Linux 宿主验收。真实历史数据库升级、HTTPS 和开机自启仍由目标部署环境验收。

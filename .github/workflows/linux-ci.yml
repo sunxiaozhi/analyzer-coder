@@ -57,9 +57,11 @@ jobs:
 
       - name: Validate startup scripts
         run: |
-          bash -n scripts/build-release.sh
-          bash -n deploy/backend/backend.sh
-          node --check scripts/build-release.mjs
+          bash -n scripts/build-docker-image.sh
+          bash -n deploy/all-in-one/analyzer.sh
+          bash -n deploy/all-in-one/entrypoint.sh
+          node --check scripts/build-docker-image.mjs
+          node --check deploy/all-in-one/configure.mjs
           node scripts/check-runtime.mjs --help
 
       - name: Validate retrieval quality
@@ -97,17 +99,6 @@ jobs:
           test -f evaluation/results/release.json
           node scripts/evaluate-quality.mjs --results evaluation/results/release.json
 
-      - name: Assemble release artifact
-        run: bash scripts/build-release.sh --version ci-${{ github.sha }} --skip-build --without-images
-
-      - name: Upload Linux release artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: analyzer-coder-linux-${{ github.sha }}
-          path: release/*.tar.gz
-          if-no-files-found: error
-          retention-days: 14
-
   docker-all-in-one:
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -116,10 +107,19 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - name: Build complete runtime image
-        run: docker build --platform linux/amd64 -t analyzer-coder:ci .
-      - name: Verify startup, graph indexing and restart persistence
-        run: node scripts/smoke-docker-image.mjs analyzer-coder:ci
+      - name: Build, verify and export the complete image
+        run: bash scripts/build-docker-image.sh --version ci-${{ github.sha }}
+      - name: Verify install, backup and single-image upgrade
+        run: node scripts/verify-deployment.mjs release/analyzer-coder-docker-ci-${{ github.sha }}
+      - name: Upload complete Docker release
+        uses: actions/upload-artifact@v7
+        with:
+          name: analyzer-coder-docker-${{ github.sha }}
+          path: |
+            release/*.tar.gz
+            release/*.sha256
+          if-no-files-found: error
+          retention-days: 14
 
   deployment-scripts:
     strategy:
@@ -132,9 +132,5 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Test release layout and backend lifecycle
-        run: node --test scripts/build-release.test.mjs scripts/backend-launch.test.mjs
+      - name: Test complete release, configuration and lifecycle
+        run: node --test scripts/build-docker-image.test.mjs scripts/deployment.test.mjs

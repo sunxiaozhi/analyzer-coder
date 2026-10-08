@@ -24,7 +24,6 @@ release
 release-full
 .vscode
 .idea
-deploy/backend/data
-deploy/backend/logs
-deploy/backend/repositories
-deploy/backend/app.jar
+deploy/all-in-one/data
+deploy/all-in-one/config
+deploy/all-in-one/backups

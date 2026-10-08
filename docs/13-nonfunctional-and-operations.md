@@ -33,7 +33,7 @@
 - 登出以 `Max-Age=0` 清空同名 Cookie（`.../AuthController.java:116`）。
 - `app.security.cookie-secure` 在 `application.yml` 默认 `false`
   （`backend/src/main/resources/application.yml:65`），发布模板按 HTTP 默认设为 `false`
-  （发布包 backend/config/application.yml 中 app.security.cookie-secure）；HTTP 模板为 false，HTTPS 部署必须设为 true。
+  （发布包 .env 中 APP_SESSION_COOKIE_SECURE）；HTTP 模板为 false，HTTPS 部署必须设为 true。
 
 ### 2.3 密码与登录防护
 
@@ -118,7 +118,7 @@
   （`backend/src/main/java/com/analyzercoder/interfaces/rest/KnowledgeAttachmentController.java:55-64`）。
 - Java 侧：MCP 与令牌列表设置 `Cache-Control: no-store`
   （`.../McpController.java:149`；`.../AccountAccessTokenController.java:32,42`）。
-- Nginx 模板统一注入 X-Content-Type-Options、X-Frame-Options、Referrer-Policy，配置见 deploy/components/nginx/nginx.conf。
+- Nginx 模板统一注入 X-Content-Type-Options、X-Frame-Options、Referrer-Policy，配置见 deploy/all-in-one/nginx.conf。
 - 全站 `Content-Security-Policy` 头在任何 nginx 配置中都未设置；CSP 仅存在于上述 Java 单端点。
 - 后端不泄漏内部细节：未预期异常统一 500 `INTERNAL_ERROR` 固定文案，数据约束异常 409
   `CONFLICT` 固定文案（`backend/src/main/java/com/analyzercoder/interfaces/rest/ApiExceptionHandler.java:70-81`）；
@@ -127,7 +127,7 @@
 
 ### 2.8 不得公网暴露的组件
 
-- PostgreSQL 只绑定宿主机 127.0.0.1；后端在宿主机运行，监听 0.0.0.0 供 Docker 网关访问，防火墙限制发布端口 18082 仅允许 Docker 来源。
+- PostgreSQL 和后端只绑定容器回环地址 127.0.0.1；宿主机仅映射 Nginx HTTP 端口，默认 18081。
 - Nginx 只转发 /api/，拒绝 /actuator；健康检查在主机访问 /actuator/health。
 - 后端运行账号只授予所需仓库和数据目录访问权限，不再依赖后端容器的 UID、挂载或 systemd 模板。
 
@@ -135,11 +135,11 @@
 
 - 外部 YAML 将 server.forward-headers-strategy 设为 framework。默认 Nginx 模板提供 HTTP；公网发布按部署手册在同一配置中接入 HTTPS 并启用 app.security.cookie-secure。
 - Nginx 使用实际连接信息覆盖转发头。前置 HTTPS 网关需按受信代理链调整配置，不信任公网客户端任意传入的转发头。
-- API 读取超时 300 秒、上传限制 60m、关闭流式响应缓冲；见 deploy/components/nginx/nginx.conf。
+- API 读取超时 300 秒、上传限制 60m、关闭流式响应缓冲；见 deploy/all-in-one/nginx.conf。
 
 ## 3. 配置需求
 
-JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包的 backend/config/application.yml 按 Spring Boot 标准加载并覆盖同名属性，无需配置 APP_ 环境变量。下表保留源码默认属性及其环境变量映射。
+JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包的 config/application.yml 作为 Spring Boot 附加配置覆盖同名属性，.env 提供启动变量及密钥。镜像入口固定内部数据源、监听端口和受管数据路径。下表保留源码默认属性及其环境变量映射，镜像模板和入口补充运行默认值。
 下表中"必填"指无默认值、缺失会导致启动失败或功能不可用。
 
 | 领域 | 配置键 | 环境变量 | 默认值 | 必填 | 来源 |
@@ -202,7 +202,7 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 | --- | --- | --- | --- |
 | `app.repository.branch-concurrency` | 2 | 分支准备并发度 | backend/src/main/java/com/analyzercoder/worker/BranchPreparationWorker.java:22 |
 | `app.knowledge.drift-task-timeout-minutes` | 5 | 知识漂移任务时限 | .../application/knowledge/KnowledgeDriftJobProcessor.java:26 |
-| `SERVER_ADDRESS`（绑定 `server.address`） | 部署模板给出 | 后端监听地址 | deploy/backend/config/application.yml |
+| `server.address` / `server.port` | 入口固定 | 容器内部 127.0.0.1:8081 | deploy/all-in-one/entrypoint.sh |
 
 - 不存在 `spring.datasource.hikari.*`，未配置连接池大小；也不存在 `server.tomcat.*`、
   `server.servlet.*`、`logging.*`、`info.*`、`management.endpoint.*` 与
@@ -247,7 +247,7 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 ### 4.3 请求超时与任务超时
 
 - HTTP 服务端未配置请求超时；实际生效的是 nginx `proxy_read_timeout 300s`
-  （deploy/components/nginx/nginx.conf）。
+  （deploy/all-in-one/nginx.conf）。
 - CodeGraph CLI 单次构建超时 10 分钟（`application.yml:89`；
   `.../application/intelligence/CodeGraphService.java:30,34,62`）；Worker 任务整体时限 12 分钟，
   写入 `timeout_at`（`application.yml:91`；
@@ -295,30 +295,31 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
 
 ## 5. 部署形态
 
-唯一支持的发布形态为 PG/pgvector、Nginx 容器加宿主机 JAR。前端为静态 dist，只读挂载到 Nginx。构建机生成完整目录和压缩包，服务器无需源码、Node.js 或 Maven。详细步骤以 [部署手册](15-deployment-runbook.md) 为准。
+唯一支持的发布形态为完整单镜像：前后端、Java、PostgreSQL/pgvector、Nginx、Git、Node.js、CodeGraph 及原生解析器、Python、MCP 同处一个容器。安装和升级都交付一张完整镜像；不提供独立组件镜像或宿主机 JAR 部署。
 
-- 模板：deploy/backend、deploy/components。
-- 打包入口：scripts/build-release.sh / .ps1，共用 build-release.mjs。
-- 镜像：PG/pgvector 与 Nginx 使用版本标签导出到 components/images/components.tar，MANIFEST 记录实际镜像 ID、摘要和架构。无镜像升级包省略 TAR。
-- PostgreSQL 固定使用 bind；`POSTGRES_DATA_SOURCE` 是宿主机绝对目录，容器 target 固定为 `/var/lib/postgresql/data`。更换 source 不会自动迁移数据。
-- Nginx 将发布目录的 `frontend/dist` 只读挂载到 `/usr/share/nginx/html`；配置将 `/index.html` 精确匹配后再提供 SPA 回退，避免入口缺失或不可读时产生内部重定向循环。`/assets/` 缺失时固定返回 404，不回退 HTML，防止 JS/CSS MIME 类型错误。Compose 配置兼容 V1.29.2 与 V2。
+- 模板与配置：deploy/all-in-one。
+- 构建入口：scripts/build-docker-image.sh / .ps1，共用 build-docker-image.mjs。
+- 交付：image.tar、跨平台 analyzer 启动脚本、Compose、image.env、README、MANIFEST、SHA256SUMS，以及完整 tar.gz。
+- data 目录 bind 挂载 /data，保存数据库、受管工作区、图谱、附件、本地仓库和日志；config 目录只读 bind 挂载 /config，包含外挂后端、Nginx、PostgreSQL 配置。
+- .env 保存启动变量、端口、密码与主密钥。首次启动生成随机值，重复初始化及升级不会覆盖已有配置；升级只更换镜像标签和交付的控制文件。
+- 仅发布 Nginx HTTP 端口（默认宿主 18081 -> 容器 8080），后端 8081 和数据库 5432 在容器内部回环监听。
 
 ### 5.4 健康检查
 
 | 检查 | 作用 |
 | --- | --- |
-| PostgreSQL pg_isready | Compose 组件就绪检查 |
-| /component-health | Nginx 自身健康，不验证静态文件或后端 |
-| /index.html 与 / | 验证前端 dist 挂载、权限及 SPA 回退 |
-| 宿主机 /actuator/health | 后端脚本验证 UP，包含数据库健康 |
-| Nginx /api/health | 验证代理到宿主机后端的链路 |
+| 容器健康检查脚本 | 同时验证 PostgreSQL、后端 Actuator 和前端入口 |
+| /component-health | Nginx 自身连通性 |
+| /index.html、/ 与真实 JS/CSS | 前端资源和 SPA 正确性；不存在的 assets 返回 404 |
+| analyzer status / logs | 容器状态与服务日志；启动等待健康、失败返回非零 |
 
 ## 6. 启动与诊断脚本
 
-发布包 backend/backend.sh 和 backend/backend.ps1 提供 start、stop、restart、status。启动检查配置占位符、端口与进程身份，并等待健康；固定 backend 工作目录，不手工注入业务配置。Linux 停机发送 SIGTERM，Windows 使用 Stop-Process；详细限制见部署手册。
+发布包 analyzer.sh 和 analyzer.ps1 提供 init、start、stop、restart、status、logs、backup、upgrade。首次运行自动校验导入本地镜像、建立配置与数据目录并等待健康；restart 重新创建容器，加载所有外挂配置。停机采用容器内的优雅关闭流程，两平台行为一致。
 
-源码的 scripts/check-runtime.mjs 继续作为开发环境诊断入口，依赖 Node/Maven 和终端环境变量；它不读取发布包 YAML，也不作为部署机必需工具。scripts/verify-core.mjs 与评测脚本保留用于开发验证。
+backup 在服务暂停时打包 data、config、.env，完成后恢复原运行状态。upgrade 校验新包后导入一张完整镜像，更新启动控制文件，保留宿主目录和配置；数据库迁移后的回滚必须使用匹配备份。
 
+脚本校验 Compose 项目的安装目录标签，拒绝操作另一安装实例。源码环境的 check-runtime.mjs、verify-core.mjs 与评测脚本继续仅用于开发验证。
 ## 7. 可观测性
 
 - Actuator 暴露端点固定为 `health,info,metrics`，健康与诊断入口见第 5.4 节
@@ -331,7 +332,7 @@ JAR 内默认配置位于 backend/src/main/resources/application.yml；发布包
   `errorMessage`、`heartbeatAt`、`timeoutAt`
   （`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:64-99,123-137`；
   `.../RepositoryBranchController.java:90-94,184-192`）。
-- 日志：发布包 backend/logs/backend.log 使用 Spring Boot 滚动策略；console.log（Windows 另有 stderr.log）记录启动输出，见 deploy/backend/config/application.yml 和两平台启停脚本。
+- 日志：宿主 data/logs/backend.log 保存后端文件日志，容器标准输出由 analyzer logs 查看；可在外挂 config/application.yml 配置日志滚动策略。
 - 审计日志的范围与事件类型见账号与权限文档；唯一读取端点为 `GET /api/accounts/audit`，
   要求超级管理员（`.../AccountController.java:110-117`）。
 
