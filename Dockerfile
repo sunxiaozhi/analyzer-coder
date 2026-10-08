@@ -43,7 +43,9 @@ COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-runtime /usr/local/lib/node_modules/ /usr/local/lib/node_modules/
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
-    && npm install --global "@colbymchenry/codegraph@${CODEGRAPH_VERSION}" \
+    && npm install --global --registry=https://registry.npmjs.org --fetch-retries=3 --fetch-timeout=600000 \
+       "@colbymchenry/codegraph@${CODEGRAPH_VERSION}" \
+       "@colbymchenry/codegraph-linux-$(node -p process.arch)@${CODEGRAPH_VERSION}" \
     && codegraph --version
 WORKDIR /opt/analyzer-coder/mcp-server
 COPY mcp-server/package*.json ./
