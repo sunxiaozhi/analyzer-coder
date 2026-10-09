@@ -13,6 +13,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -162,17 +163,11 @@ public class OpenAiCompatibleClient {
         payload.put("model", model);
         payload.put("input", input);
         payload.put("dimensions", dimension);
+        payload.put("encoding_format", "float");
         long deadline = System.nanoTime() + Duration.ofMillis(requestTimeoutMs).toNanos();
         try {
             HttpResponse<String> response =
-                    http.send(
-                            request(baseUri, "/embeddings", apiKey, deadline)
-                                    .header("Content-Type", "application/json")
-                                    .POST(
-                                            HttpRequest.BodyPublishers.ofString(
-                                                    json.writeValueAsString(payload)))
-                                    .build(),
-                            HttpResponse.BodyHandlers.ofString());
+                    sendEmbeddings(http, baseUri, apiKey, payload, deadline);
             requireAllowedStatus(response.statusCode(), response.body());
             return embeddingVector(
                     json.readTree(response.body()).path("data").path(0).path("embedding"),
@@ -198,17 +193,11 @@ public class OpenAiCompatibleClient {
         payload.put("model", model);
         payload.set("input", json.valueToTree(inputs));
         payload.put("dimensions", dimension);
+        payload.put("encoding_format", "float");
         long deadline = System.nanoTime() + Duration.ofMillis(requestTimeoutMs).toNanos();
         try {
             HttpResponse<String> response =
-                    http.send(
-                            request(baseUri, "/embeddings", apiKey, deadline)
-                                    .header("Content-Type", "application/json")
-                                    .POST(
-                                            HttpRequest.BodyPublishers.ofString(
-                                                    json.writeValueAsString(payload)))
-                                    .build(),
-                            HttpResponse.BodyHandlers.ofString());
+                    sendEmbeddings(http, baseUri, apiKey, payload, deadline);
             if (response.statusCode() == 400
                     || response.statusCode() == 413
                     || response.statusCode() == 422) {
@@ -239,6 +228,49 @@ public class OpenAiCompatibleClient {
             throw exception;
         } catch (Exception exception) {
             throw mapTransport(exception);
+        }
+    }
+
+    private HttpResponse<String> sendEmbeddings(
+            HttpClient http, URI baseUri, String apiKey, ObjectNode payload, long deadline)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response =
+                http.send(
+                        request(baseUri, "/embeddings", apiKey, deadline)
+                                .header("Content-Type", "application/json")
+                                .POST(
+                                        HttpRequest.BodyPublishers.ofString(
+                                                json.writeValueAsString(payload)))
+                                .build(),
+                        HttpResponse.BodyHandlers.ofString());
+        if (payload.has("dimensions") && rejectsDimensions(response)) {
+            // Fixed-dimension services may reject dimensions; retry once and still validate the
+            // vector length.
+            payload.remove("dimensions");
+            return sendEmbeddings(http, baseUri, apiKey, payload, deadline);
+        }
+        return response;
+    }
+
+    private boolean rejectsDimensions(HttpResponse<String> response) {
+        if (response.statusCode() != 400 && response.statusCode() != 422) return false;
+        try {
+            JsonNode error = json.readTree(response.body()).path("error");
+            String message =
+                    (error.isTextual() ? error.asText() : error.path("message").asText())
+                            .toLowerCase(Locale.ROOT);
+            boolean mentionsDimensions =
+                    message.contains("dimension") || message.contains("matryoshka");
+            boolean unsupported =
+                    message.contains("not support")
+                            || message.contains("unsupported")
+                            || message.contains("not allowed")
+                            || message.contains("not permitted")
+                            || message.contains("unrecognized")
+                            || message.contains("unknown parameter");
+            return mentionsDimensions && unsupported;
+        } catch (IOException | RuntimeException ignored) {
+            return false;
         }
     }
 

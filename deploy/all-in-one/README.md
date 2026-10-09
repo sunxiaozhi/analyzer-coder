@@ -149,3 +149,23 @@ pwsh -File analyzer.ps1 backup
 ```
 
 数据同样位于该安装目录的 `data`，配置在 `config` 和 `.env`。Windows 应限制 `.env` 和备份文件的访问权限。
+
+## 9. 内网问答与向量服务
+
+在 `config/application.yml` 的已有 `app.llm` 下配置 `endpoint-exceptions`。问答和向量服务使用不同地址时分别列出，`base-url` 与页面填写的基础地址一致（包含协议、端口和路径），程序自动追加模型接口路径。示例域名需替换为实际服务地址：
+
+```yaml
+app:
+  llm:
+    endpoint-exceptions:
+      - base-url: "https://chat.example.com/v1"
+        allow-private-network: true
+        skip-tls-verification: false
+      - base-url: "https://embedding.example.com/v1"
+        allow-private-network: true
+        skip-tls-verification: false
+```
+
+保存服务器配置后执行 `bash analyzer.sh restart`。HTTPS 证书正常时保持 `skip-tls-verification: false`。
+
+向量维度应与服务实际返回长度一致，例如标准 bge-m3 的稠密向量为 1024 维。客户端显式请求 `encoding_format: float`；服务明确拒绝 `dimensions` 参数时，会在同一超时预算内去掉该参数重试一次。返回向量仍须通过页面配置的维度校验，不截断或补齐向量。若仍返回 400，检查服务端错误正文、模型标识及基础地址。
