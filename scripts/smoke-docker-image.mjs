@@ -89,6 +89,11 @@ try {
   const sql = statement => docker(['exec','-u','postgres',name,'psql','-U','codebase_kb','-d','codebase_kb','-Atc',statement]);
   assert.equal(sql("SELECT extname FROM pg_extension WHERE extname='vector'"), 'vector');
   assert.equal(sql('SHOW max_connections'), '73');
+  // A fresh installation must use the consolidated baseline and include shared knowledge.
+  assert.equal(sql("SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success"), '1');
+  assert.equal(sql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('knowledge_branch_scopes','knowledge_branch_scope_history')"), '2');
+  assert.equal(sql("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='knowledge_code_refs' AND column_name='branch_id' AND is_nullable='NO'"), '1');
+  assert.equal(sql("SELECT count(*) FROM pg_trigger WHERE tgname IN ('trg_knowledge_scope_revision','trg_knowledge_reference_branch')"), '2');
   sql("CREATE TABLE docker_smoke_marker (value text); INSERT INTO docker_smoke_marker VALUES ('persisted');");
   const oldId = docker(['inspect',name,'--format','{{.Id}}']);
   stopAndRemove();

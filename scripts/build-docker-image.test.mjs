@@ -18,6 +18,7 @@ function fixture(t) {
   fs.mkdirSync(path.join(root,'scripts'),{recursive:true});
   fs.mkdirSync(path.join(root,'deploy/all-in-one/config'),{recursive:true});
   fs.copyFileSync(path.join(repository,'scripts/build-docker-image.mjs'),path.join(root,'scripts/build-docker-image.mjs'));
+  fs.writeFileSync(path.join(root,'VERSION'),'1.2.3\n');
   fs.writeFileSync(path.join(root,'scripts/smoke-docker-image.mjs'),'if(process.env.FAIL_SMOKE)process.exit(1);\n');
   for(const name of ['analyzer.sh','analyzer.ps1','compose.yaml','image.env','README.md']) fs.copyFileSync(path.join(repository,'deploy/all-in-one',name),path.join(root,'deploy/all-in-one',name));
   fs.writeFileSync(path.join(root,'deploy/all-in-one/.env'),'PRIVATE=not-for-delivery');
@@ -37,9 +38,9 @@ cp.spawnSync=function(command,args,options){
 };
 require('node:module').syncBuiltinESMExports();
 `);
-  const launch=(extra={},args=[])=>spawnSync(process.execPath,['--require',preload,path.join(root,'scripts/build-docker-image.mjs'),'--version','test-1','--output','delivery with spaces',...args],
+  const launch=(extra={},args=[])=>spawnSync(process.execPath,['--require',preload,path.join(root,'scripts/build-docker-image.mjs'),'--output','delivery with spaces',...args],
     {cwd:os.tmpdir(),env:{...process.env,...extra},encoding:'utf8',windowsHide:true,timeout:30000});
-  return {root,launch,destination:path.join(root,'delivery with spaces/analyzer-coder-docker-test-1')};
+  return {root,launch,destination:path.join(root,'delivery with spaces/analyzer-coder-docker-1.2.3')};
 }
 test('complete delivery includes launchers and archive, excludes private data, and hashes every delivery file',t=>{
   const f=fixture(t), result=f.launch();
@@ -50,8 +51,9 @@ test('complete delivery includes launchers and archive, excludes private data, a
     const [,sum,name]=line.match(/^([0-9a-f]{64})  (.+)$/);
     assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(f.destination,name))).digest('hex'),sum);
   }
-  assert.match(fs.readFileSync(path.join(f.destination,'image.env'),'utf8'),/analyzer-coder:test-1/);
+  assert.match(fs.readFileSync(path.join(f.destination,'image.env'),'utf8'),/analyzer-coder:1.2.3/);
   const manifest=JSON.parse(fs.readFileSync(path.join(f.destination,'MANIFEST.json')));
+  assert.equal(manifest.releaseVersion,'1.2.3');
   assert.equal(manifest.dataMount,'./data:/data');
   assert.equal(manifest.configMount,'./config:/config:ro');
   const archive=f.destination+'.tar.gz';
@@ -79,4 +81,24 @@ test('removed application-only flags and unsafe tags are rejected',t=>{
   const f=fixture(t);
   for(const args of [['--without-images'],['--skip-build'],['--version','bad/version']])assert.notEqual(f.launch({},args).status,0);
   assert.ok(!fs.existsSync(f.destination));
+});
+
+
+test('release version comes from VERSION and arbitrary overrides cannot create releases',t=>{
+  for(const version of ['20261009-flyway','1.2.4','1.2.3-ci','01.2.3']){
+    const f=fixture(t), result=f.launch({},['--version',version]);
+    assert.notEqual(result.status,0);
+    assert.ok(!fs.existsSync(f.destination));
+  }
+  const f=fixture(t);
+  fs.writeFileSync(path.join(f.root,'VERSION'),'01.2.3\n');
+  assert.notEqual(f.launch().status,0);
+  assert.ok(!fs.existsSync(f.destination));
+});
+test('CI versions keep the project release prefix',t=>{
+  const f=fixture(t), result=f.launch({},['--version','1.2.3-ci.abc123']);
+  assert.equal(result.status,0,result.stderr);
+  const destination=path.join(f.root,'delivery with spaces/analyzer-coder-docker-1.2.3-ci.abc123');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(destination,'MANIFEST.json'))).releaseVersion,'1.2.3-ci.abc123');
+  assert.ok(fs.existsSync(destination+'.tar.gz'));
 });

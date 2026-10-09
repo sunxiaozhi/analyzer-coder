@@ -27,14 +27,14 @@
 
 ## 打包与部署
 
-唯一部署方式是一个完整 Docker 镜像，包含前后端、Java、PostgreSQL/pgvector、Nginx、Git、Node.js、CodeGraph 原生运行时和 MCP。安装和升级都交付一张镜像，业务数据写入宿主机 data 目录，配置放在 .env 和 config 目录。
+唯一部署方式是一个完整 Docker 镜像，包含前后端、Java、PostgreSQL/pgvector、Nginx、Git、Node.js、CodeGraph 原生运行时和 MCP。交付一张完整镜像，业务数据写入宿主机 data 目录，配置放在 .env 和 config 目录。
 
-Windows：`pwsh -File scripts/build-docker-image.ps1 -Version 1.0.0`。
-Linux：`bash scripts/build-docker-image.sh --version 1.0.0`。
+Windows：`pwsh -File scripts/build-docker-image.ps1`。
+Linux：`bash scripts/build-docker-image.sh`。
 
 输出完整离线目录及同名 tar.gz。服务器解压后执行 `bash analyzer.sh start` 或 `pwsh -File analyzer.ps1 start`，自动导入镜像、初始化缺失配置并等待健康；默认访问 http://服务器IP:18081，管理员初始密码从 .env 读取。
 
-修改配置用 restart，备份用 backup，升级用 upgrade 新包目录；已有数据、配置和密钥保留。运行机只需要 Docker/Compose，以及系统 Bash 或 PowerShell 7。
+修改配置用 restart，备份用 backup；数据、配置和密钥保存在安装目录。运行机只需要 Docker/Compose，以及系统 Bash 或 PowerShell 7。
 
 安装、外挂配置、备份、单镜像升级和旧数据卷迁移见 [启动部署手册](deploy/all-in-one/README.md)。源码开发见 [后端说明](backend/README.md)，前端使用 `npm --prefix frontend run dev`。
 ## 验证
@@ -65,3 +65,5 @@ node scripts/evaluate-quality.mjs --validate
 MCP 配置、分支选择和工具参数见 [MCP 接入说明](mcp-server/README.md)；MCP 工具目录见 [MCP 接入需求](docs/09-mcp-integration.md)。
 仓库接入与分支同步/索引的边界见 [仓库接入与来源凭据](docs/03-repository-source-and-credentials.md) 和 [分支工作区与准备](docs/04-branch-version-and-preparation.md)。
 部署与启动操作见 [部署与启动操作手册](docs/15-deployment-runbook.md)。
+
+发布版本统一读取根目录 `VERSION`，成果物固定输出到项目 `release/`；版本、命名及重复打包规则见 [发布规则](docs/release-policy.md)。

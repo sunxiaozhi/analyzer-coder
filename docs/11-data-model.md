@@ -47,7 +47,7 @@ repositories
 
 ### `knowledge_cards` 与 `knowledge_card_revisions`
 
-两表都有必填 `branch_id`。修订触发器把当前卡片的分支身份写入历史修订，知识不能跨分支共享或后改“适用范围”。代码引用仍记录产生证据时的内容令牌，以便检测漂移。
+两表都有必填 `branch_id`。修订触发器把当前卡片的分支身份写入历史修订，共享知识通过 knowledge_branch_scopes 记录 ALL_BRANCHES 或 SELECTED_BRANCHES 适用范围，并通过 knowledge_branch_scope_history 保存修订范围。代码引用仍记录产生证据时的内容令牌，以便检测漂移。
 
 ### `branch_read_contexts`
 
@@ -63,9 +63,9 @@ repositories
 
 ## 迁移摘要
 
-Flyway 仅保留 `V1__init_schema.sql`，一次建立当前 42 张业务表、约束、索引、触发器及必要的初始配置。已退役的变更评审与跨仓工程项目结构不再创建。
+Flyway 仅保留 `V1__init_schema.sql`，合并原 V1 与 V2，一次建立当前业务表、约束、索引、触发器及必要的初始配置，包含 knowledge_branch_scopes、knowledge_branch_scope_history 和知识代码引用的 branch_id。已退役的变更评审与跨仓工程项目结构不再创建。
 
-此基线只适用于空数据库。已有 V1–V9 执行历史与新版 V1 校验和不同；按重新建库的方式部署，不在旧库上直接执行迁移。
+此基线只适用于空数据库。已有旧 V1/V2 或更早 V1–V9 执行历史与新版 V1 校验和不同，不能直接原地升级。首次部署使用空库；保留旧库数据时须另行验证数据迁移方案，不能清空历史表、repair 或关闭 Flyway 绕过校验。
 
 ## 受管文件布局
 

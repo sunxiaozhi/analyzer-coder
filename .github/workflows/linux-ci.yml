@@ -108,9 +108,9 @@ jobs:
         with:
           node-version: '24'
       - name: Build, verify and export the complete image
-        run: bash scripts/build-docker-image.sh --version ci-${{ github.sha }}
+        run: bash scripts/build-docker-image.sh --version "$(cat VERSION)-ci.${{ github.sha }}"
       - name: Verify install, backup and single-image upgrade
-        run: node scripts/verify-deployment.mjs release/analyzer-coder-docker-ci-${{ github.sha }}
+        run: node scripts/verify-deployment.mjs "release/analyzer-coder-docker-$(cat VERSION)-ci.${{ github.sha }}"
       - name: Upload complete Docker release
         uses: actions/upload-artifact@v7
         with:

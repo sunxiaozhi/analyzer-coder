@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const options = { version: '1.0.0', platform: 'linux/amd64', output: 'release', runtimeImage: null };
+const options = { version: null, platform: 'linux/amd64', output: 'release', runtimeImage: null };
 const deliveryFiles = ['analyzer.sh', 'analyzer.ps1', 'compose.yaml', 'image.env', 'README.md'];
 const imageFiles = ['configure.mjs', 'runtime.env.example', 'application.yml', 'postgresql.conf', 'nginx.conf'];
 function command(executable, args, cwd = root, capture = false) {
@@ -86,6 +86,7 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
     console.log('Usage: node scripts/build-docker-image.mjs [--version VERSION] [--platform linux/amd64|linux/arm64] [--output DIR] [--runtime-image analyzer-coder:VERSION]');
+    console.log('Defaults: version from project VERSION; output in project release/. Explicit version must match VERSION (CI: VERSION-ci.ID).');
     console.log('Builds and verifies one complete image, then delivers launchers, image.tar, checksums and a .tar.gz.');
     console.log('--runtime-image reuses a local verified complete runtime; rebuilds applications using local Node/npm, Java 17 and Maven.');
     return;
@@ -97,14 +98,23 @@ async function main() {
     if (!value || value.startsWith('--')) throw new Error(`Missing value for ${args[i - 1]}`);
     options[key] = value;
   }
-  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/.test(options.version)) throw new Error('Invalid image version.');
+  const releaseVersion = fs.readFileSync(path.join(root, 'VERSION'), 'utf8').trim();
+  const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+  if (!stableVersion.test(releaseVersion)) throw new Error('VERSION must contain MAJOR.MINOR.PATCH.');
+  options.version ??= releaseVersion;
+  const ciPrefix = releaseVersion + '-ci.';
+  const validCiVersion = options.version.startsWith(ciPrefix) && /^[a-z0-9]+$/.test(options.version.slice(ciPrefix.length));
+  if (options.version !== releaseVersion && !validCiVersion) {
+    throw new Error('Release version must match VERSION; only VERSION-ci.ID is allowed for CI.');
+  }
+  if (options.version.length > 80) throw new Error('Image version is too long.');
   if (!['linux/amd64', 'linux/arm64'].includes(options.platform)) throw new Error('Unsupported image platform.');
   if (options.runtimeImage && !/^analyzer-coder:[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/.test(options.runtimeImage)) throw new Error('Invalid runtime image.');
   const packageName = `analyzer-coder-docker-${options.version}`;
   const output = path.resolve(root, options.output);
   const destination = path.join(output, packageName);
   const archive = path.join(output, `${packageName}.tar.gz`);
-  if ([destination, archive, archive + '.sha256'].some(file => fs.existsSync(file))) throw new Error('Output exists; choose another version or output.');
+  if ([destination, archive, archive + '.sha256'].some(file => fs.existsSync(file))) throw new Error('This release already exists; reuse it or update VERSION for an intentional new release. Existing deliveries are never overwritten.');
   command('tar', ['--version'], root, true);
   if (docker(['info', '--format', '{{.OSType}}'], true) !== 'linux') throw new Error('Start Docker with Linux containers first.');
   const image = `analyzer-coder:${options.version}`;
@@ -120,7 +130,7 @@ async function main() {
   fs.writeFileSync(marker, 'Packaging has not completed.\n');
   docker(['save', '--output', path.join(destination, 'image.tar'), image]);
   for (const name of deliveryFiles) {
-    const text = fs.readFileSync(path.join(root, 'deploy/all-in-one', name), 'utf8').replaceAll('analyzer-coder:1.0.0', image);
+    const text = fs.readFileSync(path.join(root, 'deploy/all-in-one', name), 'utf8').replaceAll('analyzer-coder:1.0.0', image).replaceAll('{{RELEASE_VERSION}}', options.version);
     fs.writeFileSync(path.join(destination, name), text);
   }
   if (process.platform !== 'win32') fs.chmodSync(path.join(destination, 'analyzer.sh'), 0o755);
@@ -130,7 +140,7 @@ async function main() {
     sourceDirty = Boolean(command('git', ['status', '--porcelain'], root, true));
   } catch { /* Source archives may omit Git metadata. */ }
   fs.writeFileSync(path.join(destination, 'MANIFEST.json'), JSON.stringify({
-    image, platform: options.platform, imageId: details.Id, created: details.Created,
+    releaseVersion: options.version, image, platform: options.platform, imageId: details.Id, created: details.Created,
     codegraphVersion: '1.6.0', sourceCommit, sourceDirty, runtime,
     dataMount: './data:/data', configMount: './config:/config:ro',
   }, null, 2) + '\n');
