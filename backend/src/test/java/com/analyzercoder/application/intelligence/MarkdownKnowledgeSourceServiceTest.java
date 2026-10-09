@@ -33,12 +33,15 @@ import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 class MarkdownKnowledgeSourceServiceTest {
     private static final UUID REPOSITORY_ID =
             UUID.fromString("10000000-0000-0000-0000-000000000001");
-    private static final UUID CONTENT_VERSION_ID = UUID.fromString("20000000-0000-0000-0000-000000000002");
+    private static final UUID CONTENT_VERSION_ID =
+            UUID.fromString("20000000-0000-0000-0000-000000000002");
     private static final UUID ACTOR_ID = UUID.fromString("30000000-0000-0000-0000-000000000003");
     private static final UUID BRANCH_ID = UUID.fromString("40000000-0000-0000-0000-000000000004");
 
@@ -59,7 +62,7 @@ class MarkdownKnowledgeSourceServiceTest {
     }
 
     @Test
-    void synchronizeExtractsWholeFileHashAndHeadingAndCleansManifest() {
+    void synchronizeUsesFilenameInsteadOfHeadingAndCleansManifest() {
         String content = "前言\r\n### 深入设计\r\n完整正文";
         ScannedRepositoryFile markdown =
                 new ScannedRepositoryFile(
@@ -77,13 +80,39 @@ class MarkdownKnowledgeSourceServiceTest {
                         eq(CONTENT_VERSION_ID),
                         eq("docs/design.md"),
                         eq(sha256(content)),
-                        eq("深入设计"),
+                        eq("design"),
                         eq("DOCUMENT"),
                         eq(content),
                         eq(3),
                         eq((long) content.getBytes(StandardCharsets.UTF_8).length));
         verify(mapper).deleteMissingSources(REPOSITORY_ID, List.of("docs/design.md"));
-        verify(mapper).reconcileLinkedCards(REPOSITORY_ID, CONTENT_VERSION_ID, "current-commit", true);
+        verify(mapper)
+                .reconcileLinkedCards(REPOSITORY_ID, CONTENT_VERSION_ID, "current-commit", true);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"README.md, README", "docs/design.v2.md, design.v2", "docs/部署说明.md, 部署说明"})
+    void synchronizeBranchUsesFilenameInsteadOfHeading(String path, String expectedTitle) {
+        String content = "# 正文标题\n正文内容";
+        ScannedRepositoryFile markdown =
+                new ScannedRepositoryFile(
+                        path, "markdown", RepositoryAssetType.DOCUMENT, content, 2);
+
+        service.synchronizeBranch(REPOSITORY_ID, BRANCH_ID, CONTENT_VERSION_ID, List.of(markdown));
+
+        verify(mapper)
+                .upsertBranchSource(
+                        any(UUID.class),
+                        eq(REPOSITORY_ID),
+                        eq(BRANCH_ID),
+                        eq(CONTENT_VERSION_ID),
+                        eq(path),
+                        eq(sha256(content)),
+                        eq(expectedTitle),
+                        eq("DOCUMENT"),
+                        eq(content),
+                        eq(2),
+                        eq((long) content.getBytes(StandardCharsets.UTF_8).length));
     }
 
     @Test
@@ -108,7 +137,8 @@ class MarkdownKnowledgeSourceServiceTest {
                                 null));
         when(mapper.findChunkIds(REPOSITORY_ID, CONTENT_VERSION_ID, "README.md", 30))
                 .thenReturn(List.of(chunkId));
-        when(intelligence.createCard(eq(REPOSITORY_ID), eq(BRANCH_ID), eq(ACTOR_ID), any())).thenReturn(created);
+        when(intelligence.createCard(eq(REPOSITORY_ID), eq(BRANCH_ID), eq(ACTOR_ID), any()))
+                .thenReturn(created);
         when(intelligence.cards(REPOSITORY_ID, true)).thenReturn(List.of(created));
 
         IntelligenceService.KnowledgeCard result =
@@ -120,8 +150,10 @@ class MarkdownKnowledgeSourceServiceTest {
 
         ArgumentCaptor<IntelligenceService.CardInput> input =
                 ArgumentCaptor.forClass(IntelligenceService.CardInput.class);
-        verify(intelligence).createCard(eq(REPOSITORY_ID), eq(BRANCH_ID), eq(ACTOR_ID), input.capture());
+        verify(intelligence)
+                .createCard(eq(REPOSITORY_ID), eq(BRANCH_ID), eq(ACTOR_ID), input.capture());
         assertEquals("项目说明", input.getValue().cardType());
+        assertEquals("README", input.getValue().title());
         assertEquals(content, input.getValue().content());
         assertEquals(
                 List.of(new IntelligenceService.CodeReferenceInput(chunkId)),
@@ -218,7 +250,14 @@ class MarkdownKnowledgeSourceServiceTest {
         assertEquals(content, input.getValue().content());
         verify(mapper)
                 .insertBranchProvenance(
-                        cardId, 3, sourceId, REPOSITORY_ID, BRANCH_ID, CONTENT_VERSION_ID, "docs/guide.md", hash);
+                        cardId,
+                        3,
+                        sourceId,
+                        REPOSITORY_ID,
+                        BRANCH_ID,
+                        CONTENT_VERSION_ID,
+                        "docs/guide.md",
+                        hash);
         assertEquals(cardId, result.id());
         assertEquals(3, result.revision());
     }
@@ -297,6 +336,8 @@ class MarkdownKnowledgeSourceServiceTest {
 
         assertEquals(1, result.counts().current());
         assertEquals(1, result.counts().stale());
+        assertEquals("README", result.items().get(0).title());
+        assertEquals("guide", result.items().get(1).title());
         assertEquals(oldContentVersion, result.items().get(0).generatedContentVersion());
         assertEquals(currentHash, result.items().get(0).generatedContentHash());
     }

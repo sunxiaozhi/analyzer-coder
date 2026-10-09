@@ -255,7 +255,7 @@
   - 索引（全量或增量）都会以完整扫描清单同步来源，未变化的来源也会推进到新内容版本令牌，并删除当前分支清单之外的来源行。
   - 来源按 `(repo_id, branch_id, file_path)` 唯一；唯一约束在分支化迁移中从仓库路径唯一改为分支路径唯一。
   - 来源保存完整 Markdown 原文、完整原文 SHA-256、标题、资产类型、行数与字节数。
-  - 标题优先取第一个 Markdown 标题，无标题时取文件名去扩展名，超长截断到 200 字符，仍为空时使用"未命名 Markdown"。
+  - 标题统一取文件名去扩展名，不读取正文标题；超长截断到 200 字符，仍为空时使用"未命名 Markdown"。已有来源在列表读取时也按文件路径计算名称，无需重新扫描；生成或同步知识卡时使用相同规则。
 - 证据：`backend/src/main/java/com/analyzercoder/application/intelligence/MarkdownKnowledgeSourceService.java:61-150,457-495`、`backend/src/main/resources/mappers/MarkdownKnowledgeSourceMapper.xml:4-59`、`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/resources/db/migration/V1__init_schema.sql`
 
 ### KNO-025 来源状态：待生成、已生成、已过期

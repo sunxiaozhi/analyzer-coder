@@ -90,7 +90,7 @@ function select(item: RepositoryCredential) { if (item.status !== 'ACTIVE') retu
         <el-form-item label="Git 服务地址" required><el-input v-model="form.serverUrl" placeholder="https://gitlab.example.com" /></el-form-item>
         <el-form-item label="用户名"><el-input v-model="form.username" :placeholder="form.type === 'GITLAB_PAT' ? 'oauth2' : 'Git 用户名'" /></el-form-item>
         <el-form-item :label="editingId ? '新令牌（留空保留原令牌）' : '访问令牌'" required><el-input v-model="form.secret" type="password" show-password autocomplete="new-password" /></el-form-item>
-        <div class="form-actions">
+        <div class="credential-actions">
           <el-button v-if="editingId" :loading="validatingId === editingId" @click="validate(rows.find(item => item.id === editingId)!)">检测接入地址</el-button>
           <el-button type="primary" :loading="saving" @click="save">保存</el-button>
           <el-button v-if="editingId" :disabled="rows.find(item => item.id === editingId)?.status !== 'ACTIVE'" @click="select(rows.find(item => item.id === editingId)!)">选择此凭据</el-button>
@@ -103,5 +103,83 @@ function select(item: RepositoryCredential) { if (item.status !== 'ACTIVE') retu
 </template>
 
 <style scoped>
-.credential-layout{display:grid;grid-template-columns:280px 1fr;gap:20px;margin-top:18px}.credential-list{border-right:1px solid var(--el-border-color);padding-right:16px;min-height:360px}.section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.credential-item{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--el-border-color);background:#fff;border-radius:8px;padding:10px;margin-bottom:8px;text-align:left;cursor:pointer}.credential-item.active{border-color:var(--app-selection-border);background:var(--app-selection-bg)}.credential-item span{display:grid;gap:4px;min-width:0}.credential-item small{color:var(--el-text-color-secondary);overflow:hidden;text-overflow:ellipsis}.form-actions{display:flex;justify-content:flex-end;gap:8px}@media(max-width:720px){.credential-layout{grid-template-columns:1fr}.credential-list{border-right:0;border-bottom:1px solid var(--el-border-color);padding-right:0;padding-bottom:12px;min-height:0}}
+.credential-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 20px;
+  margin-top: 18px;
+}
+.credential-list {
+  min-width: 0;
+  min-height: 360px;
+  padding-right: 16px;
+  border-right: 1px solid var(--el-border-color);
+}
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.credential-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.credential-item.active {
+  border-color: var(--app-selection-border);
+  background: var(--app-selection-bg);
+}
+.credential-item > span:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.credential-item b {
+  overflow-wrap: anywhere;
+}
+.credential-item small {
+  overflow: hidden;
+  color: var(--el-text-color-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.credential-item :deep(.el-tag) {
+  flex-shrink: 0;
+}
+.credential-form {
+  min-width: 0;
+}
+.credential-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--el-border-color-light);
+}
+.credential-actions :deep(.el-button) {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .credential-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .credential-list {
+    min-height: 0;
+    padding-right: 0;
+    padding-bottom: 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--el-border-color);
+  }
+}
 </style>

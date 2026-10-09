@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,8 +37,6 @@ public class MarkdownKnowledgeSourceService {
     private static final int MAX_CODE_REFERENCES = 30;
     private static final int MAX_BATCH_GENERATION = 100;
     private static final int MAX_CARD_CONTENT_LENGTH = 600_000;
-    private static final Pattern MARKDOWN_HEADING =
-            Pattern.compile("(?m)^\\s*#{1,6}\\s+(.+?)\\s*#*\\s*$");
     private static final Pattern SHA_256 = Pattern.compile("^[0-9a-f]{64}$");
 
     private final MarkdownKnowledgeSourceMapper mapper;
@@ -60,7 +57,8 @@ public class MarkdownKnowledgeSourceService {
 
     /**
      * Synchronizes the complete Markdown manifest from a repository scan. Both full and incremental
-     * indexing pass the complete scan so unchanged sources also advance to the new contentVersion token.
+     * indexing pass the complete scan so unchanged sources also advance to the new contentVersion
+     * token.
      */
     @Transactional
     public void synchronize(
@@ -169,7 +167,8 @@ public class MarkdownKnowledgeSourceService {
         requireContext(repositoryId, context);
         List<MarkdownSource> items =
                 mapper
-                        .listBranchSources(repositoryId, context.branchId(), context.contentVersion())
+                        .listBranchSources(
+                                repositoryId, context.branchId(), context.contentVersion())
                         .stream()
                         .map(MarkdownKnowledgeSourceService::sourceView)
                         .toList();
@@ -212,7 +211,10 @@ public class MarkdownKnowledgeSourceService {
                 source, input.expectedContentVersion(), normalizeHash(input.expectedContentHash()));
         Map<String, Object> view =
                 mapper.findBranchSource(
-                        repositoryId, context.branchId(), input.expectedContentVersion(), sourcePath);
+                        repositoryId,
+                        context.branchId(),
+                        input.expectedContentVersion(),
+                        sourcePath);
         if (view == null) throw sourceChanged();
         return generateSource(repositoryId, actorId, view, false, context.branchId());
     }
@@ -225,7 +227,8 @@ public class MarkdownKnowledgeSourceService {
         }
         CodeRepository repository = repository(repositoryId);
         verifyExpectedContentVersion(repository, expectedContentVersion);
-        List<Map<String, Object>> candidates = mapper.listSources(repositoryId, expectedContentVersion);
+        List<Map<String, Object>> candidates =
+                mapper.listSources(repositoryId, expectedContentVersion);
         int pendingTotal =
                 (int)
                         candidates.stream()
@@ -262,7 +265,10 @@ public class MarkdownKnowledgeSourceService {
 
     @Transactional
     public BatchGenerationResult generatePending(
-            UUID repositoryId, UUID actorId, UUID expectedContentVersion, BranchReadContext context) {
+            UUID repositoryId,
+            UUID actorId,
+            UUID expectedContentVersion,
+            BranchReadContext context) {
         requireContext(repositoryId, context);
         verifyExpectedContentVersion(context, expectedContentVersion);
         List<Map<String, Object>> candidates =
@@ -331,7 +337,7 @@ public class MarkdownKnowledgeSourceService {
                 "STALE".equals(status) ? card(repositoryId, linkedCardId) : null;
         IntelligenceService.CardInput cardInput =
                 new IntelligenceService.CardInput(
-                        string(source, "title"),
+                        title(sourcePath),
                         cardType(string(source, "asset_type"), sourcePath),
                         content,
                         tags(previous, string(source, "asset_type")),
@@ -349,8 +355,7 @@ public class MarkdownKnowledgeSourceService {
                         references);
 
         if (sourceBranchId == null) sourceBranchId = uuid(source, "source_branch_id");
-        if (sourceBranchId == null)
-            throw new IllegalArgumentException("Markdown 知识必须从明确的分支生成");
+        if (sourceBranchId == null) throw new IllegalArgumentException("Markdown 知识必须从明确的分支生成");
         IntelligenceService.KnowledgeCard generated =
                 previous == null
                         ? intelligence.createCard(repositoryId, sourceBranchId, actorId, cardInput)
@@ -385,15 +390,17 @@ public class MarkdownKnowledgeSourceService {
         }
     }
 
-    private static void verifyExpectedContentVersion(CodeRepository repository, UUID expectedContentVersion) {
+    private static void verifyExpectedContentVersion(
+            CodeRepository repository, UUID expectedContentVersion) {
         if (!currentContentVersion(repository).equals(expectedContentVersion)) {
             throw sourceChanged();
         }
     }
 
-    private static void verifyExpectedContentVersion(BranchReadContext context, UUID expectedContentVersion) {
-        if (expectedContentVersion == null || !context.contentVersion().equals(expectedContentVersion))
-            throw sourceChanged();
+    private static void verifyExpectedContentVersion(
+            BranchReadContext context, UUID expectedContentVersion) {
+        if (expectedContentVersion == null
+                || !context.contentVersion().equals(expectedContentVersion)) throw sourceChanged();
     }
 
     private static void requireContext(UUID repositoryId, BranchReadContext context) {
@@ -457,7 +464,7 @@ public class MarkdownKnowledgeSourceService {
         byte[] bytes = file.content().getBytes(StandardCharsets.UTF_8);
         return new SourceDocument(
                 path,
-                title(file.content(), path),
+                title(path),
                 file.assetType().name(),
                 file.content(),
                 sha256(bytes),
@@ -465,18 +472,12 @@ public class MarkdownKnowledgeSourceService {
                 bytes.length);
     }
 
-    private static String title(String content, String path) {
-        Matcher heading = MARKDOWN_HEADING.matcher(content == null ? "" : content);
-        String value;
-        if (heading.find()) {
-            value = heading.group(1).trim();
-        } else {
-            int slash = path.lastIndexOf('/');
-            value = slash < 0 ? path : path.substring(slash + 1);
-            int extension = value.lastIndexOf('.');
-            if (extension > 0) {
-                value = value.substring(0, extension);
-            }
+    private static String title(String path) {
+        int slash = path.lastIndexOf('/');
+        String value = slash < 0 ? path : path.substring(slash + 1);
+        int extension = value.lastIndexOf('.');
+        if (extension > 0) {
+            value = value.substring(0, extension);
         }
         if (value.isBlank()) {
             value = "未命名 Markdown";
@@ -527,7 +528,7 @@ public class MarkdownKnowledgeSourceService {
                 string(row, "source_path"),
                 uuid(row, "source_content_version"),
                 string(row, "source_content_hash"),
-                string(row, "title"),
+                title(string(row, "source_path")),
                 string(row, "asset_type"),
                 integer(row, "line_count"),
                 longValue(row, "byte_size"),
@@ -635,7 +636,8 @@ public class MarkdownKnowledgeSourceService {
     public record GenerateInput(
             String sourcePath, UUID expectedContentVersion, String expectedContentHash) {}
 
-    public record MarkdownSourceList(UUID contentVersion, Counts counts, List<MarkdownSource> items) {}
+    public record MarkdownSourceList(
+            UUID contentVersion, Counts counts, List<MarkdownSource> items) {}
 
     public record Counts(long total, long pending, long current, long stale) {}
 
