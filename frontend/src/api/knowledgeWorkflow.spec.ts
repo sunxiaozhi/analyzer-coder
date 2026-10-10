@@ -17,6 +17,12 @@ describe('knowledge branch workflow', () => {
       expect(new Headers(options?.headers).get('X-Branch-Context')).toBe('legacy-context');
     }
   });
+  it('deletes the exact draft revision in the selected branch', async () => {
+    await intelligenceApi.deleteCard('repo', 'card', 7, 'legacy-context');
+    expect(request).toHaveBeenCalledWith('/api/repositories/repo/knowledge/card?expectedRevision=7', {
+      method: 'DELETE', headers: { 'X-Branch-Context': 'legacy-context' },
+    });
+  });
   it('publishes the exact revision with one request', async () => {
     await intelligenceApi.publishCard('repo', 'card', 7, 'legacy-context');
     expect(request).toHaveBeenCalledOnce();

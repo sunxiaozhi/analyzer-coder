@@ -6,11 +6,12 @@ import { knowledgeExcerpt, knowledgeStatus } from './knowledgePresentation';
 const props = defineProps<{
   card: KnowledgeCard; canManage: boolean; canMaintain: boolean; scopeLabel: string;
   validationLabel?: string; validationState?: BranchValidationState;
-  branchContext?: BranchContext | null; selected?: boolean;
+  branchContext?: BranchContext | null; selected?: boolean; deleting?: boolean;
 }>();
 const emit = defineEmits<{
   view: [card: KnowledgeCard]; edit: [card: KnowledgeCard]; history: [card: KnowledgeCard];
   review: [card: KnowledgeCard, status: 'APPROVED' | 'CHANGES_REQUESTED'];
+  delete: [card: KnowledgeCard];
   publish: [card: KnowledgeCard, status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'];
 }>();
 const expanded = ref(false);
@@ -43,7 +44,8 @@ const excerpt = computed(() => knowledgeExcerpt(props.card.content || ''));
         <el-button text aria-label="更多知识操作">更多</el-button>
         <template #dropdown><el-dropdown-menu>
           <el-dropdown-item v-if="canMaintain" @click="emit('history', card)">修订历史</el-dropdown-item>
-          <el-dropdown-item v-if="canManage && card.publicationStatus === 'PUBLISHED'" @click="emit('publish', card, 'DRAFT')">撤回为草稿</el-dropdown-item>
+          <el-dropdown-item v-if="canManage && card.publicationStatus !== 'DRAFT'" @click="emit('publish', card, 'DRAFT')">撤回为草稿</el-dropdown-item>
+          <el-dropdown-item v-if="canManage && card.publicationStatus === 'DRAFT'" :disabled="deleting" divided @click="emit('delete', card)">{{ deleting ? '正在删除…' : '删除草稿' }}</el-dropdown-item>
         </el-dropdown-menu></template>
       </el-dropdown>
     </footer>

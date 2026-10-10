@@ -12,9 +12,9 @@ describe('workspaceNavigation', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].items.map(item => item.label)).toEqual([
       '项目总览',
+      '项目问答',
       '联合检索',
       '代码图谱',
-      '项目问答',
     ]);
   });
 

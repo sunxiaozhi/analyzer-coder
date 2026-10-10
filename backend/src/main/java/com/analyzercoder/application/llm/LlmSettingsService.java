@@ -26,8 +26,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 /** 管理大模型供应商配置、密钥加密、连通性测试与当前生效配置切换。 */
 @Service
 public class LlmSettingsService {
+    private static final Logger LOG = LoggerFactory.getLogger(LlmSettingsService.class);
     private static final TypeReference<List<StageView>> STAGE_LIST = new TypeReference<>() {};
     private static final Pattern PRIVATE_KEY_PATTERN =
             Pattern.compile(
@@ -47,6 +51,7 @@ public class LlmSettingsService {
                     "(?i)((?:api[_-]?key|secret|password|token)\\s*[:=]\\s*['\\\"]?)"
                             + "[^\\s'\\\"]{8,}");
     private final LlmSettingsMapper mapper;
+    private final LlmRuntimeStateService runtimeState;
     private final LlmSecretCipher secretCipher;
     private final LlmEndpointPolicy endpointPolicy;
     private final OpenAiCompatibleClient client;
@@ -70,9 +75,11 @@ public class LlmSettingsService {
             LlmEndpointPolicy endpointPolicy,
             OpenAiCompatibleClient client,
             ObjectMapper json,
+            LlmRuntimeStateService runtimeState,
             @Value("${app.llm.connectivity-timeout-seconds:15}") int connectivityTimeoutSeconds,
             @Value("${app.llm.breaker-failure-threshold:3}") int breakerFailureThreshold) {
         this.mapper = mapper;
+        this.runtimeState = runtimeState;
         this.secretCipher = secretCipher;
         this.endpointPolicy = endpointPolicy;
         this.client = client;
@@ -118,7 +125,7 @@ public class LlmSettingsService {
                                         string(row, "model"),
                                         string(row, "availability"),
                                         string(row, "breaker_state"),
-                                        "AVAILABLE".equals(string(row, "availability"))
+                                        generationAvailable(string(row, "availability"))
                                                 && "CLOSED".equals(string(row, "breaker_state"))))
                 .toList();
     }
@@ -249,6 +256,36 @@ public class LlmSettingsService {
 
     private VectorModelCheckView probeVectorModel(Map<String, Object> candidate) {
         long started = System.nanoTime();
+        try (var ignored = ModelCallLogContext.open(null, null, null, null, null)) {
+            ModelCallLogContext.stage("VECTOR_PROBE");
+            LOG.info(
+                    "向量模型检测开始: {}, configId={}, model={}, dimension={}, timeoutMs={}",
+                    ModelCallLogContext.fields(),
+                    uuid(candidate, "id"),
+                    LlmFailureMessages.safe(string(candidate, "model")),
+                    integer(candidate, "dimension", 64),
+                    integer(candidate, "request_timeout_ms", 30000));
+            VectorModelCheckView result = probeVectorModelOnce(candidate);
+            if (result.available())
+                LOG.info(
+                        "向量模型检测完成: {}, configId={}, available=true, elapsedMs={}",
+                        ModelCallLogContext.fields(),
+                        uuid(candidate, "id"),
+                        elapsed(started));
+            else
+                LOG.warn(
+                        "向量模型检测失败: {}, configId={}, code={}, detail={}, elapsedMs={}",
+                        ModelCallLogContext.fields(),
+                        uuid(candidate, "id"),
+                        result.errorCode(),
+                        result.errorSummary(),
+                        elapsed(started));
+            return result;
+        }
+    }
+
+    private VectorModelCheckView probeVectorModelOnce(Map<String, Object> candidate) {
+        long started = System.nanoTime();
         int dimension = integer(candidate, "dimension", 64);
         if ("LOCAL_HASH".equals(string(candidate, "provider_type"))) {
             return new VectorModelCheckView(
@@ -262,13 +299,15 @@ public class LlmSettingsService {
                     null);
         }
         try {
-            client.embed(
-                    string(candidate, "base_url"),
-                    string(candidate, "model"),
-                    readSecret(uuid(candidate, "secret_version_id")),
-                    "connection probe",
-                    dimension,
-                    integer(candidate, "request_timeout_ms", 30000));
+            ExternalVectorizer vectorizer =
+                    externalVectorizer(
+                            candidate,
+                            started
+                                    + Duration.ofMillis(
+                                                    integer(candidate, "request_timeout_ms", 30000))
+                                            .toNanos());
+            vectorizer.vectorize("connection probe");
+            vectorizer.vectorizeBatch(List.of("connection probe", "连接检测"));
             return new VectorModelCheckView(
                     uuid(candidate, "id"),
                     true,
@@ -313,11 +352,27 @@ public class LlmSettingsService {
         default List<VectorEmbedding> vectorizeBatch(List<String> inputs) {
             return inputs.stream().map(this::vectorize).toList();
         }
+
+        default void vectorizeBatch(
+                List<String> inputs, BiConsumer<Integer, VectorEmbedding> onResult) {
+            List<VectorEmbedding> results = vectorizeBatch(inputs);
+            if (results.size() != inputs.size())
+                throw new IllegalStateException("批量向量结果数量与输入数量不一致");
+            for (int index = 0; index < results.size(); index++)
+                onResult.accept(index, results.get(index));
+        }
     }
 
     /** Captures one external vector configuration and secret for a single indexing pass. */
     public ExternalVectorizer openExternalVectorizer() {
-        Map<String, Object> row = mapper.activeVectorModel();
+        return externalVectorizer(mapper.activeVectorModel());
+    }
+
+    private ExternalVectorizer externalVectorizer(Map<String, Object> row) {
+        return externalVectorizer(row, Long.MAX_VALUE);
+    }
+
+    private ExternalVectorizer externalVectorizer(Map<String, Object> row, long deadline) {
         if (row == null || "LOCAL_HASH".equals(string(row, "provider_type"))) {
             throw new IllegalStateException("当前未启用外部向量模型");
         }
@@ -326,37 +381,165 @@ public class LlmSettingsService {
         String apiKey = readSecret(uuid(row, "secret_version_id"));
         int dimension = integer(row, "dimension", 64);
         int requestTimeoutMs = integer(row, "request_timeout_ms", 30000);
+        LOG.info(
+                "向量模型配置快照: {}, configId={}, model={}, dimension={}, timeoutMs={}",
+                ModelCallLogContext.fields(),
+                uuid(row, "id"),
+                LlmFailureMessages.safe(model, apiKey),
+                dimension,
+                requestTimeoutMs);
+        EmbeddingInputHandler inputHandler =
+                new EmbeddingInputHandler(client, json, baseUrl, model, apiKey, dimension);
         return new ExternalVectorizer() {
             private boolean batchSupported = true;
+            private int maxBatchInputs = Integer.MAX_VALUE;
+            private LlmConnectionException batchFailure;
 
             @Override
             public VectorEmbedding vectorize(String input) {
                 return new VectorEmbedding(
                         model,
                         dimension,
-                        client.embed(baseUrl, model, apiKey, input, dimension, requestTimeoutMs),
+                        inputHandler.embed(input, this::callTimeout),
                         "SEMANTIC_EMBEDDING");
             }
 
             @Override
             public List<VectorEmbedding> vectorizeBatch(List<String> inputs) {
-                if (inputs.size() < 2 || !batchSupported) {
-                    return ExternalVectorizer.super.vectorizeBatch(inputs);
+                return vectorizeRange(inputs, 0, inputs.size(), (index, result) -> {});
+            }
+
+            @Override
+            public void vectorizeBatch(
+                    List<String> inputs, BiConsumer<Integer, VectorEmbedding> onResult) {
+                vectorizeRange(inputs, 0, inputs.size(), onResult);
+            }
+
+            private List<VectorEmbedding> vectorizeRange(
+                    List<String> inputs,
+                    int offset,
+                    int total,
+                    BiConsumer<Integer, VectorEmbedding> onResult) {
+                if (inputs.size() < 2
+                        || !batchSupported
+                        || inputs.stream().anyMatch(EmbeddingInputHandler::needsSplitting)) {
+                    return vectorizeIndividually(inputs, offset, total, onResult);
+                }
+                if (inputs.size() > maxBatchInputs) {
+                    List<VectorEmbedding> results = new ArrayList<>();
+                    for (int start = 0; start < inputs.size(); ) {
+                        int end = Math.min(inputs.size(), start + maxBatchInputs);
+                        results.addAll(
+                                vectorizeRange(
+                                        inputs.subList(start, end),
+                                        offset + start,
+                                        total,
+                                        onResult));
+                        start = end;
+                    }
+                    return List.copyOf(results);
                 }
                 try {
-                    return client
-                            .embedBatch(baseUrl, model, apiKey, inputs, dimension, requestTimeoutMs)
-                            .stream()
-                            .map(
-                                    vector ->
-                                            new VectorEmbedding(
-                                                    model, dimension, vector, "SEMANTIC_EMBEDDING"))
-                            .toList();
+                    List<VectorEmbedding> generated =
+                            client
+                                    .embedBatch(
+                                            baseUrl,
+                                            model,
+                                            apiKey,
+                                            inputs,
+                                            dimension,
+                                            callTimeout())
+                                    .stream()
+                                    .map(
+                                            vector ->
+                                                    new VectorEmbedding(
+                                                            model,
+                                                            dimension,
+                                                            vector,
+                                                            "SEMANTIC_EMBEDDING"))
+                                    .toList();
+                    for (int index = 0; index < generated.size(); index++)
+                        onResult.accept(offset + index, generated.get(index));
+                    return generated;
                 } catch (LlmConnectionException exception) {
+                    if ("LLM_INPUT_TOO_LONG".equals(exception.code())) {
+                        LOG.warn(
+                                "向量批次输入超限，缩小批次: {}, model={}, inputs={}, code={}",
+                                ModelCallLogContext.fields(),
+                                LlmFailureMessages.safe(model, apiKey),
+                                inputs.size(),
+                                exception.code());
+                        int middle = inputs.size() / 2;
+                        maxBatchInputs = Math.min(maxBatchInputs, middle);
+                        List<VectorEmbedding> results =
+                                new ArrayList<>(
+                                        vectorizeRange(
+                                                inputs.subList(0, middle),
+                                                offset,
+                                                total,
+                                                onResult));
+                        results.addAll(
+                                vectorizeRange(
+                                        inputs.subList(middle, inputs.size()),
+                                        offset + middle,
+                                        total,
+                                        onResult));
+                        return List.copyOf(results);
+                    }
                     if (!"LLM_BATCH_UNSUPPORTED".equals(exception.code())) throw exception;
                     batchSupported = false;
-                    return ExternalVectorizer.super.vectorizeBatch(inputs);
+                    batchFailure = exception;
+                    LOG.warn(
+                            "向量批量请求降级为单条: {}, configId={}, model={}, inputs={}, code={}, detail={}",
+                            ModelCallLogContext.fields(),
+                            uuid(row, "id"),
+                            LlmFailureMessages.safe(model, apiKey),
+                            inputs.size(),
+                            exception.code(),
+                            LlmFailureMessages.safe(exception.getMessage(), apiKey));
+                    return vectorizeIndividually(inputs, offset, total, onResult);
                 }
+            }
+
+            private int callTimeout() {
+                if (deadline == Long.MAX_VALUE) return requestTimeoutMs;
+                long remaining = Duration.ofNanos(deadline - System.nanoTime()).toMillis();
+                if (remaining <= 0)
+                    throw new LlmConnectionException(
+                            "LLM_TIMEOUT", "向量模型检测超过总超时=" + requestTimeoutMs + "ms");
+                return (int) Math.min(requestTimeoutMs, remaining);
+            }
+
+            private List<VectorEmbedding> vectorizeIndividually(
+                    List<String> inputs,
+                    int offset,
+                    int total,
+                    BiConsumer<Integer, VectorEmbedding> onResult) {
+                List<VectorEmbedding> results = new ArrayList<>();
+                for (int index = 0; index < inputs.size(); index++) {
+                    try {
+                        VectorEmbedding generated = vectorize(inputs.get(index));
+                        onResult.accept(offset + index, generated);
+                        results.add(generated);
+                    } catch (LlmConnectionException failure) {
+                        String context =
+                                "当前批次第 "
+                                        + (offset + index + 1)
+                                        + "/"
+                                        + total
+                                        + " 条输入失败："
+                                        + failure.getMessage();
+                        if (batchFailure != null)
+                            context +=
+                                    "；已降级为单条请求，原批量错误 ["
+                                            + batchFailure.code()
+                                            + "]："
+                                            + LlmFailureMessages.brief(batchFailure.getMessage());
+                        throw new LlmConnectionException(
+                                failure.code(), LlmFailureMessages.safe(context, apiKey), failure);
+                    }
+                }
+                return List.copyOf(results);
             }
         };
     }
@@ -367,15 +550,14 @@ public class LlmSettingsService {
             return new VectorEmbedding(activeVectorModelName(), 64, null, "CHARACTER_HASH");
         }
         int dimension = integer(row, "dimension", 64);
-        String vector =
-                client.embed(
-                        string(row, "base_url"),
-                        string(row, "model"),
-                        readSecret(uuid(row, "secret_version_id")),
-                        input,
-                        dimension,
-                        integer(row, "request_timeout_ms", 30000));
-        return new VectorEmbedding(string(row, "model"), dimension, vector, "SEMANTIC_EMBEDDING");
+        LOG.info(
+                "查询向量模型选择: {}, configId={}, model={}, dimension={}, timeoutMs={}",
+                ModelCallLogContext.fields(),
+                uuid(row, "id"),
+                LlmFailureMessages.safe(string(row, "model")),
+                dimension,
+                integer(row, "request_timeout_ms", 30000));
+        return externalVectorizer(row, Long.MAX_VALUE).vectorize(input);
     }
 
     public CheckView startCheck(UUID actorId, ConnectivityCheckRequest request) {
@@ -460,7 +642,15 @@ public class LlmSettingsService {
         if (row == null) {
             throw new ApiSecurityException(404, "LLM_MODEL_NOT_FOUND", "选择的问答模型不存在");
         }
-        if (!"AVAILABLE".equals(string(row, "availability"))) {
+        LOG.info(
+                "问答模型选择: {}, configId={}, model={}, availability={}, breakerState={}, timeoutMs={}",
+                ModelCallLogContext.fields(),
+                configId,
+                LlmFailureMessages.safe(string(row, "model")),
+                string(row, "availability"),
+                string(row, "breaker_state"),
+                integer(row, "request_timeout_ms", 60000));
+        if (!generationAvailable(string(row, "availability"))) {
             throw new ApiSecurityException(409, "LLM_MODEL_UNAVAILABLE", "选择的问答模型尚未通过连接检测");
         }
         if (!"CLOSED".equals(string(row, "breaker_state"))) {
@@ -470,15 +660,45 @@ public class LlmSettingsService {
         String key = readSecret(spec.secretVersionId());
         try {
             String answer = client.generate(spec, key, safePrompt(prompt));
-            mapper.recordRuntimeSuccess(spec.id());
+            runtimeState.success(spec.id());
             return Optional.of(new GenerationResult(answer, spec.name() + "/" + spec.model()));
         } catch (LlmConnectionException exception) {
-            mapper.recordRuntimeFailure(spec.id(), exception.code(), breakerFailureThreshold);
-            return Optional.empty();
+            runtimeState.failure(spec.id(), exception.code(), breakerFailureThreshold);
+            int status =
+                    switch (exception.code()) {
+                        case "LLM_TIMEOUT" -> 504;
+                        case "LLM_RATE_LIMITED", "LLM_CONNECTION_FAILED" -> 503;
+                        default -> 502;
+                    };
+            throw new ApiSecurityException(
+                    status,
+                    exception.code(),
+                    "问答模型调用失败 ["
+                            + exception.code()
+                            + "]："
+                            + LlmFailureMessages.safe(exception.getMessage(), key));
         }
     }
 
+    private static boolean generationAvailable(String availability) {
+        return "AVAILABLE".equals(availability) || "DEGRADED".equals(availability);
+    }
+
     private void runCheck(
+            UUID checkId, ProbeCandidate candidate, String flightKey, CheckControl control) {
+        try (var ignored =
+                ModelCallLogContext.open(checkId.toString(), null, null, null, checkId)) {
+            LOG.info(
+                    "问答模型检测开始: {}, configId={}, model={}, totalTimeoutSeconds={}",
+                    ModelCallLogContext.fields(),
+                    candidate.spec().id(),
+                    LlmFailureMessages.safe(candidate.spec().model(), candidate.apiKey()),
+                    connectivityTimeoutSeconds);
+            runCheckOnce(checkId, candidate, flightKey, control);
+        }
+    }
+
+    private void runCheckOnce(
             UUID checkId, ProbeCandidate candidate, String flightKey, CheckControl control) {
         long started = System.nanoTime();
         List<StageView> stages = new ArrayList<>();
@@ -492,6 +712,14 @@ public class LlmSettingsService {
                             deadline,
                             control.canceled,
                             event -> {
+                                ModelCallLogContext.stage(event.stage());
+                                LOG.info(
+                                        "模型检测阶段: {}, configId={}, status={}, durationMs={}, code={}",
+                                        ModelCallLogContext.fields(),
+                                        candidate.spec().id(),
+                                        event.status(),
+                                        event.durationMs(),
+                                        event.errorCode());
                                 stages.add(
                                         new StageView(
                                                 event.stage(),
@@ -514,14 +742,33 @@ public class LlmSettingsService {
                             elapsed(started),
                             result.connectDurationMs(),
                             result.firstTokenDurationMs());
+            LOG.info(
+                    "问答模型检测完成: {}, configId={}, availability={}, code={}, persisted={}, elapsedMs={}",
+                    ModelCallLogContext.fields(),
+                    candidate.spec().id(),
+                    result.availability(),
+                    result.errorCode(),
+                    completed,
+                    elapsed(started));
             if (completed == 1 && candidate.spec().id() != null) {
                 mapper.applyCheckToRuntime(
                         candidate.spec().id(), checkId, result.availability(), result.errorCode());
             }
         } catch (LlmConnectionException exception) {
             if ("LLM_CHECK_CANCELED".equals(exception.code()) || control.canceled.get()) {
+                LOG.info(
+                        "问答模型检测取消: {}, elapsedMs={}",
+                        ModelCallLogContext.fields(),
+                        elapsed(started));
                 mapper.cancelCheck(checkId, stringJson(stages));
             } else {
+                LOG.warn(
+                        "问答模型检测失败: {}, configId={}, code={}, detail={}, elapsedMs={}",
+                        ModelCallLogContext.fields(),
+                        candidate.spec().id(),
+                        exception.code(),
+                        LlmFailureMessages.safe(exception.getMessage(), candidate.apiKey()),
+                        elapsed(started));
                 int completed =
                         mapper.completeCheck(
                                 checkId,
@@ -542,6 +789,13 @@ public class LlmSettingsService {
                 }
             }
         } catch (RuntimeException exception) {
+            LOG.error(
+                    "问答模型检测异常: {}, configId={}, errorType={}, elapsedMs={}, stack={}",
+                    ModelCallLogContext.fields(),
+                    candidate.spec().id(),
+                    exception.getClass().getSimpleName(),
+                    elapsed(started),
+                    LlmFailureMessages.stackTrace(exception));
             int completed =
                     mapper.completeCheck(
                             checkId,
@@ -959,7 +1213,8 @@ public class LlmSettingsService {
         if (value == null || value.isBlank()) {
             return "连接检测失败";
         }
-        return value.length() > 500 ? value.substring(0, 500) : value;
+        String safe = LlmFailureMessages.safe(value);
+        return safe.length() > 1800 ? safe.substring(0, 1799) + "…" : safe;
     }
 
     private static String safePrompt(String value) {

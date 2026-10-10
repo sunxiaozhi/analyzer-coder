@@ -327,6 +327,198 @@ class OpenAiCompatibleClientTest {
         assertEquals(2, requests.size());
     }
 
+    @Test
+    void exposesHttpReasonAndRequestScaleWithoutTheApiKey() {
+        server.removeContext("/v1/embeddings");
+        server.createContext(
+                "/v1/embeddings",
+                exchange ->
+                        respond(
+                                exchange,
+                                400,
+                                "application/json",
+                                "{\"error\":{\"message\":\"maximum input length is 8192 tokens; received test-key; Bearer private-header\"}}"));
+        LlmConnectionException failure =
+                assertThrows(
+                        LlmConnectionException.class,
+                        () ->
+                                embeddingClient()
+                                        .embed(
+                                                embeddingUrl(),
+                                                "bge-m3",
+                                                "test-key",
+                                                "private source code",
+                                                1024,
+                                                5000));
+        assertEquals("LLM_INPUT_TOO_LONG", failure.code());
+        assertTrue(failure.getMessage().contains("HTTP 400"));
+        assertTrue(failure.getMessage().contains("maximum input length is 8192 tokens"));
+        assertTrue(failure.getMessage().contains("模型=bge-m3"));
+        assertTrue(failure.getMessage().contains("输入条数=1"));
+        assertTrue(failure.getMessage().contains("请求超时=5000ms"));
+        assertTrue(!failure.getMessage().contains("test-key"));
+        assertTrue(!failure.getMessage().contains("private-header"));
+        assertTrue(!failure.getMessage().contains("private source code"));
+    }
+
+    @Test
+    void preservesBatchRejectionReasonForSingleInputFallback() {
+        server.removeContext("/v1/embeddings");
+        server.createContext(
+                "/v1/embeddings",
+                exchange ->
+                        respond(
+                                exchange,
+                                413,
+                                "application/json",
+                                "{\"error\":\"batch arrays are not supported\"}"));
+        LlmConnectionException failure =
+                assertThrows(
+                        LlmConnectionException.class,
+                        () ->
+                                embeddingClient()
+                                        .embedBatch(
+                                                embeddingUrl(),
+                                                "model",
+                                                "test-key",
+                                                List.of("first", "second"),
+                                                64,
+                                                5000));
+        assertEquals("LLM_BATCH_UNSUPPORTED", failure.code());
+        assertTrue(failure.getMessage().contains("HTTP 413"));
+        assertTrue(failure.getMessage().contains("batch arrays are not supported"));
+        assertTrue(failure.getMessage().contains("输入条数=2，总字符数=11，最长输入字符数=6"));
+    }
+
+    @Test
+    void reportsTimeoutWithConfiguredBudgetAndInputScale() {
+        server.removeContext("/v1/embeddings");
+        server.createContext(
+                "/v1/embeddings",
+                exchange -> {
+                    try {
+                        Thread.sleep(700);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                    try {
+                        respond(exchange, 200, "application/json", embeddingResponse(64));
+                    } catch (IOException ignored) {
+                        exchange.close();
+                    }
+                });
+        LlmConnectionException failure =
+                assertThrows(
+                        LlmConnectionException.class,
+                        () ->
+                                embeddingClient()
+                                        .embedBatch(
+                                                embeddingUrl(),
+                                                "slow-model",
+                                                "test-key",
+                                                List.of("first", "second"),
+                                                64,
+                                                100));
+        assertEquals("LLM_TIMEOUT", failure.code());
+        assertTrue(failure.getMessage().contains("请求超时=100ms"));
+        assertTrue(failure.getMessage().contains("输入条数=2"));
+        assertTrue(failure.getMessage().contains("适当增大请求超时"));
+    }
+
+    @Test
+    void includesExpectedAndActualDimensions() {
+        LlmConnectionException failure =
+                assertThrows(
+                        LlmConnectionException.class,
+                        () ->
+                                embeddingClient()
+                                        .embed(
+                                                embeddingUrl(),
+                                                "model",
+                                                "test-key",
+                                                "probe",
+                                                1024,
+                                                5000));
+        assertEquals("VECTOR_DIMENSION_INCOMPATIBLE", failure.code());
+        assertTrue(failure.getMessage().contains("配置 1024 维，实际 64 维"));
+    }
+
+    @Test
+    void distinguishesMissingEmbeddingFromDimensionMismatch() {
+        server.removeContext("/v1/embeddings");
+        server.createContext(
+                "/v1/embeddings",
+                exchange -> respond(exchange, 200, "application/json", "{\"data\":[{}]}"));
+        LlmConnectionException failure =
+                assertThrows(
+                        LlmConnectionException.class,
+                        () ->
+                                embeddingClient()
+                                        .embed(
+                                                embeddingUrl(),
+                                                "model",
+                                                "test-key",
+                                                "probe",
+                                                64,
+                                                5000));
+        assertEquals("LLM_PROTOCOL_INVALID", failure.code());
+        assertTrue(failure.getMessage().contains("缺少 data[].embedding"));
+    }
+
+    @Test
+    void ignoresUnstructuredErrorPagesAndRetainsHttpStatus() {
+        server.removeContext("/v1/embeddings");
+        server.createContext(
+                "/v1/embeddings",
+                exchange ->
+                        respond(
+                                exchange,
+                                502,
+                                "text/html",
+                                "<html>private proxy diagnostics</html>"));
+        LlmConnectionException failure =
+                assertThrows(
+                        LlmConnectionException.class,
+                        () ->
+                                embeddingClient()
+                                        .embed(
+                                                embeddingUrl(),
+                                                "model",
+                                                "test-key",
+                                                "probe",
+                                                64,
+                                                5000));
+        assertTrue(failure.getMessage().contains("HTTP 502"));
+        assertTrue(!failure.getMessage().contains("private proxy diagnostics"));
+    }
+
+    @Test
+    void extractsValidationMessagesWithoutEchoingInputs() {
+        server.removeContext("/v1/embeddings");
+        server.createContext(
+                "/v1/embeddings",
+                exchange ->
+                        respond(
+                                exchange,
+                                422,
+                                "application/json",
+                                "{\"detail\":[{\"msg\":\"input exceeds maximum length\",\"input\":\"private source code\"}]}"));
+        LlmConnectionException failure =
+                assertThrows(
+                        LlmConnectionException.class,
+                        () ->
+                                embeddingClient()
+                                        .embed(
+                                                embeddingUrl(),
+                                                "model",
+                                                "test-key",
+                                                "probe",
+                                                64,
+                                                5000));
+        assertTrue(failure.getMessage().contains("input exceeds maximum length"));
+        assertTrue(!failure.getMessage().contains("private source code"));
+    }
+
     private List<JsonNode> rejectDimensionsThenRespond(String response) {
         List<JsonNode> requests = new CopyOnWriteArrayList<>();
         server.removeContext("/v1/embeddings");

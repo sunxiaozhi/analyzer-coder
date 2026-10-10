@@ -117,12 +117,12 @@
     <update id="applyCheckToRuntime">
         UPDATE llm_provider_runtime_states
         SET availability=#{availability},latest_check_id=#{checkId},
-        last_success_at=CASE WHEN #{availability}='AVAILABLE' THEN CURRENT_TIMESTAMP ELSE last_success_at END,
+        last_success_at=CASE WHEN #{availability} IN ('AVAILABLE','DEGRADED') THEN CURRENT_TIMESTAMP ELSE last_success_at END,
         last_failure_at=CASE WHEN #{availability} IN ('DEGRADED','UNAVAILABLE') THEN CURRENT_TIMESTAMP ELSE
         last_failure_at END,
-        consecutive_failures=CASE WHEN #{availability}='AVAILABLE' THEN 0 ELSE consecutive_failures+1 END,
-        breaker_state=CASE WHEN #{availability}='AVAILABLE' THEN 'CLOSED' ELSE breaker_state END,
-        breaker_opened_at=CASE WHEN #{availability}='AVAILABLE' THEN NULL ELSE breaker_opened_at END,
+        consecutive_failures=CASE WHEN #{availability} IN ('AVAILABLE','DEGRADED') THEN 0 ELSE consecutive_failures+1 END,
+        breaker_state=CASE WHEN #{availability} IN ('AVAILABLE','DEGRADED') THEN 'CLOSED' ELSE breaker_state END,
+        breaker_opened_at=CASE WHEN #{availability} IN ('AVAILABLE','DEGRADED') THEN NULL ELSE breaker_opened_at END,
         last_error_code=#{errorCode},updated_at=CURRENT_TIMESTAMP
         WHERE config_id=#{configId}
     </update>

@@ -37,6 +37,8 @@ let cardsVersion=0;
 let sourcesVersion=0;
 let driftVersion=0;
 let saveVersion=0;
+let deleteVersion=0;
+const deletingCardId = shallowRef<string | null>(null);
 const router = useRouter();
 const route = useRoute();
 type KnowledgeMode = 'cards' | 'markdown';
@@ -102,7 +104,7 @@ function restoreReadingState() {
   scrollTop.value = state?.top ?? 0; selectedCardId.value = state?.selected ?? null; resumeCardId.value = state?.resume ?? null;
 }
 restoreReadingState();
-onBeforeUnmount(() => { remember(); cardsVersion++; sourcesVersion++; driftVersion++; saveVersion++; });
+onBeforeUnmount(() => { remember(); cardsVersion++; sourcesVersion++; driftVersion++; saveVersion++; deleteVersion++; });
 onDeactivated(remember);
 onActivated(() => { const card = cards.value.find(item => item.id === resumeCardId.value); if (card) openDetail(card); void restoreListPosition(); });
 function trackScroll(event: Event) { scrollTop.value = (event.target as HTMLElement).scrollTop; }
@@ -553,6 +555,40 @@ async function setPublication(card: KnowledgeCard, publicationStatus: 'DRAFT' | 
     if (error instanceof Error) ElMessage.error(error.message);
   }
 }
+async function deleteCard(card: KnowledgeCard) {
+  const repositoryId = repositories.selectedRepositoryId;
+  const context = branchContext.context;
+  if (!repositoryId || !context || readScope.blocked.value || !canManage.value || card.publicationStatus !== 'DRAFT' || deletingCardId.value) return;
+  const version = ++deleteVersion;
+  const identity = branchContext.identity;
+  const isCurrent = () => version === deleteVersion && repositoryId === repositories.selectedRepositoryId
+    && identity === branchContext.identity && context.contextId === branchContext.context?.contextId;
+  deletingCardId.value = card.id;
+  try {
+    await ElMessageBox.confirm(`永久删除“${card.title}”？共享范围：${scopeLabel(card)}。将清理该知识的修订记录、向量及 Markdown 预备知识关联；原 Markdown 文件保留。此操作无法撤销。`,
+      '删除知识草稿', { type: 'warning', confirmButtonText: '删除草稿', cancelButtonText: '取消' });
+    if (!isCurrent() || !canManage.value || readScope.blocked.value) return;
+    await intelligenceApi.deleteCard(repositoryId, card.id, card.revision, context.contextId);
+    if (!isCurrent()) return;
+    cards.value = cards.value.filter(item => item.id !== card.id);
+    branchValidations.value = branchValidations.value.filter(item => item.cardId !== card.id);
+    if (viewing.value?.id === card.id) { detailDialog.value = false; viewing.value = null; driftEvent.value = null; driftVersion++; }
+    if (editing.value?.id === card.id) { dialog.value = false; editing.value = null; saveVersion++; busy.value = false; }
+    if (historyCard.value?.id === card.id) { historyDialog.value = false; historyCard.value = null; revisions.value = []; }
+    if (selectedCardId.value === card.id) selectedCardId.value = null;
+    if (resumeCardId.value === card.id) resumeCardId.value = null;
+    if (route.name === 'knowledge' && route.query.cardId === card.id) {
+      await router.replace({ query: { ...route.query, cardId: undefined } });
+      if (!isCurrent()) return;
+    }
+    await load();
+    if (isCurrent()) ElMessage.success('知识已删除，向量及 Markdown 预备知识关联已清理');
+  } catch (error) {
+    if (isCurrent() && error instanceof Error) ElMessage.error(error.message);
+  } finally {
+    if (version === deleteVersion) deletingCardId.value = null;
+  }
+}
 async function showHistory(card: KnowledgeCard) {
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return;
@@ -574,7 +610,8 @@ async function restore(revision: number) {
 }
 watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const, () => {
   handledCreateRequest = '';
-  driftVersion++; saveVersion++;
+  driftVersion++; saveVersion++; deleteVersion++;
+  deletingCardId.value = null;
   driftLoading.value = false; busy.value = false; saveError.value = null;
   if (stateKey !== pageKey()) { remember(); stateKey = pageKey(); restoreReadingState(); }
   cards.value = []; branchValidations.value = [];
@@ -711,6 +748,7 @@ onMounted(() => void load());
             :key="card.id"
             :card="card"
             :can-manage="canManage"
+            :deleting="deletingCardId === card.id"
             :can-maintain="canMaintain"
             :scope-label="scopeLabel(card)"
             :selected="selectedCardId === card.id"
@@ -721,6 +759,7 @@ onMounted(() => void load());
             @history="showHistory"
             @review="reviewCard"
             @publish="setPublication"
+            @delete="deleteCard"
           />
         </div>
       </div>

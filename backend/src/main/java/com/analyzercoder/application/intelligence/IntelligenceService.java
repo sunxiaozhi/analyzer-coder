@@ -2,7 +2,11 @@ package com.analyzercoder.application.intelligence;
 
 import com.analyzercoder.application.branch.BranchReadContext;
 import com.analyzercoder.application.knowledge.EngineeringKnowledgePolicy;
+import com.analyzercoder.application.llm.EmbeddingRequestScope;
+import com.analyzercoder.application.llm.LlmConnectionException;
+import com.analyzercoder.application.llm.LlmFailureMessages;
 import com.analyzercoder.application.llm.LlmSettingsService;
+import com.analyzercoder.application.llm.ModelCallLogContext;
 import com.analyzercoder.domain.knowledge.KnowledgeEnforcement;
 import com.analyzercoder.domain.knowledge.KnowledgeKind;
 import com.analyzercoder.domain.knowledge.KnowledgeObligations;
@@ -11,6 +15,7 @@ import com.analyzercoder.domain.knowledge.KnowledgeSeverity;
 import com.analyzercoder.infrastructure.persistence.mapper.GraphRetrievalMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper;
 import com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow;
+import com.analyzercoder.security.ApiSecurityException;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,12 +35,16 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 编排代码问答流程：分析问题、混合检索证据、调用模型并校验最终引用。 */
 @Service
 public class IntelligenceService {
+    private static final Logger LOG = LoggerFactory.getLogger(IntelligenceService.class);
+
     @org.springframework.beans.factory.annotation.Autowired
     private com.analyzercoder.application.branch.BranchKnowledgeService branchKnowledge;
 
@@ -161,6 +170,75 @@ public class IntelligenceService {
             UUID requestedThreadId,
             UUID modelConfigId,
             BranchReadContext context) {
+        long started = System.nanoTime();
+        try (var ignored =
+                ModelCallLogContext.open(
+                        clientRequestId == null
+                                ? UUID.randomUUID().toString()
+                                : clientRequestId.toString(),
+                        repositoryId,
+                        context == null ? null : context.branchId(),
+                        null,
+                        null)) {
+            ModelCallLogContext.stage("VALIDATE");
+            LOG.info(
+                    "知识问答开始: {}, modelConfigId={}, threadId={}, questionCharacters={}",
+                    ModelCallLogContext.fields(),
+                    modelConfigId,
+                    requestedThreadId,
+                    question == null ? 0 : question.length());
+            try {
+                Answer result =
+                        askOnce(
+                                repositoryId,
+                                accountId,
+                                question,
+                                clientRequestId,
+                                requestedThreadId,
+                                modelConfigId,
+                                context);
+                ModelCallLogContext.stage("COMPLETED");
+                LOG.info(
+                        "知识问答完成: {}, modelConfigId={}, conversationId={}, evidenceStatus={}, fallbackReason={}, citations={}, answerCharacters={}, elapsedMs={}",
+                        ModelCallLogContext.fields(),
+                        modelConfigId,
+                        result.conversationId(),
+                        result.evidenceStatus(),
+                        result.fallbackReason(),
+                        result.citations().size(),
+                        result.answer().length(),
+                        elapsedMillis(started));
+                return result;
+            } catch (RuntimeException failure) {
+                LOG.error(
+                        "知识问答失败: {}, modelConfigId={}, code={}, errorType={}, elapsedMs={}, stack={}",
+                        ModelCallLogContext.fields(),
+                        modelConfigId,
+                        failureCode(failure),
+                        failure.getClass().getSimpleName(),
+                        elapsedMillis(started),
+                        LlmFailureMessages.stackTrace(failure));
+                throw failure;
+            }
+        }
+    }
+
+    private static String failureCode(RuntimeException failure) {
+        if (failure instanceof LlmConnectionException model) return model.code();
+        if (failure instanceof ApiSecurityException api) return api.code();
+        if (failure instanceof org.springframework.dao.DataAccessException)
+            return "DATABASE_FAILED";
+        return "DEPENDENCY_UNEXPECTED";
+    }
+
+    private Answer askOnce(
+            UUID repositoryId,
+            UUID accountId,
+            String question,
+            UUID clientRequestId,
+            UUID requestedThreadId,
+            UUID modelConfigId,
+            BranchReadContext context) {
         if (clientRequestId != null) {
             Map<String, Object> existing =
                     mapper.findConversationByRequest(repositoryId, accountId, clientRequestId);
@@ -168,6 +246,10 @@ public class IntelligenceService {
                 Answer saved = answerContentVersion(existing);
                 if (context != null && !context.contentVersion().equals(saved.contentVersion()))
                     throw new IllegalArgumentException("请求标识已用于其他分支版本，请发起新请求");
+                LOG.info(
+                        "知识问答复用已完成结果: {}, conversationId={}",
+                        ModelCallLogContext.fields(),
+                        saved.conversationId());
                 return saved;
             }
         }
@@ -205,9 +287,16 @@ public class IntelligenceService {
             threadTitle = string(thread, "title");
         }
 
+        ModelCallLogContext.stage("RETRIEVAL");
+        LOG.info("知识问答阶段: {}, historyTurns={}", ModelCallLogContext.fields(), history.size());
         String retrievalQuery = contextualQuery(question, history);
         EvidenceSearchResult retrieval =
                 unifiedSearchDetailed(repositoryId, retrievalQuery, 10, context);
+        ModelCallLogContext.stage("CALL_CHAIN");
+        LOG.info(
+                "知识问答阶段: {}, evidenceCount={}",
+                ModelCallLogContext.fields(),
+                retrieval.evidence().size());
         ChainContext chain =
                 modelConfigId == null
                         ? new ChainContext(retrieval.evidence(), List.of())
@@ -369,12 +458,24 @@ public class IntelligenceService {
         List<IndexedEvidence> cited;
         CitationAssessment citationAssessment;
         if (evidence.isEmpty()) {
+            ModelCallLogContext.stage("NO_EVIDENCE");
+            LOG.info(
+                    "知识问答跳过模型: {}, reason=NO_EVIDENCE, modelConfigId={}",
+                    ModelCallLogContext.fields(),
+                    modelConfigId);
             answer = "当前项目的代码索引和有效知识中没有找到达到相关度门槛的证据。" + "请先完成索引、发布相关知识，或使用更具体的模块名、符号名和业务术语。";
             evidenceStatus = "INSUFFICIENT";
             fallbackReason = "NO_EVIDENCE";
             cited = List.of();
             citationAssessment = CitationAssessment.empty();
         } else {
+            ModelCallLogContext.stage(modelConfigId == null ? "LOCAL_EVIDENCE" : "GENERATE");
+            LOG.info(
+                    "知识问答阶段: {}, modelConfigId={}, evidenceCount={}, historyTurns={}",
+                    ModelCallLogContext.fields(),
+                    modelConfigId,
+                    evidence.size(),
+                    history.size());
             Optional<LlmSettingsService.GenerationResult> generated =
                     modelConfigId == null
                             ? Optional.empty()
@@ -382,6 +483,7 @@ public class IntelligenceService {
                                     modelConfigId,
                                     llmPrompt(question, history, evidence, callLinks));
             if (generated.isPresent()) {
+                ModelCallLogContext.stage("VALIDATE_CITATIONS");
                 AnswerCitationValidator.Validation validation =
                         citationValidator.validate(generated.get().answer(), evidence.size());
                 if (validation.valid()) {
@@ -406,6 +508,11 @@ public class IntelligenceService {
                                     + "”未通过引用校验，已安全降级。";
                     evidenceStatus = "MODEL_OUTPUT_REJECTED";
                     fallbackReason = "CITATION_VALIDATION_FAILED";
+                    LOG.warn(
+                            "知识问答引用校验降级: {}, modelConfigId={}, reason={}",
+                            ModelCallLogContext.fields(),
+                            modelConfigId,
+                            LlmFailureMessages.safe(validation.reason()));
                     cited = indexed(evidence, Math.min(5, evidence.size()));
                     citationAssessment = validation.assessment();
                 }
@@ -441,6 +548,14 @@ public class IntelligenceService {
                         citationAssessment,
                         retrieval,
                         createdAt);
+        ModelCallLogContext.stage("PERSIST");
+        LOG.info(
+                "知识问答阶段: {}, conversationId={}, threadId={}, turnNo={}, citations={}",
+                ModelCallLogContext.fields(),
+                conversationId,
+                threadId,
+                turnNo,
+                citations.size());
         mapper.insertConversation(
                 conversationId,
                 threadId,
@@ -573,8 +688,7 @@ public class IntelligenceService {
     public boolean prepareRepositoryEmbeddings(UUID repositoryId) {
         try {
             rebuildHeuristicCallReferences(repositoryId);
-            ensureCodeEmbeddings(repositoryId);
-            ensureKnowledgeEmbeddings(repositoryId);
+            prepareEmbeddings(repositoryId, null, () -> {});
             return true;
         } catch (RuntimeException ignored) {
             return false;
@@ -582,6 +696,42 @@ public class IntelligenceService {
     }
 
     private RetrievalOutcome retrieve(
+            UUID repositoryId,
+            RetrievalQueryAnalyzer.Query query,
+            boolean includeKnowledge,
+            int limit,
+            BranchReadContext context) {
+        try (var ignored =
+                ModelCallLogContext.open(
+                        null,
+                        repositoryId,
+                        context == null ? null : context.branchId(),
+                        null,
+                        null)) {
+            LOG.info(
+                    "证据检索开始: {}, queryCharacters={}, includeKnowledge={}, limit={}",
+                    ModelCallLogContext.fields(),
+                    query.normalized().length(),
+                    includeKnowledge,
+                    limit);
+            RetrievalOutcome outcome =
+                    retrieveOnce(repositoryId, query, includeKnowledge, limit, context);
+            var d = outcome.diagnostics();
+            LOG.info(
+                    "证据检索完成: {}, recalledCount={}, degraded={}, vectorModel={}, enabledChannels={}, unavailableChannels={}, channelMetrics={}, elapsedMs={}",
+                    ModelCallLogContext.fields(),
+                    d.recalledCount(),
+                    d.degraded(),
+                    d.vectorModel() == null ? "unknown" : LlmFailureMessages.safe(d.vectorModel()),
+                    d.enabledChannels(),
+                    d.degradationReasons(),
+                    d.channelMetrics(),
+                    d.durationMs());
+            return outcome;
+        }
+    }
+
+    private RetrievalOutcome retrieveOnce(
             UUID repositoryId,
             RetrievalQueryAnalyzer.Query query,
             boolean includeKnowledge,
@@ -801,8 +951,19 @@ public class IntelligenceService {
             String channel, String reason, RuntimeException exception) {
         String detail = exception.getMessage();
         if (detail == null || detail.isBlank()) detail = exception.getClass().getSimpleName();
-        if (detail.length() > 240) detail = detail.substring(0, 240);
-        return new UnavailableChannel(channel, reason, detail);
+        if (exception instanceof LlmConnectionException failure) {
+            reason = failure.code();
+        }
+        LOG.warn(
+                "检索通道不可用: {}, channel={}, code={}, errorType={}, detail={}",
+                ModelCallLogContext.fields(),
+                channel,
+                reason,
+                exception.getClass().getSimpleName(),
+                exception instanceof LlmConnectionException
+                        ? LlmFailureMessages.safe(detail)
+                        : "查看对应请求或任务的异常日志");
+        return new UnavailableChannel(channel, reason, LlmFailureMessages.safe(detail));
     }
 
     private static long elapsedMillis(long started) {
@@ -1055,28 +1216,60 @@ public class IntelligenceService {
         return value.substring(0, limit) + "…";
     }
 
-    private void ensureCodeEmbeddings(UUID repositoryId) {
-        prepareCodeEmbeddings(repositoryId, null, () -> {});
-    }
-
     public void prepareBranchEmbeddings(
             UUID repositoryId, UUID contentVersion, Runnable checkpoint) {
         if (contentVersion == null) throw new IllegalArgumentException("分支内容版本不能为空");
-        prepareCodeEmbeddings(repositoryId, contentVersion, checkpoint);
+        prepareEmbeddings(repositoryId, contentVersion, checkpoint);
     }
 
-    private void prepareCodeEmbeddings(
-            UUID repositoryId, UUID contentVersion, Runnable checkpoint) {
+    private void prepareEmbeddings(UUID repositoryId, UUID contentVersion, Runnable checkpoint) {
+        long started = System.nanoTime();
+        try (var ignored = ModelCallLogContext.open(null, repositoryId, null, null, null);
+                var requestScope = EmbeddingRequestScope.indexing(checkpoint)) {
+            ModelCallLogContext.stage("VECTOR_PLAN");
+            LOG.info("向量索引开始: {}, contentVersion={}", ModelCallLogContext.fields(), contentVersion);
+            try {
+                ensureKnowledgeEmbeddings(repositoryId);
+                ModelCallLogContext.stage("VECTOR_PLAN");
+                prepareCodeEmbeddingsOnce(repositoryId, contentVersion, checkpoint, started);
+            } catch (RuntimeException failure) {
+                LOG.error(
+                        "向量索引失败: {}, contentVersion={}, code={}, errorType={}, elapsedMs={}",
+                        ModelCallLogContext.fields(),
+                        contentVersion,
+                        failureCode(failure),
+                        failure.getClass().getSimpleName(),
+                        elapsedMillis(started));
+                throw failure;
+            }
+        }
+    }
+
+    private void prepareCodeEmbeddingsOnce(
+            UUID repositoryId, UUID contentVersion, Runnable checkpoint, long started) {
         String model = llm.activeVectorModelName();
         int dimension = llm.activeVectorModelDimension();
         String capability = llm.activeRetrievalCapability();
         LlmSettingsService.ExternalVectorizer externalVectorizer = null;
         List<Map<String, Object>> pendingExternal = new ArrayList<>();
-        for (Map<String, Object> row :
+        int completed = 0;
+        int batch = 0;
+        int reusedCount = 0;
+        List<Map<String, Object>> missing =
                 contentVersion == null
                         ? mapper.missingEmbeddings(repositoryId, model, dimension, capability)
                         : mapper.missingBranchEmbeddings(
-                                repositoryId, contentVersion, model, dimension, capability)) {
+                                repositoryId, contentVersion, model, dimension, capability);
+        LOG.info(
+                "向量索引计划: {}, contentVersion={}, model={}, dimension={}, capability={}, missingChunks={}, batchSize={}",
+                ModelCallLogContext.fields(),
+                contentVersion,
+                LlmFailureMessages.safe(model),
+                dimension,
+                capability,
+                missing.size(),
+                EXTERNAL_EMBEDDING_BATCH_SIZE);
+        for (Map<String, Object> row : missing) {
             checkpoint.run();
             String reused =
                     contentVersion == null
@@ -1096,6 +1289,8 @@ public class IntelligenceService {
                         capability,
                         reused,
                         string(row, "content_hash"));
+                completed++;
+                reusedCount++;
                 continue;
             }
             String content = string(row, "content");
@@ -1103,7 +1298,9 @@ public class IntelligenceService {
                 if (externalVectorizer == null) externalVectorizer = llm.openExternalVectorizer();
                 pendingExternal.add(row);
                 if (pendingExternal.size() == EXTERNAL_EMBEDDING_BATCH_SIZE) {
-                    upsertCodeEmbeddingBatch(repositoryId, pendingExternal, externalVectorizer);
+                    upsertCodeEmbeddingBatch(
+                            repositoryId, pendingExternal, externalVectorizer, ++batch, completed);
+                    completed += pendingExternal.size();
                     pendingExternal.clear();
                 }
                 continue;
@@ -1116,51 +1313,181 @@ public class IntelligenceService {
                     capability,
                     localVector(content),
                     string(row, "content_hash"));
+            completed++;
         }
         if (!pendingExternal.isEmpty()) {
-            upsertCodeEmbeddingBatch(repositoryId, pendingExternal, externalVectorizer);
+            upsertCodeEmbeddingBatch(
+                    repositoryId, pendingExternal, externalVectorizer, ++batch, completed);
+            completed += pendingExternal.size();
         }
+        ModelCallLogContext.stage("VECTOR_COMPLETED");
+        LOG.info(
+                "向量索引完成: {}, contentVersion={}, completedChunks={}, reusedChunks={}, externalBatches={}, elapsedMs={}",
+                ModelCallLogContext.fields(),
+                contentVersion,
+                completed,
+                reusedCount,
+                batch,
+                elapsedMillis(started));
     }
 
     private void upsertCodeEmbeddingBatch(
             UUID repositoryId,
             List<Map<String, Object>> rows,
-            LlmSettingsService.ExternalVectorizer vectorizer) {
-        List<LlmSettingsService.VectorEmbedding> embeddings =
+            LlmSettingsService.ExternalVectorizer vectorizer,
+            int batch,
+            int completed) {
+        upsertEmbeddingBatch(repositoryId, rows, vectorizer, batch, completed, false);
+    }
+
+    private void upsertEmbeddingBatch(
+            UUID repositoryId,
+            List<Map<String, Object>> rows,
+            LlmSettingsService.ExternalVectorizer vectorizer,
+            int batch,
+            int completed,
+            boolean knowledge) {
+        String kind = knowledge ? "知识" : "代码";
+        String item = knowledge ? "知识片段" : "片段";
+        String stage = knowledge ? "KNOWLEDGE_VECTOR" : "VECTOR";
+        long started = System.nanoTime();
+        int[] written = {0};
+        boolean[] received = new boolean[rows.size()];
+        ModelCallLogContext.stage(stage + "_BATCH_GENERATE");
+        LOG.info(
+                "{}向量批次开始: {}, batch={}, inputs={}, completedBefore={}",
+                kind,
+                ModelCallLogContext.fields(),
+                batch,
+                rows.size(),
+                completed);
+        try {
+            try {
                 vectorizer.vectorizeBatch(
-                        rows.stream().map(row -> string(row, "content")).toList());
-        if (embeddings.size() != rows.size()) {
-            throw new IllegalStateException("批量向量结果数量与代码片段数量不一致");
-        }
-        for (int index = 0; index < rows.size(); index++) {
-            Map<String, Object> row = rows.get(index);
-            LlmSettingsService.VectorEmbedding embedding = embeddings.get(index);
-            mapper.upsertEmbedding(
-                    uuid(row, "id"),
-                    repositoryId,
-                    embedding.model(),
-                    embedding.dimension(),
-                    embedding.retrievalCapability(),
-                    embedding.vector(),
-                    string(row, "content_hash"));
+                        rows.stream().map(row -> string(row, "content")).toList(),
+                        (index, embedding) -> {
+                            if (index < 0 || index >= rows.size() || received[index])
+                                throw new IllegalStateException("批量向量结果位置重复或越界");
+                            EmbeddingRequestScope.checkpoint();
+                            ModelCallLogContext.stage(stage + "_BATCH_WRITE");
+                            if (written[0] == 0)
+                                LOG.info(
+                                        "{}向量批次写入开始: {}, batch={}, inputs={}, completedBefore={}",
+                                        kind,
+                                        ModelCallLogContext.fields(),
+                                        batch,
+                                        rows.size(),
+                                        completed);
+                            Map<String, Object> row = rows.get(index);
+                            if (knowledge) {
+                                mapper.upsertKnowledgeEmbedding(
+                                        uuid(row, "id"),
+                                        repositoryId,
+                                        integer(row, "revision"),
+                                        embedding.model(),
+                                        embedding.dimension(),
+                                        embedding.retrievalCapability(),
+                                        embedding.vector(),
+                                        sha256(string(row, "content")));
+                            } else {
+                                mapper.upsertEmbedding(
+                                        uuid(row, "id"),
+                                        repositoryId,
+                                        embedding.model(),
+                                        embedding.dimension(),
+                                        embedding.retrievalCapability(),
+                                        embedding.vector(),
+                                        string(row, "content_hash"));
+                            }
+                            received[index] = true;
+                            written[0]++;
+                            ModelCallLogContext.stage(stage + "_BATCH_GENERATE");
+                        });
+            } catch (LlmConnectionException failure) {
+                throw new LlmConnectionException(
+                        failure.code(),
+                        (knowledge ? "知识向量：" : "")
+                                + "第 "
+                                + batch
+                                + " 批向量生成失败；当前批次前已处理 "
+                                + completed
+                                + " 个"
+                                + item
+                                + "（已写入或复用），失败批次 "
+                                + rows.size()
+                                + " 个"
+                                + item
+                                + "；本批已写入 "
+                                + written[0]
+                                + "/"
+                                + rows.size()
+                                + " 个完整"
+                                + item
+                                + "，重试时会复用；"
+                                + failure.getMessage(),
+                        failure);
+            }
+            if (written[0] != rows.size())
+                throw new IllegalStateException("批量向量结果数量与" + kind + "片段数量不一致");
+            LOG.info(
+                    "{}向量批次完成: {}, batch={}, written={}, completedChunks={}, elapsedMs={}",
+                    kind,
+                    ModelCallLogContext.fields(),
+                    batch,
+                    written[0],
+                    completed + written[0],
+                    elapsedMillis(started));
+        } catch (RuntimeException failure) {
+            LOG.error(
+                    "{}向量批次失败: {}, batch={}, inputs={}, completedBefore={}, batchWritten={}, code={}, errorType={}, elapsedMs={}",
+                    kind,
+                    ModelCallLogContext.fields(),
+                    batch,
+                    rows.size(),
+                    completed,
+                    written[0],
+                    failureCode(failure),
+                    failure.getClass().getSimpleName(),
+                    elapsedMillis(started));
+            throw failure;
         }
     }
 
     private void ensureKnowledgeEmbeddings(UUID repositoryId) {
+        long started = System.nanoTime();
+        ModelCallLogContext.stage("KNOWLEDGE_VECTOR_PLAN");
         String model = llm.activeVectorModelName();
         int dimension = llm.activeVectorModelDimension();
         String capability = llm.activeRetrievalCapability();
         LlmSettingsService.ExternalVectorizer externalVectorizer = null;
         List<Map<String, Object>> pendingExternal = new ArrayList<>();
-        for (Map<String, Object> row :
-                mapper.missingKnowledgeEmbeddings(repositoryId, model, dimension, capability)) {
+        int completed = 0;
+        int batch = 0;
+        List<Map<String, Object>> missing =
+                mapper.missingKnowledgeEmbeddings(repositoryId, model, dimension, capability);
+        LOG.info(
+                "知识向量索引计划: {}, model={}, dimension={}, capability={}, missingCards={}, batchSize={}",
+                ModelCallLogContext.fields(),
+                LlmFailureMessages.safe(model),
+                dimension,
+                capability,
+                missing.size(),
+                EXTERNAL_EMBEDDING_BATCH_SIZE);
+        for (Map<String, Object> row : missing) {
+            EmbeddingRequestScope.checkpoint();
             String content = string(row, "content");
             if (!"CHARACTER_HASH".equals(capability)) {
                 if (externalVectorizer == null) externalVectorizer = llm.openExternalVectorizer();
                 pendingExternal.add(row);
                 if (pendingExternal.size() == EXTERNAL_EMBEDDING_BATCH_SIZE) {
-                    upsertKnowledgeEmbeddingBatch(
-                            repositoryId, pendingExternal, externalVectorizer);
+                    upsertEmbeddingBatch(
+                            repositoryId,
+                            pendingExternal,
+                            externalVectorizer,
+                            ++batch,
+                            completed,
+                            true);
+                    completed += pendingExternal.size();
                     pendingExternal.clear();
                 }
                 continue;
@@ -1174,35 +1501,20 @@ public class IntelligenceService {
                     capability,
                     localVector(content),
                     sha256(content));
+            completed++;
         }
         if (!pendingExternal.isEmpty()) {
-            upsertKnowledgeEmbeddingBatch(repositoryId, pendingExternal, externalVectorizer);
+            upsertEmbeddingBatch(
+                    repositoryId, pendingExternal, externalVectorizer, ++batch, completed, true);
+            completed += pendingExternal.size();
         }
-    }
-
-    private void upsertKnowledgeEmbeddingBatch(
-            UUID repositoryId,
-            List<Map<String, Object>> rows,
-            LlmSettingsService.ExternalVectorizer vectorizer) {
-        List<LlmSettingsService.VectorEmbedding> embeddings =
-                vectorizer.vectorizeBatch(
-                        rows.stream().map(row -> string(row, "content")).toList());
-        if (embeddings.size() != rows.size()) {
-            throw new IllegalStateException("批量向量结果数量与知识片段数量不一致");
-        }
-        for (int index = 0; index < rows.size(); index++) {
-            Map<String, Object> row = rows.get(index);
-            LlmSettingsService.VectorEmbedding embedding = embeddings.get(index);
-            mapper.upsertKnowledgeEmbedding(
-                    uuid(row, "id"),
-                    repositoryId,
-                    integer(row, "revision"),
-                    embedding.model(),
-                    embedding.dimension(),
-                    embedding.retrievalCapability(),
-                    embedding.vector(),
-                    sha256(string(row, "content")));
-        }
+        ModelCallLogContext.stage("KNOWLEDGE_VECTOR_COMPLETED");
+        LOG.info(
+                "知识向量索引完成: {}, completedCards={}, externalBatches={}, elapsedMs={}",
+                ModelCallLogContext.fields(),
+                completed,
+                batch,
+                elapsedMillis(started));
     }
 
     @Transactional
@@ -1515,10 +1827,16 @@ public class IntelligenceService {
     }
 
     private void prepareKnowledgeEmbeddingsSafely(UUID repositoryId) {
-        try {
-            ensureKnowledgeEmbeddings(repositoryId);
-        } catch (RuntimeException ignored) {
-            // Published knowledge remains available through keyword retrieval.
+        try (var ignored = ModelCallLogContext.open(null, repositoryId, null, null, null)) {
+            try {
+                ensureKnowledgeEmbeddings(repositoryId);
+            } catch (RuntimeException failure) {
+                LOG.warn(
+                        "知识发布向量准备失败，保留关键词检索: {}, code={}, errorType={}",
+                        ModelCallLogContext.fields(),
+                        failureCode(failure),
+                        failure.getClass().getSimpleName());
+            }
         }
     }
 

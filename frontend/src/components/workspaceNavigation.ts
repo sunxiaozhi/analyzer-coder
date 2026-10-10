@@ -31,9 +31,9 @@ export interface WorkspaceNavigationContext {
 
 const developerItems: WorkspaceNavItem[] = [
   { to: '/overview', label: '项目总览', icon: 'overview' },
+  { to: '/ask', label: '项目问答', icon: 'ask' },
   { to: '/search', label: '联合检索', icon: 'code' },
   { to: '/atlas', label: '代码图谱', icon: 'atlas' },
-  { to: '/ask', label: '项目问答', icon: 'ask' },
 ];
 
 export function workspaceNavigation(

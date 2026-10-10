@@ -45,8 +45,10 @@ class BranchPreparationJobsTest {
             db.execute("CREATE TABLE repositories(id UUID PRIMARY KEY,deleted_at TIMESTAMPTZ)");
             db.execute(
                     "CREATE TABLE repository_branches(id UUID PRIMARY KEY,repo_id UUID,content_version UUID,content_indexed_at TIMESTAMPTZ,tracking_status TEXT DEFAULT 'ACTIVE',UNIQUE(repo_id,id))");
-            db.execute("CREATE TABLE code_chunks(repo_id UUID,branch_id UUID,content_version UUID)");
-            db.execute("""
+            db.execute(
+                    "CREATE TABLE code_chunks(repo_id UUID,branch_id UUID,content_version UUID)");
+            db.execute(
+                    """
                     CREATE TABLE branch_preparation_jobs (
                         id UUID PRIMARY KEY,
                         repo_id UUID NOT NULL,
@@ -66,8 +68,10 @@ class BranchPreparationJobsTest {
                         CHECK(kind IN ('SYNC','PREPARE') OR target_content_version IS NOT NULL)
                     )
                     """);
-            db.execute("CREATE UNIQUE INDEX branch_preparation_one_active ON branch_preparation_jobs(branch_id,kind) WHERE status IN ('QUEUED','RUNNING')");
-            db.execute("CREATE INDEX branch_preparation_queue ON branch_preparation_jobs(status,created_at)");
+            db.execute(
+                    "CREATE UNIQUE INDEX branch_preparation_one_active ON branch_preparation_jobs(branch_id,kind) WHERE status IN ('QUEUED','RUNNING')");
+            db.execute(
+                    "CREATE INDEX branch_preparation_queue ON branch_preparation_jobs(status,created_at)");
             UUID repo = UUID.randomUUID(), branch = UUID.randomUUID(), account = UUID.randomUUID();
             db.update(
                     "INSERT INTO accounts VALUES(?,'owner','Owner','SUPER_ADMIN',TRUE,FALSE)",
@@ -105,8 +109,14 @@ class BranchPreparationJobsTest {
                                         .accept("SYNC", commit);
                                 call.<Runnable>getArgument(5).run();
                                 return new BranchReadContext(
-                                        UUID.randomUUID(), repo, branch, "main", UUID.randomUUID(),
-                                        commit, Path.of("."), Instant.now().plusSeconds(60));
+                                        UUID.randomUUID(),
+                                        repo,
+                                        branch,
+                                        "main",
+                                        UUID.randomUUID(),
+                                        commit,
+                                        Path.of("."),
+                                        Instant.now().plusSeconds(60));
                             })
                     .when(codeOperations)
                     .executeSync(any(), eq(repo), eq(branch), any(), any(), any());
@@ -125,15 +135,28 @@ class BranchPreparationJobsTest {
             assertThat(service.submit(actor, repo, branch).id()).isNotEqualTo(second.id());
 
             db.execute(
-                    "CREATE TABLE knowledge_cards(id UUID PRIMARY KEY,repo_id UUID,branch_id UUID,revision INTEGER,title TEXT,content TEXT,publication_status TEXT)");
+                    "CREATE TABLE knowledge_cards(id UUID PRIMARY KEY,repo_id UUID,branch_id UUID,revision INTEGER,title TEXT,content TEXT,publication_status TEXT,source_version_status TEXT,verification_note TEXT,verified_commit TEXT,last_verified_content_version UUID,source_version_checked_at TIMESTAMPTZ)");
             db.execute(
                     "CREATE TABLE knowledge_branch_validations(card_id UUID,revision INTEGER,branch_id UUID,content_version UUID,state TEXT,note TEXT,checked_by UUID,checked_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(card_id,revision,branch_id,content_version))");
+            db.execute(
+                    "CREATE TABLE knowledge_branch_scopes(card_id UUID PRIMARY KEY,mode TEXT,branch_ids UUID[])");
+            db.execute(
+                    "CREATE TABLE knowledge_branch_scope_history(card_id UUID,revision INTEGER,mode TEXT,branch_ids UUID[])");
+            String migration =
+                    new org.springframework.core.io.ClassPathResource(
+                                    "db/migration/V1__init_schema.sql")
+                            .getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+            int functionStart = migration.indexOf("CREATE FUNCTION knowledge_applies_to_branch(");
+            db.execute(
+                    migration.substring(functionStart, migration.indexOf("$;", functionStart) + 3));
             UUID card = UUID.randomUUID(), contentVersion = UUID.randomUUID();
             db.update(
-                    "INSERT INTO knowledge_cards VALUES(?,?,?,1,'Knowledge','Content','PUBLISHED')",
+                    "INSERT INTO knowledge_cards(id,repo_id,branch_id,revision,title,content,publication_status) VALUES(?,?,?,1,'Knowledge','Content','PUBLISHED')",
                     card,
                     repo,
                     branch);
+            db.update(
+                    "INSERT INTO knowledge_branch_scopes SELECT id,'SELECTED_BRANCHES',ARRAY[branch_id] FROM knowledge_cards");
             var knowledge = new BranchKnowledgeService(db, mock(AccessControlService.class));
             var context =
                     new BranchReadContext(
@@ -199,6 +222,32 @@ class BranchPreparationJobsTest {
                                     .orElseThrow()
                                     .status())
                     .isEqualTo("SUCCEEDED");
+            var failedVectorJob = service.submitVectors(actor, context);
+            doAnswer(
+                            call -> {
+                                call.<Runnable>getArgument(2).run();
+                                throw new com.analyzercoder.application.llm.LlmConnectionException(
+                                        "LLM_TIMEOUT", "第 2 批失败；请求超时=30000ms；已处理 16 个片段");
+                            })
+                    .when(intelligence)
+                    .prepareBranchEmbeddings(eq(repo), eq(contentVersion), any());
+            service.processNext();
+            var failed =
+                    service.history(actor, repo, branch, 1, 20).items().stream()
+                            .filter(job -> job.id().equals(failedVectorJob.id()))
+                            .findFirst()
+                            .orElseThrow();
+            assertThat(failed.status()).isEqualTo("FAILED");
+            assertThat(failed.stage()).isEqualTo("EMBEDDING");
+            assertThat(failed.error())
+                    .contains(
+                            "LLM_TIMEOUT",
+                            "第 2 批",
+                            "30000ms",
+                            "已处理 16",
+                            failedVectorJob.id().toString());
+            assertThat(service.submitVectors(actor, context).id())
+                    .isNotEqualTo(failedVectorJob.id());
         } finally {
             admin.execute("DROP SCHEMA " + schema + " CASCADE");
         }

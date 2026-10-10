@@ -105,5 +105,10 @@ app:
     endpoint-exceptions: []
     # 模型连通性检测的总超时（秒），不同于模型管理中的单次请求超时。
     connectivity-timeout-seconds: ${APP_LLM_CONNECTIVITY_TIMEOUT_SECONDS:15}
-    # 模型运行时连续失败达到该次数后熔断，后续问答降级为本地证据模式。
+    # Shared by host + credential within this backend; all HTTP attempts consume quota.
+    embedding-requests-per-minute: ${APP_LLM_EMBEDDING_REQUESTS_PER_MINUTE:30}
+    embedding-max-wait-ms: ${APP_LLM_EMBEDDING_MAX_WAIT_MS:120000}
+    embedding-rate-limit-retries: ${APP_LLM_EMBEDDING_RATE_LIMIT_RETRIES:3}
+    embedding-rate-limit-cooldown-ms: ${APP_LLM_EMBEDDING_RATE_LIMIT_COOLDOWN_MS:60000}
+    # 模型运行时连续失败达到该次数后熔断，后续模型问答明确报错并提示重新检测。
     breaker-failure-threshold: ${APP_LLM_BREAKER_FAILURE_THRESHOLD:3}

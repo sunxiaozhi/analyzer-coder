@@ -16,6 +16,73 @@ import org.junit.jupiter.api.Test;
 
 class ExternalVectorizerTest {
     @Test
+    void retainsBatchReasonAndFailedInputPositionAfterFallback() {
+        LlmSettingsMapper mapper = mock(LlmSettingsMapper.class);
+        OpenAiCompatibleClient client = mock(OpenAiCompatibleClient.class);
+        when(mapper.activeVectorModel())
+                .thenReturn(
+                        Map.of(
+                                "provider_type",
+                                "OPENAI_COMPATIBLE",
+                                "base_url",
+                                "https://example.com/v1",
+                                "model",
+                                "bge-m3",
+                                "dimension",
+                                2,
+                                "request_timeout_ms",
+                                5000));
+        when(client.embedBatch(
+                        eq("https://example.com/v1"),
+                        eq("bge-m3"),
+                        eq(""),
+                        anyList(),
+                        eq(2),
+                        eq(5000)))
+                .thenThrow(
+                        new LlmConnectionException(
+                                "LLM_BATCH_UNSUPPORTED", "HTTP 413: batch too large"));
+        when(client.embed(
+                        eq("https://example.com/v1"),
+                        eq("bge-m3"),
+                        eq(""),
+                        eq("first"),
+                        eq(2),
+                        eq(5000)))
+                .thenReturn("[1,0]");
+        when(client.embed(
+                        eq("https://example.com/v1"),
+                        eq("bge-m3"),
+                        eq(""),
+                        eq("second"),
+                        eq(2),
+                        eq(5000)))
+                .thenThrow(new LlmConnectionException("LLM_TIMEOUT", "模型服务响应超时"));
+        LlmSettingsService settings =
+                new LlmSettingsService(
+                        mapper,
+                        mock(LlmSecretCipher.class),
+                        mock(LlmEndpointPolicy.class),
+                        client,
+                        new ObjectMapper(),
+                        new LlmRuntimeStateService(mapper),
+                        15,
+                        3);
+        var completed = new java.util.HashMap<Integer, LlmSettingsService.VectorEmbedding>();
+        LlmConnectionException failure =
+                org.junit.jupiter.api.Assertions.assertThrows(
+                        LlmConnectionException.class,
+                        () ->
+                                settings.openExternalVectorizer()
+                                        .vectorizeBatch(
+                                                List.of("first", "second"), completed::put));
+        org.assertj.core.api.Assertions.assertThat(completed).containsOnlyKeys(0);
+        assertEquals("LLM_TIMEOUT", failure.code());
+        org.assertj.core.api.Assertions.assertThat(failure.getMessage())
+                .contains("第 2/2 条输入失败", "HTTP 413: batch too large", "已降级为单条请求", "响应超时");
+    }
+
+    @Test
     void fallsBackToSinglesOnceWhenCompatibleServerRejectsArrays() {
         LlmSettingsMapper mapper = mock(LlmSettingsMapper.class);
         OpenAiCompatibleClient client = mock(OpenAiCompatibleClient.class);
@@ -50,6 +117,7 @@ class ExternalVectorizerTest {
                         mock(LlmEndpointPolicy.class),
                         client,
                         new ObjectMapper(),
+                        new LlmRuntimeStateService(mapper),
                         15,
                         3);
         LlmSettingsService.ExternalVectorizer vectorizer = settings.openExternalVectorizer();

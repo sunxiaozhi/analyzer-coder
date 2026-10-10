@@ -305,7 +305,7 @@
 - 规则：
   - `POST /vector-models/{id}/check` 仅管理员可调用；不存在返回 404 `VECTOR_MODEL_NOT_FOUND`。
   - `LOCAL_HASH` 直接判定可用（不发起外部调用）。
-  - 外部模型调用 OpenAI 兼容 `/embeddings`，以 `"connection probe"` 为探测输入，并校验返回向量长度与配置维度一致。
+  - 外部模型调用 OpenAI 兼容 `/embeddings`，验证单条及批量输入，复用索引任务的单条降级路径，并校验返回向量长度与配置维度一致；检测全过程共享请求超时预算。详见 [模型调用排障](model-call-troubleshooting.md)。
   - 失败返回 `available=false` 及错误码与脱敏摘要；前端提示"检测通过：<能力标签>，<维度> 维，<耗时> ms"。
 - 证据：`backend/src/main/java/com/analyzercoder/interfaces/rest/LlmSettingsController.java:92`、`backend/src/main/java/com/analyzercoder/application/llm/LlmSettingsService.java:242,250,265`、`frontend/src/views/SystemSettingsView.vue:226`
 ### CFG-014 向量模型启用与激活版本
@@ -443,8 +443,8 @@
    - 证据：`backend/src/main/resources/db/migration/V1__init_schema.sql`、`backend/src/main/java/com/analyzercoder/application/intelligence/IntelligenceService.java:1145`
 5. **界面状态计数是页内计数**：任务中心的"成功 / 已取消"取自当前页集合，且接口不支持状态筛选。
    - 证据：`frontend/src/features/indexing/useIndexJobs.ts:16`、`backend/src/main/java/com/analyzercoder/interfaces/rest/IndexController.java:65`
-6. **分支任务失败原因不可区分**：所有异常写入同一段固定文本，无法区分分支缺失、凭据失效或向量模型配置问题。
-   - 证据：`backend/src/main/java/com/analyzercoder/application/branch/BranchPreparationJobs.java:307`
+6. **分支任务失败提示（已修复）**：保留模型错误码、脱敏错误原因、失败批次与任务 ID；数据库异常不回传 SQL。问答调用和向量检索诊断同步完善。
+   - 说明：[模型调用排障](model-call-troubleshooting.md)。
 7. **超时收敛依赖 worker 开启**：`app.workers.enabled=false` 时超时记录不会被收敛；该开关的运维语义需人工确认。
    - 证据：`backend/src/main/java/com/analyzercoder/config/WorkerConfig.java:10`
 8. **分支任务阶段取值未约束**：`stage` 为自由文本，数据库未约束取值，前端仅做映射；新增阶段会直接显示原始字符串，是否需要约束需人工确认。

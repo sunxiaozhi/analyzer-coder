@@ -36,6 +36,14 @@
 | 人工评审、发布/撤回/归档与分支验证 | MANAGE | `IntelligenceController.java:219,229`、`BranchKnowledgeService.java:81,164-165` |
 | 恢复历史修订 | MAINTAIN | `KnowledgeCardHistoryController.java:48` |
 
+### 知识删除
+
+具备项目 MANAGE 权限的用户可在草稿卡片“更多”菜单选择“删除草稿”。已发布或已归档知识须先撤回为草稿。删除前确认共享范围，提交当前 expectedRevision；后端锁定卡片并校验分支适用性、状态和修订号，避免误删已修改或已发布知识。
+
+删除在同一数据库事务中通过现有外键级联清理知识向量、修订记录、代码引用、分支范围/验证、漂移记录、附件引用及 Markdown 预备知识关联。Markdown 来源文件和预备知识条目保留；无其他关联知识时，来源状态恢复为“待生成”，可重新生成草稿。共享来源若仍有其他知识关联，则按剩余有效关联计算状态。历史问答保留当时的证据快照，并清空指向被删知识的引用标识。
+
+接口：DELETE /api/repositories/{repoId}/knowledge/{cardId}?expectedRevision=当前修订号，必须携带 X-Branch-Context；成功返回 204。状态不符或修订冲突返回 409，知识不存在或不适用于当前分支返回 404。页面删除成功后同步刷新知识与 Markdown 预备知识列表。
+
 ## 2 需求条目
 
 ### KNO-001 知识卡字段模型

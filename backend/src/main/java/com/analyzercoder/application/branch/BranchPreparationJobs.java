@@ -1,6 +1,10 @@
 package com.analyzercoder.application.branch;
 
+import com.analyzercoder.application.common.PageResult;
 import com.analyzercoder.application.intelligence.IntelligenceService;
+import com.analyzercoder.application.llm.LlmConnectionException;
+import com.analyzercoder.application.llm.LlmFailureMessages;
+import com.analyzercoder.application.llm.ModelCallLogContext;
 import com.analyzercoder.domain.repository.CodeRepositoryId;
 import com.analyzercoder.security.AccessControlService;
 import com.analyzercoder.security.AccountRole;
@@ -9,14 +13,14 @@ import com.analyzercoder.security.AuthenticatedAccount;
 import com.analyzercoder.security.RepositoryPermission;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.List;
 import java.util.ArrayList;
-import com.analyzercoder.application.common.PageResult;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -25,8 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class BranchPreparationJobs {
     private static final Logger log = LoggerFactory.getLogger(BranchPreparationJobs.class);
-    private static final String GENERIC_FAILURE =
-            "任务失败，请检查分支、项目权限、凭据或向量模型配置后重试";
+    private static final String GENERIC_FAILURE = "任务执行失败，请根据错误类型及任务编号检查服务日志";
 
     private final JdbcTemplate db;
     private final DataSource dataSource;
@@ -60,24 +63,43 @@ public class BranchPreparationJobs {
             UUID contentVersion) {}
 
     /** Full task history; list() continues to return only the latest task per branch/kind. */
-    public PageResult<Job> history(AuthenticatedAccount actor, UUID repoId, UUID branchId, int pageNum, int pageSize) {
+    public PageResult<Job> history(
+            AuthenticatedAccount actor, UUID repoId, UUID branchId, int pageNum, int pageSize) {
         PageResult.validate(pageNum, pageSize);
         access.require(actor, CodeRepositoryId.of(repoId), RepositoryPermission.READ);
         String filter = " WHERE repo_id=?" + (branchId == null ? "" : " AND branch_id=?");
         List<Object> arguments = new ArrayList<>();
         arguments.add(repoId);
         if (branchId != null) arguments.add(branchId);
-        Long count = db.queryForObject("SELECT COUNT(*) FROM branch_preparation_jobs" + filter, Long.class, arguments.toArray());
+        Long count =
+                db.queryForObject(
+                        "SELECT COUNT(*) FROM branch_preparation_jobs" + filter,
+                        Long.class,
+                        arguments.toArray());
         long total = count == null ? 0 : count;
         arguments.add(pageSize);
         arguments.add(((long) pageNum - 1) * pageSize);
-        List<Job> rows = db.query(
-                "SELECT id,branch_id,status,stage,error,kind,target_content_version FROM branch_preparation_jobs" + filter
-                        + " ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
-                (r, n) -> new Job(r.getObject("id", UUID.class), r.getObject("branch_id", UUID.class),
-                        r.getString("status"), r.getString("stage"), r.getString("error"),
-                        r.getString("kind"), r.getObject("target_content_version", UUID.class)), arguments.toArray());
-        return new PageResult<>(rows, pageNum, pageSize, total, (int) Math.min(Integer.MAX_VALUE, (total + pageSize - 1) / pageSize));
+        List<Job> rows =
+                db.query(
+                        "SELECT id,branch_id,status,stage,error,kind,target_content_version FROM branch_preparation_jobs"
+                                + filter
+                                + " ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
+                        (r, n) ->
+                                new Job(
+                                        r.getObject("id", UUID.class),
+                                        r.getObject("branch_id", UUID.class),
+                                        r.getString("status"),
+                                        r.getString("stage"),
+                                        r.getString("error"),
+                                        r.getString("kind"),
+                                        r.getObject("target_content_version", UUID.class)),
+                        arguments.toArray());
+        return new PageResult<>(
+                rows,
+                pageNum,
+                pageSize,
+                total,
+                (int) Math.min(Integer.MAX_VALUE, (total + pageSize - 1) / pageSize));
     }
 
     public List<Job> list(AuthenticatedAccount actor, UUID repoId) {
@@ -105,12 +127,17 @@ public class BranchPreparationJobs {
 
     /** Explicit operations are either branch sync or pinned-contentVersion index tasks. */
     public Job submitOperation(
-            AuthenticatedAccount actor, UUID repoId, UUID branchId, String kind, UUID contentVersion) {
+            AuthenticatedAccount actor,
+            UUID repoId,
+            UUID branchId,
+            String kind,
+            UUID contentVersion) {
         if (!java.util.Set.of("SYNC", "CONTENT", "GRAPH", "PREPARE").contains(kind))
             throw new IllegalArgumentException("不支持的分支操作");
         if (("CONTENT".equals(kind) || "GRAPH".equals(kind)) && contentVersion == null)
             throw new IllegalArgumentException("索引任务必须指定分支内容版本");
-        if (contentVersion != null) codeOperations.contentVersionContext(actor, repoId, branchId, contentVersion);
+        if (contentVersion != null)
+            codeOperations.contentVersionContext(actor, repoId, branchId, contentVersion);
         return enqueue(actor, repoId, branchId, kind, contentVersion);
     }
 
@@ -134,11 +161,19 @@ public class BranchPreparationJobs {
                         context.contentVersion())))
             throw new IllegalArgumentException("请先构建此分支内容版本的内容索引");
         return enqueue(
-                actor, context.repositoryId(), context.branchId(), "VECTORS", context.contentVersion());
+                actor,
+                context.repositoryId(),
+                context.branchId(),
+                "VECTORS",
+                context.contentVersion());
     }
 
     private Job enqueue(
-            AuthenticatedAccount actor, UUID repoId, UUID branchId, String kind, UUID contentVersion) {
+            AuthenticatedAccount actor,
+            UUID repoId,
+            UUID branchId,
+            String kind,
+            UUID contentVersion) {
         access.require(actor, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
         return transaction.execute(
                 status -> {
@@ -233,100 +268,127 @@ public class BranchPreparationJobs {
                                 token,
                                 id)
                         != 1) return false;
-                try {
-                    AuthenticatedAccount actor = actor((UUID) row.get("account_id"));
-                    if (java.util.Set.of("SYNC", "CONTENT", "GRAPH", "PREPARE")
-                            .contains(row.get("kind"))) {
-                        performCodeOperation(
+                try (var ignored =
+                        ModelCallLogContext.open(id.toString(), repoId, branchId, id, null)) {
+                    long started = System.nanoTime();
+                    boolean succeeded = false;
+                    ModelCallLogContext.stage("RESOLVING");
+                    log.info(
+                            "分支任务开始: {}, kind={}, contentVersion={}",
+                            ModelCallLogContext.fields(),
+                            row.get("kind"),
+                            row.get("target_content_version"));
+                    try {
+                        AuthenticatedAccount actor = actor((UUID) row.get("account_id"));
+                        if (java.util.Set.of("SYNC", "CONTENT", "GRAPH", "PREPARE")
+                                .contains(row.get("kind"))) {
+                            performCodeOperation(
+                                    actor,
+                                    repoId,
+                                    branchId,
+                                    id,
+                                    token,
+                                    (String) row.get("kind"),
+                                    (String) row.get("target_commit"),
+                                    (UUID) row.get("target_content_version"));
+                            succeeded = true;
+                            return true;
+                        }
+                        if ("VECTORS".equals(row.get("kind"))) {
+                            access.require(
+                                    actor,
+                                    CodeRepositoryId.of(repoId),
+                                    RepositoryPermission.MAINTAIN);
+                            ModelCallLogContext.stage("EMBEDDING");
+                            intelligence.prepareBranchEmbeddings(
+                                    repoId,
+                                    (UUID) row.get("target_content_version"),
+                                    () -> {
+                                        access.require(
+                                                actor(actor.id()),
+                                                CodeRepositoryId.of(repoId),
+                                                RepositoryPermission.MAINTAIN);
+                                        if (db.update(
+                                                        "UPDATE branch_preparation_jobs SET stage='EMBEDDING',updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'",
+                                                        id,
+                                                        token)
+                                                != 1) throw superseded();
+                                    });
+                            access.require(
+                                    actor(actor.id()),
+                                    CodeRepositoryId.of(repoId),
+                                    RepositoryPermission.MAINTAIN);
+                            if (db.update(
+                                            "UPDATE branch_preparation_jobs SET status='SUCCEEDED',stage='COMPLETED',updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'",
+                                            id,
+                                            token)
+                                    != 1) throw superseded();
+                            succeeded = true;
+                            return true;
+                        }
+                        branches.executePreparation(
                                 actor,
                                 repoId,
                                 branchId,
-                                id,
-                                token,
-                                (String) row.get("kind"),
                                 (String) row.get("target_commit"),
-                                (UUID) row.get("target_content_version"));
-                        return true;
-                    }
-                    if ("VECTORS".equals(row.get("kind"))) {
-                        access.require(
-                                actor, CodeRepositoryId.of(repoId), RepositoryPermission.MAINTAIN);
-                        intelligence.prepareBranchEmbeddings(
-                                repoId,
-                                (UUID) row.get("target_content_version"),
+                                (stage, commit) -> {
+                                    ModelCallLogContext.stage(stage);
+                                    log.info("分支任务阶段: {}", ModelCallLogContext.fields());
+                                    if (db.update(
+                                                    """
+                                        UPDATE branch_preparation_jobs SET stage=?,
+                                        target_commit=COALESCE(target_commit,?),updated_at=CURRENT_TIMESTAMP
+                                        WHERE id=? AND attempt_token=? AND status='RUNNING'
+                                        """,
+                                                    stage,
+                                                    commit,
+                                                    id,
+                                                    token)
+                                            != 1) throw superseded();
+                                },
                                 () -> {
+                                    // Runs in the contentVersion publication transaction; token
+                                    // fences
+                                    // a lost
+                                    // worker.
                                     access.require(
                                             actor(actor.id()),
                                             CodeRepositoryId.of(repoId),
                                             RepositoryPermission.MAINTAIN);
                                     if (db.update(
-                                                    "UPDATE branch_preparation_jobs SET stage='EMBEDDING',updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'",
+                                                    """
+                                        UPDATE branch_preparation_jobs SET status='SUCCEEDED',stage='COMPLETED',
+                                        updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'
+                                        """,
                                                     id,
                                                     token)
                                             != 1) throw superseded();
                                 });
-                        access.require(
-                                actor(actor.id()),
-                                CodeRepositoryId.of(repoId),
-                                RepositoryPermission.MAINTAIN);
-                        if (db.update(
-                                        "UPDATE branch_preparation_jobs SET status='SUCCEEDED',stage='COMPLETED',updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'",
-                                        id,
-                                        token)
-                                != 1) throw superseded();
-                        return true;
-                    }
-                    branches.executePreparation(
-                            actor,
-                            repoId,
-                            branchId,
-                            (String) row.get("target_commit"),
-                            (stage, commit) -> {
-                                if (db.update(
-                                                """
-                                        UPDATE branch_preparation_jobs SET stage=?,
-                                        target_commit=COALESCE(target_commit,?),updated_at=CURRENT_TIMESTAMP
-                                        WHERE id=? AND attempt_token=? AND status='RUNNING'
-                                        """,
-                                                stage,
-                                                commit,
-                                                id,
-                                                token)
-                                        != 1) throw superseded();
-                            },
-                            () -> {
-                                // Runs in the contentVersion publication transaction; token fences a lost
-                                // worker.
-                                access.require(
-                                        actor(actor.id()),
-                                        CodeRepositoryId.of(repoId),
-                                        RepositoryPermission.MAINTAIN);
-                                if (db.update(
-                                                """
-                                        UPDATE branch_preparation_jobs SET status='SUCCEEDED',stage='COMPLETED',
-                                        updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'
-                                        """,
-                                                id,
-                                                token)
-                                        != 1) throw superseded();
-                            });
-                } catch (RuntimeException failure) {
-                    log.error(
-                            "分支任务失败: taskId={}, repoId={}, branchId={}, kind={}, contentVersion={}",
-                            id,
-                            repoId,
-                            branchId,
-                            row.get("kind"),
-                            row.get("target_content_version"),
-                            failure);
-                    db.update(
-                            """
+                        succeeded = true;
+                    } catch (RuntimeException failure) {
+                        log.error(
+                                "分支任务失败: {}, kind={}, contentVersion={}, detail={}, stack={}",
+                                ModelCallLogContext.fields(),
+                                row.get("kind"),
+                                row.get("target_content_version"),
+                                failureMessage(failure),
+                                LlmFailureMessages.stackTrace(failure));
+                        db.update(
+                                """
                             UPDATE branch_preparation_jobs SET status='FAILED',
                             error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND attempt_token=? AND status='RUNNING'
                             """,
-                            failureMessage(failure),
-                            id,
-                            token);
+                                failureMessage(failure) + "；任务编号：" + id,
+                                id,
+                                token);
+                    } finally {
+                        log.info(
+                                "分支任务执行结束: {}, kind={}, succeeded={}, elapsedMs={}",
+                                ModelCallLogContext.fields(),
+                                row.get("kind"),
+                                succeeded,
+                                java.time.Duration.ofNanos(System.nanoTime() - started).toMillis());
+                    }
                 }
             } finally {
                 try (var statement = connection.prepareStatement("SELECT pg_advisory_unlock(?)")) {
@@ -339,8 +401,23 @@ public class BranchPreparationJobs {
     }
 
     private static String failureMessage(RuntimeException failure) {
+        Throwable cause = failure;
+        for (int depth = 0; cause != null && depth < 12; depth++, cause = cause.getCause()) {
+            if (cause instanceof LlmConnectionException modelFailure) {
+                return LlmFailureMessages.safe(
+                        "向量构建失败 [" + modelFailure.code() + "]：" + modelFailure.getMessage());
+            }
+            if (cause instanceof ApiSecurityException accessFailure) {
+                return LlmFailureMessages.safe(
+                        "任务执行失败 [" + accessFailure.code() + "]：" + accessFailure.getMessage());
+            }
+            if (cause instanceof DataAccessException) {
+                return "任务执行失败 [DATABASE_WRITE_FAILED]：数据库读写失败，请根据任务编号检查服务日志中的数据库错误";
+            }
+        }
         String message = failure.getMessage();
-        if (message == null || message.isBlank()) return GENERIC_FAILURE;
+        if (message == null || message.isBlank())
+            return GENERIC_FAILURE + "；错误类型=" + failure.getClass().getSimpleName();
         if (message.startsWith("CodeGraph")
                 || message.startsWith("未找到 CodeGraph")
                 || message.startsWith("无法创建 CodeGraph")
@@ -350,7 +427,7 @@ public class BranchPreparationJobs {
                 || message.startsWith("无法创建分支内容版本")) {
             return message.length() <= 500 ? message : message.substring(0, 500);
         }
-        return GENERIC_FAILURE;
+        return GENERIC_FAILURE + "；错误类型=" + failure.getClass().getSimpleName();
     }
 
     private void performCodeOperation(
@@ -366,7 +443,8 @@ public class BranchPreparationJobs {
         resolving.run();
         BranchReadContext context =
                 contentVersion != null
-                        ? codeOperations.contentVersionContext(actor, repoId, branchId, contentVersion)
+                        ? codeOperations.contentVersionContext(
+                                actor, repoId, branchId, contentVersion)
                         : codeOperations.executeSync(
                                 actor,
                                 repoId,

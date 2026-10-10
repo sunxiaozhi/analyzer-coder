@@ -536,6 +536,9 @@ export const intelligenceApi = {
       method: 'PUT',
       body: JSON.stringify(input),
     }),
+  deleteCard: (repositoryId: string, id: string, expectedRevision: number, contextId: string) =>
+    request<void>(`/api/repositories/${repositoryId}/knowledge/${id}?expectedRevision=${expectedRevision}`,
+      withBranchContext(contextId, { method: 'DELETE' })),
   reviewCard: (
     repositoryId: string,
     id: string,
