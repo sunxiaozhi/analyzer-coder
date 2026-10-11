@@ -3,6 +3,10 @@
 
 ## 1. 范围与方法
 
+2026-10-11 增补：新增 `KnowledgeProjectController` 的 `POST /api/repositories/knowledge-projects`，接受 `{ "name": "知识库名称", "description": "可选说明" }`，返回现有 `RepositoryResponse`，`sourceType=KNOWLEDGE`。登录用户成为所有者，名称同所有者内唯一；创建正式项目与内部 READY 工作区，不创建接入草稿或获取代码。沿用会话认证和 CSRF。以下历史统计未重新统计，新增接口在原目录基础上增补。
+
+纯知识项目继续使用知识、附件、检索、问答及 `/contexts` 接口，读取与写入仍传 `X-Branch-Context`；上下文中的 contentVersion、commitSha、contentPath 允许为空。代码准备、索引、图谱、文件、仓库 Markdown 来源、代码凭据及分支管理操作由 `KnowledgeProjectOperationInterceptor` 在入队或文件操作前拒绝，返回 409 `KNOWLEDGE_PROJECT_NO_CODE`；分支列表只供自动选择内部工作区。知识发布继续要求 MANAGE 与 expectedRevision。参见 [设计](plans/knowledge-only-design.md)。
+
 - 覆盖范围：`backend/src/main/java/com/analyzercoder/interfaces/rest/` 下所有带
   `@RestController` 的类型，共 31 个（另有 `ApiExceptionHandler` 为
   `@RestControllerAdvice`、`BranchRequestContext` 为 `@Component`，均不提供端点）

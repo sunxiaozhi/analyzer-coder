@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { FolderTree } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 import ProjectOverviewSheet from '@/features/overview/ProjectOverviewSheet.vue';
+import KnowledgeProjectSummary from '@/features/knowledge/KnowledgeProjectSummary.vue';
 import { useProjectOverview } from '@/features/overview/useProjectOverview';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 
@@ -37,7 +38,8 @@ function openManagement() {
 
 <template>
   <section class="overview-page">
-    <div v-if="!repositories.selectedRepositoryId" class="overview-empty">
+    <KnowledgeProjectSummary v-if="repository?.sourceType === 'KNOWLEDGE'" />
+    <div v-else-if="!repositories.selectedRepositoryId" class="overview-empty">
       <span><FolderTree :size="26" /></span>
       <h1>选择一个项目</h1>
       <p>项目总览会展示当前版本、代码索引和知识库状态。</p>

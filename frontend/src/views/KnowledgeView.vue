@@ -33,6 +33,7 @@ import { enforcementLabel, knowledgeKindLabel, statusLabel } from '@/utils/displ
 const repositories = useRepositoryStore();
 const branchContext = useBranchContextStore();
 const readScope = useBranchReadScope();
+const knowledgeOnly = computed(() => repositories.selectedRepository?.sourceType === 'KNOWLEDGE');
 let cardsVersion=0;
 let sourcesVersion=0;
 let driftVersion=0;
@@ -185,10 +186,10 @@ async function loadCards() {
     const contextId=branchContext.context?.contextId;
     const [loadedCards,loadedValidations]=await Promise.all([
       contextId?intelligenceApi.cards(repositoryId,contextId):intelligenceApi.cards(repositoryId),
-      branchContext.context ? branchesApi.validations(branchContext.context) : Promise.resolve([]),
+      branchContext.context && !knowledgeOnly.value ? branchesApi.validations(branchContext.context) : Promise.resolve([]),
     ]);
     if(!isCurrent())return;
-    cards.value=loadedCards.map(card => cardForBranch(card, branchContext.context, loadedValidations)); branchValidations.value=loadedValidations;
+    cards.value=knowledgeOnly.value ? loadedCards : loadedCards.map(card => cardForBranch(card, branchContext.context, loadedValidations)); branchValidations.value=loadedValidations;
     syncRequestedCard(); syncRequestedCreate();
     if (resumeCardId.value && !route.query.cardId) { const card = cards.value.find(item => item.id === resumeCardId.value); if (card) openDetail(card); }
     await restoreListPosition();
@@ -202,6 +203,7 @@ async function loadMarkdownSources() {
   const identity=branchContext.identity;
   const repositoryId=repositories.selectedRepositoryId;
   markdownSources.value=null; sourceLoadError.value=null; sourcesLoading.value=false;
+  if (knowledgeOnly.value) { activeMode.value = 'cards'; return; }
   if(!repositoryId){activeMode.value='cards';return;}
   if(readScope.blocked.value){sourceLoadError.value=readScope.reason.value;return;}
   const isCurrent=()=>version===sourcesVersion && repositoryId===repositories.selectedRepositoryId && identity===branchContext.identity;
@@ -234,6 +236,7 @@ function syncRequestedCard() {
 }
 function openCreate() { saveError.value = null; initialReference.value = null; editing.value = null; dialog.value = true; }
 function scopeLabel(card: KnowledgeCard) {
+  if (knowledgeOnly.value) return '项目知识';
   return branchScopeLabel(card.branchScope, branchContext.branches, branchContext.context?.branchName);
 }
 function openEdit(card: KnowledgeCard) { saveError.value = null; initialReference.value = null; editing.value = card; detailDialog.value = false; dialog.value = true; }
@@ -258,6 +261,7 @@ function openDetail(card: KnowledgeCard) {
   void loadDrift(card);
 }
 async function loadDrift(card: KnowledgeCard) {
+  if (knowledgeOnly.value) return;
   const repositoryId = repositories.selectedRepositoryId;
   const request = ++driftVersion;
   const identity = branchContext.identity;
@@ -542,7 +546,7 @@ async function setPublication(card: KnowledgeCard, publicationStatus: 'DRAFT' | 
     const context = branchContext.context;
     if (!context) return;
     await ElMessageBox.confirm(publicationStatus === 'PUBLISHED'
-      ? `确认“${card.title}”适用于 ${context.branchName} 分支并发布？发布后可用于检索和问答。`
+      ? knowledgeOnly.value ? `确认发布“${card.title}”？发布后可用于检索和问答。` : `确认“${card.title}”适用于 ${context.branchName} 分支并发布？发布后可用于检索和问答。`
       : `${action}“${card.title}”？`, '发布知识', { confirmButtonText: publicationStatus === 'PUBLISHED' ? '确认并发布' : '确定', cancelButtonText: '取消' });
     if (publicationStatus === 'PUBLISHED') {
       await intelligenceApi.publishCard(repositoryId, card.id, card.revision, context.contextId);
@@ -550,7 +554,7 @@ async function setPublication(card: KnowledgeCard, publicationStatus: 'DRAFT' | 
       await intelligenceApi.setCardPublication(repositoryId, card.id, publicationStatus, context.contextId);
     }
     await branchValidationSaved();
-    ElMessage.success(publicationStatus === 'PUBLISHED' ? `已发布，共享范围：${scopeLabel(card)}；其他使用分支需分别确认适用性` : `${action}完成`);
+    ElMessage.success(publicationStatus === 'PUBLISHED' ? knowledgeOnly.value ? '知识已发布，可用于检索和问答' : `已发布，共享范围：${scopeLabel(card)}；其他使用分支需分别确认适用性` : `${action}完成`);
   } catch (error) {
     if (error instanceof Error) ElMessage.error(error.message);
   }
@@ -565,7 +569,9 @@ async function deleteCard(card: KnowledgeCard) {
     && identity === branchContext.identity && context.contextId === branchContext.context?.contextId;
   deletingCardId.value = card.id;
   try {
-    await ElMessageBox.confirm(`永久删除“${card.title}”？共享范围：${scopeLabel(card)}。将清理该知识的修订记录、向量及 Markdown 预备知识关联；原 Markdown 文件保留。此操作无法撤销。`,
+    await ElMessageBox.confirm(knowledgeOnly.value
+      ? `永久删除“${card.title}”？将清理该知识的修订记录和向量。此操作无法撤销。`
+      : `永久删除“${card.title}”？共享范围：${scopeLabel(card)}。将清理该知识的修订记录、向量及 Markdown 预备知识关联；原 Markdown 文件保留。此操作无法撤销。`,
       '删除知识草稿', { type: 'warning', confirmButtonText: '删除草稿', cancelButtonText: '取消' });
     if (!isCurrent() || !canManage.value || readScope.blocked.value) return;
     await intelligenceApi.deleteCard(repositoryId, card.id, card.revision, context.contextId);
@@ -582,7 +588,7 @@ async function deleteCard(card: KnowledgeCard) {
       if (!isCurrent()) return;
     }
     await load();
-    if (isCurrent()) ElMessage.success('知识已删除，向量及 Markdown 预备知识关联已清理');
+    if (isCurrent()) ElMessage.success(knowledgeOnly.value ? '知识已删除，修订记录和向量已清理' : '知识已删除，向量及 Markdown 预备知识关联已清理');
   } catch (error) {
     if (isCurrent() && error instanceof Error) ElMessage.error(error.message);
   } finally {
@@ -652,7 +658,7 @@ onMounted(() => void load());
           <button
             type="button"
             role="tab"
-            :aria-selected="activeMode === 'markdown'"
+            v-if="!knowledgeOnly" :aria-selected="activeMode === 'markdown'"
             :class="{ active: activeMode === 'markdown' }"
             @click="activeMode = 'markdown'"
           >
@@ -660,7 +666,7 @@ onMounted(() => void load());
           </button>
         </div>
 
-        <el-select v-if="activeMode === 'cards' && readScope.requiresContext.value" v-model="validationFilter" aria-label="分支验证筛选" placeholder="分支验证">
+        <el-select v-if="activeMode === 'cards' && readScope.requiresContext.value && !knowledgeOnly" v-model="validationFilter" aria-label="分支验证筛选" placeholder="分支验证">
           <el-option value="ALL" label="全部验证状态" />
           <el-option v-for="(label, state) in validationLabels" :key="state" :value="state" :label="label" />
         </el-select>
@@ -752,7 +758,7 @@ onMounted(() => void load());
             :can-maintain="canMaintain"
             :scope-label="scopeLabel(card)"
             :selected="selectedCardId === card.id"
-            :branch-context="branchContext.context" :validation-state="validationState(card)"
+            :knowledge-only="knowledgeOnly" :branch-context="knowledgeOnly ? null : branchContext.context" :validation-state="knowledgeOnly ? undefined : validationState(card)"
             :validation-label="readScope.requiresContext.value ? validationLabels[validationState(card)] : undefined"
             @view="openDetail"
             @edit="openEdit"
@@ -793,7 +799,7 @@ onMounted(() => void load());
       :drift-loading="driftLoading"
       :can-maintain="canMaintain"
       :source-review-loading="sourceReviewLoading"
-      :branch-context="readScope.requiresContext.value ? branchContext.context : null"
+      :knowledge-only="knowledgeOnly" :branch-context="!knowledgeOnly && readScope.requiresContext.value ? branchContext.context : null"
       :can-manage="canManage"
       @branch-validated="branchValidationSaved"
       @open-code="openCode"
@@ -804,7 +810,7 @@ onMounted(() => void load());
     <KnowledgeCardEditorDialog v-if="canMaintain && repositories.selectedRepositoryId" v-model="dialog"
       :context-id="branchContext.context?.contextId"
       :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy" :save-error="saveError"
-      :initial-reference="initialReference"
+      :knowledge-only="knowledgeOnly" :initial-reference="initialReference"
       :branch-name="branchContext.context?.branchName ?? null"
       :branch-id="branchContext.context?.branchId" :branches="branchContext.branches"
       @submit="save" @open-code="openCode" />

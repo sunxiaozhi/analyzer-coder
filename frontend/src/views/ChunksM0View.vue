@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Close, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import SearchExcerpt from '@/components/SearchExcerpt.vue';
+import KnowledgeSearchPanel from '@/features/knowledge/KnowledgeSearchPanel.vue';
 import { knowledgeExcerpt } from '@/features/knowledge/knowledgePresentation';
 import { usePageMemoryStore } from '@/stores/pageMemory';
 import RepositoryFilePreview from '@/components/RepositoryFilePreview.vue';
@@ -154,6 +155,7 @@ async function loadContentVersion(repositoryId: string | null) {
   fileCache.clear();
   if (!repositoryId) return;
   if (readScope.blocked.value) { contentVersionError.value = readScope.reason.value; return; }
+  if (repository.value?.sourceType === 'KNOWLEDGE') return;
   filesLoading.value = true;
   try {
     const result = branchContext.context?.contextId
@@ -417,7 +419,8 @@ watch(
 
 <template>
   <section class="code-workbench">
-    <section v-if="!workbenchReady" class="workbench-gate">
+    <KnowledgeSearchPanel v-if="repository?.sourceType === 'KNOWLEDGE'" />
+    <section v-else-if="!workbenchReady" class="workbench-gate">
       <Search class="workbench-gate-icon" aria-hidden="true" />
       <h1>{{ gateCopy.title }}</h1>
       <p>{{ gateCopy.detail }}</p>

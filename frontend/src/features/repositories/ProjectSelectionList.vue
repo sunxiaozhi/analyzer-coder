@@ -4,7 +4,7 @@ import type { Repository } from '@/types/api';
 import ProjectActionsMenu from './ProjectActionsMenu.vue';
 withDefaults(defineProps<{ rows: Repository[]; selectedId: string | null; loading: boolean; disabled: boolean; readingBranchName?: string | null }>(), { readingBranchName: null });
 const emit = defineEmits<{ select: [repository: Repository]; settings: [repository: Repository]; govern: [repository: Repository]; remove: [repository: Repository] }>();
-const sources = { LOCAL_GIT: '本地 Git', REMOTE_GIT: '远程 Git', GITLAB: 'GitLab', ZIP: 'ZIP 导入' };
+const sources = { LOCAL_GIT: '本地 Git', REMOTE_GIT: '远程 Git', GITLAB: 'GitLab', ZIP: 'ZIP 导入', KNOWLEDGE: '纯知识库' };
 </script>
 <template>
   <nav class="project-selection" aria-label="项目列表" :aria-busy="loading">
@@ -16,7 +16,7 @@ const sources = { LOCAL_GIT: '本地 Git', REMOTE_GIT: '远程 Git', GITLAB: 'Gi
         <span class="project-copy">
           <strong class="project-name">{{ project.name }}</strong>
           <span class="project-source">{{ sources[project.sourceType] }}</span>
-          <span class="project-branch"><GitBranch :size="12" />{{ project.id === selectedId ? '当前阅读' : '默认分支' }} · {{ project.id === selectedId ? readingBranchName || '尚未选择' : project.branch || 'WORKSPACE' }}</span>
+          <span v-if="project.sourceType !== 'KNOWLEDGE'" class="project-branch"><GitBranch :size="12" />{{ project.id === selectedId ? '当前阅读' : '默认分支' }} · {{ project.id === selectedId ? readingBranchName || '尚未选择' : project.branch || 'WORKSPACE' }}</span>
         </span>
       </button>
       <ProjectActionsMenu class="project-item-menu" :repository="project" compact :disabled="disabled || loading" @settings="emit('settings', project)" @govern="emit('govern', project)" @remove="emit('remove', project)" />

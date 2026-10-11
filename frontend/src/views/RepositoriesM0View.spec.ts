@@ -7,7 +7,7 @@ import ProjectSelectionList from '@/features/repositories/ProjectSelectionList.v
 import BranchWorkspace from '@/features/branches/BranchWorkspace.vue';
 import ProjectSettingsPanel from '@/features/repositories/ProjectSettingsPanel.vue';
 import RepositoryFormDialog from '@/features/repositories/RepositoryFormDialog.vue';
-import { listRepositoryPage } from '@/api/repositories';
+import { createKnowledgeProject, listRepositoryPage } from '@/api/repositories';
 import { projectDraftsApi, type ProjectDraft } from '@/api/projectDrafts';
 import { sourceImportsApi } from '@/api/sourceImports';
 import type { Repository } from '@/types/api';
@@ -19,7 +19,7 @@ const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => store }));
 vi.mock('@/stores/branchContextStore', () => ({ useBranchContextStore: () => branches }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: navigation.push, replace: navigation.replace }) }));
-vi.mock('@/api/repositories', () => ({ listRepositoryPage: vi.fn(), updateRepository: vi.fn() }));
+vi.mock('@/api/repositories', () => ({ createKnowledgeProject: vi.fn(), listRepositoryPage: vi.fn(), updateRepository: vi.fn() }));
 vi.mock('@/api/projectDrafts', () => ({ projectDraftsApi: { list: vi.fn(), remove: vi.fn(), create: vi.fn(), configure: vi.fn(), complete: vi.fn() } }));
 vi.mock('@/api/sourceImports', () => ({ sourceImportsApi: { remoteJob: vi.fn(), job: vi.fn() } }));
 vi.mock('element-plus', async importOriginal => ({
@@ -41,6 +41,22 @@ beforeEach(() => {
   vi.mocked(listRepositoryPage).mockResolvedValue({ items: rows, total: 2, pageNum: 1, pageSize: 15 } as Awaited<ReturnType<typeof listRepositoryPage>>);
 });
 const mountView = () => shallowMount(RepositoriesM0View, { global: { stubs: { ElInput: true, ElButton: { props: ['disabled', 'loading'], template: '<button :disabled="disabled || loading"><slot /></button>' }, ElAlert: true, ElEmpty: true, ElDialog: { props: ['modelValue'], template: '<section v-if="modelValue"><slot /><slot name="footer" /></section>' } } } });
+
+it('creates a knowledge project without a source draft and enters knowledge management', async () => {
+  const created = project('knowledge', 'KNOWLEDGE');
+  vi.mocked(createKnowledgeProject).mockResolvedValue(created);
+  const wrapper = mountView(); await flushPromises();
+  wrapper.getComponent(RepositoryFormDialog).vm.$emit('submit', {
+    sourceType: 'KNOWLEDGE', name: '知识库', description: '资料', url: '', branch: '', credentialId: '', file: null,
+  });
+  await flushPromises();
+  expect(createKnowledgeProject).toHaveBeenCalledWith('知识库', '资料');
+  expect(projectDraftsApi.create).not.toHaveBeenCalled();
+  expect(sourceImportsApi.remoteJob).not.toHaveBeenCalled();
+  expect(store.selectRepository).toHaveBeenCalledWith('knowledge');
+  expect(navigation.push).toHaveBeenCalledWith('/knowledge');
+  wrapper.unmount();
+});
 
 const draft = (id: string, lifecycleStatus: ProjectDraft['lifecycleStatus'] = 'FAILED'): ProjectDraft => ({
   id, name: id, description: '', sourceType: 'GITLAB', sourceLocation: 'https://git.example.com/project.git',

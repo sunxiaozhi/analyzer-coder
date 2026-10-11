@@ -14,7 +14,7 @@ import ProjectSelectionList from '@/features/repositories/ProjectSelectionList.v
 import BranchWorkspace from '@/features/branches/BranchWorkspace.vue';
 import { sourceImportsApi } from '@/api/sourceImports';
 import { projectDraftsApi, type ProjectDraft } from '@/api/projectDrafts';
-import { listRepositoryPage, updateRepository } from '@/api/repositories';
+import { createKnowledgeProject, listRepositoryPage, updateRepository } from '@/api/repositories';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import type { Repository } from '@/types/api';
 
@@ -49,7 +49,7 @@ let pageVersion = 0;
 let alive = true;
 let searchTimer: number | undefined;
 
-type Input = { sourceType: 'REMOTE_GIT' | 'GITLAB' | 'ZIP'; name: string; description: string; url: string; branch: string; credentialId: string; file: File | null };
+type Input = { sourceType: 'REMOTE_GIT' | 'GITLAB' | 'ZIP' | 'KNOWLEDGE'; name: string; description: string; url: string; branch: string; credentialId: string; file: File | null };
 const unfinishedDrafts = computed(() => projectDrafts.value.filter(draft => draft.lifecycleStatus !== 'READY'));
 
 async function loadPage() {
@@ -90,6 +90,16 @@ async function create(input: Input) {
   if (importing.value) return;
   importing.value = true;
   try {
+    if (input.sourceType === 'KNOWLEDGE') {
+      const project = await createKnowledgeProject(input.name, input.description);
+      dialogOpen.value = false;
+      retryingDraft.value = null;
+      await reloadAll();
+      await store.selectRepository(project.id);
+      await router.push('/knowledge');
+      ElMessage.success('知识库已创建');
+      return;
+    }
     let draft = retryingDraft.value
       ?? await projectDraftsApi.create(input.name, input.description);
     retryingDraft.value = draft;
@@ -227,7 +237,13 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
     <section class="surface project-branches" aria-label="当前项目分支">
       <template v-if="selectedProject">
         <ProjectManagementHeader :repository="selectedProject" :reading-branch-name="readingBranchName" @settings="openSettings(selectedProject)" @govern="govern(selectedProject)" @remove="remove(selectedProject.id, selectedProject.name)" />
-        <BranchWorkspace :key="selectedProject.id" :repository-id="selectedProject.id"
+        <div v-if="selectedProject.sourceType === 'KNOWLEDGE'" class="knowledge-project-actions">
+          <p>维护并发布知识卡，即可用于检索和问答。</p>
+          <el-button type="primary" @click="router.push('/knowledge')">管理知识</el-button>
+          <el-button @click="router.push('/search')">知识检索</el-button>
+          <el-button @click="router.push('/ask')">项目问答</el-button>
+        </div>
+        <BranchWorkspace v-else :key="selectedProject.id" :repository-id="selectedProject.id"
           :can-maintain="selectedProject.capabilities.canUpdate" :can-manage="selectedProject.capabilities.canConfigure"
           :can-track="selectedProject.sourceType !== 'ZIP'" :default-branch="selectedProject.branch || 'WORKSPACE'" :reading-busy="readingBusy" :remote-source="['REMOTE_GIT', 'GITLAB'].includes(selectedProject.sourceType)" :reading-branch-id="branchContext.selectedBranchId" :initial-branch-id="typeof route.query.branchId === 'string' ? route.query.branchId : undefined" show-branch-list @changed="branchesChanged" @read="readBranch" />
       </template>
@@ -245,6 +261,7 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
   </section>
 </template>
 <style scoped>
+.knowledge-project-actions { padding: 24px 30px; color: var(--app-text-regular); }
 .repository-design { display: grid; grid-template-columns: clamp(280px, 25%, 350px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 22px; overflow: hidden; min-height: 0; }
 .repository-list-surface { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; background: var(--app-surface); border-radius: 10px; }
 .repository-list-header { padding: 22px 18px 0; border-bottom: 1px solid var(--app-border); }

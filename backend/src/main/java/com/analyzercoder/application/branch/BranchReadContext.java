@@ -14,4 +14,9 @@ public record BranchReadContext(
         UUID contentVersion,
         String commitSha,
         @JsonIgnore Path contentPath,
-        Instant expiresAt) {}
+        Instant expiresAt) {
+    /** Only knowledge projects can receive a context without a code publication. */
+    public boolean knowledgeOnly() {
+        return contentVersion == null;
+    }
+}

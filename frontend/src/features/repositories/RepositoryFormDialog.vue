@@ -10,6 +10,7 @@ const repositorySourceOptions = [
   { value: 'GITLAB', label: 'GitLab' },
   { value: 'REMOTE_GIT', label: 'Git' },
   { value: 'ZIP', label: 'ZIP' },
+  { value: 'KNOWLEDGE', label: '仅作为知识库使用' },
 ] as const;
 type RepositorySourceType = (typeof repositorySourceOptions)[number]['value'];
 const defaultRepositorySource = repositorySourceOptions[0].value;
@@ -104,7 +105,10 @@ function submit() {
     ElMessage.warning('请填写 HTTPS Git 地址'); return;
   }
   submitted.value = true;
-  emit('submit', { ...form, name: form.name.trim(), file: file.value });
+  emit('submit', { ...form, name: form.name.trim(),
+    url: form.sourceType === 'KNOWLEDGE' ? '' : form.url,
+    credentialId: form.sourceType === 'KNOWLEDGE' ? '' : form.credentialId,
+    file: form.sourceType === 'KNOWLEDGE' ? null : file.value });
 }
 </script>
 
@@ -124,19 +128,21 @@ function submit() {
         <el-form-item label="项目说明"><el-input v-model="form.description" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="说明项目目标、边界或维护团队" /></el-form-item>
       </section>
       <section class="import-section" aria-labelledby="project-source-heading">
-        <h3 id="project-source-heading">代码来源</h3>
-        <el-form-item label="来源类型" required>
+        <h3 id="project-source-heading">项目用途与代码来源</h3>
+        <el-form-item label="项目类型" required>
           <el-radio-group v-model="form.sourceType">
             <el-radio-button
               v-for="option in repositorySourceOptions"
               :key="option.value"
               :value="option.value"
+              :disabled="!!initialDraft && option.value === 'KNOWLEDGE'"
             >
               {{ option.label }}
             </el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <template v-if="form.sourceType !== 'ZIP'">
+        <p v-if="form.sourceType === 'KNOWLEDGE'" class="draft-note">创建后即可维护知识卡、检索和问答，无需导入代码。</p>
+        <template v-else-if="form.sourceType !== 'ZIP'">
           <el-form-item label="HTTPS Git 地址" required>
             <el-input v-model="form.url" placeholder="https://git.example.com/group/project.git" />
           </el-form-item>
@@ -164,12 +170,12 @@ function submit() {
           </el-upload>
         </el-form-item>
       </section>
-      <p class="draft-note">来源验证失败后会保留接入草稿，可在项目列表继续接入。</p>
+      <p v-if="form.sourceType !== 'KNOWLEDGE'" class="draft-note">来源验证失败后会保留接入草稿，可在项目列表继续接入。</p>
     </el-form>
     <template #footer>
       <el-button :disabled="submitLocked" @click="open = false">取消</el-button>
       <el-button type="primary" :loading="submitLocked" :disabled="submitLocked" @click="submit">
-        {{ submitLocked ? '正在接入…' : '开始接入' }}
+        {{ form.sourceType === 'KNOWLEDGE' ? (submitLocked ? '正在创建…' : '创建知识库') : (submitLocked ? '正在接入…' : '开始接入') }}
       </el-button>
     </template>
     <RepositoryCredentialManagerDialog v-model="credentialManagerOpen" :repository-url="form.url"

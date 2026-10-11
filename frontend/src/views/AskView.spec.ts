@@ -1,0 +1,35 @@
+import { shallowMount, flushPromises } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
+import { beforeEach, expect, it, vi } from 'vitest';
+import AskView from './AskView.vue';
+import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
+import { branchesApi } from '@/api/branches';
+import { intelligenceApi } from '@/api/intelligence';
+import { useBranchContextStore } from '@/stores/branchContextStore';
+let repository: any;
+vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => repository }));
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('@/api/branches', () => ({ branchesApi: { contentVersionIndexStatus: vi.fn() } }));
+vi.mock('@/api/intelligence', () => ({ intelligenceApi: { history: vi.fn(), askModels: vi.fn() } }));
+beforeEach(() => {
+  vi.resetAllMocks();
+  setActivePinia(createPinia());
+  repository = { selectedRepositoryId: 'knowledge', selectedRepository: { id: 'knowledge', name: '知识库', sourceType: 'KNOWLEDGE' } };
+  repository.repositories = [repository.selectedRepository];
+  const branches = useBranchContextStore();
+  branches.selectedBranchId = 'workspace';
+  branches.context = { contextId: 'context', repositoryId: 'knowledge', branchId: 'workspace', branchName: 'WORKSPACE', contentVersion: null, commitSha: null, expiresAt: '' };
+  vi.mocked(intelligenceApi.history).mockResolvedValue([]);
+  vi.mocked(intelligenceApi.askModels).mockResolvedValue([]);
+});
+it('enables knowledge questions without requesting any code index status', async () => {
+  const wrapper = shallowMount(AskView, { global: { stubs: { ElTag: { template: '<span><slot /></span>' }, ElButton: true, ElOption: true, ElSelect: true } } });
+  await flushPromises();
+  expect(branchesApi.contentVersionIndexStatus).not.toHaveBeenCalled();
+  expect(wrapper.getComponent(AskConversationPanel).props('disabled')).toBe(false);
+  expect(wrapper.getComponent(AskConversationPanel).props('knowledgeOnly')).toBe(true);
+  expect(wrapper.text()).toContain('知识问答可用');
+  expect(wrapper.text()).not.toContain('WORKSPACE');
+  expect(wrapper.text()).not.toContain('去准备项目');
+  wrapper.unmount();
+});

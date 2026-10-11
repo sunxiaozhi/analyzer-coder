@@ -4,6 +4,7 @@ import type { KnowledgeCard } from '@/api/intelligence';
 import type { BranchContext, BranchValidationState } from '@/api/branches';
 import { knowledgeExcerpt, knowledgeStatus } from './knowledgePresentation';
 const props = defineProps<{
+  knowledgeOnly?: boolean;
   card: KnowledgeCard; canManage: boolean; canMaintain: boolean; scopeLabel: string;
   validationLabel?: string; validationState?: BranchValidationState;
   branchContext?: BranchContext | null; selected?: boolean; deleting?: boolean;
@@ -30,7 +31,7 @@ const excerpt = computed(() => knowledgeExcerpt(props.card.content || ''));
     <p class="card-excerpt">{{ excerpt || '暂无正文摘要' }}</p>
     <p v-if="['STALE', 'SUSPECT'].includes(card.sourceVersionStatus)" class="source-warning">来源代码已变化，请查看维护信息与复核。</p>
     <div class="card-meta">
-      <span class="branch-scope" :title="card.branchScope?.mode === 'ALL_BRANCHES' ? '包括后续新增分支' : scopeLabel">{{ scopeLabel }}</span>
+      <span class="branch-scope" :title="!knowledgeOnly && card.branchScope?.mode === 'ALL_BRANCHES' ? '包括后续新增分支' : scopeLabel">{{ scopeLabel }}</span>
       <span v-if="!card.tags.length" class="muted">暂无标签</span>
       <span v-for="tag in (expanded ? card.tags : card.tags.slice(0, 3))" :key="tag" class="card-tag"># {{ tag }}</span>
       <button v-if="card.tags.length > 3" type="button" class="tags-toggle" :aria-expanded="expanded" @click="expanded = !expanded">{{ expanded ? '收起标签' : `+${card.tags.length - 3}` }}</button>

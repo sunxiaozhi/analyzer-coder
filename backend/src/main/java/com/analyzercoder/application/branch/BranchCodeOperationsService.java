@@ -65,6 +65,7 @@ public class BranchCodeOperationsService {
             java.util.function.BiConsumer<String, String> progress,
             Runnable checkpoint) {
         require(actor, repoId, RepositoryPermission.MAINTAIN);
+        branches.requireCodeProject(repoId);
         RepositoryBranchService.Branch branch =
                 branches.list(actor, repoId).stream()
                         .filter(b -> b.id().equals(branchId) && "ACTIVE".equals(b.trackingStatus()))
@@ -96,12 +97,14 @@ public class BranchCodeOperationsService {
                                     ? remote.fetch(actor, repository, branch.name())
                                     : repository.sourceType() == RepositorySourceType.ZIP
                                             ? contentVersions.resolveWorkspace(repository.path())
-                                            : contentVersions.resolve(repository.path(), branch.name());
+                                            : contentVersions.resolve(
+                                                    repository.path(), branch.name());
             progress.accept("SYNC", commit);
             if (branch.contentVersion() != null && commit.equals(branch.commitSha())) {
                 BranchReadContext current =
                         contentVersionContext(actor, repoId, branchId, branch.contentVersion());
-                if (contentVersions.isLatestWorkspace(repository.id(), branchId, current.contentPath())) {
+                if (contentVersions.isLatestWorkspace(
+                        repository.id(), branchId, current.contentPath())) {
                     transaction.executeWithoutResult(
                             status -> {
                                 checkpoint.run();
@@ -121,7 +124,8 @@ public class BranchCodeOperationsService {
                 }
             }
             var contentVersion =
-                    contentVersions.createLatest(repository.id(), branchId, repository.path(), commit);
+                    contentVersions.createLatest(
+                            repository.id(), branchId, repository.path(), commit);
             unpublished = contentVersion;
             progress.accept("PUBLISHING", commit);
             transaction.executeWithoutResult(
@@ -163,13 +167,15 @@ public class BranchCodeOperationsService {
     public void indexContent(
             AuthenticatedAccount actor, BranchReadContext context, Runnable checkpoint) {
         require(actor, context.repositoryId(), RepositoryPermission.MAINTAIN);
-        contentVersionContext(actor, context.repositoryId(), context.branchId(), context.contentVersion());
+        contentVersionContext(
+                actor, context.repositoryId(), context.branchId(), context.contentVersion());
         contentIndexes.index(context, branches.repositoryFor(context), checkpoint);
     }
 
     public BranchReadContext contentVersionContext(
             AuthenticatedAccount actor, UUID repoId, UUID branchId, UUID contentVersion) {
         require(actor, repoId, RepositoryPermission.READ);
+        branches.requireCodeProject(repoId);
         var rows =
                 db.query(
                         """
@@ -199,7 +205,8 @@ public class BranchCodeOperationsService {
     public void buildGraph(
             AuthenticatedAccount actor, BranchReadContext context, Runnable checkpoint) {
         require(actor, context.repositoryId(), RepositoryPermission.MAINTAIN);
-        contentVersionContext(actor, context.repositoryId(), context.branchId(), context.contentVersion());
+        contentVersionContext(
+                actor, context.repositoryId(), context.branchId(), context.contentVersion());
         checkpoint.run();
         graph.buildContentVersion(
                 context.repositoryId(),
@@ -222,7 +229,8 @@ public class BranchCodeOperationsService {
     }
 
     public IndexStatus status(AuthenticatedAccount actor, BranchReadContext context) {
-        contentVersionContext(actor, context.repositoryId(), context.branchId(), context.contentVersion());
+        contentVersionContext(
+                actor, context.repositoryId(), context.branchId(), context.contentVersion());
         return queryStatuses(context.repositoryId(), context.branchId(), context.contentVersion())
                 .stream()
                 .filter(item -> item.branchId().equals(context.branchId()))
@@ -230,7 +238,8 @@ public class BranchCodeOperationsService {
                 .orElseThrow();
     }
 
-    private List<IndexStatus> queryStatuses(UUID repoId, UUID pinnedBranch, UUID pinnedContentVersion) {
+    private List<IndexStatus> queryStatuses(
+            UUID repoId, UUID pinnedBranch, UUID pinnedContentVersion) {
         return db.query(
                 """
                 SELECT b.id,b.content_version,

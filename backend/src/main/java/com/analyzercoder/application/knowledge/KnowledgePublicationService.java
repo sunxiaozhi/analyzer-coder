@@ -53,6 +53,21 @@ public class KnowledgePublicationService {
         if (revisions.size() != 1 || revisions.get(0) != expectedRevision) {
             throw new ApiSecurityException(409, "KNOWLEDGE_REVISION_CONFLICT", "知识已修改，请刷新后重新发布");
         }
+        if (context.knowledgeOnly()) {
+            db.update(
+                    """
+                    UPDATE knowledge_cards SET source_version_status='CURRENT',
+                        verification_note='发布时已人工确认知识内容',
+                        source_version_checked_at=CURRENT_TIMESTAMP,
+                        review_status='APPROVED',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP
+                    WHERE id=? AND repo_id=?
+                    """,
+                    actor.id(),
+                    cardId,
+                    context.repositoryId());
+            return intelligence.setCardPublication(
+                    context.repositoryId(), cardId, actor.id(), "PUBLISHED");
+        }
         Integer missing =
                 db.queryForObject(
                         """

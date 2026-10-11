@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.analyzercoder.infrastructure.persistence.mapper.IntelligenceMapper">
+    <select id="isKnowledgeProject" resultType="boolean">
+        SELECT EXISTS(SELECT 1 FROM repositories WHERE id=#{repositoryId} AND source_type='KNOWLEDGE')
+    </select>
     <resultMap id="card" type="com.analyzercoder.infrastructure.persistence.model.KnowledgeCardRow">
         <constructor>
             <idArg column="id" javaType="java.util.UUID"/>
@@ -472,7 +475,8 @@
         c.repo_id=#{repositoryId} AND live.publication_status='PUBLISHED' AND live.review_status='APPROVED'
         AND knowledge_applies_to_branch(c.id,#{branchId},c.revision)
         AND (
-            (c.enforcement='REFERENCE' AND NOT EXISTS(SELECT 1 FROM knowledge_code_refs refs WHERE refs.card_id=c.id AND refs.revision=c.revision))
+            EXISTS(SELECT 1 FROM repositories r WHERE r.id=c.repo_id AND r.source_type='KNOWLEDGE')
+            OR (c.enforcement='REFERENCE' AND NOT EXISTS(SELECT 1 FROM knowledge_code_refs refs WHERE refs.card_id=c.id AND refs.revision=c.revision))
             OR EXISTS(SELECT 1 FROM knowledge_branch_validations v WHERE v.card_id=c.id AND v.revision=c.revision
                 AND v.branch_id=#{branchId} AND v.content_version=#{contentVersion} AND v.state='CURRENT')
         )

@@ -58,12 +58,14 @@ onDeactivated(rememberConversation);
 onBeforeUnmount(() => { rememberConversation(); contextVersion++; historyRequest++; conversation.invalidate(); });
 
 const repository = computed(() => repositories.selectedRepository);
+const knowledgeOnly = computed(() => repository.value?.sourceType === 'KNOWLEDGE');
 const canAsk = computed(() => Boolean(repository.value && !readScope.blocked.value && branchContentReady.value));
 const selectedModel = computed(() =>
   askModels.value.find(item => item.id === selectedModelId.value) ?? null
 );
 const readinessCopy = computed(() => {
   if (!repository.value) return { label: '未选择项目', type: 'info' as const };
+  if (knowledgeOnly.value) return { label: readScope.blocked.value ? '正在读取知识内容' : '知识问答可用', type: 'info' as const };
   return { label: readScope.blocked.value ? '分支内容版本未就绪' : branchContentReady.value ? '当前分支内容索引已就绪' : '当前分支待构建内容索引', type: branchContentReady.value ? 'success' as const : 'info' as const };
 });
 
@@ -93,7 +95,9 @@ async function loadContext(repositoryId: string | null) {
   const isCurrent = () => version === contextVersion
     && repositoryId === repositories.selectedRepositoryId
     && branchIdentity === branchContext.identity;
-  const profileTask = branchesApi.contentVersionIndexStatus(branchContext.context!).then(status => {
+  const profileTask = knowledgeOnly.value ? Promise.resolve().then(() => {
+    if (isCurrent()) { branchContentReady.value = true; readinessLoading.value = false; }
+  }) : branchesApi.contentVersionIndexStatus(branchContext.context!).then(status => {
     if (isCurrent()) branchContentReady.value = status.contentVersion === branchContext.context?.contentVersion && status.contentReady;
   })
     .catch((error) => {
@@ -143,6 +147,7 @@ async function reloadHistory() {
 }
 
 async function refreshReadinessForAsk(repositoryId: string): Promise<boolean | null> {
+  if (knowledgeOnly.value && !readScope.blocked.value) { branchContentReady.value = true; return true; }
   if (readScope.blocked.value) return false;
   const identity = branchContext.identity;
   const status = await branchesApi.contentVersionIndexStatus(branchContext.context!);
@@ -220,6 +225,7 @@ async function selectTargetRepository(repositoryId: string) {
 }
 
 function openReadinessAction() {
+  if (knowledgeOnly.value) { void branchContext.refresh(); return; }
   void router.push(repository.value ? '/overview' : '/repositories');
 }
 
@@ -298,15 +304,15 @@ onMounted(async () => {
       <div class="scope-copy">
         <span>问答范围</span>
         <strong>{{ repository?.name ?? '未选择项目' }}</strong>
-        <small>{{ branchContext.context?.branchName ?? repository?.branch ?? '无分支' }}<template v-if="branchContext.context?.commitSha ?? repository?.commit"> · {{ (branchContext.context?.commitSha ?? repository?.commit)?.slice(0, 8) }}</template></small>
+        <small v-if="knowledgeOnly">纯知识库 · 已发布知识</small><small v-else>{{ branchContext.context?.branchName ?? repository?.branch ?? '无分支' }}<template v-if="branchContext.context?.commitSha ?? repository?.commit"> · {{ (branchContext.context?.commitSha ?? repository?.commit)?.slice(0, 8) }}</template></small>
       </div>
       <el-tag :type="readinessCopy?.type" effect="plain" round>{{ readinessCopy?.label }}</el-tag>
       <div v-if="!repository || !canAsk" class="command-notice">
-        <span>{{ repository ? '当前项目还没有可检索的代码内容。' : '先选择项目才能开始问答。' }}</span>
-        <el-button link type="primary" @click="openReadinessAction">{{ repository ? '去准备项目' : '选择项目' }}</el-button>
+        <span>{{ !repository ? '先选择项目才能开始问答。' : knowledgeOnly ? '正在读取知识内容，请稍候。' : '当前项目还没有可检索的代码内容。' }}</span>
+        <el-button link type="primary" @click="openReadinessAction">{{ knowledgeOnly ? '刷新知识' : repository ? '去准备项目' : '选择项目' }}</el-button>
       </div>
       <div v-else-if="!modelsLoading && !selectedModel" class="command-notice">
-        <span>本地证据模式：返回源码摘录与引用，不生成模型推理。</span>
+        <span>{{ knowledgeOnly ? '本地证据模式：返回知识摘录与引用，不生成模型推理。' : '本地证据模式：返回源码摘录与引用，不生成模型推理。' }}</span>
         <el-button v-if="auth.isAdmin" link type="primary" @click="openModelSettings">配置并检测模型</el-button>
       </div>
       <div class="command-actions">
@@ -340,6 +346,7 @@ onMounted(async () => {
 
     <AskConversationPanel
       v-model="conversation.question.value"
+      :knowledge-only="knowledgeOnly"
       :turns="conversation.turns.value"
       :scroll-top="readingTop" :expanded-evidence="expandedEvidence"
       @scroll-position="readingTop = $event" @expand-evidence="expandEvidence"

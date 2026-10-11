@@ -19,7 +19,7 @@ import { useBranchContextStore } from '@/stores/branchContextStore';
 let route: { name: string; query: Record<string, string> };
 let repositories: {
   selectedRepositoryId: string;
-  selectedRepository: { capabilities: { canUpdate: boolean; canConfigure: boolean } };
+  selectedRepository: { sourceType?: string; capabilities: { canUpdate: boolean; canConfigure: boolean } };
 };
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => repositories }));
 vi.mock('vue-router', () => ({
@@ -74,6 +74,20 @@ describe('knowledge evidence access', () => {
     vi.mocked(intelligenceApi.cards).mockResolvedValue(original.map(card => ({ ...card, publicationStatus: 'DRAFT' })));
     const wrapper = mountView(); await flushPromises(); return wrapper;
   }
+
+  it('loads knowledge without Markdown, code drift or branch validations for knowledge projects', async () => {
+    repositories.selectedRepository.sourceType = 'KNOWLEDGE';
+    const branches = useBranchContextStore();
+    branches.context = { contextId: 'ctx-knowledge', repositoryId: 'repo-1', branchId: 'main', branchName: 'WORKSPACE', contentVersion: null, commitSha: null, expiresAt: '' };
+    const wrapper = mountView(); await flushPromises();
+    expect(intelligenceApi.cards).toHaveBeenCalledWith('repo-1', 'ctx-knowledge');
+    expect(intelligenceApi.markdownSources).not.toHaveBeenCalled();
+    expect(intelligenceApi.sourceDrift).not.toHaveBeenCalled();
+    expect(branchesApi.validations).not.toHaveBeenCalled();
+    expect(wrapper.text()).not.toContain('Markdown 预备知识');
+    expect(wrapper.getComponent(KnowledgeCardDetailDialog).props('knowledgeOnly')).toBe(true);
+    wrapper.unmount();
+  });
 
   it('deletes the confirmed revision, closes its detail, and refreshes knowledge and Markdown sources', async () => {
     const wrapper = await draftView();

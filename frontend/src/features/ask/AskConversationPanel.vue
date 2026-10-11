@@ -15,6 +15,7 @@ const props = defineProps<{
   requestState: AskRequestState;
   error: string | null;
   disabled?: boolean;
+  knowledgeOnly?: boolean;
   restoredThreadId?: string | null;
   scrollTop?: number;
   expandedEvidence?: string[];
@@ -78,7 +79,7 @@ function shortcut(event: KeyboardEvent) {
     <div ref="messages" class="messages" aria-live="polite" @scroll="emit('scrollPosition', ($event.target as HTMLElement).scrollTop)">
       <el-empty
         v-if="!turns.length && !pendingQuestion && requestState === 'idle'"
-        description="可以询问业务知识、实现位置或代码影响"
+        :description="knowledgeOnly ? '可以询问业务规则、流程或资料内容' : '可以询问业务知识、实现位置或代码影响'"
       />
 
       <template v-for="turn in turns" :key="turn.conversationId">
@@ -95,6 +96,7 @@ function shortcut(event: KeyboardEvent) {
             <small v-if="turn.evidenceStatus === 'DEGRADED'" class="local-evidence-label">本地证据摘录 · 未生成模型推理</small>
             <div class="answer-markdown" v-html="renderedAnswer(turn.answer)"></div>
             <AnswerEvidencePanel v-if="turn.citations.length" :citations="turn.citations" :branch-id="turn.branchId" :branch-name="turn.branchName"
+              :knowledge-only="knowledgeOnly"
               :expanded="expandedEvidence?.includes(turn.conversationId)" @update:expanded="emit('expandEvidence', turn.conversationId, $event)" @click.stop
               @open-knowledge="emit('openKnowledge', $event, turn.branchId)" @open-code="emit('openCode', $event)"
               @open-graph="emit('openGraph', $event)" />
@@ -126,7 +128,7 @@ function shortcut(event: KeyboardEvent) {
                 <span v-if="turn.retrieval.degraded">· 已降级</span>
               </summary>
               <div>
-                <span>内容版本 {{ turn.retrieval.contentVersion?.slice(0, 8) ?? '不可用' }}</span>
+                <span v-if="!knowledgeOnly">内容版本 {{ turn.retrieval.contentVersion?.slice(0, 8) ?? '不可用' }}</span>
                 <span>向量模型 {{ turn.retrieval.vectorModel ?? '未执行' }}</span>
                 <span>启用通道 {{ turn.retrieval.enabledChannels.join('、') || '无' }}</span>
               </div>
@@ -146,7 +148,7 @@ function shortcut(event: KeyboardEvent) {
       <article v-if="requestState === 'sending'" class="message assistant pending">
         <span>助手</span>
         <div class="answer-loading">
-          <i></i><div><b>正在结合上下文检索当前项目</b><small>正在核对代码和知识证据…</small></div>
+          <i></i><div><b>正在结合上下文检索当前项目</b><small>{{ knowledgeOnly ? '正在核对知识证据…' : '正在核对代码和知识证据…' }}</small></div>
         </div>
       </article>
       <article v-if="requestState === 'failed'" class="message assistant failed">
@@ -166,7 +168,7 @@ function shortcut(event: KeyboardEvent) {
         type="textarea"
         :autosize="{ minRows: 4, maxRows: 8 }"
         :disabled="disabled"
-        :placeholder="turns.length ? '继续追问当前会话…' : '询问业务规则、实现位置、调用关系或影响范围…'"
+        :placeholder="turns.length ? '继续追问当前会话…' : knowledgeOnly ? '询问业务规则、流程或资料内容…' : '询问业务规则、实现位置、调用关系或影响范围…'"
         @keydown="shortcut"
       />
       <el-button

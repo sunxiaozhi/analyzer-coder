@@ -4,15 +4,15 @@ import type { Repository } from '@/types/api';
 import ProjectActionsMenu from './ProjectActionsMenu.vue';
 defineProps<{ repository: Repository; readingBranchName: string | null }>();
 const emit = defineEmits<{ settings: []; govern: []; remove: [] }>();
-const sources = { LOCAL_GIT: '本地 Git', REMOTE_GIT: '远程 Git', GITLAB: 'GitLab', ZIP: 'ZIP 导入' };
+const sources = { LOCAL_GIT: '本地 Git', REMOTE_GIT: '远程 Git', GITLAB: 'GitLab', ZIP: 'ZIP 导入', KNOWLEDGE: '纯知识库' };
 </script>
 <template>
   <header class="project-header">
     <div class="project-heading"><span class="heading-icon"><Archive v-if="repository.sourceType === 'ZIP'" :size="23" /><FolderGit2 v-else :size="23" /></span><div><span class="source-label">{{ sources[repository.sourceType] }}</span><h2>{{ repository.name }}</h2></div></div>
     <ProjectActionsMenu class="header-menu" :repository="repository" @settings="emit('settings')" @govern="emit('govern')" @remove="emit('remove')" />
     <p v-if="repository.description" class="project-description">{{ repository.description }}</p>
-    <p class="project-location" :title="repository.path">{{ repository.path }}</p>
-    <div class="project-context">
+    <p v-if="repository.sourceType !== 'KNOWLEDGE'" class="project-location" :title="repository.path">{{ repository.path }}</p>
+    <div v-if="repository.sourceType !== 'KNOWLEDGE'" class="project-context">
       <span class="reading-context"><GitBranch :size="14" />当前阅读 <b>{{ readingBranchName || '尚未选择' }}</b></span>
       <span class="default-context">默认分支 <b>{{ repository.branch || 'WORKSPACE' }}</b></span>
     </div>

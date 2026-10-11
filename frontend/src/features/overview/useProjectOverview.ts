@@ -36,6 +36,7 @@ export function useProjectOverview() {
     error.value = null;
     loading.value = false;
     if (!repositoryId) return;
+    if (repositories.selectedRepository?.sourceType === 'KNOWLEDGE') return;
     if (readScope.blocked.value) {
       if (branches.loading) loading.value = true;
       else error.value = readScope.reason.value;

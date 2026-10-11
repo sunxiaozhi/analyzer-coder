@@ -42,6 +42,8 @@ public class BranchGraphTasks {
 
     @Transactional
     public IndexJob start(BranchReadContext context) {
+        if (context.knowledgeOnly())
+            throw new ApiSecurityException(409, "KNOWLEDGE_PROJECT_NO_CODE", "纯知识库项目不提供代码操作");
         return start(
                 new Target(
                         context.repositoryId(),
@@ -69,7 +71,8 @@ public class BranchGraphTasks {
                         target.repoId());
         if (!active.isEmpty()) {
             var current = target(active.get(0));
-            if (current.isPresent() && current.get().contentVersion().equals(target.contentVersion()))
+            if (current.isPresent()
+                    && current.get().contentVersion().equals(target.contentVersion()))
                 return jobs.findById(IndexJobId.of(active.get(0))).orElseThrow();
             throw new ApiSecurityException(409, "BRANCH_GRAPH_BUSY", "项目已有其他版本的活动任务，请等待其完成");
         }

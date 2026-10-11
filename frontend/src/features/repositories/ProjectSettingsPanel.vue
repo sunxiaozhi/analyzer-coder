@@ -5,17 +5,17 @@ const emit = defineEmits<{ edit: []; remove: [] }>();
 </script>
 <template>
   <section class="project-settings">
-    <p class="scope-note">项目统一管理代码来源、资料和权限。同步代码及索引请在分支列表中操作。</p>
+    <p class="scope-note">{{ repository.sourceType === 'KNOWLEDGE' ? '项目管理知识资料和访问权限。' : '项目统一管理代码来源、资料和权限。同步代码及索引请在分支列表中操作。' }}</p>
     <dl class="settings-list">
       <dt>项目</dt><dd>{{ repository.name }}</dd>
-      <dt>代码来源</dt><dd>{{ repository.sourceType }}</dd>
+      <template v-if="repository.sourceType !== 'KNOWLEDGE'"><dt>代码来源</dt><dd>{{ repository.sourceType }}</dd>
       <dt>服务端路径</dt><dd class="source-path">{{ repository.path }}</dd>
       <dt>默认分支</dt><dd>{{ repository.branch || 'WORKSPACE' }}<small>仅作为首次进入项目时的阅读偏好；ZIP 导入使用固定逻辑分支 WORKSPACE</small></dd>
-      <dt>所有者</dt><dd>{{ repository.ownerDisplayName }}</dd>
+      </template><dt v-if="repository.sourceType === 'KNOWLEDGE'">用途</dt><dd v-if="repository.sourceType === 'KNOWLEDGE'">纯知识库</dd><dt>所有者</dt><dd>{{ repository.ownerDisplayName }}</dd>
     </dl>
-    <el-button v-if="repository.capabilities.canEditRepository ?? repository.capabilities.canConfigure" type="primary" @click="emit('edit')">编辑资料与凭据</el-button>
+    <el-button v-if="repository.capabilities.canEditRepository ?? repository.capabilities.canConfigure" type="primary" @click="emit('edit')">{{ repository.sourceType === 'KNOWLEDGE' ? '编辑资料' : '编辑资料与凭据' }}</el-button>
     <div v-if="repository.capabilities.canDelete" class="danger-zone">
-      <div><strong>删除项目</strong><p>删除平台中的项目、分支及派生数据；不修改源仓库。</p></div>
+      <div><strong>删除项目</strong><p>{{ repository.sourceType === 'KNOWLEDGE' ? '删除项目、知识及相关数据。' : '删除平台中的项目、分支及派生数据；不修改源仓库。' }}</p></div>
       <el-button type="danger" plain @click="emit('remove')">删除项目</el-button>
     </div>
   </section>

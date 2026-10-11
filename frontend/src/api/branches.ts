@@ -23,7 +23,7 @@ export interface BranchIndexStatus {
 }
 export interface BranchContext {
   contextId: string; repositoryId: string; branchId: string; branchName: string;
-  contentVersion: string; commitSha: string; expiresAt: string;
+  contentVersion: string | null; commitSha: string | null; expiresAt: string;
 }
 export type BranchValidationState = 'CURRENT' | 'UNVERIFIED' | 'REVIEW_REQUIRED' | 'INVALID';
 export interface BranchValidationCard {

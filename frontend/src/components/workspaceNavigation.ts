@@ -27,6 +27,7 @@ export interface WorkspaceNavigationContext {
   isAdmin: boolean;
   canReadSelectedRepository: boolean;
   canManageProjects: boolean;
+  knowledgeOnly?: boolean;
 }
 
 const developerItems: WorkspaceNavItem[] = [
@@ -48,7 +49,8 @@ export function workspaceNavigation(
   }
 
   const groups: WorkspaceNavGroup[] = [
-    { key: 'developer', label: '研发工作', collapsible: false, items: developerItems },
+    { key: 'developer', label: context.knowledgeOnly ? '知识工作' : '研发工作', collapsible: false,
+      items: context.knowledgeOnly ? developerItems.filter(item => item.icon !== 'atlas').map(item => item.to === '/search' ? { ...item, label: '知识检索' } : item) : developerItems },
   ];
   if (maintenanceItems.length) {
     groups.push({

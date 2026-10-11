@@ -26,8 +26,8 @@ const statuses:Record<string,string>={QUEUED:'排队中',RUNNING:'执行中',SUC
   <section class="branch-index-panel" aria-label="分支代码与索引">
     <header class="contentVersion-strip">
       <div><span class="scope-label">分支代码版本</span><strong>{{ branch.name }}</strong></div>
-      <code>{{ context?.commitSha.slice(0,12) ?? branch.commitSha?.slice(0,12) ?? '未同步' }}</code>
-      <small>内容版本 {{ context?.contentVersion.slice(0,8) ?? branch.contentVersion?.slice(0,8) ?? '—' }}</small>
+      <code>{{ context?.commitSha?.slice(0,12) ?? branch.commitSha?.slice(0,12) ?? '未同步' }}</code>
+      <small>内容版本 {{ context?.contentVersion?.slice(0,8) ?? branch.contentVersion?.slice(0,8) ?? '—' }}</small>
       <el-button v-if="branch.contentVersion" link type="primary" @click="emit('refresh')">刷新已准备版本</el-button>
     </header>
     <div class="index-states">

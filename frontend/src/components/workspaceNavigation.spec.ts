@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { workspaceNavigation } from './workspaceNavigation';
 
 describe('workspaceNavigation', () => {
+  it('shows knowledge search and hides code graphs for knowledge projects', () => {
+    const groups = workspaceNavigation({ isAdmin: false, canReadSelectedRepository: true, canManageProjects: true, knowledgeOnly: true });
+    const items = groups.flatMap(group => group.items);
+    expect(items.some(item => item.to === '/atlas')).toBe(false);
+    expect(items.find(item => item.to === '/search')?.label).toBe('知识检索');
+  });
   it('shows ordinary developers the focused retrieval workflow', () => {
     const groups = workspaceNavigation({
       isAdmin: false,

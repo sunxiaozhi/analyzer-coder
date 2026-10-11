@@ -2,7 +2,7 @@
 import { Connection, Document, Reading, View } from '@element-plus/icons-vue';
 import type { Citation, CodeReference } from '@/api/intelligence';
 
-const props = defineProps<{ citations: Citation[]; branchId?: string | null; branchName?: string | null }>();
+const props = defineProps<{ citations: Citation[]; branchId?: string | null; branchName?: string | null; knowledgeOnly?: boolean }>();
 const expanded = defineModel<boolean>('expanded', { default: false });
 const emit = defineEmits<{
   openKnowledge: [citation: Citation];
@@ -29,7 +29,7 @@ function citationReference(citation: Citation): CodeReference | null {
 
 <template>
   <details class="answer-evidence" :open="expanded" @toggle="expanded = ($event.target as HTMLDetailsElement).open">
-    <summary><b>引用证据 {{ citations.length }} 条</b><span>展开查看知识与代码来源</span></summary>
+    <summary><b>引用证据 {{ citations.length }} 条</b><span>{{ knowledgeOnly ? '展开查看知识来源' : '展开查看知识与代码来源' }}</span></summary>
     <article
       v-for="citation in citations"
       :key="citation.id"
@@ -40,7 +40,7 @@ function citationReference(citation: Citation): CodeReference | null {
           <el-icon><Reading v-if="citation.sourceType === 'KNOWLEDGE'" /><Document v-else /></el-icon>
           {{ citation.sourceType === 'KNOWLEDGE' ? (citation.sourceScope || '团队知识') : '代码' }}
         </span>
-        <small>S{{ citation.rank }} · {{ branchName || branchId || '来源分支未提供' }}</small>
+        <small>S{{ citation.rank }}<template v-if="!knowledgeOnly"> · {{ branchName || branchId || '来源分支未提供' }}</template></small>
       </div>
       <div class="evidence-title">
         <b>{{ citation.title }}</b>

@@ -182,7 +182,7 @@ public class BranchPreparationJobs {
                                     """
                     SELECT b.id FROM repository_branches b JOIN repositories r ON r.id=b.repo_id
                     WHERE b.repo_id=? AND b.id=? AND b.tracking_status='ACTIVE'
-                      AND r.deleted_at IS NULL FOR UPDATE OF b
+                      AND r.deleted_at IS NULL AND r.source_type<>'KNOWLEDGE' FOR UPDATE OF b
                     """,
                                     UUID.class,
                                     repoId,

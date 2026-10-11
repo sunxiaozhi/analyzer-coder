@@ -244,7 +244,8 @@ public class IntelligenceService {
                     mapper.findConversationByRequest(repositoryId, accountId, clientRequestId);
             if (existing != null && !existing.isEmpty()) {
                 Answer saved = answerContentVersion(existing);
-                if (context != null && !context.contentVersion().equals(saved.contentVersion()))
+                if (context != null
+                        && !Objects.equals(context.contentVersion(), saved.contentVersion()))
                     throw new IllegalArgumentException("请求标识已用于其他分支版本，请发起新请求");
                 LOG.info(
                         "知识问答复用已完成结果: {}, conversationId={}",
@@ -279,8 +280,9 @@ public class IntelligenceService {
                     && history.stream()
                             .anyMatch(
                                     turn ->
-                                            !context.contentVersion()
-                                                    .equals(turn.contentVersion())))
+                                            !Objects.equals(
+                                                    context.contentVersion(),
+                                                    turn.contentVersion())))
                 throw new IllegalArgumentException("会话属于其他代码版本，请在当前分支新建会话");
             Integer next = mapper.nextTurnNo(threadId);
             turnNo = next == null ? history.size() + 1 : next;
@@ -452,6 +454,7 @@ public class IntelligenceService {
                         .findFirst()
                         .orElse(retrieval.contentVersion());
         String answer;
+        boolean knowledgeOnly = context != null && context.knowledgeOnly();
         String provider = "deterministic-local";
         String evidenceStatus;
         String fallbackReason;
@@ -463,7 +466,11 @@ public class IntelligenceService {
                     "知识问答跳过模型: {}, reason=NO_EVIDENCE, modelConfigId={}",
                     ModelCallLogContext.fields(),
                     modelConfigId);
-            answer = "当前项目的代码索引和有效知识中没有找到达到相关度门槛的证据。" + "请先完成索引、发布相关知识，或使用更具体的模块名、符号名和业务术语。";
+            answer =
+                    context != null && context.knowledgeOnly()
+                            ? "当前知识库中没有找到相关的已发布知识。请先发布相关知识，或使用更具体的关键词。"
+                            : "当前项目的代码索引和有效知识中没有找到达到相关度门槛的证据。"
+                                    + "请先完成索引、发布相关知识，或使用更具体的模块名、符号名和业务术语。";
             evidenceStatus = "INSUFFICIENT";
             fallbackReason = "NO_EVIDENCE";
             cited = List.of();
@@ -481,7 +488,8 @@ public class IntelligenceService {
                             ? Optional.empty()
                             : llm.generate(
                                     modelConfigId,
-                                    llmPrompt(question, history, evidence, callLinks));
+                                    llmPrompt(
+                                            question, history, evidence, callLinks, knowledgeOnly));
             if (generated.isPresent()) {
                 ModelCallLogContext.stage("VALIDATE_CITATIONS");
                 AnswerCitationValidator.Validation validation =
@@ -502,7 +510,7 @@ public class IntelligenceService {
                     citationAssessment = validation.assessment();
                 } else {
                     answer =
-                            deterministicAnswer(evidence)
+                            deterministicAnswer(evidence, knowledgeOnly)
                                     + "\n\n外部模型回答因“"
                                     + validation.reason()
                                     + "”未通过引用校验，已安全降级。";
@@ -517,7 +525,7 @@ public class IntelligenceService {
                     citationAssessment = validation.assessment();
                 }
             } else {
-                answer = deterministicAnswer(evidence);
+                answer = deterministicAnswer(evidence, knowledgeOnly);
                 evidenceStatus = "DEGRADED";
                 fallbackReason =
                         modelConfigId == null ? "LOCAL_EVIDENCE_MODE" : "MODEL_UNAVAILABLE";
@@ -748,6 +756,7 @@ public class IntelligenceService {
         UUID contentVersion = null;
         String vectorModel = null;
         String retrievalCapability = null;
+        boolean knowledgeOnly = context != null && context.knowledgeOnly();
 
         try {
             contentVersion =
@@ -762,26 +771,28 @@ public class IntelligenceService {
 
         List<Map<String, Object>> codeKeywordRows = List.of();
         long channelStarted = System.nanoTime();
-        try {
-            codeKeywordRows =
-                    context != null
-                            ? mapper.searchBranchCodeKeyword(
-                                    repositoryId,
-                                    context.contentVersion(),
-                                    query.normalized(),
-                                    query.terms(),
-                                    termCount,
-                                    candidateLimit)
-                            : mapper.searchCodeKeyword(
-                                    repositoryId,
-                                    query.normalized(),
-                                    query.terms(),
-                                    termCount,
-                                    candidateLimit);
-            channels.add(channel("CODE_KEYWORD", 1.15, "CODE", codeKeywordRows, true));
-            metrics.add(metric("CODE_KEYWORD", codeKeywordRows.size(), channelStarted));
-        } catch (RuntimeException exception) {
-            unavailable.add(unavailable("CODE_KEYWORD", "CODE_KEYWORD_FAILED", exception));
+        if (!knowledgeOnly) {
+            try {
+                codeKeywordRows =
+                        context != null
+                                ? mapper.searchBranchCodeKeyword(
+                                        repositoryId,
+                                        context.contentVersion(),
+                                        query.normalized(),
+                                        query.terms(),
+                                        termCount,
+                                        candidateLimit)
+                                : mapper.searchCodeKeyword(
+                                        repositoryId,
+                                        query.normalized(),
+                                        query.terms(),
+                                        termCount,
+                                        candidateLimit);
+                channels.add(channel("CODE_KEYWORD", 1.15, "CODE", codeKeywordRows, true));
+                metrics.add(metric("CODE_KEYWORD", codeKeywordRows.size(), channelStarted));
+            } catch (RuntimeException exception) {
+                unavailable.add(unavailable("CODE_KEYWORD", "CODE_KEYWORD_FAILED", exception));
+            }
         }
         List<String> matchedSymbols =
                 codeKeywordRows.stream()
@@ -848,33 +859,35 @@ public class IntelligenceService {
             boolean semantic = "SEMANTIC_EMBEDDING".equals(embedding.retrievalCapability());
             String codeVectorChannel = semantic ? "CODE_SEMANTIC" : "CODE_CHARACTER_SIMILARITY";
             channelStarted = System.nanoTime();
-            try {
-                List<Map<String, Object>> vectorRows =
-                        context != null
-                                ? mapper.searchBranchCodeVector(
-                                        repositoryId,
-                                        context.contentVersion(),
-                                        vector,
-                                        model,
-                                        embedding.dimension(),
-                                        candidateLimit)
-                                : mapper.searchCodeVector(
-                                        repositoryId,
-                                        vector,
-                                        model,
-                                        embedding.dimension(),
-                                        candidateLimit);
-                if (context != null && vectorRows.isEmpty()) {
+            if (!knowledgeOnly) {
+                try {
+                    List<Map<String, Object>> vectorRows =
+                            context != null
+                                    ? mapper.searchBranchCodeVector(
+                                            repositoryId,
+                                            context.contentVersion(),
+                                            vector,
+                                            model,
+                                            embedding.dimension(),
+                                            candidateLimit)
+                                    : mapper.searchCodeVector(
+                                            repositoryId,
+                                            vector,
+                                            model,
+                                            embedding.dimension(),
+                                            candidateLimit);
+                    if (context != null && vectorRows.isEmpty()) {
+                        unavailable.add(
+                                new UnavailableChannel(
+                                        codeVectorChannel,
+                                        "BRANCH_VECTOR_NOT_READY",
+                                        "当前分支内容版本尚无匹配模型的向量索引，使用关键词检索"));
+                    } else channels.add(channel(codeVectorChannel, 1.0, "CODE", vectorRows, false));
+                    metrics.add(metric(codeVectorChannel, vectorRows.size(), channelStarted));
+                } catch (RuntimeException exception) {
                     unavailable.add(
-                            new UnavailableChannel(
-                                    codeVectorChannel,
-                                    "BRANCH_VECTOR_NOT_READY",
-                                    "当前分支内容版本尚无匹配模型的向量索引，使用关键词检索"));
-                } else channels.add(channel(codeVectorChannel, 1.0, "CODE", vectorRows, false));
-                metrics.add(metric(codeVectorChannel, vectorRows.size(), channelStarted));
-            } catch (RuntimeException exception) {
-                unavailable.add(
-                        unavailable(codeVectorChannel, "CODE_VECTOR_QUERY_FAILED", exception));
+                            unavailable(codeVectorChannel, "CODE_VECTOR_QUERY_FAILED", exception));
+                }
             }
             if (includeKnowledge) {
                 String knowledgeVectorChannel =
@@ -917,7 +930,8 @@ public class IntelligenceService {
                 vectorModel = "unknown";
                 retrievalCapability = "UNKNOWN";
             }
-            unavailable.add(unavailable("CODE_VECTOR", "VECTOR_RETRIEVAL_FAILED", exception));
+            if (!knowledgeOnly)
+                unavailable.add(unavailable("CODE_VECTOR", "VECTOR_RETRIEVAL_FAILED", exception));
             if (includeKnowledge) {
                 unavailable.add(
                         unavailable("KNOWLEDGE_VECTOR", "VECTOR_RETRIEVAL_FAILED", exception));
@@ -1120,8 +1134,10 @@ public class IntelligenceService {
         return result;
     }
 
-    private static String deterministicAnswer(List<Evidence> evidence) {
-        StringBuilder answer = new StringBuilder("根据当前有效代码与团队知识，检索到以下高相关证据：");
+    private static String deterministicAnswer(List<Evidence> evidence, boolean knowledgeOnly) {
+        StringBuilder answer =
+                new StringBuilder(
+                        knowledgeOnly ? "根据当前已发布知识，检索到以下高相关证据：" : "根据当前有效代码与团队知识，检索到以下高相关证据：");
         for (int index = 0; index < Math.min(5, evidence.size()); index++) {
             Evidence item = evidence.get(index);
             answer.append("\n")
@@ -1136,11 +1152,19 @@ public class IntelligenceService {
                 answer.append("（第 ").append(item.startLine()).append(" 行附近）");
             }
         }
-        return answer.append("。\n\n当前未使用外部模型生成解释，请打开引用核对原文，并使用调用图谱验证结构关系。").toString();
+        return answer.append(
+                        knowledgeOnly
+                                ? "。\n\n当前未使用外部模型生成解释，请打开引用核对知识原文。"
+                                : "。\n\n当前未使用外部模型生成解释，请打开引用核对原文，并使用调用图谱验证结构关系。")
+                .toString();
     }
 
     private static String llmPrompt(
-            String question, List<Answer> history, List<Evidence> evidence, List<CallLink> links) {
+            String question,
+            List<Answer> history,
+            List<Evidence> evidence,
+            List<CallLink> links,
+            boolean knowledgeOnly) {
         StringBuilder prompt =
                 new StringBuilder(
                                 "你是项目知识与代码问答助手。只能依据下面带编号的本轮证据回答；"
@@ -1203,11 +1227,13 @@ public class IntelligenceService {
                         .append(')');
             }
         }
+        prompt.append("\n请用中文回答当前问题；每个项目事实句末必须标注一个或多个 [S编号]；");
         return prompt.append(
-                        "\n请用中文回答当前问题；每个项目事实句末必须标注一个或多个 [S编号]；"
-                                + "区分团队知识和源码事实；冲突时以当前内容版本源码为准；"
-                                + "分析功能实现时说明入口、主要步骤、调用方向和不确定点；"
-                                + "启发式调用关系只能作为线索，无法从代码证据核实时请明确说明不确定。")
+                        knowledgeOnly
+                                ? "这是纯知识库项目，只依据已发布知识回答；来源矛盾时分别陈述差异，不推测源码实现。"
+                                : "区分团队知识和源码事实；冲突时以当前内容版本源码为准；"
+                                        + "分析功能实现时说明入口、主要步骤、调用方向和不确定点；"
+                                        + "启发式调用关系只能作为线索，无法从代码证据核实时请明确说明不确定。")
                 .toString();
     }
 
@@ -1610,6 +1636,7 @@ public class IntelligenceService {
 
     @Transactional
     public KnowledgeCard createCard(UUID repositoryId, UUID branchId, UUID actor, CardInput input) {
+        validateKnowledgeProjectInput(repositoryId, input);
         CardInput validated = validateCardInput(input);
         UUID id = UUID.randomUUID();
         mapper.insertCard(
@@ -1629,7 +1656,8 @@ public class IntelligenceService {
                 writeJson(validated.obligations()));
         KnowledgeCard card = findCard(repositoryId, id);
         if (branchKnowledge != null)
-            branchKnowledge.saveScope(repositoryId, id, card.revision(), input.branchScope());
+            branchKnowledge.saveScope(
+                    repositoryId, id, card.revision(), projectScope(repositoryId, input));
         attachments.attach(repositoryId, id, card.revision(), validated.attachmentIds());
         attachCodeReferences(repositoryId, id, card.revision(), validated.codeReferences());
         mapper.refreshCardSourceVersion(repositoryId, id);
@@ -1638,6 +1666,7 @@ public class IntelligenceService {
 
     @Transactional
     public KnowledgeCard updateCard(UUID repositoryId, UUID id, UUID actor, CardInput input) {
+        validateKnowledgeProjectInput(repositoryId, input);
         CardInput validated = validateCardInput(input);
         if (branchKnowledge != null)
             branchKnowledge.checkRevision(repositoryId, id, input.expectedRevision());
@@ -1660,7 +1689,8 @@ public class IntelligenceService {
         }
         KnowledgeCard card = findCard(repositoryId, id);
         if (branchKnowledge != null)
-            branchKnowledge.saveScope(repositoryId, id, card.revision(), input.branchScope());
+            branchKnowledge.saveScope(
+                    repositoryId, id, card.revision(), projectScope(repositoryId, input));
         attachments.attach(repositoryId, id, card.revision(), validated.attachmentIds());
         attachCodeReferences(repositoryId, id, card.revision(), validated.codeReferences());
         mapper.refreshCardSourceVersion(repositoryId, id);
@@ -1723,6 +1753,21 @@ public class IntelligenceService {
                 .filter(card -> card.id().equals(id))
                 .findFirst()
                 .orElseThrow();
+    }
+
+    private void validateKnowledgeProjectInput(UUID repositoryId, CardInput input) {
+        if (input != null
+                && mapper.isKnowledgeProject(repositoryId)
+                && !input.codeReferences().isEmpty())
+            throw new IllegalArgumentException("纯知识库项目不能关联代码");
+    }
+
+    private com.analyzercoder.application.branch.BranchKnowledgeService.BranchScope projectScope(
+            UUID repositoryId, CardInput input) {
+        return mapper.isKnowledgeProject(repositoryId)
+                ? new com.analyzercoder.application.branch.BranchKnowledgeService.BranchScope(
+                        "ALL_BRANCHES", List.of())
+                : input.branchScope();
     }
 
     private CardInput validateCardInput(CardInput input) {

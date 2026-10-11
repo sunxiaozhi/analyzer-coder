@@ -3,7 +3,7 @@ export type IndexJobStatus='QUEUED'|'RUNNING'|'CANCEL_REQUESTED'|'SUCCEEDED'|'FA
 export type ChunkType='FILE'|'SYMBOL'|'DOC_SECTION'|'TEST_CASE'|'CONFIG'|'KNOWLEDGE_CARD';
 export type RepositoryAssetType='CODE'|'DOCUMENT'|'RULE'|'TASK'|'CONFIG';
 export interface ApiErrorResponse{code:string;message:string;timestamp:string}
-export type RepositorySourceType='LOCAL_GIT'|'REMOTE_GIT'|'GITLAB'|'ZIP';
+export type RepositorySourceType='LOCAL_GIT'|'REMOTE_GIT'|'GITLAB'|'ZIP'|'KNOWLEDGE';
 export interface RepositoryCapabilities{canRead:boolean;canEditRepository?:boolean;canUpdate:boolean;canIndex:boolean;canBuildCodeGraph:boolean;canConfigure:boolean;canGrant:boolean;canManageCredential:boolean;canTransferOwnership:boolean;canDelete:boolean}
 export interface Repository{id:string;name:string;description:string;version:number;path:string;sourceType:RepositorySourceType;branch:string|null;commit:string|null;worktreeDigest:string|null;dirty:boolean;contentVersion:string|null;contentVersionCreatedAt:string|null;codeGraphPath:string;codeGraphDetected:boolean;lastScannedAt:string|null;ownerAccountId:string;ownerDisplayName:string;relationship:'SUPER_ADMIN'|'OWNER'|'READ'|'MAINTAIN'|'MANAGE';ownershipVersion:number;repositoryStatus:string;capabilities:RepositoryCapabilities}
 export interface RegisterRepositoryPayload{name:string;path:string}

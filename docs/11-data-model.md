@@ -2,7 +2,7 @@
 
 ## 设计原则
 
-项目是权限与来源容器，分支是代码和知识的唯一业务边界。数据库中没有历史源码副本表；分支行直接保存当前提交、工作区和发布状态。
+项目是权限与来源容器，代码项目以分支固定代码及适用知识。纯知识项目复用内部固定工作区作为知识外键身份，用户无需操作分支。数据库中没有历史源码副本表；代码分支行直接保存当前提交、工作区和发布状态。
 
 `content_version` 是内部发布代次令牌。它用于并发控制、固定阅读上下文和关联派生产物，不代表可管理的历史对象。任何业务接口都不能列出、恢复或单独删除旧令牌。
 
@@ -63,7 +63,9 @@ repositories
 
 ## 迁移摘要
 
-Flyway 仅保留 `V1__init_schema.sql`，合并原 V1 与 V2，一次建立当前业务表、约束、索引、触发器及必要的初始配置，包含 knowledge_branch_scopes、knowledge_branch_scope_history 和知识代码引用的 branch_id。已退役的变更评审与跨仓工程项目结构不再创建。
+`V1__init_schema.sql` 是初始化基线，一次建立业务表、约束、索引、触发器及必要的初始配置，包含 knowledge_branch_scopes、knowledge_branch_scope_history 和知识代码引用的 branch_id。已退役的变更评审与跨仓工程项目结构不再创建。
+
+`V2__knowledge_only_context.sql` 只将 `branch_read_contexts.content_version` 改为允许 NULL，不改动 V1。`repositories.source_type` 已是 text，可直接保存 `KNOWLEDGE`；不新增表。纯知识工作区的 content_version、commit_sha、content_path 为空，preparation_status 为 READY。应用只允许 KNOWLEDGE 使用空代码版本上下文，继续校验账号、项目、有效期及固定知识修订。实现见 `KnowledgeProjectService#create`、`RepositoryBranchService#resolve`，详细设计见 [纯知识库设计](plans/knowledge-only-design.md)。
 
 此基线只适用于空数据库。已有旧 V1/V2 或更早 V1–V9 执行历史与新版 V1 校验和不同，不能直接原地升级。首次部署使用空库；保留旧库数据时须另行验证数据迁移方案，不能清空历史表、repair 或关闭 Flyway 绕过校验。
 
@@ -92,6 +94,5 @@ Flyway 仅保留 `V1__init_schema.sql`，合并原 V1 与 V2，一次建立当�
 
 - 独立的分支历史源码副本表；
 - 分支上的“发布版本指针 + 多个版本实体”模型；
-- 知识的项目共享或多分支范围表；
 - 用户可见的版本保留、引用检查或手工删除接口；
 - ZIP 专属的仓库级准备流水线。

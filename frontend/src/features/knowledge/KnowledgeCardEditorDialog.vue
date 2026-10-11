@@ -20,6 +20,7 @@ import type { RepositoryBranch } from '@/api/branches';
 
 const props = defineProps<{
   modelValue: boolean;
+  knowledgeOnly?: boolean;
   repositoryId: string;
   contextId?: string | null;
   card: KnowledgeCard | null;
@@ -200,7 +201,7 @@ function save() {
     @update:model-value="emit('update:modelValue', $event)">
     <p class="editor-intro">保存生成草稿修订，确认后通过列表发布。</p>
     <el-form label-position="top" class="knowledge-card-form">
-      <KnowledgeBranchScopeSection v-if="branchId" v-model="form.branchScope" class="editor-scope"
+      <KnowledgeBranchScopeSection v-if="branchId && !knowledgeOnly" v-model="form.branchScope" class="editor-scope"
         :key="card?.id ?? 'new'" :current-branch-id="branchId" :branch-name="branchName" :branches="branches ?? []" :error="scopeError" />
       <KnowledgeCardContentSection class="editor-content"
         v-model:title="form.title" v-model:knowledge-kind="form.knowledgeKind" v-model:content="form.content" v-model:tags="form.tags"
@@ -210,7 +211,7 @@ function save() {
           v-model:title="form.title" v-model:knowledge-kind="form.knowledgeKind" v-model:content="form.content" v-model:tags="form.tags"
           :repository-id="repositoryId" :attachments="attachments" :uploading="uploading"
           @choose-files="chooseFiles" @remove-attachment="removeAttachment" @insert-attachment="insertAttachment" />
-        <details class="settings-group">
+        <details v-if="!knowledgeOnly" class="settings-group">
           <summary>关联代码 · {{ codeReferences.length }} 处</summary>
           <KnowledgeCodeAssociationSection v-model:references="codeReferences" :context-id="contextId"
             :repository-id="repositoryId" @open-code="emit('openCode', $event)" />

@@ -13,6 +13,7 @@ import MarkdownPreview from '@/components/MarkdownPreview.vue';
 
 const props = defineProps<{
   card: KnowledgeCard | null;
+  knowledgeOnly?: boolean;
   driftEvent: KnowledgeDriftEvent | null;
   driftLoading: boolean;
   canMaintain: boolean;
@@ -74,7 +75,7 @@ const hasScope = computed(() => Boolean(props.card && (
       <div class="detail-meta">
         <el-tag v-if="status" :type="status.type">{{ status.label }}</el-tag>
         <span>{{ scopeLabel }}</span>
-        <span v-if="card.branchScope?.mode === 'ALL_BRANCHES'">包括后续新增分支</span>
+        <span v-if="!knowledgeOnly && card.branchScope?.mode === 'ALL_BRANCHES'">包括后续新增分支</span>
         <span>{{ kindLabels[card.knowledgeKind] }} · {{ enforcementLabels[card.enforcement] }}</span>
         <span>修订 v{{ card.revision }}</span><time :datetime="card.updatedAt">{{ new Date(card.updatedAt).toLocaleString() }}</time>
       </div>
@@ -101,12 +102,12 @@ const hasScope = computed(() => Boolean(props.card && (
       <dl class="engineering-facts">
         <div><dt>负责人</dt><dd :title="card.ownerAccountId || undefined">{{ ownerLabel || card.ownerAccountId || '未指定' }} <el-button v-if="card.ownerAccountId && !ownerLabel" link @click="copyOwner">复制标识</el-button></dd></div>
         <div><dt>人工评审</dt><dd>{{ localizeStatus(card.reviewStatus) }}</dd></div>
-        <div><dt>来源版本</dt><dd>{{ localizeStatus(card.sourceVersionStatus) }}</dd></div>
-        <div><dt>最近验证内容版本</dt><dd class="mono">{{ card.lastVerifiedContentVersion || '尚未验证' }}</dd></div>
+        <div v-if="!knowledgeOnly"><dt>来源版本</dt><dd>{{ localizeStatus(card.sourceVersionStatus) }}</dd></div>
+        <div v-if="!knowledgeOnly"><dt>最近验证内容版本</dt><dd class="mono">{{ card.lastVerifiedContentVersion || '尚未验证' }}</dd></div>
         <div><dt>验证说明</dt><dd>{{ card.verificationNote || '暂无' }}</dd></div>
       </dl>
       <KnowledgeDriftPanel
-        v-if="card.sourceVersionStatus !== 'UNVERIFIED' || driftEvent || driftLoading"
+        v-if="!knowledgeOnly && (card.sourceVersionStatus !== 'UNVERIFIED' || driftEvent || driftLoading)"
         :card="card"
         :event="driftEvent"
         :loading="driftLoading"

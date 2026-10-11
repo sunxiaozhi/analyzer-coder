@@ -10,6 +10,9 @@ import org.apache.ibatis.annotations.Param;
 /** 定义智能分析数据访问操作的 MyBatis 映射接口，集中维护持久化层查询边界。 */
 @Mapper
 public interface IntelligenceMapper {
+    boolean isKnowledgeProject(
+            @org.apache.ibatis.annotations.Param("repositoryId") UUID repositoryId);
+
     List<Map<String, Object>> searchBranchCodeKeyword(
             @Param("repositoryId") UUID repositoryId,
             @Param("contentVersion") UUID contentVersion,

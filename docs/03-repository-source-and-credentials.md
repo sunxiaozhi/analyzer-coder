@@ -1,4 +1,7 @@
 # 仓库接入与来源凭据
+
+2026-10-11 增补：项目来源增加 KNOWLEDGE。创建只填写名称和说明，通过 `KnowledgeProjectController` / `KnowledgeProjectService` 直接建立正式项目，无代码接入草稿、文件获取或扫描。名称权限规则沿用现有项目；界面隐藏路径、凭据和默认分支设置。纯知识库不支持后续切换成代码项目。参见 [需求](plans/knowledge-only-requirements.md) 与 [设计](plans/knowledge-only-design.md)。
+
 > 本文档由当前实现反推生成（2026-09-19）。描述已实现的需求，不是新设计。
 
 ## 1 功能范围与角色

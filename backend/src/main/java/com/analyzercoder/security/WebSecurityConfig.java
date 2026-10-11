@@ -9,11 +9,15 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebSecurityConfig implements WebMvcConfigurer {
     private final SessionInterceptor sessionInterceptor;
     private final AccessTokenInterceptor accessTokenInterceptor;
+    private final KnowledgeProjectOperationInterceptor knowledgeProjectOperations;
 
     public WebSecurityConfig(
-            SessionInterceptor sessionInterceptor, AccessTokenInterceptor accessTokenInterceptor) {
+            SessionInterceptor sessionInterceptor,
+            AccessTokenInterceptor accessTokenInterceptor,
+            KnowledgeProjectOperationInterceptor knowledgeProjectOperations) {
         this.sessionInterceptor = sessionInterceptor;
         this.accessTokenInterceptor = accessTokenInterceptor;
+        this.knowledgeProjectOperations = knowledgeProjectOperations;
     }
 
     @Override
@@ -21,5 +25,6 @@ public class WebSecurityConfig implements WebMvcConfigurer {
         registry.addInterceptor(accessTokenInterceptor).addPathPatterns("/**");
         registry.addInterceptor(sessionInterceptor).addPathPatterns("/**");
         registry.addInterceptor(new BranchContextInterceptor()).addPathPatterns("/api/**");
+        registry.addInterceptor(knowledgeProjectOperations).addPathPatterns("/api/repositories/**");
     }
 }

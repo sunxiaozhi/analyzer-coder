@@ -50,6 +50,7 @@ public class RepositoryEditingService {
             throw new IllegalArgumentException("项目描述不能超过 500 个字符");
         }
         String nextBranch = defaultBranch == null ? current.defaultBranch() : defaultBranch.trim();
+        if ("KNOWLEDGE".equals(current.sourceType())) nextBranch = current.defaultBranch();
         if (nextBranch != null && nextBranch.length() > 255) {
             throw new IllegalArgumentException("默认分支不能超过 255 个字符");
         }

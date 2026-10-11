@@ -179,6 +179,12 @@ export function registerRepository(payload: RegisterRepositoryPayload): Promise<
   return request<Repository>('/api/repositories', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+export function createKnowledgeProject(name: string, description: string): Promise<Repository> {
+  return request<Repository>('/api/repositories/knowledge-projects', {
+    method: 'POST', body: JSON.stringify({ name, description }),
+  });
+}
+
 export function updateRepository(repositoryId: string, payload: {
   name: string; description: string; defaultBranch: string; version: number;
 }): Promise<Repository> {

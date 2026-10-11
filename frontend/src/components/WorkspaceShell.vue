@@ -56,6 +56,7 @@ const navGroups = computed(() => workspaceNavigation({
   isAdmin: auth.isAdmin,
   canReadSelectedRepository: Boolean(repositoryStore.selectedRepository),
   canManageProjects: canManageProjects.value,
+  knowledgeOnly: repositoryStore.selectedRepository?.sourceType === 'KNOWLEDGE',
 }));
 const visibleNavItems = computed(() => navGroups.value.flatMap(group => group.items));
 const branchAwareRepository = computed(() => {
@@ -106,7 +107,7 @@ async function refreshBranchContext() {
         },
       });
     }
-    if (branchContext.context) ElMessage.success(`已读取最新分支版本 ${branchContext.context.commitSha.slice(0, 8)}`);
+    if (branchContext.context) ElMessage.success(repositoryStore.selectedRepository?.sourceType === 'KNOWLEDGE' ? '已刷新知识内容' : `已读取最新分支版本 ${branchContext.context.commitSha?.slice(0, 8)}`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '刷新分支版本失败');
   }
@@ -268,7 +269,7 @@ onMounted(() => {
         />
       </el-select>
       <span v-if="branchContext.context" class="locked-commit mono" :title="`提交 ${branchContext.context.commitSha} · 内容版本 ${branchContext.context.contentVersion}`">
-        锁定 {{ branchContext.context.commitSha.slice(0, 8) }}
+        锁定 {{ branchContext.context.commitSha?.slice(0, 8) }}
       </span>
       <span v-else class="locked-commit">{{ branchContext.loading ? '正在切换分支…' : branchContext.error ?? '版本未就绪' }}</span>
       <button class="branch-refresh" type="button" title="读取最新分支版本" aria-label="读取最新分支版本" :disabled="branchContext.loading" @click="refreshBranchContext"><RefreshCw :size="14" /></button>

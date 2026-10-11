@@ -98,6 +98,7 @@ public class RepositoryBranchService {
 
     public Branch track(AuthenticatedAccount actor, UUID repoId, String name) {
         require(actor, repoId, RepositoryPermission.MAINTAIN);
+        requireCodeProject(repoId);
         GitBranchContentVersionFactory.validateBranch(name);
         Integer archived =
                 db.queryForObject(
@@ -121,6 +122,7 @@ public class RepositoryBranchService {
     @Transactional
     public Branch archive(AuthenticatedAccount actor, UUID repoId, UUID branchId) {
         require(actor, repoId, RepositoryPermission.MANAGE);
+        requireCodeProject(repoId);
         int changed =
                 db.update(
                         """
@@ -148,6 +150,7 @@ public class RepositoryBranchService {
     @Transactional
     public Branch restore(AuthenticatedAccount actor, UUID repoId, UUID branchId) {
         require(actor, repoId, RepositoryPermission.MANAGE);
+        requireCodeProject(repoId);
         if (db.update(
                         """
                         UPDATE repository_branches SET tracking_status='ACTIVE',archived_at=NULL,archived_by=NULL,
@@ -367,7 +370,8 @@ public class RepositoryBranchService {
                 SELECT c.*,b.name,b.commit_sha,b.content_path FROM branch_read_contexts c
                 JOIN repository_branches b ON b.id=c.branch_id
                 WHERE c.id=? AND c.repo_id=? AND c.account_id=? AND c.expires_at>CURRENT_TIMESTAMP
-                  AND c.content_version=b.content_version AND b.tracking_status='ACTIVE'
+                  AND c.content_version IS NOT DISTINCT FROM b.content_version AND b.tracking_status='ACTIVE'
+                  AND (b.content_version IS NOT NULL OR EXISTS(SELECT 1 FROM repositories r WHERE r.id=b.repo_id AND r.source_type='KNOWLEDGE'))
                 """,
                             (r, n) ->
                                     new BranchReadContext(
@@ -377,7 +381,9 @@ public class RepositoryBranchService {
                                             r.getString("name"),
                                             r.getObject("content_version", UUID.class),
                                             r.getString("commit_sha"),
-                                            Path.of(r.getString("content_path")),
+                                            r.getString("content_path") == null
+                                                    ? null
+                                                    : Path.of(r.getString("content_path")),
                                             r.getTimestamp("expires_at").toInstant()),
                             contextId,
                             repoId,
@@ -397,7 +403,8 @@ public class RepositoryBranchService {
                                     """
                 SELECT b.id,b.name,b.content_version,b.commit_sha,b.content_path FROM repository_branches b
                 WHERE b.repo_id=? AND b.id=? AND b.tracking_status='ACTIVE'
-                  AND b.content_version IS NOT NULL AND b.content_path IS NOT NULL
+                  AND ((b.content_version IS NOT NULL AND b.content_path IS NOT NULL)
+                       OR EXISTS(SELECT 1 FROM repositories r WHERE r.id=b.repo_id AND r.source_type='KNOWLEDGE'))
                 """,
                                     (r, n) ->
                                             new BranchReadContext(
@@ -407,7 +414,9 @@ public class RepositoryBranchService {
                                                     r.getString("name"),
                                                     r.getObject("content_version", UUID.class),
                                                     r.getString("commit_sha"),
-                                                    Path.of(r.getString("content_path")),
+                                                    r.getString("content_path") == null
+                                                            ? null
+                                                            : Path.of(r.getString("content_path")),
                                                     Instant.now().plusSeconds(3600)),
                                     repoId,
                                     branchId);
@@ -438,6 +447,7 @@ public class RepositoryBranchService {
     }
 
     public CodeRepository repositoryFor(BranchReadContext context) {
+        requireCodeProject(context.repositoryId());
         CodeRepository original = repository(context.repositoryId());
         return original.withManagedContentVersion(
                 new GitRepositoryContentVersion(
@@ -459,6 +469,11 @@ public class RepositoryBranchService {
         return repositories
                 .findById(CodeRepositoryId.of(id))
                 .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
+    }
+
+    public void requireCodeProject(UUID id) {
+        if (repository(id).sourceType() == RepositorySourceType.KNOWLEDGE)
+            throw new ApiSecurityException(409, "KNOWLEDGE_PROJECT_NO_CODE", "纯知识库项目不提供代码操作");
     }
 
     private void require(AuthenticatedAccount actor, UUID id, RepositoryPermission permission) {

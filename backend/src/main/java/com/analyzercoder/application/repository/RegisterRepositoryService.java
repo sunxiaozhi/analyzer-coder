@@ -87,6 +87,9 @@ public class RegisterRepositoryService implements RegisterRepositoryUseCase {
     @Transactional
     public RepositoryScanResult rescan(CodeRepositoryId id) {
         CodeRepository repository = get(id);
+        if (repository.sourceType()
+                == com.analyzercoder.domain.repository.RepositorySourceType.KNOWLEDGE)
+            throw new IllegalArgumentException("纯知识库项目无需同步代码");
         if (indexJobStore.hasActiveJob(id)) {
             throw new IllegalStateException("项目存在运行中的索引任务，暂时不能同步");
         }

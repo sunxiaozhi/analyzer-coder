@@ -21,9 +21,9 @@ watch(() => [props.modelValue, props.repository] as const, () => {
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" title="项目资料与凭据" width="620"
+  <el-dialog :model-value="modelValue" :title="repository?.sourceType === 'KNOWLEDGE' ? '项目资料' : '项目资料与凭据'" width="620"
              @update:model-value="emit('update:modelValue', $event)">
-    <el-alert title="来源类型、服务端路径和所有者不可在此修改；远程仓库凭据可在下方单独维护。" type="info"
+    <el-alert v-if="repository?.sourceType !== 'KNOWLEDGE'" title="来源类型、服务端路径和所有者不可在此修改；远程仓库凭据可在下方单独维护。" type="info"
               :closable="false" show-icon />
     <el-form label-position="top" class="edit-form">
       <el-form-item label="项目名称" required>
@@ -32,11 +32,11 @@ watch(() => [props.modelValue, props.repository] as const, () => {
       <el-form-item label="项目描述">
         <el-input v-model="form.description" type="textarea" :rows="4" maxlength="500" show-word-limit />
       </el-form-item>
-      <el-form-item label="默认分支">
+      <el-form-item v-if="repository?.sourceType !== 'KNOWLEDGE'" label="默认分支">
         <el-input v-model="form.defaultBranch" maxlength="255" placeholder="例如 main" />
         <small>仅决定首次打开项目时的阅读偏好；不会同步或修改分支代码。</small>
       </el-form-item>
-      <el-form-item label="不可修改的来源">
+      <el-form-item v-if="repository?.sourceType !== 'KNOWLEDGE'" label="不可修改的来源">
         <el-input :model-value="`${repository?.sourceType ?? ''} · ${repository?.path ?? ''}`" disabled />
       </el-form-item>
     </el-form>

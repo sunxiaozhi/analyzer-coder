@@ -142,7 +142,8 @@ public class RepositoryController {
                 repository.currentContentVersion() == null
                         ? null
                         : codeGraphArtifacts.findPublished(
-                                repository.id().value(), repository.currentContentVersion().value());
+                                repository.id().value(),
+                                repository.currentContentVersion().value());
         var metadata = editing.metadata(repository.id().value());
         return RepositoryResponse.from(
                 repository, accessControl.describe(account, repository.id()), artifact, metadata);
@@ -215,7 +216,19 @@ public class RepositoryController {
                     access.relationship(),
                     access.ownershipVersion(),
                     access.repositoryStatus(),
-                    access.capabilities());
+                    repository.sourceType() == RepositorySourceType.KNOWLEDGE
+                            ? new RepositoryAccess.Capabilities(
+                                    access.capabilities().canRead(),
+                                    access.capabilities().canEditRepository(),
+                                    access.capabilities().canUpdate(),
+                                    false,
+                                    false,
+                                    access.capabilities().canConfigure(),
+                                    access.capabilities().canGrant(),
+                                    false,
+                                    access.capabilities().canTransferOwnership(),
+                                    access.capabilities().canDelete())
+                            : access.capabilities());
         }
     }
 }

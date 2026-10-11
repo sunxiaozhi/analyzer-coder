@@ -11,6 +11,7 @@ export function useBranchReadScope() {
     || branches.context.repositoryId !== repositories.selectedRepositoryId
     || branches.context.branchId !== branches.selectedBranchId));
   const reason = computed(() => branches.error
+    ?? (repositories.selectedRepository?.sourceType === 'KNOWLEDGE' ? (branches.loading ? '正在读取知识内容，请稍候' : '知识内容尚未就绪，请刷新项目') : null)
     ?? (branches.loading ? '正在锁定当前分支版本，请稍候' : '当前分支版本未就绪，请在项目管理中同步该分支'));
   return { requiresContext, blocked, reason };
 }
