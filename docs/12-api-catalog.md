@@ -274,6 +274,7 @@
 | GET | /api/repositories/{repoId}/knowledge | 知识卡列表 | READ；草稿卡仅 MAINTAIN 可见 | 可选 `X-Branch-Context`（按分支适用性过滤） | `List<KnowledgeCard>` | IntelligenceController.java:176-188；IntelligenceService.java:1776 |
 | POST | /api/repositories/{repoId}/knowledge | 创建知识卡 | MAINTAIN + CSRF | `CardInput` | `KnowledgeCard` | IntelligenceController.java:190-201；IntelligenceService.java:1744 |
 | PUT | /api/repositories/{repoId}/knowledge/{cardId} | 更新知识卡 | MAINTAIN + CSRF | `CardInput` | `KnowledgeCard` | IntelligenceController.java:203-211 |
+| DELETE | /api/repositories/{repoId}/knowledge/{cardId} | 删除知识草稿 | MANAGE + CSRF + X-Branch-Context | `expectedRevision`（正整数，必填）；检查当前分支适用性 | 无响应体；HTTP 204；非草稿或修订冲突返回 409 | KnowledgeDeletionController；KnowledgeDeletionService；BranchContextInterceptor |
 | POST | /api/repositories/{repoId}/knowledge/{cardId}/review | 审核知识卡 | MANAGE + CSRF | `ReviewCardRequest{reviewStatus}` | `KnowledgeCard` | IntelligenceController.java:213-221,239 |
 | POST | /api/repositories/{repoId}/knowledge/{cardId}/publication | 设置发布状态 | MANAGE + CSRF | `PublicationRequest{publicationStatus}` | `KnowledgeCard` | IntelligenceController.java:223-231,241 |
 | POST | /api/repositories/{repoId}/knowledge/{cardId}/publish | 一次确认并发布 | MANAGE + CSRF + X-Branch-Context | `{expectedRevision}` | `KnowledgeCard`；评审、分支确认和发布为同一事务 | IntelligenceController.publishCard；KnowledgePublicationService.publish |

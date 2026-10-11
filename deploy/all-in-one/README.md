@@ -8,7 +8,7 @@
 
 ## 1. 全新安装与数据库初始化
 
-首次安装按本节从空目录初始化；已有实例请执行第 10 节升级步骤。
+首次安装按本节从空目录初始化，首次启动会自动初始化空数据库。
 
 首次启动时，系统自动建立数据库表、索引、约束及初始配置。无需手动建表或导入 SQL。
 
@@ -171,55 +171,7 @@ app:
 向量维度应与服务实际返回长度一致，例如标准 bge-m3 的稠密向量为 1024 维。客户端显式请求 `encoding_format: float`；服务明确拒绝 `dimensions` 参数时，会在同一超时预算内去掉该参数重试一次。返回向量仍须通过页面配置的维度校验，不截断或补齐向量。若仍返回 400，检查服务端错误正文、模型标识及基础地址。
 
 
-## 10. 升级现有安装
-
-适用于使用本项目 analyzer.sh / analyzer.ps1 管理、data 和 config 位于安装目录中的 1.0.2 / 1.0.3 / 1.0.4 / 1.0.5 实例。新版本为 {{RELEASE_VERSION}}，新增知识草稿删除及向量、Markdown 关联的事务清理；增加向量共享节流、HTTP 429 等待重试和已完成片段即时保存复用，将项目问答移到项目总览下方。保留此前的长文本分段聚合、超限批次缩小、问答真实调用修复、完整响应超时和关联日志。升级保留现有业务数据、模型设置、密码、主密钥、端口及已编辑的 config。
-
-先将新压缩包和同名校验文件上传到服务器 /tmp。新包解压到独立目录，不能直接覆盖正在运行的安装目录。下文原安装目录为 /opt/analyzer-coder，请按实际路径调整。
-
-```bash
-# 校验与解压任何一步失败，均不继续升级。
-(
-  set -e
-  cd /tmp
-  sha256sum -c analyzer-coder-docker-{{RELEASE_VERSION}}.tar.gz.sha256
-  test ! -e analyzer-coder-docker-{{RELEASE_VERSION}}
-  tar -xzf analyzer-coder-docker-{{RELEASE_VERSION}}.tar.gz
-  cd analyzer-coder-docker-{{RELEASE_VERSION}}
-  sha256sum -c SHA256SUMS
-)
-```
-
-确认上一步全部通过后，在维护窗口执行。先停机再备份，避免备份完成后产生尚未包含在备份中的新数据；任何一步失败即停止后续操作：
-
-```bash
-(
-  set -e
-  cd /opt/analyzer-coder
-  bash analyzer.sh stop
-  bash analyzer.sh backup
-  # 确认终端输出 Backup 路径并保留该文件。
-  bash analyzer.sh upgrade /tmp/analyzer-coder-docker-{{RELEASE_VERSION}}
-  bash analyzer.sh status
-  grep '^ANALYZER_IMAGE=' .env
-)
-```
-
-预期镜像为 analyzer-coder:{{RELEASE_VERSION}}、容器状态 healthy。升级命令会加载新镜像、更新启动文件和镜像版本并启动服务；不需要手动导入 SQL。不要删除原 .env、config、data 或 backups。升级失败时保留日志和备份，不反复初始化空库。
-
-登录后重新检测问答模型和向量模型，再执行一次有证据的知识问答和一次向量任务。检查新日志中的实际 CHAT、EMBEDDING / EMBEDDING_BATCH 调用及失败原因；检测成功并不等同于大批量或长上下文调用必然成功。前序批次已有向量而任务失败时，应按第 11 节定位失败批次。 对此前因输入超限或 HTTP 429 失败的向量任务，升级后重新提交向量任务；已完成的完整片段保留并复用，无需删除业务数据或重新导入仓库。限流等待期间任务可能继续显示运行中，可查看“向量请求等待额度”“向量服务限流”和“向量请求等待结束”日志。默认每分钟 30 次实际请求，后台等待及重试参数见第 11 节。
-
-Windows Docker Desktop 使用独立解压的新包目录：
-
-```powershell
-pwsh -File analyzer.ps1 stop
-# 确认停止成功后备份，确认备份成功后升级。
-pwsh -File analyzer.ps1 backup
-pwsh -File analyzer.ps1 upgrade -PackageDirectory C:/packages/analyzer-coder-docker-{{RELEASE_VERSION}}
-pwsh -File analyzer.ps1 status
-```
-
-## 11. 问答与向量调用排障
+## 10. 问答与向量调用排障
 
 知识问答先调用当前启用的向量模型生成查询向量，再检索代码与知识证据，最后调用本轮选择的问答模型。两者分别读取自己的服务地址、模型标识、密钥和超时设置。
 
@@ -312,7 +264,7 @@ HTTP 客户端自带的 200 日志只表示响应状态；应用的“模型调�
 
 本地故障注入测试验证调用链行为，不能替代目标服务器、目标网关和实际长文本的验证。
 
-## 12. 知识草稿删除与菜单调整
+## 11. 知识草稿删除与菜单调整
 
 研发工作菜单顺序为：项目总览 → 项目问答 → 联合检索 → 代码图谱。
 

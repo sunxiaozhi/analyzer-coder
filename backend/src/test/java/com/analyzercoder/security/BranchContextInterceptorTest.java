@@ -19,6 +19,7 @@ class BranchContextInterceptorTest {
                     {"GET", "/chunks"},
                     {"GET", cardPath + "/source-drift"},
                     {"PUT", cardPath},
+                    {"DELETE", cardPath},
                     {"POST", cardPath + "/review"},
                     {"POST", cardPath + "/publication"},
                     {"POST", cardPath + "/publish"}
@@ -27,6 +28,32 @@ class BranchContextInterceptorTest {
             request.addHeader("X-Branch-Context", "pinned");
             assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), null))
                     .isTrue();
+        }
+    }
+
+    @Test
+    void allowsScopedDeletionWithoutOpeningOtherKnowledgeDeleteRoutes() {
+        var interceptor = new BranchContextInterceptor();
+        var request =
+                new MockHttpServletRequest(
+                        "DELETE", base + "/qa/records/22222222-2222-4222-8222-222222222222");
+        request.addHeader("X-Branch-Context", "pinned");
+        assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), null)).isTrue();
+
+        for (var path :
+                new String[] {
+                    "/knowledge",
+                    "/knowledge/markdown-sources",
+                    "/knowledge/attachments/22222222-2222-4222-8222-222222222222"
+                }) {
+            request.setRequestURI(base + path);
+            assertThatThrownBy(
+                            () ->
+                                    interceptor.preHandle(
+                                            request, new MockHttpServletResponse(), null))
+                    .isInstanceOf(ApiSecurityException.class)
+                    .extracting("code")
+                    .isEqualTo("BRANCH_CONTEXT_UNSUPPORTED");
         }
     }
 

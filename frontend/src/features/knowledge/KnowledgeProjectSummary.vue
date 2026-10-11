@@ -31,8 +31,7 @@ watch(() => branches.context?.contextId, async (_, __, onCleanup) => {
     <p v-else>{{ count === null ? '正在读取知识内容…' : `可见知识卡 ${count} 条，已发布 ${published} 条` }}</p>
     <p>维护并发布知识卡，即可用于检索和问答。</p>
     <el-button type="primary" @click="router.push('/knowledge')">管理知识</el-button>
-    <el-button @click="router.push('/search')">知识检索</el-button>
-    <el-button @click="router.push('/ask')">项目问答</el-button>
+    <el-button @click="router.push('/ask')">知识问答</el-button>
     <el-button :loading="branches.loading" @click="branches.refresh()">刷新知识</el-button>
   </section>
 </template>

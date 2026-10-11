@@ -22,12 +22,13 @@ it('creates a knowledge project with only its name and clears code credentials f
       ElSelect: true, ElOption: true, ElAlert: true, RepositoryCredentialManagerDialog: true,
     } },
   });
+  await wrapper.findAll('input')[3]!.setValue('feature/old-git-branch');
   wrapper.findComponent({ name: 'ElRadioGroup' }).vm.$emit('update:modelValue', 'KNOWLEDGE');
   await wrapper.findAll('input')[0]!.setValue('知识库');
   const create = wrapper.findAll('button').find(button => button.text() === '创建知识库');
   expect(create).toBeDefined();
   await create!.trigger('click');
-  expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ sourceType: 'KNOWLEDGE', name: '知识库', url: '', credentialId: '', file: null });
+  expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ sourceType: 'KNOWLEDGE', name: '知识库', branch: '', url: '', credentialId: '', file: null });
   expect(wrapper.findAll('input')).toHaveLength(2);
   wrapper.unmount();
 });

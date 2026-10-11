@@ -155,7 +155,7 @@ onScopeDispose(() => {
           <button :class="{ active: knowledgeFilter === 'trusted' }" @click="knowledgeFilter = 'trusted'">可信 {{ trustedKnowledgeCount }}</button>
           <button :class="{ active: knowledgeFilter === 'attention' }" @click="knowledgeFilter = 'attention'">需关注 {{ attentionKnowledgeCount }}</button>
         </div>
-        <el-button v-if="canMaintainKnowledge" type="primary" plain :icon="FilePlus2" @click="emit('createKnowledge')">创建关联知识</el-button>
+        <el-button v-if="canMaintainKnowledge" type="primary" plain :icon="FilePlus2" @click="emit('createKnowledge')">新建知识</el-button>
       </header>
       <div class="knowledge-grid">
         <article v-for="item in visibleKnowledge" :key="item.knowledgeId" class="knowledge-card" :data-trusted="item.trusted">
@@ -171,8 +171,8 @@ onScopeDispose(() => {
         </article>
       </div>
       <section v-if="!visibleKnowledge.length" class="action-empty">
-        <BookOpenCheck :size="24" /><div><b>{{ knowledgeFilter === 'all' ? '当前文件还没有适用知识' : '当前筛选条件没有知识' }}</b><p>创建知识卡片并绑定当前代码，让后续检索可以同时返回说明与实现。</p></div>
-        <el-button v-if="canMaintainKnowledge && knowledgeFilter === 'all'" type="primary" @click="emit('createKnowledge')">创建并绑定</el-button>
+        <BookOpenCheck :size="24" /><div><b>{{ knowledgeFilter === 'all' ? '当前文件还没有适用知识' : '当前筛选条件没有知识' }}</b><p>新建知识并绑定当前代码，让后续检索可以同时返回说明与实现。</p></div>
+        <el-button v-if="canMaintainKnowledge && knowledgeFilter === 'all'" type="primary" @click="emit('createKnowledge')">新建知识</el-button>
       </section>
       <p v-for="item in context?.limitations.filter(item => item.includes('KNOWLEDGE'))" :key="item" class="limitation">{{ limitationLabel(item) }}</p>
     </div>

@@ -195,7 +195,7 @@ function save() {
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" :title="card ? '编辑知识卡片' : '新建知识卡片'"
+  <el-dialog :model-value="modelValue" :title="card ? '编辑知识卡片' : '新建知识'"
     width="min(1200px, 96vw)" top="3vh" destroy-on-close
     :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy"
     @update:model-value="emit('update:modelValue', $event)">
@@ -227,7 +227,7 @@ function save() {
     <template #footer>
       <el-alert v-if="saveError" class="save-error" type="error" :closable="false" :title="saveError" role="alert" />
       <el-button :disabled="busy" @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="busy" :disabled="uploading" @click="save">{{ card ? '保存新修订' : '创建草稿' }}</el-button>
+      <el-button type="primary" :loading="busy" :disabled="uploading" @click="save">{{ card ? '保存新修订' : '新建知识' }}</el-button>
     </template>
   </el-dialog>
 </template>

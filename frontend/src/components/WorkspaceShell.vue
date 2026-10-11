@@ -61,11 +61,23 @@ const navGroups = computed(() => workspaceNavigation({
 const visibleNavItems = computed(() => navGroups.value.flatMap(group => group.items));
 const branchAwareRepository = computed(() => {
   const sourceType = repositoryStore.selectedRepository?.sourceType;
-  return sourceType === 'LOCAL_GIT' || sourceType === 'REMOTE_GIT' || sourceType === 'GITLAB';
+  return sourceType === 'LOCAL_GIT' || sourceType === 'REMOTE_GIT' || sourceType === 'GITLAB' || sourceType === 'KNOWLEDGE';
 });
+const virtualBranch = computed(() => repositoryStore.selectedRepository?.sourceType === 'KNOWLEDGE');
 const titles: Record<string, string> = { help: '功能导航', mcp: 'MCP 接入', overview: '项目总览', repositories: '项目管理', indexing: '任务中心', search: '联合检索', ask: '项目问答', graph: '联合检索', knowledge: '知识管理', accounts: '账号权限', audit: '审计日志', settings: '模型配置' };
 const pageTitle = computed(() => route.name === 'atlas' ? '代码图谱' : titles[String(route.name)] ?? '代码知识平台');
 const activeRouteName = computed(() => String(route.name ?? ''));
+function knowledgeDestination() {
+  if (!virtualBranch.value || !['overview', 'search', 'atlas', 'graph'].includes(String(route.name))) return null;
+  const query = { ...route.query };
+  for (const key of ['path', 'startLine', 'endLine', 'contentVersion', 'symbol', 'relation', 'depth', 'analyze']) delete query[key];
+  if (route.name === 'search' || route.name === 'graph') query.searchScope = 'PUBLISHED';
+  return { name: 'knowledge', query };
+}
+watch(() => [virtualBranch.value, route.name] as const, () => {
+  const destination = knowledgeDestination();
+  if (destination) void router.replace(destination);
+}, { immediate: true });
 async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }
 async function changeRepository(repositoryId: string | null) {
   try {
@@ -188,22 +200,30 @@ watch(visibleNavItems, items => {
 watch(
   () => [repositoryStore.selectedRepositoryId, repositoryStore.selectedRepository?.sourceType] as const,
   ([repositoryId]) => {
-    if (!branchAwareRepository.value) {
-      branchContext.clear();
+    const hasBranchSelection = branchAwareRepository.value;
+    if (!hasBranchSelection) {
       if (route.query.branchId || route.query.contextId) {
         const query = { ...route.query };
         delete query.branchId;
         delete query.contextId;
         void router.replace({ query });
       }
+    }
+    if (!repositoryId) {
+      branchContext.clear();
       return;
     }
-    const preferred = typeof route.query.branchId === 'string' ? route.query.branchId : null;
-    void branchContext.load(repositoryId, preferred, repositoryStore.selectedRepository?.branch).then(async () => {
-      if (!branchContext.context || route.query.branchId === branchContext.context.branchId) return;
+    // Initial selection also locks the automatically created virtual or ZIP workspace.
+    const preferred = hasBranchSelection && typeof route.query.branchId === 'string' ? route.query.branchId : null;
+    const defaultBranch = hasBranchSelection ? repositoryStore.selectedRepository?.branch : 'WORKSPACE';
+    void branchContext.load(repositoryId, preferred, defaultBranch).then(async () => {
+      if (!hasBranchSelection || repositoryId !== repositoryStore.selectedRepositoryId
+        || !branchContext.context || route.query.branchId === branchContext.context.branchId) return;
+      const destination = knowledgeDestination();
       await router.replace({
+        ...(destination ? { name: destination.name } : {}),
         query: {
-          ...route.query,
+          ...(destination?.query ?? route.query),
           branchId: branchContext.context.branchId,
           contextId: branchContext.context.contextId,
         },
@@ -215,6 +235,7 @@ watch(
 watch(
   () => route.query.branchId,
   branchId => {
+    if (!branchAwareRepository.value) return;
     if (typeof branchId !== 'string' || branchId === branchContext.selectedBranchId) return;
     if (branchContext.activeBranches.some(item => item.id === branchId)) void changeBranch(branchId, true);
   },
@@ -263,16 +284,17 @@ onMounted(() => {
         <el-option
           v-for="branch in branchContext.activeBranches"
           :key="branch.id"
-          :label="`${branch.name} · ${branchStatusLabel(branch.status)}`"
+          :label="`${branch.name} · ${virtualBranch ? '虚拟分支' : branchStatusLabel(branch.status)}`"
           :value="branch.id"
           :disabled="branch.status !== 'READY'"
         />
       </el-select>
-      <span v-if="branchContext.context" class="locked-commit mono" :title="`提交 ${branchContext.context.commitSha} · 内容版本 ${branchContext.context.contentVersion}`">
+      <span v-if="virtualBranch && branchContext.context" class="locked-commit" title="知识归属此虚拟分支，无需准备代码版本">虚拟分支 · 无代码</span>
+      <span v-else-if="branchContext.context" class="locked-commit mono" :title="`提交 ${branchContext.context.commitSha} · 内容版本 ${branchContext.context.contentVersion}`">
         锁定 {{ branchContext.context.commitSha?.slice(0, 8) }}
       </span>
-      <span v-else class="locked-commit">{{ branchContext.loading ? '正在切换分支…' : branchContext.error ?? '版本未就绪' }}</span>
-      <button class="branch-refresh" type="button" title="读取最新分支版本" aria-label="读取最新分支版本" :disabled="branchContext.loading" @click="refreshBranchContext"><RefreshCw :size="14" /></button>
+      <span v-else class="locked-commit">{{ branchContext.loading ? (virtualBranch ? '正在读取知识分支…' : '正在切换分支…') : branchContext.error ?? '版本未就绪' }}</span>
+      <button class="branch-refresh" type="button" :title="virtualBranch ? '刷新知识分支' : '读取最新分支版本'" :aria-label="virtualBranch ? '刷新知识分支' : '读取最新分支版本'" :disabled="branchContext.loading" @click="refreshBranchContext"><RefreshCw :size="14" /></button>
     </div>
     <div class="topbar-spacer" /><RouterLink class="help-entry" to="/help" title="查看功能导航和数据来源"><CircleHelp :size="16" /><span>帮助说明</span></RouterLink><RouterLink class="mcp-entry" to="/mcp" title="查看 MCP 接入指导"><Plug :size="16" /><span>MCP 接入</span></RouterLink><span class="context-chip">{{ auth.account?.displayName }} · {{ auth.isAdmin ? '管理员' : '普通用户' }}</span><el-button link title="退出登录" @click="logout"><LogOut :size="16" /></el-button></header>
     <div class="page-frame">

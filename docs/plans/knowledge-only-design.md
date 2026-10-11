@@ -4,7 +4,7 @@
 
 ## 设计决策
 
-复用 repositories 项目、repository_branches 工作区身份、知识卡、修订、权限、附件、向量与问答历史。增加来源枚举 KNOWLEDGE，表示不含代码的项目。保留内部固定 WORKSPACE 身份以复用知识归属外键，用户不操作分支。不初始化 Git、不伪造 commit 或代码 content_version、不执行扫描和代码索引。
+复用 repositories 项目、repository_branches 工作区身份、知识卡、修订、权限、附件、向量与问答历史。增加来源枚举 KNOWLEDGE，表示不含代码的项目。WORKSPACE 作为可见的虚拟分支保留知识归属外键，创建及首次进入时自动选择并初始化阅读上下文。不初始化 Git、不伪造 commit 或代码 content_version、不执行扫描和代码索引。
 
 repositories.path 指向受管项目数据位置，供现有存储模型和清理机制复用；并非源码路径。codegraph_path 仅保留兼容字段，纯知识库不创建相应产物。代码专属功能必须显式拒绝 KNOWLEDGE。
 
@@ -20,7 +20,7 @@ repository_branches.content_version、commit_sha、content_path 已允许 NULL�
 
 - 新增 POST /api/repositories/knowledge-projects，输入 name、description。认证用户成为所有者，校验重名，事务内保存正式项目及 READY 的固定工作区，返回既有 RepositoryResponse。
 - 现有项目响应 sourceType=KNOWLEDGE，关闭代码索引、图谱与代码凭据能力。项目资料编辑不允许修改知识工作区名称。
-- 沿用知识 CRUD、附件、历史、发布、检索和问答 API。工作区上下文自动选择，前端不暴露分支概念。
+- 沿用知识 CRUD、附件、历史、发布、检索和问答 API。工作区上下文自动选择，前端展示虚拟分支；知识及问答请求携带该分支上下文，继续校验账号、项目与有效期。
 - 纯知识发布校验权限和 expectedRevision、记录审核发布，跳过代码引用和版本验证。禁止提交代码引用，知识范围固定项目共享。
 - 发布/编辑/撤回后沿用上下文刷新机制，防止新的修订被旧上下文误读。知识向量继续按卡片修订生成。
 
@@ -30,7 +30,11 @@ repository_branches.content_version、commit_sha、content_path 已允许 NULL�
 
 ## 界面适配
 
-现有创建表单增加知识库选项，不要求或提交代码字段。创建后选择正式项目并跳转知识管理。项目管理、设置、公共项目栏和总览展示知识库用途；隐藏分支与代码准备操作。知识页隐藏 Markdown 来源、分支范围和验证、代码引用及失效提示。检索、问答不要求内容索引。导航隐藏图谱，直接进入代码页提供知识库导航。沿用现有布局、字体与配色，只改变与用途有关的控件与文案。
+现有创建表单增加知识库选项，不要求或提交代码字段。创建后选择正式项目、自动锁定 WORKSPACE 虚拟分支并跳转知识管理。项目管理、设置、公共项目栏、知识卡片和问答范围保留虚拟分支信息，标明“虚拟分支 · 无代码”；隐藏代码准备操作。知识页隐藏 Markdown 来源、分支范围编辑和代码验证、代码引用及失效提示。检索、问答不要求内容索引。导航隐藏图谱，直接进入代码页提供知识库导航。沿用现有布局、字体与配色，只改变与用途有关的控件与文案。
+
+后续接入代码应在同一项目将虚拟分支关联为真实代码分支，保留分支身份与已有知识。本次仅修复虚拟分支初始化及展示，转换接口、接入入口和数据转换规则另行实施。
+
+纯知识库入口合并：项目总览中的项目资料和知识统计移入 KnowledgeLibraryHeader，挂载于知识管理顶部；导航保留知识管理、知识问答及项目管理。知识管理同一搜索框通过范围选择区分可见卡片筛选与已发布知识检索，PublishedKnowledgeResults 展示已发布证据，usePublishedKnowledgeSearch 复用 unifiedSearch API，250ms 合并输入请求，并校验请求版本以丢弃切换项目后的旧响应。检索失败可重试，降级结果保留说明；旧检索链接的 q 和已发布范围在首次虚拟分支初始化后仍保留。代码项目导航与检索流程保持原有行为。
 
 ## 测试计划与实施记录
 
@@ -53,3 +57,7 @@ repository_branches.content_version、commit_sha、content_path 已允许 NULL�
 重现时使用专用测试库，设置 APP_DATASOURCE_URL/USERNAME/PASSWORD、APP_MANAGED_DATA_ROOT、APP_REPOSITORY_ALLOWED_ROOTS 及测试初始化账号/模型加密键，再执行 `mvn -o -pl backend -am "-Dtest=*Test" "-Dsurefire.failIfNoSpecifiedTests=false" clean test`。前端执行 `npm --prefix frontend run test` 与 `npm --prefix frontend run build`。
 
 本轮未进行浏览器整页端到端、外部问答模型/远端向量服务联调、正式部署验收。附件正文解析及后续接入代码仍不在需求范围内。
+
+2026-10-11 虚拟分支修订：修复 WorkspaceShell 对纯知识库清空上下文而未自动加载的问题，保留并展示 WORKSPACE 虚拟分支；代码类型表单切换至纯知识库时清空残留分支输入。新增页面壳与真实分支状态、知识页和问答页联合回归，覆盖首次选中、旧项目坐标、加载期隔离以及 Git/ZIP 阅读流程；7 个相关测试文件共 45 项通过，前端类型检查和生产构建通过。未打包新版本，未实现代码接入转换。
+
+2026-10-11 入口合并修订：验证纯知识库导航精简、旧检索链接转入知识管理、项目统计、草稿与发布范围切换、初始虚拟分支选中后的关键词保留，以及请求合并、项目切换丢弃旧响应、失败重试和降级结果；7 个相关测试文件共 55 项通过，前端类型检查及生产构建通过。未打包新版本。

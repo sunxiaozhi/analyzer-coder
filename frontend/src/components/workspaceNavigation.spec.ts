@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { workspaceNavigation } from './workspaceNavigation';
 
 describe('workspaceNavigation', () => {
-  it('shows knowledge search and hides code graphs for knowledge projects', () => {
+  it('merges knowledge work into management and questions while preserving project management', () => {
     const groups = workspaceNavigation({ isAdmin: false, canReadSelectedRepository: true, canManageProjects: true, knowledgeOnly: true });
     const items = groups.flatMap(group => group.items);
-    expect(items.some(item => item.to === '/atlas')).toBe(false);
-    expect(items.find(item => item.to === '/search')?.label).toBe('知识检索');
+    expect(groups[0].items.map(item => item.label)).toEqual(['知识管理', '知识问答']);
+    expect(items.map(item => item.to)).toEqual(['/knowledge', '/ask', '/repositories']);
   });
   it('shows ordinary developers the focused retrieval workflow', () => {
     const groups = workspaceNavigation({

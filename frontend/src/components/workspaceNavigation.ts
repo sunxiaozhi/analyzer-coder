@@ -41,7 +41,7 @@ export function workspaceNavigation(
   context: WorkspaceNavigationContext,
 ): WorkspaceNavGroup[] {
   const maintenanceItems: WorkspaceNavItem[] = [];
-  if (context.canReadSelectedRepository) {
+  if (context.canReadSelectedRepository && !context.knowledgeOnly) {
     maintenanceItems.push({ to: '/knowledge', label: '知识管理', icon: 'knowledge' });
   }
   if (context.canManageProjects) {
@@ -50,7 +50,10 @@ export function workspaceNavigation(
 
   const groups: WorkspaceNavGroup[] = [
     { key: 'developer', label: context.knowledgeOnly ? '知识工作' : '研发工作', collapsible: false,
-      items: context.knowledgeOnly ? developerItems.filter(item => item.icon !== 'atlas').map(item => item.to === '/search' ? { ...item, label: '知识检索' } : item) : developerItems },
+      items: context.knowledgeOnly ? [
+        ...(context.canReadSelectedRepository ? [{ to: '/knowledge', label: '知识管理', icon: 'knowledge' as const }] : []),
+        { to: '/ask', label: '知识问答', icon: 'ask' },
+      ] : developerItems },
   ];
   if (maintenanceItems.length) {
     groups.push({

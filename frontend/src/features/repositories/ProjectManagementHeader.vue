@@ -12,9 +12,10 @@ const sources = { LOCAL_GIT: '本地 Git', REMOTE_GIT: '远程 Git', GITLAB: 'Gi
     <ProjectActionsMenu class="header-menu" :repository="repository" @settings="emit('settings')" @govern="emit('govern')" @remove="emit('remove')" />
     <p v-if="repository.description" class="project-description">{{ repository.description }}</p>
     <p v-if="repository.sourceType !== 'KNOWLEDGE'" class="project-location" :title="repository.path">{{ repository.path }}</p>
-    <div v-if="repository.sourceType !== 'KNOWLEDGE'" class="project-context">
-      <span class="reading-context"><GitBranch :size="14" />当前阅读 <b>{{ readingBranchName || '尚未选择' }}</b></span>
-      <span class="default-context">默认分支 <b>{{ repository.branch || 'WORKSPACE' }}</b></span>
+    <div class="project-context">
+      <span class="reading-context"><GitBranch :size="14" />{{ repository.sourceType === 'KNOWLEDGE' ? '当前知识分支' : '当前阅读' }} <b>{{ readingBranchName || (repository.sourceType === 'KNOWLEDGE' ? repository.branch || 'WORKSPACE' : '尚未选择') }}</b></span>
+      <span v-if="repository.sourceType === 'KNOWLEDGE'" class="default-context">虚拟分支 · 无代码</span>
+      <span v-else class="default-context">默认分支 <b>{{ repository.branch || 'WORKSPACE' }}</b></span>
     </div>
   </header>
 </template>

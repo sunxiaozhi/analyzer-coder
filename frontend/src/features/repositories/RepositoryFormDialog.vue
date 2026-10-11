@@ -106,6 +106,7 @@ function submit() {
   }
   submitted.value = true;
   emit('submit', { ...form, name: form.name.trim(),
+    branch: form.sourceType === 'KNOWLEDGE' ? '' : form.branch,
     url: form.sourceType === 'KNOWLEDGE' ? '' : form.url,
     credentialId: form.sourceType === 'KNOWLEDGE' ? '' : form.credentialId,
     file: form.sourceType === 'KNOWLEDGE' ? null : file.value });
@@ -141,7 +142,7 @@ function submit() {
             </el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <p v-if="form.sourceType === 'KNOWLEDGE'" class="draft-note">创建后即可维护知识卡、检索和问答，无需导入代码。</p>
+        <p v-if="form.sourceType === 'KNOWLEDGE'" class="draft-note">自动创建并选中 WORKSPACE 虚拟分支，用于维护知识、检索和问答，无需导入代码。</p>
         <template v-else-if="form.sourceType !== 'ZIP'">
           <el-form-item label="HTTPS Git 地址" required>
             <el-input v-model="form.url" placeholder="https://git.example.com/group/project.git" />

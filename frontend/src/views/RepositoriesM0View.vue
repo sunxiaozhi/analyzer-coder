@@ -240,8 +240,7 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
         <div v-if="selectedProject.sourceType === 'KNOWLEDGE'" class="knowledge-project-actions">
           <p>维护并发布知识卡，即可用于检索和问答。</p>
           <el-button type="primary" @click="router.push('/knowledge')">管理知识</el-button>
-          <el-button @click="router.push('/search')">知识检索</el-button>
-          <el-button @click="router.push('/ask')">项目问答</el-button>
+          <el-button @click="router.push('/ask')">知识问答</el-button>
         </div>
         <BranchWorkspace v-else :key="selectedProject.id" :repository-id="selectedProject.id"
           :can-maintain="selectedProject.capabilities.canUpdate" :can-manage="selectedProject.capabilities.canConfigure"

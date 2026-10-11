@@ -35,6 +35,8 @@ const readinessLoading = shallowRef(false);
 const askModels = shallowRef<AskModel[]>([]);
 const selectedModelId = shallowRef('');
 const modelsLoading = shallowRef(false);
+const modelsReady = shallowRef(false);
+const submissionPending = shallowRef(false);
 let contextVersion = 0;
 let historyRequest = 0;
 const defaultHistoryOpen = () => typeof window.matchMedia !== 'function' || !window.matchMedia('(max-width: 900px)').matches;
@@ -63,6 +65,7 @@ const canAsk = computed(() => Boolean(repository.value && !readScope.blocked.val
 const selectedModel = computed(() =>
   askModels.value.find(item => item.id === selectedModelId.value) ?? null
 );
+const recommendedModel = computed(() => askModels.value.find(item => item.available) ?? null);
 const readinessCopy = computed(() => {
   if (!repository.value) return { label: '未选择项目', type: 'info' as const };
   if (knowledgeOnly.value) return { label: readScope.blocked.value ? '正在读取知识内容' : '知识问答可用', type: 'info' as const };
@@ -84,6 +87,7 @@ async function loadContext(repositoryId: string | null) {
   history.value = [];
   branchContentReady.value = false;
   askModels.value = [];
+  modelsReady.value = false;
   readinessLoading.value = false;
   historyLoading.value = false;
   modelsLoading.value = false;
@@ -114,6 +118,7 @@ async function loadContext(repositoryId: string | null) {
     .then((result) => {
       if (!isCurrent()) return;
       askModels.value = result;
+      modelsReady.value = true;
       const current = result.find(item => item.id === selectedModelId.value && item.available);
       selectedModelId.value = current?.id ?? '';
     })
@@ -156,31 +161,60 @@ async function refreshReadinessForAsk(repositoryId: string): Promise<boolean | n
   return branchContentReady.value;
 }
 
-async function send() {
+async function confirmAnswerMode(isCurrent: () => boolean): Promise<boolean> {
+  if (selectedModelId.value || !askModels.value.length) return true;
+  const model = recommendedModel.value;
+  try {
+    await ElMessageBox.confirm(
+      model
+        ? `已配置问答模型“${model.name}”（${model.model}），建议使用该模型生成回答。也可选择仅用本地证据，返回摘录与引用。`
+        : '已配置的问答模型暂不可用，请先在设置中检测模型。也可选择仅用本地证据，返回摘录与引用。',
+      model ? '推荐使用问答模型' : '问答模型暂不可用',
+      {
+        type: 'info', distinguishCancelAndClose: true,
+        confirmButtonText: model ? '使用推荐模型' : '仅用本地证据',
+        cancelButtonText: model ? '仅用本地证据' : '取消',
+      },
+    );
+    if (!isCurrent()) return false;
+    selectedModelId.value = model?.id ?? '';
+    return true;
+  } catch (action) {
+    return action === 'cancel' && Boolean(model) && isCurrent();
+  }
+}
+
+async function submitQuestion(retrying = false) {
+  const question = retrying ? conversation.pendingQuestion.value : conversation.question.value;
+  if (!question.trim() || submissionPending.value || conversation.requestState.value === 'sending') return;
   const repositoryId = repositories.selectedRepositoryId;
   if (!repositoryId) return ElMessage.warning('请先选择项目');
   if (readScope.blocked.value) {
     return ElMessage.warning('当前分支内容版本尚未就绪，请先在分支工作区完成准备');
   }
-  const ready = canAsk.value || await refreshReadinessForAsk(repositoryId);
-  if (ready === null || repositoryId !== repositories.selectedRepositoryId) return;
-  if (!ready) return ElMessage.warning('当前项目尚未完成问答准备，请先完成索引');
+  if (!modelsReady.value) return ElMessage.warning(modelsLoading.value ? '正在加载问答模型，请稍候再发送' : '问答模型加载失败，请刷新页面后重试');
+  const version = contextVersion;
+  const identity = branchContext.identity;
+  const isCurrent = () => version === contextVersion && identity === branchContext.identity
+    && repositoryId === repositories.selectedRepositoryId;
+  submissionPending.value = true;
   try {
-    const result = await conversation.send(repositoryId, selectedModelId.value || null, branchContext.context?.contextId ?? null);
-    if (!result || result.repositoryId !== repositories.selectedRepositoryId) return;
+    const ready = canAsk.value || await refreshReadinessForAsk(repositoryId);
+    if (ready === null || !isCurrent()) return;
+    if (!ready) return ElMessage.warning('当前项目尚未完成问答准备，请先完成索引');
+    if (!await confirmAnswerMode(isCurrent) || !isCurrent()) return;
+    const result = retrying
+      ? await conversation.retry(repositoryId, selectedModelId.value || null, branchContext.context?.contextId ?? null)
+      : await conversation.send(repositoryId, selectedModelId.value || null, branchContext.context?.contextId ?? null);
+    if (!result || !isCurrent()) return;
     readingTop.value = Number.MAX_SAFE_INTEGER;
     await reloadHistory();
   } catch { /* 错误保留在回答区，可直接重试。 */ }
+  finally { submissionPending.value = false; }
 }
 
-async function retry() {
-  const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId || readScope.blocked.value) return;
-  try {
-    const result = await conversation.retry(repositoryId, selectedModelId.value || null, branchContext.context?.contextId ?? null);
-    if (result) await reloadHistory();
-  } catch { /* 错误保留在回答区。 */ }
-}
+function send() { return submitQuestion(); }
+function retry() { return submitQuestion(true); }
 
 async function openHistory(record: QaHistoryRecord, preservePosition = false) {
   const request = ++historyRequest;
@@ -304,7 +338,7 @@ onMounted(async () => {
       <div class="scope-copy">
         <span>问答范围</span>
         <strong>{{ repository?.name ?? '未选择项目' }}</strong>
-        <small v-if="knowledgeOnly">纯知识库 · 已发布知识</small><small v-else>{{ branchContext.context?.branchName ?? repository?.branch ?? '无分支' }}<template v-if="branchContext.context?.commitSha ?? repository?.commit"> · {{ (branchContext.context?.commitSha ?? repository?.commit)?.slice(0, 8) }}</template></small>
+        <small v-if="knowledgeOnly">纯知识库 · {{ branchContext.context?.branchName ?? 'WORKSPACE' }} 虚拟分支 · 已发布知识</small><small v-else>{{ branchContext.context?.branchName ?? repository?.branch ?? '无分支' }}<template v-if="branchContext.context?.commitSha ?? repository?.commit"> · {{ (branchContext.context?.commitSha ?? repository?.commit)?.slice(0, 8) }}</template></small>
       </div>
       <el-tag :type="readinessCopy?.type" effect="plain" round>{{ readinessCopy?.label }}</el-tag>
       <div v-if="!repository || !canAsk" class="command-notice">
@@ -312,8 +346,11 @@ onMounted(async () => {
         <el-button link type="primary" @click="openReadinessAction">{{ knowledgeOnly ? '刷新知识' : repository ? '去准备项目' : '选择项目' }}</el-button>
       </div>
       <div v-else-if="!modelsLoading && !selectedModel" class="command-notice">
-        <span>{{ knowledgeOnly ? '本地证据模式：返回知识摘录与引用，不生成模型推理。' : '本地证据模式：返回源码摘录与引用，不生成模型推理。' }}</span>
-        <el-button v-if="auth.isAdmin" link type="primary" @click="openModelSettings">配置并检测模型</el-button>
+        <span v-if="!modelsReady">问答模型加载失败，请刷新页面后重试。</span>
+        <span v-else-if="recommendedModel">已配置可用问答模型，发送问题时将推荐使用。</span>
+        <span v-else-if="askModels.length">已配置的问答模型暂不可用，请先检测模型。</span>
+        <span v-else>{{ knowledgeOnly ? '本地证据模式：返回知识摘录与引用，不生成模型推理。' : '本地证据模式：返回源码摘录与引用，不生成模型推理。' }}</span>
+        <el-button v-if="auth.isAdmin && !recommendedModel" link type="primary" @click="openModelSettings">配置并检测模型</el-button>
       </div>
       <div class="command-actions">
         <div class="model-selector">
@@ -321,6 +358,7 @@ onMounted(async () => {
           <el-select
             v-model="selectedModelId"
             :loading="modelsLoading"
+            :disabled="submissionPending"
             placeholder="本地证据模式"
             aria-label="问答模型"
           >
@@ -355,7 +393,7 @@ onMounted(async () => {
       :pending-question="conversation.pendingQuestion.value"
       :request-state="conversation.requestState.value"
       :error="conversation.error.value"
-      :disabled="!repository || !canAsk"
+      :disabled="!repository || !canAsk || modelsLoading || submissionPending"
       @send="send" @retry="retry" @select-answer="conversation.selectAnswer"
       @open-knowledge="openKnowledge" @open-code="openCode" @open-graph="openGraph"
     />

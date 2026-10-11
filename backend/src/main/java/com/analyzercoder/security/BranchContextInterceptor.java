@@ -34,7 +34,8 @@ public class BranchContextInterceptor implements HandlerInterceptor {
                     "/knowledge/[0-9a-fA-F-]{36}/(?:review|publication|publish|source-review)");
     private static final List<Pattern> PUT = patterns("/knowledge/[0-9a-fA-F-]{36}");
     private static final List<Pattern> PATCH = patterns("/qa/records/[0-9a-fA-F-]{36}");
-    private static final List<Pattern> DELETE = PATCH;
+    private static final List<Pattern> DELETE =
+            patterns("/qa/records/[0-9a-fA-F-]{36}", "/knowledge/[0-9a-fA-F-]{36}");
 
     @Override
     public boolean preHandle(

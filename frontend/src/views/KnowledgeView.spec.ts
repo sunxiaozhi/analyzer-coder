@@ -12,6 +12,8 @@ import KnowledgeView from './KnowledgeView.vue';
 import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
 import KnowledgeCardListItem from '@/features/knowledge/KnowledgeCardListItem.vue';
+import KnowledgeLibraryHeader from '@/features/knowledge/KnowledgeLibraryHeader.vue';
+import PublishedKnowledgeResults from '@/features/knowledge/PublishedKnowledgeResults.vue';
 import { intelligenceApi } from '@/api/intelligence';
 import { branchesApi } from '@/api/branches';
 import { useBranchContextStore } from '@/stores/branchContextStore';
@@ -86,6 +88,42 @@ describe('knowledge evidence access', () => {
     expect(branchesApi.validations).not.toHaveBeenCalled();
     expect(wrapper.text()).not.toContain('Markdown 预备知识');
     expect(wrapper.getComponent(KnowledgeCardDetailDialog).props('knowledgeOnly')).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('combines project summary, draft filtering and published search in knowledge management', async () => {
+    repositories.selectedRepository.sourceType = 'KNOWLEDGE';
+    const [original] = await intelligenceApi.cards('repo-1', 'ctx-main');
+    vi.mocked(intelligenceApi.cards).mockResolvedValue([
+      { ...original, id: 'published', publicationStatus: 'PUBLISHED', reviewStatus: 'APPROVED' },
+      { ...original, id: 'draft', publicationStatus: 'DRAFT' },
+    ]);
+    const wrapper = mountView(); await flushPromises();
+    expect(wrapper.getComponent(KnowledgeLibraryHeader).props()).toMatchObject({ total: 2, published: 1, drafts: 1 });
+    const scope = wrapper.findAllComponents({ name: 'ElSelect' }).find(item => item.attributes('aria-label') === '知识搜索范围')!;
+    scope.vm.$emit('update:modelValue', 'DRAFT'); await flushPromises();
+    expect(wrapper.findAllComponents(KnowledgeCardListItem).map(item => item.props('card').id)).toEqual(['draft']);
+    scope.vm.$emit('update:modelValue', 'PUBLISHED');
+    const query = wrapper.findAllComponents({ name: 'ElInput' }).find(item => item.attributes('placeholder') === '搜索标题、正文或标签')!;
+    query.vm.$emit('update:modelValue', '支持语义的搜索'); await flushPromises();
+    expect(wrapper.getComponent(PublishedKnowledgeResults).props('query')).toBe('支持语义的搜索');
+    expect(wrapper.findComponent(KnowledgeCardListItem).exists()).toBe(false);
+    query.vm.$emit('update:modelValue', ''); await flushPromises();
+    expect(wrapper.findComponent(PublishedKnowledgeResults).exists()).toBe(false);
+    expect(wrapper.findAllComponents(KnowledgeCardListItem).map(item => item.props('card').id)).toEqual(['published']);
+    wrapper.unmount();
+  });
+
+  it('retains linked search keywords while the initial virtual branch is being selected', async () => {
+    repositories.selectedRepository.sourceType = 'KNOWLEDGE';
+    route.query = { q: '退款期限', searchScope: 'PUBLISHED' };
+    const branches = useBranchContextStore();
+    branches.selectedBranchId = null; branches.context = null;
+    const wrapper = mountView(); await flushPromises();
+    branches.selectedBranchId = 'workspace';
+    branches.context = { contextId: 'ctx-workspace', repositoryId: 'repo-1', branchId: 'workspace', branchName: 'WORKSPACE', contentVersion: null, commitSha: null, expiresAt: '' };
+    await flushPromises();
+    expect(wrapper.getComponent(PublishedKnowledgeResults).props('query')).toBe('退款期限');
     wrapper.unmount();
   });
 

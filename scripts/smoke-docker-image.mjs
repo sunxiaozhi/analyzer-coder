@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -72,10 +72,21 @@ try {
     body: JSON.stringify({ username, password }),
   });
   assert.equal(login.status, 200);
-  const account = await login.json();
+  let account = await login.json();
   assert.equal(account.username, username);
-  const cookie = login.headers.get('set-cookie')?.split(';')[0];
+  let cookie = login.headers.get('set-cookie')?.split(';')[0];
   assert.ok(cookie);
+  if (account.mustChangePassword) {
+    const changed = await fetch(`${base}/api/auth/change-password`, {
+      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': account.csrfToken },
+      body: JSON.stringify({ currentPassword: password, newPassword: `Smoke-${randomBytes(20).toString('hex')}!` }),
+    });
+    assert.equal(changed.status, 200);
+    account = await changed.json();
+    cookie = changed.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(cookie);
+    assert.equal(account.mustChangePassword, false);
+  }
   const exec = args => docker(['exec', '-u', 'analyzer', name, ...args]);
   assert.match(exec(['git', '--version']), /git version/);
   assert.match(exec(['codegraph', '--version']), /1\.6\.0/);
@@ -90,10 +101,32 @@ try {
   assert.equal(sql("SELECT extname FROM pg_extension WHERE extname='vector'"), 'vector');
   assert.equal(sql('SHOW max_connections'), '73');
   // A fresh installation must use the consolidated baseline and include shared knowledge.
-  assert.equal(sql("SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success"), '1');
+  assert.equal(sql("SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success"), '1,2');
+  assert.equal(sql("SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='branch_read_contexts' AND column_name='content_version'"), 'YES');
   assert.equal(sql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('knowledge_branch_scopes','knowledge_branch_scope_history')"), '2');
   assert.equal(sql("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='knowledge_code_refs' AND column_name='branch_id' AND is_nullable='NO'"), '1');
   assert.equal(sql("SELECT count(*) FROM pg_trigger WHERE tgname IN ('trg_knowledge_scope_revision','trg_knowledge_reference_branch')"), '2');
+  // Exercise the real HTTP interceptors, context resolver and transactional draft deletion.
+  const repoId = randomUUID(), cardId = randomUUID();
+  sql(`INSERT INTO repositories(id,name,normalized_name,path,source_type,owner_account_id,created_at,updated_at) VALUES('${repoId}','Smoke knowledge','smoke-knowledge','knowledge://${repoId}','KNOWLEDGE','${account.id}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);`);
+  const branchId = sql(`SELECT id FROM repository_branches WHERE repo_id='${repoId}' AND name='WORKSPACE'`);
+  assert.match(branchId, /^[0-9a-f-]{36}$/);
+  sql(`INSERT INTO knowledge_cards(id,repo_id,branch_id,title,content,publication_status) VALUES('${cardId}','${repoId}','${branchId}','Smoke draft','Draft content','DRAFT');`);
+  const headers = { Cookie: cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': account.csrfToken };
+  const pinned = await fetch(`${base}/api/repositories/${repoId}/contexts`, {
+    method: 'POST', headers, body: JSON.stringify({ branchId }),
+  });
+  assert.equal(pinned.status, 200);
+  const context = await pinned.json();
+  assert.equal(context.contentVersion, null);
+  const removed = await fetch(`${base}/api/repositories/${repoId}/knowledge/${cardId}?expectedRevision=1`, {
+    method: 'DELETE', headers: { ...headers, 'X-Branch-Context': context.contextId },
+  });
+  assert.equal(removed.status, 204, 'Pinned knowledge deletion must reach the branch-aware service.');
+  for (const [table, column] of [['knowledge_cards','id'], ['knowledge_card_revisions','card_id'], ['knowledge_branch_scopes','card_id']]) {
+    assert.equal(sql(`SELECT count(*) FROM ${table} WHERE ${column}='${cardId}'`), '0');
+  }
+  console.log('PASS: knowledge workspace context and HTTP draft deletion with revision/scope cascades.');
   sql("CREATE TABLE docker_smoke_marker (value text); INSERT INTO docker_smoke_marker VALUES ('persisted');");
   const oldId = docker(['inspect',name,'--format','{{.Id}}']);
   stopAndRemove();

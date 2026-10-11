@@ -11,7 +11,7 @@ const emit = defineEmits<{ edit: []; remove: [] }>();
       <template v-if="repository.sourceType !== 'KNOWLEDGE'"><dt>代码来源</dt><dd>{{ repository.sourceType }}</dd>
       <dt>服务端路径</dt><dd class="source-path">{{ repository.path }}</dd>
       <dt>默认分支</dt><dd>{{ repository.branch || 'WORKSPACE' }}<small>仅作为首次进入项目时的阅读偏好；ZIP 导入使用固定逻辑分支 WORKSPACE</small></dd>
-      </template><dt v-if="repository.sourceType === 'KNOWLEDGE'">用途</dt><dd v-if="repository.sourceType === 'KNOWLEDGE'">纯知识库</dd><dt>所有者</dt><dd>{{ repository.ownerDisplayName }}</dd>
+      </template><template v-if="repository.sourceType === 'KNOWLEDGE'"><dt>用途</dt><dd>纯知识库</dd><dt>知识分支</dt><dd>{{ repository.branch || 'WORKSPACE' }}<small>虚拟分支，用于归属知识和问答，无需代码提交。</small></dd></template><dt>所有者</dt><dd>{{ repository.ownerDisplayName }}</dd>
     </dl>
     <el-button v-if="repository.capabilities.canEditRepository ?? repository.capabilities.canConfigure" type="primary" @click="emit('edit')">{{ repository.sourceType === 'KNOWLEDGE' ? '编辑资料' : '编辑资料与凭据' }}</el-button>
     <div v-if="repository.capabilities.canDelete" class="danger-zone">

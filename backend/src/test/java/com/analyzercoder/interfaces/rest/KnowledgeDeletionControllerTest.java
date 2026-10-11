@@ -16,6 +16,7 @@ import com.analyzercoder.security.AccountRole;
 import com.analyzercoder.security.ApiSecurityException;
 import com.analyzercoder.security.AuthenticatedAccount;
 import com.analyzercoder.security.AuthenticatedSession;
+import com.analyzercoder.security.BranchContextInterceptor;
 import com.analyzercoder.security.SecurityContext;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -49,6 +50,7 @@ class KnowledgeDeletionControllerTest {
     void setup() {
         mvc =
                 MockMvcBuilders.standaloneSetup(new KnowledgeDeletionController(service, contexts))
+                        .addInterceptors(new BranchContextInterceptor())
                         .setControllerAdvice(new ApiExceptionHandler())
                         .build();
         when(contexts.resolve(any(), eq(repo))).thenReturn(context);
