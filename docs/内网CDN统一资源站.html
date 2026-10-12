@@ -1,0 +1,2510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>内网CDN统一资源站 - 结项汇报</title>
+
+  <!-- Fonts & Icons -->
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=Inter:wght@300;400;600;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Vue 2 & Element UI -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.css">
+  <script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/index.js"></script>
+
+  <!-- ECharts 5 -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+
+  <!-- GSAP & Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans SC', 'sans-serif'],
+            tech: ['Outfit', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+          },
+          animation: {
+            'float': 'float 6s ease-in-out infinite',
+            'spin-slow': 'spin 15s linear infinite',
+            'pulse-glow': 'pulseGlow 3s ease-in-out infinite',
+            'scroll-y': 'scrollY 10s linear infinite',
+          },
+          keyframes: {
+            float: { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-15px)' } },
+            pulseGlow: { '0%, 100%': { opacity: 0.6, transform: 'scale(1)' }, '50%': { opacity: 1, transform: 'scale(1.05)' } },
+            scrollY: { '0%': { transform: 'translateY(0)' }, '100%': { transform: 'translateY(-50%)' } }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --ppt-scale: 1;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #020617;
+      color: #f8fafc;
+      overflow: hidden;
+      font-family: 'Inter', 'Noto Sans SC', sans-serif;
+    }
+
+    #ppt-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
+    }
+
+    #ppt-container::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-size: 60px 60px;
+      background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      z-index: 0;
+      animation: bgPan 40s linear infinite;
+    }
+
+    .slide {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      margin-top: -405px;
+      margin-left: -720px;
+      width: 1440px;
+      height: 810px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      opacity: 0;
+      visibility: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 4rem 5.5rem;
+      border-radius: 1.5rem;
+      overflow: hidden;
+      z-index: 1;
+      transform: scale(var(--ppt-scale));
+      transform-origin: center center;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      z-index: 10;
+    }
+
+    .dark-glass {
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 1rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .bg-image-cover {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      opacity: 0.15;
+      z-index: 0;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    /* 实战大屏特有的角标 */
+    .corner-decor {
+      position: relative;
+    }
+
+    .corner-decor::before {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: -1px;
+      width: 6px;
+      height: 6px;
+      border-top: 2px solid #00d4ff;
+      border-left: 2px solid #00d4ff;
+    }
+
+    .corner-decor::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      right: -1px;
+      width: 6px;
+      height: 6px;
+      border-bottom: 2px solid #00d4ff;
+      border-right: 2px solid #00d4ff;
+    }
+
+    @keyframes bgPan {
+      0% {
+        background-position: 0% 0%;
+      }
+
+      100% {
+        background-position: 100% 100%;
+      }
+    }
+
+    .slide-content {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #controls {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      gap: 0.5rem;
+      z-index: 999;
+      background: rgba(15, 23, 42, 0.8);
+      padding: 0.4rem 0.8rem;
+      border-radius: 2rem;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      align-items: center;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(12px);
+      color: white;
+    }
+
+    .btn-nav {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0.5rem 0.8rem;
+      border-radius: 1.5rem;
+      transition: all 0.3s;
+    }
+
+    .btn-nav:hover {
+      background: #00f6ff;
+      color: #0f172a;
+      transform: scale(1.05);
+    }
+
+    #slide-counter {
+      font-size: 0.85rem;
+      min-width: 60px;
+      text-align: center;
+      font-weight: bold;
+      font-family: 'Outfit';
+      letter-spacing: 1px;
+    }
+
+    /* 滚动条 */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 246, 255, 0.5);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="ppt-container">
+
+    <!-- Slide 1: Cover -->
+    <div class="slide active">
+      <div class="bg-image-cover opacity-30 mix-blend-screen"
+        style="background-image: url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920');">
+      </div>
+
+      <div class="slide-content flex flex-row items-center justify-between h-full px-6 relative">
+        <div id="three-bg" class="absolute inset-0 z-0 opacity-80 pointer-events-none"></div>
+
+        <div class="w-[55%] pr-12 relative z-10 stagger-item">
+          <div
+            class="inline-block mb-6 px-5 py-2 rounded-full bg-blue-500/20 text-cyan-400 font-bold tracking-widest text-sm border border-cyan-400/30 shadow-[0_0_15px_rgba(34,211,238,0.2)] backdrop-blur-md">
+            <i class="fa-solid fa-satellite-dish mr-2 animate-pulse"></i> PROJECT CLOSING REPORT
+          </div>
+          <h1 class="text-[5.5rem] font-black mb-6 tracking-tight text-white font-sans leading-[1.1] drop-shadow-2xl">
+            内网CDN<br><span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">统一资源站</span>
+          </h1>
+          <p class="text-3xl text-slate-300 font-medium mb-12 border-l-4 border-cyan-400 pl-4">打造 专网 AI 智能体时代的离线资源基建</p>
+          <div class="flex gap-12 mt-16 dark-glass !bg-white/5 p-6 rounded-2xl w-max">
+            <div>
+              <p class="text-cyan-400 text-xs mb-1 uppercase tracking-widest font-bold">汇报团队</p>
+              <p class="text-white font-bold text-xl tracking-wide">田加峰、袁永潇、傅强</p>
+            </div>
+            <div class="w-[1px] h-12 bg-white/20"></div>
+            <div>
+              <p class="text-cyan-400 text-xs mb-1 uppercase tracking-widest font-bold">汇报日期</p>
+              <p class="text-white font-bold text-xl font-tech tracking-wider">2026.09</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="w-[45%] h-full flex items-center justify-center relative z-10 stagger-item">
+          <div class="relative w-80 h-96 animate-float">
+            <div
+              class="absolute inset-0 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-3xl transform rotate-6 opacity-50 blur-xl animate-pulse">
+            </div>
+            <div
+              class="absolute inset-0 dark-glass rounded-3xl border border-white/20 p-8 flex flex-col items-center justify-center shadow-2xl">
+              <div
+                class="w-32 h-32 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 p-[2px] mb-8 shadow-[0_0_30px_rgba(34,211,238,0.5)]">
+                <div class="w-full h-full bg-[#0f172a] rounded-full flex items-center justify-center">
+                  <i
+                    class="fa-solid fa-cubes-stacked text-5xl text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"></i>
+                </div>
+              </div>
+              <div class="w-full space-y-4">
+                <div class="h-3 w-full bg-white/10 rounded-full overflow-hidden">
+                  <div class="h-full bg-cyan-400 w-3/4"></div>
+                </div>
+                <div class="h-3 w-4/5 bg-white/10 rounded-full mx-auto overflow-hidden">
+                  <div class="h-full bg-blue-500 w-1/2"></div>
+                </div>
+              </div>
+              <div
+                class="mt-8 px-4 py-2 bg-white/5 rounded-lg border border-white/10 text-xs text-cyan-200 font-mono text-center">
+                结项汇报 <span class="animate-ping inline-block w-2 h-2 bg-green-400 rounded-full ml-2"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 2: Background -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.08]"
+        style="background-image: url('https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1920');">
+      </div>
+      <div class="slide-content h-full flex flex-col">
+        <h2 class="text-4xl font-bold mb-4 text-white flex items-center stagger-item"><span
+            class="text-cyan-400 text-5xl mr-4 font-tech drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">01</span>业务场景与痛点破局
+        </h2>
+        <div
+          class="w-24 h-1.5 bg-gradient-to-r from-cyan-400 to-blue-600 mb-6 rounded-full shadow-[0_0_10px_rgba(34,211,238,0.5)] stagger-item">
+        </div>
+
+        <div class="flex-1 flex flex-col justify-center gap-8 pb-2">
+          <div class="stagger-item">
+            <p
+              class="text-xl text-slate-300 leading-relaxed border-l-4 border-cyan-400 pl-6 dark-glass py-6 rounded-r-xl shadow-lg font-medium">
+              在企业内网环境下，使用大模型生成HTML独立页面或调用图表资源时，因无法访问公网CDN常出现<span
+                class="text-rose-400 font-black px-1 drop-shadow-md">资源缺失</span>。本项目通过建设<span
+                class="text-cyan-400 font-black px-1 drop-shadow-md">统一的离线资源站</span>，实现静态资源的内网闭环。
+            </p>
+          </div>
+
+          <div class="flex gap-8 items-stretch h-64">
+            <div class="flex-1 stagger-item h-full">
+              <div
+                class="dark-glass p-8 !border-t-[4px] border-t-pink-500 group flex flex-col hover:-translate-y-4 transition-transform duration-500 overflow-hidden relative h-full bg-[#0b1120]/80 hover:shadow-[0_20px_50px_rgba(236,72,153,0.3)]">
+                <div
+                  class="absolute inset-0 bg-gradient-to-t from-pink-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                </div>
+                <div
+                  class="absolute -right-6 -top-6 w-24 h-24 bg-pink-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500">
+                </div>
+                <div class="flex items-center gap-4 mb-6 relative z-10">
+                  <div
+                    class="w-14 h-14 rounded-2xl bg-pink-500/20 flex items-center justify-center border border-pink-500/30 group-hover:scale-110 transition-transform duration-300 shadow-[0_0_15px_rgba(236,72,153,0.3)]">
+                    <i class="fa-solid fa-laptop-code text-2xl text-pink-400"></i>
+                  </div>
+                  <h3 class="text-xl font-bold text-white leading-tight">快速生成可运行演示</h3>
+                </div>
+                <div class="bg-black/30 border border-white/5 p-5 rounded-xl flex-1 relative z-10">
+                  <p class="text-sm text-slate-400 leading-relaxed">在技术预研需要智能体快速生成独立演示环境时，额外配置开发环境耗费大量时间，难以一键产出。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex-1 stagger-item h-full">
+              <div
+                class="dark-glass p-8 !border-t-[4px] border-t-orange-500 group flex flex-col hover:-translate-y-4 transition-transform duration-500 overflow-hidden relative h-full bg-[#0b1120]/80 hover:shadow-[0_20px_50px_rgba(249,115,22,0.3)]">
+                <div
+                  class="absolute inset-0 bg-gradient-to-t from-orange-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                </div>
+                <div
+                  class="absolute -right-6 -top-6 w-24 h-24 bg-orange-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500">
+                </div>
+                <div class="flex items-center gap-4 mb-6 relative z-10">
+                  <div
+                    class="w-14 h-14 rounded-2xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30 group-hover:scale-110 transition-transform duration-300 shadow-[0_0_15px_rgba(249,115,22,0.3)]">
+                    <i class="fa-solid fa-wand-magic-sparkles text-2xl text-orange-400"></i>
+                  </div>
+                  <h3 class="text-xl font-bold text-white leading-tight">高保真产品原型展现</h3>
+                </div>
+                <div class="bg-black/30 border border-white/5 p-5 rounded-xl flex-1 relative z-10">
+                  <p class="text-sm text-slate-400 leading-relaxed">当前原型设计依赖外网资源。内网大模型因缺乏完整资源库映射，生成的界面效果较为原生态，影响评审。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex-1 stagger-item h-full">
+              <div
+                class="dark-glass p-8 !border-t-[4px] border-t-cyan-500 group flex flex-col hover:-translate-y-4 transition-transform duration-500 overflow-hidden relative h-full bg-[#0b1120]/80 hover:shadow-[0_20px_50px_rgba(34,211,238,0.3)]">
+                <div
+                  class="absolute inset-0 bg-gradient-to-t from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                </div>
+                <div
+                  class="absolute -right-6 -top-6 w-24 h-24 bg-cyan-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500">
+                </div>
+                <div class="flex items-center gap-4 mb-6 relative z-10">
+                  <div
+                    class="w-14 h-14 rounded-2xl bg-cyan-500/20 flex items-center justify-center border border-cyan-500/30 group-hover:scale-110 transition-transform duration-300 shadow-[0_0_15px_rgba(34,211,238,0.3)]">
+                    <i class="fa-solid fa-chart-pie text-2xl text-cyan-400"></i>
+                  </div>
+                  <h3 class="text-xl font-bold text-white leading-tight">表现力丰富的网页文档</h3>
+                </div>
+                <div class="bg-black/30 border border-white/5 p-5 rounded-xl flex-1 relative z-10">
+                  <p class="text-sm text-slate-400 leading-relaxed">内网环境下，因缺乏3D图表引擎、高级动画框架等离线资源支持，导致网页汇报页面视觉效果差，表现力不足。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 3: Solution Target -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.08]"
+        style="background-image: url('https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1920');">
+      </div>
+      <div class="slide-content h-full flex flex-col">
+        <h2 class="text-4xl font-bold mb-4 text-white flex items-center stagger-item"><span
+            class="text-cyan-400 text-5xl mr-4 font-tech drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">02</span>核心愿景：构建
+          AI 智能体的离线资源中枢</h2>
+        <div
+          class="w-24 h-1.5 bg-gradient-to-r from-cyan-400 to-blue-600 mb-10 rounded-full stagger-item shadow-[0_0_10px_rgba(34,211,238,0.5)]">
+        </div>
+
+        <div class="flex gap-8 items-stretch my-auto pb-4 h-[450px]">
+          <div class="flex-1 stagger-item h-full">
+            <div
+              class="dark-glass p-0 group relative overflow-hidden flex flex-col border-t-0 rounded-2xl h-full hover:-translate-y-4 transition-transform duration-500 hover:shadow-[0_20px_50px_rgba(59,130,246,0.3)] bg-[#0b1120]/80">
+              <div class="h-40 w-full bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+                style="background-image: url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=800');">
+                <div class="w-full h-full bg-[#0f172a]/70 backdrop-blur-[2px]"></div>
+              </div>
+              <div
+                class="absolute top-32 left-8 w-16 h-16 rounded-2xl bg-blue-900/80 shadow-[0_0_20px_rgba(59,130,246,0.4)] flex items-center justify-center border border-blue-400/50 z-10 transform group-hover:-translate-y-2 group-hover:shadow-[0_0_30px_rgba(59,130,246,0.7)] transition-all duration-300 backdrop-blur-md">
+                <i class="fa-solid fa-bolt text-3xl text-blue-400 group-hover:text-white transition-colors"></i>
+              </div>
+              <div class="p-8 pt-12 flex-1 flex flex-col bg-[#0b1120]/80">
+                <h3 class="text-2xl font-black text-white mb-3">极速验证方案</h3>
+                <p class="text-slate-400 leading-relaxed text-sm flex-1 font-medium">
+                  研发无需安装构建工具或配置本地环境。智能体通过引入CDN静态资源，一键跑通临时功能演示，大幅压缩预研时间。</p>
+                <div
+                  class="mt-4 pt-4 border-t border-slate-700/50 flex justify-between items-center text-xs font-tech font-bold">
+                  <span
+                    class="text-blue-300 px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full group-hover:bg-blue-500/40 transition-colors">适用:
+                    研发人员</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex-1 stagger-item h-full">
+            <div
+              class="dark-glass p-0 group relative overflow-hidden flex flex-col border-t-0 rounded-2xl h-full hover:-translate-y-4 transition-transform duration-500 hover:shadow-[0_20px_50px_rgba(99,102,241,0.3)] bg-[#0b1120]/80">
+              <div class="h-40 w-full bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+                style="background-image: url('https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?q=80&w=800');">
+                <div class="w-full h-full bg-[#0f172a]/70 backdrop-blur-[2px]"></div>
+              </div>
+              <div
+                class="absolute top-32 left-8 w-16 h-16 rounded-2xl bg-indigo-900/80 shadow-[0_0_20px_rgba(99,102,241,0.4)] flex items-center justify-center border border-indigo-400/50 z-10 transform group-hover:-translate-y-2 group-hover:shadow-[0_0_30px_rgba(99,102,241,0.7)] transition-all duration-300 backdrop-blur-md">
+                <i
+                  class="fa-solid fa-object-group text-3xl text-indigo-400 group-hover:text-white transition-colors"></i>
+              </div>
+              <div class="p-8 pt-12 flex-1 flex flex-col bg-[#0b1120]/80">
+                <h3 class="text-2xl font-black text-white mb-3">原型高保真还原</h3>
+                <p class="text-slate-400 leading-relaxed text-sm flex-1 font-medium">
+                  内网使用AI生成的产品原型可直接调用与开发环境一致的组件库等资源，实现与现有产品风格类似的效果图，减少手动适配修改，提升原型生成与评审效率。</p>
+                <div
+                  class="mt-4 pt-4 border-t border-slate-700/50 flex justify-between items-center text-xs font-tech font-bold">
+                  <span
+                    class="text-indigo-300 px-3 py-1 bg-indigo-500/20 border border-indigo-500/30 rounded-full group-hover:bg-indigo-500/40 transition-colors">适用:
+                    产品/UI设计</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex-1 stagger-item h-full">
+            <div
+              class="dark-glass p-0 group relative overflow-hidden flex flex-col border-t-0 rounded-2xl h-full hover:-translate-y-4 transition-transform duration-500 hover:shadow-[0_20px_50px_rgba(34,211,238,0.3)] bg-[#0b1120]/80">
+              <div class="h-40 w-full bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+                style="background-image: url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=800');">
+                <div class="w-full h-full bg-[#0f172a]/70 backdrop-blur-[2px]"></div>
+              </div>
+              <div
+                class="absolute top-32 left-8 w-16 h-16 rounded-2xl bg-cyan-900/80 shadow-[0_0_20px_rgba(34,211,238,0.4)] flex items-center justify-center border border-cyan-400/50 z-10 transform group-hover:-translate-y-2 group-hover:shadow-[0_0_30px_rgba(34,211,238,0.7)] transition-all duration-300 backdrop-blur-md">
+                <i
+                  class="fa-solid fa-person-chalkboard text-3xl text-cyan-400 group-hover:text-white transition-colors"></i>
+              </div>
+              <div class="p-8 pt-12 flex-1 flex flex-col bg-[#0b1120]/80">
+                <h3 class="text-2xl font-black text-white mb-3">表现力视觉升维</h3>
+                <p class="text-slate-400 leading-relaxed text-sm flex-1 font-medium">
+                  为网页演示与大屏汇报提供高质量图表引擎、动画框架等离线资源支撑，提升全员的演示表现力。</p>
+                <div
+                  class="mt-4 pt-4 border-t border-slate-700/50 flex justify-between items-center text-xs font-tech font-bold">
+                  <span
+                    class="text-cyan-300 px-3 py-1 bg-cyan-500/20 border border-cyan-500/30 rounded-full group-hover:bg-cyan-500/40 transition-colors">适用:
+                    全体人员</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 4: Resource Database -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.08]"
+        style="background-image: url('https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1920');">
+      </div>
+      <div class="slide-content h-full flex flex-col">
+        <h2 class="text-4xl font-bold mb-3 text-white flex items-center stagger-item"><span
+            class="text-cyan-400 text-5xl mr-4 font-tech drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">03</span>底层基建：离线静态资源全量托管
+        </h2>
+        <div
+          class="w-24 h-1.5 bg-gradient-to-r from-cyan-400 to-blue-600 mb-4 rounded-full shrink-0 stagger-item shadow-[0_0_10px_rgba(34,211,238,0.5)]">
+        </div>
+
+        <div class="flex-1 flex flex-col gap-4 pb-2 min-h-0">
+          <div class="flex flex-col gap-4 shrink-0 stagger-item mt-2">
+            <div class="flex gap-4">
+              <div class="flex-[1.1] flex items-center gap-3 dark-glass px-4 py-3 border-l-[4px] border-l-blue-500">
+                <i class="fa-solid fa-download text-blue-400 text-lg w-5 text-center"></i>
+                <div class="text-[13px] text-white font-bold tracking-wide">收集归纳：<span
+                    class="font-normal text-slate-400">全面盘点开源库</span></div>
+              </div>
+
+              <!-- 优化后的多线托管区块，使用标签(Badge)设计 -->
+              <div class="flex-[1.6] flex items-center gap-3 dark-glass px-4 py-2 border-l-[4px] border-l-indigo-500">
+                <i class="fa-solid fa-server text-indigo-400 text-lg w-5 text-center"></i>
+                <div class="text-[13px] text-white font-bold tracking-wide flex items-center gap-3">
+                  <span class="shrink-0">访问地址：</span>
+                  <div class="flex flex-col gap-1.5">
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-1.5 py-0.5 rounded font-bold leading-none tracking-widest shadow-sm">专网</span>
+                      <span class="text-[12px] text-cyan-400 font-mono font-normal">10.100.103.210/cdn/</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/40 px-1.5 py-0.5 rounded font-bold leading-none tracking-widest shadow-sm">内网</span>
+                      <span class="text-[12px] text-cyan-400 font-mono font-normal">10.11.214.27/cdn/</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- 结束 -->
+
+              <div class="flex-1 flex items-center gap-3 dark-glass px-4 py-3 border-l-[4px] border-l-cyan-500">
+                <i class="fa-solid fa-table-columns text-cyan-400 text-lg w-5 text-center"></i>
+                <div class="text-[13px] text-white font-bold tracking-wide">资产透出：<span
+                    class="font-normal text-slate-400">清晰展示 11 大类资源</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            class="w-full relative dark-glass p-1.5 flex flex-col shadow-[0_0_30px_rgba(34,211,238,0.1)] border border-cyan-500/30 overflow-hidden flex-1 min-h-0 stagger-item">
+            <div
+              class="bg-[#020617]/90 rounded-lg flex-1 flex flex-col font-sans shadow-inner min-h-0 overflow-hidden relative z-10">
+              <div
+                class="h-9 shrink-0 border-b border-slate-700/80 flex items-center px-4 justify-between bg-[#0f172a]">
+                <div class="flex items-center gap-2">
+                  <div class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_5px_#ef4444]"></div>
+                  <div class="w-3 h-3 rounded-full bg-yellow-500 shadow-[0_0_5px_#eab308]"></div>
+                  <div class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_5px_#22c55e]"></div>
+                  <span
+                    class="text-[12px] font-mono text-cyan-100 ml-2 tracking-wide font-bold">CDN_RESOURCES.json</span>
+                </div>
+                <div
+                  class="text-[16px] font-bold text-cyan-400 bg-cyan-900/40 px-2 py-0.5 rounded border border-cyan-400/30">
+                  <i class="fa-solid fa-database mr-1"></i> 共 66 个库 / 101 个文件, 覆盖 11 大类
+                </div>
+              </div>
+
+              <div
+                class="flex px-4 py-2 border-b border-slate-700/60 bg-[#1e293b]/50 text-[12px] font-bold text-slate-400 shrink-0 items-center">
+                <div class="w-[10%] pl-2">类别</div>
+                <div class="w-[5%] text-center">数量</div>
+                <div class="w-[35%] pl-2">代表库</div>
+                <div class="w-[50%] pl-4 border-l border-slate-700">主要用途与场景</div>
+              </div>
+
+              <div class="flex-1 overflow-y-auto custom-scrollbar p-2 flex flex-col bg-[#0b1120]">
+                <!-- 精细化 11 大类列表 -->
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-blue-400"></div><span
+                      class="text-[14px] font-bold text-white">基础开发框架</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-cyan-400 text-center shrink-0">8</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">react, vue, jquery, vue-router</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">视图层核心及路由，构建单页应用(SPA)基石
+                  </div>
+                </div>
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50 bg-slate-800/20">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-indigo-400"></div><span
+                      class="text-[14px] font-bold text-white">UI 组件库</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-indigo-400 text-center shrink-0">13</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">element-ui, antd, vant, swiper</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">表单、表格等开箱即用组件，用于后台与移动端
+                  </div>
+                </div>
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-cyan-400"></div><span
+                      class="text-[14px] font-bold text-white">图表引擎</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-cyan-400 text-center shrink-0">8</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">echarts, echarts-gl, d3, mermaid</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">统计图、网络拓扑图，支撑数据大屏与报表汇报
+                  </div>
+                </div>
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50 bg-slate-800/20">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-purple-400"></div><span
+                      class="text-[14px] font-bold text-white">高级动画</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-purple-400 text-center shrink-0">4</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">gsap, lottie-web, anime.js</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">复杂补间动画与矢量动效，打造沉浸式演示网页
+                  </div>
+                </div>
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-pink-400"></div><span
+                      class="text-[14px] font-bold text-white">3D / 图形渲染库</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-pink-400 text-center shrink-0">6</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">three.js, babylonjs, pixi.js, konva
+                  </div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">WebGL渲染引擎，用于数字孪生三维展示
+                  </div>
+                </div>
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50 bg-slate-800/20">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-teal-400"></div><span
+                      class="text-[14px] font-bold text-white">状态管理</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-teal-400 text-center shrink-0">7</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">vuex, pinia, redux, zustand</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">全局状态维护、跨组件异步数据缓存</div>
+                </div>
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-orange-400"></div><span
+                      class="text-[14px] font-bold text-white">工具库</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-orange-400 text-center shrink-0">8</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">dayjs, axios, sortablejs</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">HTTP请求、日期处理、拖拽适配通用类库
+                  </div>
+                </div>
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50 bg-slate-800/20">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-yellow-400"></div><span
+                      class="text-[14px] font-bold text-white">CSS 样式库</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-yellow-400 text-center shrink-0">2</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">normalize.css, animate.css</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">浏览器样式重置、预设基础CSS动画</div>
+                </div>
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-emerald-400"></div><span
+                      class="text-[14px] font-bold text-white">音视频处理</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-emerald-400 text-center shrink-0">2</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">@ffmpeg/ffmpeg</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">纯浏览器端音视频转码、剪辑与合并处理
+                  </div>
+                </div>
+                <div
+                  class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded border-b border-slate-800/50 bg-slate-800/20">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-blue-300"></div><span
+                      class="text-[14px] font-bold text-white">运行时编译</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-blue-300 text-center shrink-0">3</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">@babel/standalone, @tailwindcss</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">无构建环境下的单文件HTML实时编译支持
+                  </div>
+                </div>
+                <div class="flex px-3 py-1.5 hover:bg-slate-800/50 transition-colors items-center rounded">
+                  <div class="w-[10%] flex items-center gap-2 pl-1 shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-rose-400"></div><span
+                      class="text-[14px] font-bold text-white">图标字体</span>
+                  </div>
+                  <div class="w-[5%] text-[14px] font-tech font-bold text-rose-400 text-center shrink-0">5</div>
+                  <div class="w-[35%] text-[14px] font-mono text-slate-300 pl-2">fontawesome, @ant-design/icons</div>
+                  <div class="w-[50%] text-[14px] text-slate-400 pl-4 border-l border-slate-800">海量矢量图标资产库，满足一切UI需求
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 5: Custom Upload -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.08]"
+        style="background-image: url('https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1920');">
+      </div>
+      <div class="slide-content h-full flex flex-col">
+        <h2 class="text-4xl font-bold mb-4 text-white flex items-center shrink-0 stagger-item"><span
+            class="text-cyan-400 text-5xl mr-4 font-tech drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">04</span>资源注入：自定义资源的自主扩展
+        </h2>
+        <div
+          class="w-24 h-1.5 bg-gradient-to-r from-cyan-400 to-blue-600 mb-8 rounded-full shadow-[0_0_10px_rgba(34,211,238,0.5)] shrink-0 stagger-item">
+        </div>
+        <div class="flex-1 flex items-center justify-between gap-10 min-h-0">
+          <div class="w-1/2 flex flex-col justify-center stagger-item">
+            <h3 class="text-3xl font-bold text-white mb-6 leading-tight">提供自定义上传入口，<br>打破官方资源的局限性</h3>
+            <p class="text-base text-slate-300 mb-8 leading-relaxed dark-glass p-5 rounded-lg shadow-sm font-medium">
+              除了官方维护的高频开源库，我们开放了<span
+                class="text-cyan-400 font-bold px-1">自定义上传资源的入口</span>。各业务线可将私有组件、内部图标库、特定字体自行打包上传，并提供专属管理视图。
+            </p>
+            <div class="space-y-6 pl-2">
+              <div class="flex items-start gap-4">
+                <div
+                  class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-lg font-bold border border-blue-500/50 shadow-[0_0_10px_rgba(59,130,246,0.3)] shrink-0">
+                  1</div>
+                <div>
+                  <h4 class="text-white text-lg font-bold mb-1">元数据配置</h4>
+                  <p class="text-sm text-slate-400">规范填写资源名、引用地址、版本号等核心管理信息。</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-4">
+                <div
+                  class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-lg font-bold border border-cyan-500/50 shadow-[0_0_10px_rgba(34,211,238,0.3)] shrink-0">
+                  2</div>
+                <div>
+                  <h4 class="text-white text-lg font-bold mb-1">打包上传</h4>
+                  <p class="text-sm text-slate-400">支持文件夹上传，系统自动解析并提取文件目录。</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-4">
+                <div
+                  class="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-lg font-bold border border-indigo-500/50 shadow-[0_0_10px_rgba(99,102,241,0.3)] shrink-0">
+                  3</div>
+                <div>
+                  <h4 class="text-white text-lg font-bold mb-1">视图展示</h4>
+                  <p class="text-sm text-slate-400">自定义资源管理页面，支持资源包全景信息可视化。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="w-1/2 flex justify-center stagger-item">
+            <div
+              class="dark-glass w-full max-w-md p-8 border-t-[4px] border-t-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.15)] relative">
+              <div
+                class="absolute -top-6 -right-6 w-14 h-14 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(34,211,238,0.5)] border border-cyan-200/50 transform rotate-12">
+                <i class="fa-solid fa-cloud-arrow-up text-white text-2xl transform -rotate-12"></i>
+              </div>
+              <h4 class="text-xl font-black text-white mb-5 border-b border-slate-700/50 pb-3">上传自定义资源</h4>
+              <div
+                class="border-2 border-dashed border-cyan-500/40 rounded-xl h-32 flex flex-col items-center justify-center mb-6 bg-cyan-500/10 hover:bg-cyan-500/20 transition cursor-pointer">
+                <i class="fa-solid fa-file-zipper text-4xl text-cyan-400 mb-2"></i>
+                <span class="text-cyan-200 text-xs font-bold tracking-wide">拖拽文件夹到此处解析</span>
+              </div>
+              <div class="space-y-4">
+                <input type="text" placeholder="资源名 (如: 公司内网图标库)"
+                  class="w-full bg-[#0b1120]/80 border border-slate-600 rounded-lg p-3 text-slate-200 text-sm font-medium focus:outline-none focus:border-cyan-400 transition">
+                <input type="text" placeholder="版本号 (如: 1.0.0)"
+                  class="w-full bg-[#0b1120]/80 border border-slate-600 rounded-lg p-3 text-slate-200 text-sm font-medium focus:outline-none focus:border-cyan-400 transition">
+                <input type="text" placeholder="引用地址 (如: /cdn/custom/icons)"
+                  class="w-full bg-[#0b1120]/80 border border-slate-600 rounded-lg p-3 text-slate-200 text-sm font-medium focus:outline-none focus:border-cyan-400 transition">
+                <button
+                  class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-[0_0_15px_rgba(34,211,238,0.4)] py-3 rounded-lg font-bold transition text-sm mt-2 tracking-widest">确认托管发布</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 6: Tool Downloads -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.08]"
+        style="background-image: url('https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1920');">
+      </div>
+      <div class="slide-content h-full flex flex-col">
+        <h2 class="text-4xl font-bold mb-4 text-white flex items-center shrink-0 stagger-item"><span
+            class="text-blue-500 text-5xl mr-4 font-tech drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">05</span>常用工具下载：全员共享的效率百宝箱
+        </h2>
+        <div
+          class="w-24 h-1.5 bg-gradient-to-r from-blue-500 to-cyan-400 mb-8 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)] shrink-0 stagger-item">
+        </div>
+
+        <div class="flex-1 flex flex-col min-h-0 dark-glass p-8 shadow-2xl relative overflow-hidden stagger-item">
+          <div
+            class="absolute -right-20 -top-20 w-64 h-64 bg-blue-500/20 rounded-full blur-[80px] opacity-60 pointer-events-none">
+          </div>
+          <p class="text-slate-300 mb-6 text-lg font-medium relative z-10 shrink-0">内网开发与设计必备工具集，无需申请权限，<span
+              class="text-cyan-400 font-bold px-1 drop-shadow-md">任何人都可以进入本站直接下载常用工具</span>，极速搭建本地工作台。</p>
+
+          <div class="grid grid-cols-3 gap-6 flex-1 w-full relative z-10 px-2 pb-2 mt-2">
+            <div
+              class="dark-glass p-4 border-t-[3px] border-t-green-500 rounded-2xl flex flex-col items-center justify-center text-center group hover:-translate-y-2 transition-transform duration-300 hover:shadow-[0_0_20px_rgba(34,197,94,0.2)] cursor-pointer bg-[#0f172a]/80">
+              <div
+                class="w-14 h-14 bg-green-500/10 rounded-xl flex items-center justify-center mb-3 group-hover:rotate-12 transition-transform border border-green-500/30">
+                <i class="fa-brands fa-node-js text-3xl text-green-400"></i>
+              </div>
+              <h4 class="text-lg font-bold text-white mb-1">Node.js</h4>
+              <p class="text-[13px] text-slate-400 mb-4">前端多版本运行环境</p>
+              <button
+                class="w-[80%] py-2 bg-[#1e293b] hover:bg-green-500 text-slate-300 hover:text-white rounded-lg text-sm font-bold transition-colors border border-slate-700/50"><i
+                  class="fa-solid fa-cloud-arrow-down"></i> Windows版</button>
+            </div>
+
+            <div
+              class="dark-glass p-4 border-t-[3px] border-t-blue-500 rounded-2xl flex flex-col items-center justify-center text-center group hover:-translate-y-2 transition-transform duration-300 hover:shadow-[0_0_20px_rgba(59,130,246,0.2)] cursor-pointer bg-[#0f172a]/80">
+              <div
+                class="w-14 h-14 bg-blue-500/10 rounded-xl flex items-center justify-center mb-3 group-hover:rotate-12 transition-transform border border-blue-500/30">
+                <i class="fa-solid fa-code text-3xl text-blue-400"></i>
+              </div>
+              <h4 class="text-lg font-bold text-white mb-1">VS Code</h4>
+              <p class="text-[13px] text-slate-400 mb-4">主力代码编辑器</p>
+              <button
+                class="w-[80%] py-2 bg-[#1e293b] hover:bg-blue-500 text-slate-300 hover:text-white rounded-lg text-sm font-bold transition-colors border border-slate-700/50"><i
+                  class="fa-solid fa-cloud-arrow-down"></i> 通用版下载</button>
+            </div>
+
+            <div
+              class="dark-glass p-4 border-t-[3px] border-t-orange-500 rounded-2xl flex flex-col items-center justify-center text-center group hover:-translate-y-2 transition-transform duration-300 hover:shadow-[0_0_20px_rgba(249,115,22,0.2)] cursor-pointer bg-[#0f172a]/80">
+              <div
+                class="w-14 h-14 bg-orange-500/10 rounded-xl flex items-center justify-center mb-3 group-hover:rotate-12 transition-transform border border-orange-500/30">
+                <i class="fa-brands fa-git-alt text-3xl text-orange-400"></i>
+              </div>
+              <h4 class="text-lg font-bold text-white mb-1">Git</h4>
+              <p class="text-[13px] text-slate-400 mb-4">代码版本控制工具</p>
+              <button
+                class="w-[80%] py-2 bg-[#1e293b] hover:bg-orange-500 text-slate-300 hover:text-white rounded-lg text-sm font-bold transition-colors border border-slate-700/50"><i
+                  class="fa-solid fa-cloud-arrow-down"></i> Windows版</button>
+            </div>
+
+            <div
+              class="dark-glass p-4 border-t-[3px] border-t-yellow-400 rounded-2xl flex flex-col items-center justify-center text-center group hover:-translate-y-2 transition-transform duration-300 hover:shadow-[0_0_20px_rgba(250,204,21,0.2)] cursor-pointer bg-[#0f172a]/80">
+              <div
+                class="w-14 h-14 bg-yellow-500/10 rounded-xl flex items-center justify-center mb-3 group-hover:rotate-12 transition-transform border border-yellow-500/30">
+                <i class="fa-brands fa-chrome text-3xl text-yellow-400"></i>
+              </div>
+              <h4 class="text-lg font-bold text-white mb-1">Chrome</h4>
+              <p class="text-[13px] text-slate-400 mb-4">前端标准调试浏览器</p>
+              <button
+                class="w-[80%] py-2 bg-[#1e293b] hover:bg-yellow-500 text-slate-300 hover:text-white rounded-lg text-sm font-bold transition-colors border border-slate-700/50"><i
+                  class="fa-solid fa-cloud-arrow-down"></i> 离线完整包</button>
+            </div>
+
+            <div
+              class="dark-glass p-4 border-t-[3px] border-t-purple-500 rounded-2xl flex flex-col items-center justify-center text-center group hover:-translate-y-2 transition-transform duration-300 hover:shadow-[0_0_20px_rgba(168,85,247,0.2)] cursor-pointer bg-[#0f172a]/80">
+              <div
+                class="w-14 h-14 bg-purple-500/10 rounded-xl flex items-center justify-center mb-3 group-hover:rotate-12 transition-transform border border-purple-500/30">
+                <i class="fa-solid fa-pen-nib text-3xl text-purple-400"></i>
+              </div>
+              <h4 class="text-lg font-bold text-white mb-1">OpenDesign</h4>
+              <p class="text-[13px] text-slate-400 mb-4">UI原型设计协同工具</p>
+              <button
+                class="w-[80%] py-2 bg-[#1e293b] hover:bg-purple-500 text-slate-300 hover:text-white rounded-lg text-sm font-bold transition-colors border border-slate-700/50"><i
+                  class="fa-solid fa-cloud-arrow-down"></i> Mac/Win双端</button>
+            </div>
+
+            <div
+              class="dark-glass p-4 border-t-[3px] border-t-indigo-500 rounded-2xl flex flex-col items-center justify-center text-center group hover:-translate-y-2 transition-transform duration-300 hover:shadow-[0_0_20px_rgba(99,102,241,0.2)] cursor-pointer bg-[#0f172a]/80">
+              <div
+                class="w-14 h-14 bg-indigo-500/10 rounded-xl flex items-center justify-center mb-3 group-hover:rotate-12 transition-transform border border-indigo-500/30">
+                <i class="fa-solid fa-network-wired text-3xl text-indigo-400"></i>
+              </div>
+              <h4 class="text-lg font-bold text-white mb-1">CCSwitch</h4>
+              <p class="text-[13px] text-slate-400 mb-4">内网环境Host代理切换</p>
+              <button
+                class="w-[80%] py-2 bg-[#1e293b] hover:bg-indigo-500 text-slate-300 hover:text-white rounded-lg text-sm font-bold transition-colors border border-slate-700/50"><i
+                  class="fa-solid fa-cloud-arrow-down"></i> 免安装版</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 7: AI Integration -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.08]"
+        style="background-image: url('https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1920');"></div>
+      <div class="slide-content h-full flex flex-col min-h-0 relative z-10">
+        <h2 class="text-4xl font-bold mb-4 text-white flex items-center shrink-0 stagger-item">
+          <span class="text-indigo-400 text-5xl mr-4 font-tech drop-shadow-[0_0_15px_rgba(129,140,248,0.5)]">06</span>
+          大模型赋能：JSON接口透出与Skill前置约束
+        </h2>
+        <div
+          class="w-24 h-1.5 bg-gradient-to-r from-indigo-400 to-purple-500 mb-6 rounded-full shadow-[0_0_10px_rgba(129,140,248,0.5)] shrink-0 stagger-item">
+        </div>
+        <div class="flex-1 flex flex-col justify-center gap-6 min-h-0">
+          <div class="stagger-item">
+            <p
+              class="text-lg text-slate-300 max-w-5xl border-l-4 border-indigo-400 pl-5 pr-3 leading-relaxed dark-glass py-4 rounded-r-xl shadow-sm font-medium">
+              为了让智能体“精准且合规”地在内网运行，我们构建了<strong class="text-cyan-400 font-black px-1 drop-shadow-md">“JSON数据获取 +
+                双核Skill规则”</strong>的机制，全面接管 AI 生成过程中的静态资源调度与本地工具安装。
+            </p>
+          </div>
+
+          <div class="flex gap-6 items-stretch flex-1 min-h-0 w-full">
+            <div class="w-[35%] flex flex-col gap-4 shrink-0 h-full">
+
+              <div class="stagger-item flex-1 h-full">
+                <div
+                  class="dark-glass p-5 h-full border-t-[3px] border-t-blue-400 flex flex-col justify-center relative overflow-hidden group hover:-translate-y-1 transition-transform">
+                  <div
+                    class="absolute -right-4 -bottom-4 w-20 h-20 bg-blue-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500">
+                  </div>
+                  <div class="flex items-center justify-between mb-2 relative z-10">
+                    <i
+                      class="fa-solid fa-network-wired text-3xl text-blue-400 drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]"></i>
+                    <span
+                      class="text-[10px] text-blue-300 bg-blue-900/50 border border-blue-500/50 px-2 py-1 rounded font-mono font-bold shadow-sm tracking-widest">API
+                      GET</span>
+                  </div>
+                  <h4 class="text-lg font-bold text-white mb-1 relative z-10">JSON 接口实时获取</h4>
+                  <p class="text-[13px] text-slate-400 leading-relaxed font-medium relative z-10">AI 生成前拉取内网资源目录，解决数据盲区。
+                  </p>
+                </div>
+              </div>
+
+              <div class="stagger-item flex-1 h-full">
+                <div
+                  class="dark-glass p-5 h-full border-t-[3px] border-t-indigo-400 flex flex-col justify-center relative overflow-hidden group hover:-translate-y-1 transition-transform">
+                  <div
+                    class="absolute -right-4 -bottom-4 w-20 h-20 bg-indigo-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500">
+                  </div>
+                  <div class="flex items-center justify-between mb-2 relative z-10">
+                    <i
+                      class="fa-solid fa-file-shield text-3xl text-indigo-400 drop-shadow-[0_0_10px_rgba(129,140,248,0.5)]"></i>
+                    <!-- <span
+                      class="text-[10px] text-indigo-300 bg-indigo-900/50 border border-indigo-500/50 px-2 py-1 rounded font-mono font-bold shadow-sm tracking-widest">@SKILL.md</span> -->
+                  </div>
+                  <h4 class="text-lg font-bold text-white mb-1 relative z-10">离线资源使用 Skill</h4>
+                  <p class="text-[13px] text-slate-400 leading-relaxed font-medium relative z-10">
+                    内建渲染规则，严格屏蔽公网调用，确保产物离线可用。</p>
+                </div>
+              </div>
+
+              <div class="stagger-item flex-1 h-full">
+                <div
+                  class="dark-glass p-5 h-full border-t-[3px] border-t-purple-400 flex flex-col justify-center relative overflow-hidden group hover:-translate-y-1 transition-transform">
+                  <div
+                    class="absolute -right-4 -bottom-4 w-20 h-20 bg-purple-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500">
+                  </div>
+                  <div class="flex items-center justify-between mb-2 relative z-10">
+                    <i
+                      class="fa-solid fa-laptop-code text-3xl text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]"></i>
+   
+                  </div>
+                  <h4 class="text-lg font-bold text-white mb-1 relative z-10">工具下载安装 Skill</h4>
+                  <p class="text-[13px] text-slate-400 leading-relaxed font-medium relative z-10">
+                    提供工具下载路径与安装指南。</p>
+                </div>
+              </div>
+
+            </div>
+
+            <div class="w-[65%] h-full stagger-item">
+              <div
+                class="dark-glass p-0 bg-[#020617]/90 border border-white/10 relative flex flex-col overflow-hidden shadow-2xl h-full group hover:-translate-y-1 transition-transform">
+                <div class="absolute inset-0 bg-image-cover opacity-10"
+                  style="background-image: url('https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1920');">
+                </div>
+
+                <div class="p-6 flex-1 flex flex-col relative z-10 h-full gap-4">
+                  <div class="flex-1 flex flex-col min-h-0">
+                    <h4 class="text-white font-mono text-[15px] mb-3 flex items-center shrink-0">
+                      <i class="fa-solid fa-database text-blue-400 mr-2"></i> CDN 数据透出：动态解析接口视图
+                      <span
+                        class="ml-auto text-[11px] bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-1.5 rounded">GET
+                        /cdn/resources.json</span>
+                    </h4>
+                    <div
+                      class="bg-[#0f172a]/90 p-5 rounded-xl flex-1 overflow-y-auto border border-white/5 custom-scrollbar shadow-inner">
+                      <pre class="text-[13px] font-mono leading-[1.7] m-0" style="color:#d4d4d4;">{
+  <span class="text-[#9cdcfe]">"version"</span>: <span class="text-[#ce9178]">"1.0"</span>, <span class="text-[#6a9955]">// 接口规范版本</span>
+  <span class="text-[#9cdcfe]">"basePath"</span>: <span class="text-[#ce9178]">"http://10.100.103.210/cdn/"</span>, <span class="text-[#6a9955]">// 内网资源根目录</span>
+  <span class="text-[#9cdcfe]">"totalFiles"</span>: <span class="text-[#b5cea8]">101</span>,
+  <span class="text-[#9cdcfe]">"packages"</span>: [
+    {
+      <span class="text-[#9cdcfe]">"name"</span>: <span class="text-[#ce9178]">"vue"</span>,
+      <span class="text-[#9cdcfe]">"version"</span>: <span class="text-[#ce9178]">"2.7.16"</span>,
+      <span class="text-[#9cdcfe]">"category"</span>: <span class="text-[#ce9178]">"framework"</span>,
+      <span class="text-[#9cdcfe]">"files"</span>: [
+        {
+          <span class="text-[#9cdcfe]">"path"</span>: <span class="text-[#ce9178]">"vue/vue.min.js"</span>,
+          <span class="text-[#9cdcfe]">"type"</span>: <span class="text-[#ce9178]">"javascript"</span>,
+          <span class="text-[#9cdcfe]">"entry"</span>: <span class="text-[#569cd6]">true</span>
+        }
+      ]
+    },
+    {
+      <span class="text-[#9cdcfe]">"name"</span>: <span class="text-[#ce9178]">"element-ui"</span>,
+      <span class="text-[#9cdcfe]">"version"</span>: <span class="text-[#ce9178]">"2.15.14"</span>,
+      <span class="text-[#9cdcfe]">"category"</span>: <span class="text-[#ce9178]">"ui-library"</span>,
+      <span class="text-[#9cdcfe]">"files"</span>: [
+        {
+          <span class="text-[#9cdcfe]">"path"</span>: <span class="text-[#ce9178]">"element-ui/lib/index.js"</span>,
+          <span class="text-[#9cdcfe]">"type"</span>: <span class="text-[#ce9178]">"javascript"</span>
+        },
+        {
+          <span class="text-[#9cdcfe]">"path"</span>: <span class="text-[#ce9178]">"element-ui/lib/theme-chalk/index.css"</span>,
+          <span class="text-[#9cdcfe]">"type"</span>: <span class="text-[#ce9178]">"stylesheet"</span>
+        }
+      ]
+    },
+    {
+      <span class="text-[#9cdcfe]">"name"</span>: <span class="text-[#ce9178]">"vscode"</span>,
+      <span class="text-[#9cdcfe]">"version"</span>: <span class="text-[#ce9178]">"latest"</span>,
+      <span class="text-[#9cdcfe]">"category"</span>: <span class="text-[#ce9178]">"tool"</span>,
+      <span class="text-[#9cdcfe]">"files"</span>: [
+        {
+          <span class="text-[#9cdcfe]">"path"</span>: <span class="text-[#ce9178]">"tools/VSCodeSetup.exe"</span>,
+          <span class="text-[#9cdcfe]">"type"</span>: <span class="text-[#ce9178]">"binary"</span>
+        }
+      ]
+    }
+  ],
+  <span class="text-[#9cdcfe]">"categories"</span>: [
+    <span class="text-[#ce9178]">"framework"</span>, <span class="text-[#ce9178]">"ui-library"</span>, <span class="text-[#ce9178]">"charts"</span>, <span class="text-[#ce9178]">"3d"</span>, <span class="text-[#ce9178]">"tool"</span>
+  ],
+  <span class="text-[#9cdcfe]">"lastUpdated"</span>: <span class="text-[#ce9178]">"2026-09-16T10:00:00Z"</span>
+}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 8: How to use SKILL -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.08]"
+        style="background-image: url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1920');"></div>
+      <div class="slide-content h-full flex flex-col relative z-10">
+        <h2 class="text-4xl font-bold mb-4 text-white flex items-center stagger-item"><span
+            class="text-cyan-400 text-5xl mr-4 font-tech drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">07</span>实操指南：如何挂载与使用内网规则
+        </h2>
+        <div
+          class="w-24 h-1.5 bg-gradient-to-r from-cyan-400 to-blue-600 mb-8 rounded-full shadow-[0_0_10px_rgba(34,211,238,0.5)] shrink-0 stagger-item">
+        </div>
+
+        <div class="flex-1 flex gap-10  min-h-0 items-stretch">
+          <div class="w-[40%] flex flex-col justify-center gap-10 relative py-2 pl-0 pr-4 h-full">
+            <div
+              class="absolute left-[18px] top-[15%] bottom-[15%] w-1 bg-slate-800 rounded-full stagger-item overflow-hidden">
+              <div
+                class="w-full h-full bg-gradient-to-b from-cyan-400 via-blue-500 to-indigo-500 origin-top animate-[scaleY_2s_ease-out_forwards]">
+              </div>
+            </div>
+
+            <div class="flex items-center gap-6 relative z-10 stagger-item">
+              <div
+                class="w-10 h-10 rounded-full bg-[#020617] border-[3px] border-cyan-400 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.6)] shrink-0 z-10">
+                <div class="w-3 h-3 bg-cyan-400 rounded-full animate-pulse"></div>
+              </div>
+              <div
+                class="dark-glass p-5 flex-1 hover:-translate-y-1 transition-transform cursor-default border-l-2 border-l-cyan-500 bg-[#0b1120]/80">
+                <h4 class="text-lg font-bold text-cyan-400 mb-1 tracking-wide">加载环境约束</h4>
+                <p class="text-[13px] text-slate-400 font-medium">在对话框或后台配置中，挂载内网专属的资源环境规则。</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-6 relative z-10 stagger-item">
+              <div
+                class="w-10 h-10 rounded-full bg-[#020617] border-[3px] border-blue-500 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.6)] shrink-0 z-10">
+                <div class="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+              </div>
+              <div
+                class="dark-glass p-5 flex-1 hover:-translate-y-1 transition-transform cursor-default border-l-2 border-l-blue-500 bg-[#0b1120]/80">
+                <h4 class="text-lg font-bold text-blue-400 mb-1 tracking-wide">解析规则获取资源</h4>
+                <p class="text-[13px] text-slate-400 font-medium">助手自动读取内网限制条件，拉取专属离线资源，屏蔽外网幻觉。</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-6 relative z-10 stagger-item">
+              <div
+                class="w-10 h-10 rounded-full bg-[#020617] border-[3px] border-indigo-500 flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.6)] shrink-0 z-10">
+                <div class="w-3 h-3 bg-indigo-500 rounded-full animate-pulse"></div>
+              </div>
+              <div
+                class="dark-glass p-5 flex-1 hover:-translate-y-1 transition-transform cursor-default border-l-2 border-l-indigo-500 bg-[#0b1120]/80">
+                <h4 class="text-lg font-bold text-indigo-400 mb-1 tracking-wide">合规代码输出</h4>
+                <p class="text-[13px] text-slate-400 font-medium">智能输出完全匹配内网组件库的产物，实现即取即用零配置。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="w-[60%] flex flex-col gap-5 h-full pb-4 stagger-item overflow-y-auto custom-scrollbar pr-1">
+
+            <div
+              class="dark-glass border-slate-700/50 p-4 rounded-2xl shadow-2xl flex flex-col shrink-0 bg-[#020617]/90 border-t-[4px] border-t-indigo-500 relative overflow-hidden group">
+              <div class="flex items-center gap-3 mb-2 shrink-0 border-b border-slate-800 pb-2 relative z-10">
+                <div
+                  class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]">
+                  <i class="fa-solid fa-bolt text-xs"></i></div>
+                <div>
+                  <span class="text-white font-bold text-[14px] tracking-widest block">对话一键克隆安装指令</span>
+                </div>
+              </div>
+              <p class="text-[12px] text-slate-300 mb-2 relative z-10">直接复制下方指令发送给智能体，即可完成专网技能的即时同步：</p>
+
+              <div
+                class="flex items-center justify-between bg-[#0b1120] p-2 pl-3 rounded-lg border border-slate-700/80 relative z-20 shadow-inner">
+                <div class="text-slate-200 text-[12px] leading-relaxed select-all cursor-text flex-1 pr-3"
+                  id="skill-command">
+                  帮我安装一个智能体技能：把 <span class="text-indigo-400 font-mono">http://10.100.103.210/cdn/SKILL.md</span>
+                  克隆到你全局的skills里。
+                </div>
+                <button
+                  onclick="navigator.clipboard.writeText(document.getElementById('skill-command').innerText); this.innerHTML='<i class=\'fa-solid fa-check\'></i> 已复制'; setTimeout(() => this.innerHTML='<i class=\'fa-regular fa-copy\'></i> 复制', 2500)"
+                  class="shrink-0 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-colors shadow-[0_0_15px_rgba(99,102,241,0.4)] cursor-pointer">
+                  <i class="fa-regular fa-copy"></i> 复制
+                </button>
+              </div>
+            </div>
+
+            <div
+              class="dark-glass border-slate-700/50 p-5 rounded-2xl shadow-2xl flex flex-col bg-[#020617]/95 border-t-[4px] border-t-cyan-400 relative overflow-hidden group">
+              <div class="absolute -right-10 -top-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl"></div>
+
+              <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-800 relative z-10">
+                <div class="flex items-center gap-2.5">
+                  <div
+                    class="w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 border border-cyan-500/40">
+                    <i class="fa-solid fa-file-code text-xs"></i>
+                  </div>
+                  <span class="text-white font-bold text-[14px] tracking-wide font-mono">Agent.md 系统级提示词注入</span>
+                </div>
+                <span
+                  class="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/30 font-mono">每次执行前强制前置读取</span>
+              </div>
+
+              <div
+                class="bg-[#0b1120] p-3.5 rounded-xl border border-slate-700/80 relative z-20 shadow-inner max-h-[270px] overflow-y-auto custom-scrollbar">
+                <pre class="text-[11px] font-mono leading-[1.6] m-0" style="color: #d4d4d4;" id="agent-md-code"><span class="text-[#6a9955]"># 🤖 智能体全局预加载技能：内网 CDN 离线基建管控</span>
+
+<span class="text-[#569cd6]">## ⚡ 核心引导指令（每次执行前必读）</span>
+你在接收到单页面HTML生成、静态代码生成、网页汇报、PPT生成、网页演示文档或原型设计任务前，<span class="text-[#f43f5e]">必须首先自动加载并读取</span>：
+- <span class="text-[#9cdcfe]">引导链接</span>：<span class="text-[#ce9178]">skills/cdn-offline/SKILL.md</span>
+- <span class="text-[#9cdcfe]">核心约束</span>：
+  1. <span class="text-[#yellow]">零公网依赖</span>：严禁引入公网 CDN 链接（如 unpkg 等），所有组件和图表引擎必须严格映射为内网统一资源站地址。
+  2. <span class="text-[#yellow]">离线高保真</span>：自动调用内网托管的常用库（Vue、Element UI、ECharts 等），确保产物 in 专网环境下即开即用。
+
+<span class="text-[#569cd6]">## 📋 行为准则</span>
+- 每次任务的思维链（CoT）中必须包含：已读取本地 skills/cdn-offline/skill.md 并对齐内网离线约束
+- 所有代码输出默认遵循该 Skill 定义的标准与推荐加载顺序。</pre>
+              </div>
+
+              <div class="mt-3.5 flex justify-end relative z-20">
+                <button
+                  onclick="navigator.clipboard.writeText(document.getElementById('agent-md-code').innerText); this.innerHTML='<i class=\'fa-solid fa-check\'></i> 已复制注入配置'; setTimeout(() => this.innerHTML='<i class=\'fa-regular fa-copy\'></i> 复制 Agent.md 注入配置', 2500)"
+                  class="flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-lg text-xs font-bold transition-colors shadow-[0_0_15px_rgba(34,211,238,0.4)] cursor-pointer">
+                  <i class="fa-regular fa-copy"></i> 复制 Agent.md 注入配置
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Slide 9: Use Cases Hub -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.08]"
+        style="background-image: url('https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1920');">
+      </div>
+      <div class="slide-content h-full flex flex-col justify-center items-center text-center relative z-10">
+        <h2 class="text-[3.5rem] font-black mb-6 tracking-tight text-white stagger-item drop-shadow-lg">
+          真实场景的应用实战
+        </h2>
+        <p class="text-xl text-slate-300 font-medium mb-16 max-w-3xl mx-auto leading-relaxed stagger-item">
+          从临时方案验证到高级汇报材料，体验大模型在内网环境下使用 CDN 资源极速构建生产级代码的震撼效果。
+        </p>
+        <div class="grid grid-cols-3 gap-10 w-full px-8">
+
+          <div class="stagger-item h-[360px]">
+            <div
+              class="dark-glass p-0 group relative overflow-hidden flex flex-col shadow-2xl rounded-2xl cursor-default h-full border border-white/10 hover:-translate-y-4 transition-transform duration-500 hover:shadow-[0_20px_50px_rgba(59,130,246,0.3)] bg-[#0b1120]/80">
+              <div
+                class="absolute inset-0 bg-gradient-to-t from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              </div>
+              <div
+                class="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110 opacity-30 mix-blend-screen"
+                style="background-image: url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=800');">
+              </div>
+              <div class="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/50 to-transparent"></div>
+              <div class="relative z-10 p-8 h-full flex flex-col justify-center items-center text-white">
+                <div
+                  class="w-20 h-20 bg-blue-500/20 backdrop-blur-md rounded-full flex items-center justify-center mb-6 border border-blue-400/50 group-hover:bg-blue-600 transition-colors duration-300 shadow-[0_0_20px_rgba(59,130,246,0.6)]">
+                  <i class="fa-solid fa-chart-line text-4xl text-blue-300 group-hover:text-white"></i>
+                </div>
+                <h3 class="text-2xl font-bold mb-3">实战一：实时监控大屏</h3>
+                <p class="text-slate-400 text-sm font-medium w-4/5">引入 ECharts 与暗黑主题，数据可视化极速构建</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="stagger-item h-[360px]">
+            <div
+              class="dark-glass p-0 group relative overflow-hidden flex flex-col shadow-2xl rounded-2xl cursor-default h-full border border-white/10 hover:-translate-y-4 transition-transform duration-500 hover:shadow-[0_20px_50px_rgba(99,102,241,0.3)] bg-[#0b1120]/80">
+              <div
+                class="absolute inset-0 bg-gradient-to-t from-indigo-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              </div>
+              <div
+                class="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110 opacity-30 mix-blend-screen"
+                style="background-image: url('https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=800');">
+              </div>
+              <div class="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/50 to-transparent"></div>
+              <div class="relative z-10 p-8 h-full flex flex-col justify-center items-center text-white">
+                <div
+                  class="w-20 h-20 bg-indigo-500/20 backdrop-blur-md rounded-full flex items-center justify-center mb-6 border border-indigo-400/50 group-hover:bg-indigo-600 transition-colors duration-300 shadow-[0_0_20px_rgba(99,102,241,0.6)]">
+                  <i class="fa-solid fa-table-columns text-4xl text-indigo-300 group-hover:text-white"></i>
+                </div>
+                <h3 class="text-2xl font-bold mb-3">实战二：生产级原型</h3>
+                <p class="text-slate-400 text-sm font-medium w-4/5">调用 Element UI，AI 直出带交互的管理系统高保真代码</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="stagger-item h-[360px]">
+            <div
+              class="dark-glass p-0 group relative overflow-hidden flex flex-col shadow-2xl rounded-2xl cursor-default h-full border border-white/10 hover:-translate-y-4 transition-transform duration-500 hover:shadow-[0_20px_50px_rgba(34,211,238,0.3)] bg-[#0b1120]/80">
+              <div
+                class="absolute inset-0 bg-gradient-to-t from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              </div>
+              <div
+                class="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110 opacity-30 mix-blend-screen"
+                style="background-image: url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=800');">
+              </div>
+              <div class="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/50 to-transparent"></div>
+              <div class="relative z-10 p-8 h-full flex flex-col justify-center items-center text-white">
+                <div
+                  class="w-20 h-20 bg-cyan-500/20 backdrop-blur-md rounded-full flex items-center justify-center mb-6 border border-cyan-400/50 group-hover:bg-cyan-500 transition-colors duration-300 shadow-[0_0_20px_rgba(34,211,238,0.6)]">
+                  <i class="fa-solid fa-laptop-code text-4xl text-cyan-300 group-hover:text-white"></i>
+                </div>
+                <h3 class="text-2xl font-bold mb-3">实战三：沉浸式网页文档</h3>
+                <p class="text-slate-400 text-sm font-medium w-4/5">应用 Three.js 与 GSAP，生成类似本幻灯片的科技风互动演示</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <div
+          class="mt-12 text-sm text-cyan-400 animate-pulse font-tech tracking-wider font-bold stagger-item drop-shadow-md z-10">
+          请按右方向键或点击右下角按钮浏览案例...</div>
+      </div>
+    </div>
+
+    <!-- Slide 10: Case 1 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/js/china.js"></script>
+
+    <div class="slide !bg-[#0b1120] border-slate-800 shadow-2xl">
+      <div class="slide-content h-full flex flex-col relative z-10">
+        <div class="flex justify-between items-center mb-12 shrink-0 stagger-item">
+          <h2 class="text-4xl font-bold text-white"><span
+              class="bg-blue-600/50 border border-blue-400/50 text-blue-200 px-4 py-1.5 rounded-lg mr-4 font-black shadow-[0_0_15px_rgba(59,130,246,0.6)]">实战一</span>
+            「网络安全态势」极速构建</h2>
+        </div>
+
+        <div class="flex-1 flex gap-8 pb-2 items-stretch min-h-0">
+          <div class="w-[35%] stagger-item">
+            <div
+              class="dark-glass flex flex-col overflow-hidden shadow-xl p-6 gap-6 bg-[#020617]/50 border border-slate-800/80 h-full group hover:-translate-y-1 transition-transform duration-500">
+              <div class="flex flex-col gap-2 shrink-0">
+                <div class="flex items-center gap-2 text-sm font-bold text-cyan-400"><i
+                    class="fa-solid fa-bullseye"></i> 业务场景</div>
+                <p
+                  class="text-[13px] text-slate-300 leading-relaxed bg-cyan-900/20 border border-cyan-500/30 p-3 rounded-xl">
+                  快速做一个网络安全态势大屏，主要包含攻击趋势、威胁分布、骨干网地图与流量监控等图表展示。
+                </p>
+              </div>
+              <div class="flex flex-col gap-2 flex-1 min-h-0">
+                <div class="flex items-center gap-2 text-sm font-bold text-blue-400"><i
+                    class="fa-solid fa-terminal"></i> 提示词参考</div>
+                <div
+                  class="p-4 flex-1 text-[12px] text-slate-400 font-mono font-medium leading-[2.0] bg-[#020617]/80 border border-slate-700/80 rounded-xl overflow-y-auto custom-scrollbar shadow-inner">
+                  <span class="text-[#ce9178]">"请结合内网 CDN 资源库，用 Vue + ECharts 写一个『网络运行安全态势感知』大屏前端页面，要求："</span><br><br>
+                  1. 整体布局：16:9 暗黑科技风（背景 <span
+                    class="bg-blue-950 text-blue-300 px-1 py-0.5 rounded border border-blue-700/50 font-mono">#070b19</span>）。<br>
+                  2、内容要求：顶部展示四大核心安全指标；左侧展示攻击趋势折线图和威胁类型环形图（图例右侧竖向排列）；中央嵌入中国骨干网安全态势地图（含散点与飞线）；右侧展示攻击源 TOP
+                  柱状图与实时高危预警流；底部展示内外网流量监控面积图与综合风险雷达图。<br>
+                  3. 交互与细节：所有图表组件必须使用真实的 <span class="text-cyan-400 font-bold">ECharts</span> 实例渲染。数据mock。<br>
+                  4. 依赖库使用内网 CDN 地址加载。
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="w-[65%] stagger-item">
+            <div
+              class="flex flex-col relative rounded-2xl overflow-hidden border border-[#1e3a8a] shadow-[0_0_40px_rgba(30,58,138,0.3)] bg-[#070b19] p-4 h-full group hover:-translate-y-1 transition-transform duration-500"
+              style="background-image: radial-gradient(circle at center, #0f1b3d 0%, #070b19 100%);">
+
+              <div
+                class="flex justify-between items-center pb-3 mb-3 border-b border-blue-500/20 shrink-0 relative z-10">
+                <div class="flex-1"></div>
+                <h3
+                  class="flex-1 text-center text-cyan-400 font-bold tracking-[0.2em] text-xl drop-shadow-[0_0_15px_rgba(34,211,238,0.6)]">
+                  网络运行安全态势感知</h3>
+                <div class="flex-1 flex items-center justify-end">
+                  <div class="text-blue-300 text-[10px] font-tech opacity-90 tracking-wider">2026-09-16 17:08:30</div>
+                </div>
+              </div>
+
+              <div class="flex gap-4 mb-4 shrink-0">
+                <div
+                  class="flex-1 bg-gradient-to-r from-[#0b122e] to-[#101b42] border border-[#1e3a8a] corner-decor p-2 flex flex-col relative justify-center">
+                  <div class="text-slate-400 text-[10px] mb-1 flex items-center gap-1"><i
+                      class="fa-solid fa-bug text-red-400"></i> 今日拦截总数 (次)</div>
+                  <div class="text-2xl font-tech font-bold text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">
+                    1,245,920</div>
+                </div>
+                <div
+                  class="flex-1 bg-gradient-to-r from-[#0b122e] to-[#101b42] border border-[#1e3a8a] corner-decor p-2 flex flex-col relative justify-center">
+                  <div class="text-slate-400 text-[10px] mb-1 flex items-center gap-1"><i
+                      class="fa-solid fa-shield-check text-green-400"></i> 综合威胁防御率</div>
+                  <div class="text-2xl font-tech font-bold text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]">
+                    99.98<span class="text-xs text-slate-400 ml-1 font-sans">%</span></div>
+                </div>
+                <div
+                  class="flex-1 bg-gradient-to-r from-[#0b122e] to-[#101b42] border border-[#1e3a8a] corner-decor p-2 flex flex-col relative justify-center">
+                  <div class="text-slate-400 text-[10px] mb-1 flex items-center gap-1"><i
+                      class="fa-solid fa-user-ninja text-yellow-400"></i> 活跃高危源 IP</div>
+                  <div class="text-2xl font-tech font-bold text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">
+                    1,065</div>
+                </div>
+                <div
+                  class="flex-1 bg-gradient-to-r from-[#0b122e] to-[#101b42] border border-[#1e3a8a] corner-decor p-2 flex flex-col relative justify-center">
+                  <div class="text-slate-400 text-[10px] mb-1 flex items-center gap-1"><i
+                      class="fa-solid fa-microchip text-cyan-400"></i> 核心网关负载率</div>
+                  <div class="text-2xl font-tech font-bold text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
+                    45.2<span class="text-xs text-slate-400 ml-1 font-sans">%</span></div>
+                </div>
+              </div>
+
+              <div class="flex-[1.5] flex gap-4 min-h-0 mb-4">
+                <div class="w-[28%] flex flex-col gap-4 h-full">
+                  <div class="flex-[1.2] bg-[#0b122e]/80 border border-[#1e3a8a] corner-decor p-2 flex flex-col">
+                    <div class="text-cyan-300 text-[11px] font-bold mb-1 pl-1 border-l-2 border-cyan-400">24小时攻击拦截趋势
+                    </div>
+                    <div id="echarts-attack-trend" class="flex-1 w-full min-h-0"></div>
+                  </div>
+                  <div class="flex-[0.8] bg-[#0b122e]/80 border border-[#1e3a8a] corner-decor p-2 flex flex-col">
+                    <div class="text-cyan-300 text-[11px] font-bold mb-1 pl-1 border-l-2 border-cyan-400">拦截威胁类型分布</div>
+                    <div id="echarts-threat-type" class="flex-1 w-full min-h-0"></div>
+                  </div>
+                </div>
+
+                <div
+                  class="w-[44%] relative border border-[#1e3a8a]/50 corner-decor bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#111f4d] to-transparent flex flex-col">
+                  <div class="absolute top-2 right-3 flex gap-2 z-10 pointer-events-none">
+                    <div class="text-[9px] text-slate-400 flex items-center gap-1"><span
+                        class="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span>正常节点</div>
+                    <div class="text-[9px] text-slate-400 flex items-center gap-1"><span
+                        class="w-1.5 h-1.5 bg-red-500 rounded-full"></span>高危节点</div>
+                  </div>
+                  <div id="echarts-security-map" class="flex-1 w-full min-h-0 relative z-0"></div>
+                </div>
+
+                <div class="w-[28%] flex flex-col gap-4 h-full">
+                  <div class="flex-[1] bg-[#0b122e]/80 border border-[#1e3a8a] corner-decor p-2 flex flex-col">
+                    <div class="text-cyan-300 text-[11px] font-bold mb-1 pl-1 border-l-2 border-cyan-400">国内攻击源区域 TOP5
+                    </div>
+                    <div id="echarts-attack-source" class="flex-1 w-full min-h-0"></div>
+                  </div>
+
+                  <div
+                    class="flex-[1] bg-[#0b122e]/80 border border-[#1e3a8a] corner-decor p-2 flex flex-col overflow-hidden">
+                    <div
+                      class="text-red-400 text-[11px] pb-1.5 border-b border-[#1e3a8a] font-bold shrink-0 flex items-center gap-1">
+                      <i class="fa-solid fa-triangle-exclamation animate-pulse"></i> 实时高危预警流
+                    </div>
+                    <div class="flex-1 relative overflow-hidden mt-1.5"
+                      style="mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);">
+                      <div class="absolute inset-x-0 flex flex-col gap-1.5 animate-scroll-y mt-1 font-mono">
+                        <div
+                          class="flex justify-between items-center text-[9px] bg-red-900/20 border border-red-500/20 px-2 py-1.5 rounded">
+                          <span class="text-slate-400">17:08</span><span
+                            class="text-red-400 font-bold">SQL注入</span><span
+                            class="text-slate-300">114.11.*.*</span><span class="text-green-400">已拦截</span>
+                        </div>
+                        <div
+                          class="flex justify-between items-center text-[9px] bg-orange-900/20 border border-orange-500/20 px-2 py-1.5 rounded">
+                          <span class="text-slate-400">17:07</span><span
+                            class="text-orange-400 font-bold">暴力破解</span><span
+                            class="text-slate-300">183.15.*.*</span><span class="text-green-400">已拦截</span>
+                        </div>
+                        <div
+                          class="flex justify-between items-center text-[9px] bg-red-900/20 border border-red-500/20 px-2 py-1.5 rounded">
+                          <span class="text-slate-400">17:05</span><span class="text-red-400 font-bold">木马远控</span><span
+                            class="text-slate-300">202.96.*.*</span><span class="text-red-400 animate-pulse">阻断中</span>
+                        </div>
+                        <div
+                          class="flex justify-between items-center text-[9px] bg-yellow-900/20 border border-yellow-500/20 px-2 py-1.5 rounded">
+                          <span class="text-slate-400">17:02</span><span
+                            class="text-yellow-400 font-bold">端口扫描</span><span
+                            class="text-slate-300">119.29.*.*</span><span class="text-green-400">已记录</span>
+                        </div>
+                        <div
+                          class="flex justify-between items-center text-[9px] bg-red-900/20 border border-red-500/20 px-2 py-1.5 rounded">
+                          <span class="text-slate-400">17:01</span><span class="text-red-400 font-bold">CC
+                            攻击</span><span class="text-slate-300">120.25.*.*</span><span
+                            class="text-green-400">清洗中</span>
+                        </div>
+                        <div
+                          class="flex justify-between items-center text-[9px] bg-red-900/20 border border-red-500/20 px-2 py-1.5 rounded">
+                          <span class="text-slate-400">17:08</span><span
+                            class="text-red-400 font-bold">SQL注入</span><span
+                            class="text-slate-300">114.11.*.*</span><span class="text-green-400">已拦截</span>
+                        </div>
+                        <div
+                          class="flex justify-between items-center text-[9px] bg-orange-900/20 border border-orange-500/20 px-2 py-1.5 rounded">
+                          <span class="text-slate-400">17:07</span><span
+                            class="text-orange-400 font-bold">暴力破解</span><span
+                            class="text-slate-300">183.15.*.*</span><span class="text-green-400">已拦截</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex-[0.8] flex gap-4 shrink-0">
+                <div class="w-[45%] bg-[#0b122e]/80 border border-[#1e3a8a] corner-decor p-2 flex flex-col">
+                  <div class="text-cyan-300 text-[11px] font-bold mb-1 pl-1 border-l-2 border-cyan-400">内外网实时流量监控</div>
+                  <div id="echarts-traffic" class="flex-1 w-full min-h-0"></div>
+                </div>
+
+                <div
+                  class="w-[20%] bg-[#0b122e]/80 border border-[#1e3a8a] corner-decor p-3 flex flex-col justify-center gap-3">
+                  <div class="w-full">
+                    <div class="flex justify-between text-[9px] mb-1"><span class="text-slate-300">华东主干网 健康度</span><span
+                        class="text-cyan-400 font-tech">98.5%</span></div>
+                    <div class="w-full h-1.5 bg-blue-900/50 rounded-full overflow-hidden">
+                      <div class="h-full bg-cyan-400 shadow-[0_0_5px_#22d3ee]" style="width: 98.5%"></div>
+                    </div>
+                  </div>
+                  <div class="w-full">
+                    <div class="flex justify-between text-[9px] mb-1"><span class="text-slate-300">华南灾备区 健康度</span><span
+                        class="text-yellow-400 font-tech">72.0%</span></div>
+                    <div class="w-full h-1.5 bg-blue-900/50 rounded-full overflow-hidden">
+                      <div class="h-full bg-yellow-400 shadow-[0_0_5px_#facc15] animate-pulse" style="width: 72%"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="w-[35%] bg-[#0b122e]/80 border border-[#1e3a8a] corner-decor p-2 flex flex-col">
+                  <div class="text-cyan-300 text-[11px] font-bold mb-1 pl-1 border-l-2 border-cyan-400">综合风险水位评估</div>
+                  <div id="echarts-risk-radar" class="flex-1 w-full min-h-0"></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 专属网络安全 ECharts 渲染脚本 -->
+    <script>
+      setTimeout(() => {
+        const initCharts = () => {
+          if (typeof echarts === 'undefined') return;
+
+          const trendDom = document.getElementById('echarts-attack-trend');
+          if (trendDom) {
+            const chart = echarts.init(trendDom);
+            chart.setOption({
+              grid: { top: 10, right: 10, bottom: 20, left: 35 },
+              tooltip: { trigger: 'axis', backgroundColor: 'rgba(7,11,25,0.8)', borderColor: '#1e3a8a', textStyle: { color: '#fff', fontSize: 10 } },
+              xAxis: { type: 'category', data: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'], axisLabel: { color: '#64748b', fontSize: 9 }, axisLine: { lineStyle: { color: '#1e3a8a' } } },
+              yAxis: { type: 'value', axisLabel: { color: '#64748b', fontSize: 9 }, splitLine: { lineStyle: { color: '#1e3a8a', type: 'dashed' } } },
+              series: [
+                { name: 'Web攻击', type: 'line', smooth: true, data: [120, 80, 250, 450, 310, 520], symbol: 'none', itemStyle: { color: '#22d3ee' }, lineStyle: { width: 2 } },
+                { name: 'DDoS', type: 'line', smooth: true, data: [50, 60, 100, 800, 200, 150], symbol: 'none', itemStyle: { color: '#ef4444' }, lineStyle: { width: 2 } }
+              ]
+            });
+            window.addEventListener('resize', () => chart.resize());
+          }
+
+          const typeDom = document.getElementById('echarts-threat-type');
+          if (typeDom) {
+            const chart = echarts.init(typeDom);
+            chart.setOption({
+              tooltip: { trigger: 'item', backgroundColor: 'rgba(7,11,25,0.8)', borderColor: '#1e3a8a', textStyle: { color: '#fff', fontSize: 10 } },
+              legend: { orient: 'vertical', right: 5, top: 'middle', textStyle: { color: '#cbd5e1', fontSize: 9 }, itemWidth: 8, itemHeight: 8 },
+              series: [{
+                name: '威胁类型', type: 'pie', radius: ['45%', '70%'], center: ['32%', '50%'],
+                itemStyle: { borderColor: '#070b19', borderWidth: 2 },
+                label: { show: false },
+                data: [
+                  { value: 40, name: 'DDoS攻击', itemStyle: { color: '#ef4444' } },
+                  { value: 30, name: 'SQL注入', itemStyle: { color: '#f59e0b' } },
+                  { value: 20, name: 'XSS跨站', itemStyle: { color: '#3b82f6' } },
+                ]
+              }]
+            });
+            window.addEventListener('resize', () => chart.resize());
+          }
+
+          const sourceDom = document.getElementById('echarts-attack-source');
+          if (sourceDom) {
+            const chart = echarts.init(sourceDom);
+            chart.setOption({
+              grid: { top: 5, right: 15, bottom: 5, left: 35 },
+              tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: 'rgba(7,11,25,0.8)', textStyle: { color: '#fff', fontSize: 10 } },
+              xAxis: { type: 'value', show: false },
+              yAxis: { type: 'category', data: ['广东', '浙江', '江苏', '北京', '四川'].reverse(), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { show: false }, axisTick: { show: false } },
+              series: [{
+                type: 'bar', data: [8500, 6200, 5100, 4800, 3200].reverse(), barWidth: '40%',
+                itemStyle: {
+                  borderRadius: [0, 3, 3, 0],
+                  color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [{ offset: 0, color: '#ef4444' }, { offset: 1, color: 'transparent' }])
+                },
+                label: { show: true, position: 'right', color: '#ef4444', fontSize: 9, fontFamily: 'Outfit' }
+              }]
+            });
+            window.addEventListener('resize', () => chart.resize());
+          }
+
+          const trafficDom = document.getElementById('echarts-traffic');
+          if (trafficDom) {
+            const chart = echarts.init(trafficDom);
+            chart.setOption({
+              grid: { top: 10, right: 10, bottom: 20, left: 35 },
+              tooltip: { trigger: 'axis', backgroundColor: 'rgba(7,11,25,0.8)', borderColor: '#1e3a8a', textStyle: { color: '#fff', fontSize: 10 } },
+              xAxis: { type: 'category', boundaryGap: false, data: ['17:00', '17:02', '17:04', '17:06', '17:08'], axisLabel: { color: '#64748b', fontSize: 9 }, axisLine: { lineStyle: { color: '#1e3a8a' } } },
+              yAxis: { type: 'value', axisLabel: { color: '#64748b', fontSize: 9 }, splitLine: { lineStyle: { color: '#1e3a8a', type: 'dashed' } } },
+              series: [
+                { name: '入站流量', type: 'line', smooth: true, data: [1200, 1500, 1100, 3200, 1800], symbol: 'none', itemStyle: { color: '#22d3ee' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(34,211,238,0.5)' }, { offset: 1, color: 'transparent' }]) } },
+                { name: '出站流量', type: 'line', smooth: true, data: [800, 900, 850, 950, 880], symbol: 'none', itemStyle: { color: '#4ade80' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(74,222,128,0.3)' }, { offset: 1, color: 'transparent' }]) } }
+              ]
+            });
+            window.addEventListener('resize', () => chart.resize());
+          }
+
+          const mapDom = document.getElementById('echarts-security-map');
+          if (mapDom) {
+            const chart = echarts.init(mapDom);
+            chart.setOption({
+              backgroundColor: 'transparent',
+              tooltip: { trigger: 'item', backgroundColor: 'rgba(7,11,25,0.9)', borderColor: '#ef4444', textStyle: { color: '#fff', fontSize: 10 }, formatter: '{b}<br/>状态: {c}' },
+              geo: {
+                map: 'china', zoom: 1.2, roam: false, label: { show: false },
+                itemStyle: { areaColor: 'rgba(15, 23, 42, 0.4)', borderColor: '#1e3a8a', borderWidth: 1 },
+                emphasis: { itemStyle: { areaColor: 'rgba(30, 58, 138, 0.6)' }, label: { show: false } }
+              },
+              series: [
+                {
+                  type: 'lines', zlevel: 1,
+                  effect: { show: true, period: 3, trailLength: 0.2, symbol: 'arrow', symbolSize: 5 },
+                  lineStyle: { color: '#ef4444', width: 1.5, opacity: 0.4, curveness: 0.3 },
+                  data: [
+                    { coords: [[113.23, 23.16], [116.40, 39.90]] },
+                    { coords: [[121.47, 31.23], [116.40, 39.90]] }
+                  ]
+                },
+                {
+                  type: 'effectScatter', coordinateSystem: 'geo', zlevel: 2,
+                  rippleEffect: { brushType: 'stroke', scale: 4 },
+                  label: { show: true, position: 'right', formatter: '{b}', color: '#94a3b8', fontSize: 9 },
+                  symbolSize: function (val) { return val[2] === '被攻击' ? 12 : 6; },
+                  itemStyle: {
+                    color: function (params) { return params.value[2] === '被攻击' ? '#ef4444' : '#22d3ee'; },
+                    shadowBlur: 10,
+                    shadowColor: function (params) { return params.value[2] === '被攻击' ? '#ef4444' : '#22d3ee'; }
+                  },
+                  data: [
+                    { name: '北京总部', value: [116.40, 39.90, '被攻击'] },
+                    { name: '上海灾备', value: [121.47, 31.23, '安全'] },
+                    { name: '广州节点', value: [113.23, 23.16, '安全'] },
+                    { name: '成都节点', value: [104.06, 30.67, '安全'] }
+                  ]
+                }
+              ]
+            });
+            window.addEventListener('resize', () => chart.resize());
+          }
+
+          const radarDom = document.getElementById('echarts-risk-radar');
+          if (radarDom) {
+            const chart = echarts.init(radarDom);
+            chart.setOption({
+              tooltip: { trigger: 'item', backgroundColor: 'rgba(7,11,25,0.8)', borderColor: '#1e3a8a', textStyle: { color: '#fff', fontSize: 10 } },
+              radar: {
+                indicator: [
+                  { name: '流量异常', max: 100 },
+                  { name: '漏洞扫描', max: 100 },
+                  { name: '恶意登录', max: 100 },
+                  { name: '敏感信息', max: 100 },
+                  { name: '终端违规', max: 100 }
+                ],
+                radius: '60%',
+                center: ['50%', '55%'],
+                splitNumber: 4,
+                axisName: { color: '#94a3b8', fontSize: 9 },
+                splitArea: { areaStyle: { color: ['rgba(34,211,238,0.05)', 'rgba(34,211,238,0.1)', 'rgba(34,211,238,0.15)', 'rgba(34,211,238,0.2)'] } },
+                axisLine: { lineStyle: { color: 'rgba(34,211,238,0.3)' } },
+                splitLine: { lineStyle: { color: 'rgba(34,211,238,0.3)' } }
+              },
+              series: [{
+                type: 'radar',
+                data: [
+                  {
+                    value: [85, 42, 68, 35, 50],
+                    name: '风险指数',
+                    itemStyle: { color: '#22d3ee' },
+                    areaStyle: { color: 'rgba(34,211,238,0.4)' },
+                    lineStyle: { width: 1 }
+                  }
+                ]
+              }]
+            });
+            window.addEventListener('resize', () => chart.resize());
+          }
+        };
+        initCharts();
+      }, 800);
+    </script>
+
+    <!-- Slide 11: Case 2 -->
+    <div class="slide !bg-[#0b1120] border-slate-800 shadow-2xl">
+      <div class="slide-content h-full flex flex-col relative z-10">
+        <div class="flex justify-between items-center mb-12 shrink-0 stagger-item">
+          <h2 class="text-4xl font-bold text-white"><span
+              class="bg-indigo-600/50 border border-indigo-400/50 text-indigo-200 px-4 py-1.5 rounded-lg mr-4 font-black shadow-[0_0_15px_rgba(99,102,241,0.6)]">实战二</span>
+            AI工具直接输出与生产环境风格一致的原型</h2>
+        </div>
+
+        <div class="flex-1 flex gap-8 pb-2 items-stretch min-h-0">
+          <div class="w-[35%] stagger-item">
+            <div
+              class="dark-glass flex flex-col overflow-hidden shadow-xl p-6 gap-6 bg-[#020617]/50 border border-slate-800/80 h-full group hover:-translate-y-1 transition-transform duration-500">
+              <div class="flex flex-col gap-3 shrink-0">
+                <div class="flex items-center gap-2 text-base font-bold text-indigo-400"><i
+                    class="fa-solid fa-bullseye"></i> 业务需求</div>
+                <div
+                  class="p-4 text-[14px] text-slate-300 font-medium leading-relaxed bg-indigo-900/20 border border-indigo-500/30 rounded-xl shadow-sm">
+                  业务团队需要评审「人员管理模块」的交互与字段设计。需要快速生成一个人员管理页面原型，页面包括左侧组织树、顶部查询筛选、右侧数据表格。
+                </div>
+              </div>
+              <div class="flex flex-col gap-3 flex-1 min-h-0">
+                <div class="flex items-center gap-2 text-base font-bold text-indigo-400"><i
+                    class="fa-solid fa-terminal"></i> 提示词参考</div>
+                <div
+                  class="p-5 flex-1 text-[13px] text-slate-400 font-mono font-medium leading-[2.2] bg-[#020617]/80 border border-slate-700/80 rounded-xl overflow-y-auto custom-scrollbar shadow-inner">
+                  <span class="text-[#ce9178]">"请根据以下要求，使用 <span class="text-indigo-400 font-bold">ElementUI</span>
+                    组件库，生成一个高保真的管理系统前端页面："</span><br>
+                  1. 创建一个左侧和顶部颜色为 <span
+                    class="bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-700/50 font-mono">#18213e</span>
+                  的菜单栏，左侧菜单包含1项人员管理菜单。<br>
+                  2. 人员管理页面宽度自适应，。左侧展示<span class="text-indigo-400 font-bold">组织架构树</span>，带搜索框。<br>
+                  3. 右侧主体分为<span
+                    class="text-amber-400 font-bold">独立的三个块</span>展示：最上方块放置人员名称、部门名称等查询条件及按钮；中间块放置标题“人员数据列表”及右侧新增按钮；最下方块放置分页表格，表头含编辑删除操作。<br>
+                  4. 组件库使用内网 <span
+                    class="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded border border-slate-600 font-mono">CDN地址</span>。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="w-[65%] stagger-item" id="element-app">
+            <div
+              class="flex h-full w-full relative rounded-2xl overflow-hidden border border-slate-500 shadow-[0_0_40px_rgba(255,255,255,0.1)] bg-[#f1f5f9] group hover:-translate-y-1 transition-transform duration-500">
+
+              <div class="w-28 bg-[#18213e] flex flex-col items-center py-4 shrink-0 shadow-lg z-20">
+                <div class="text-white text-2xl mb-8 flex items-center gap-2 font-bold"><i
+                    class="fa-solid fa-cube text-indigo-400"></i> <span class="text-sm tracking-widest">内网系统</span>
+                </div>
+                <div
+                  class="w-full py-3 bg-indigo-600/30 text-indigo-300 text-sm flex items-center pl-4 gap-3 cursor-pointer border-l-[3px] border-indigo-400">
+                  人员管理
+                </div>
+              </div>
+
+              <div class="flex-1 flex flex-col min-w-0">
+                <div class="h-12 bg-[#18213e] flex items-center justify-between px-5 shrink-0 shadow-sm z-10">
+                  <div class="text-indigo-800 text-xs  border-indigo-400/80 px-3 py-1  font-bold "></div>
+                  <div class="flex items-center gap-5 text-slate-300">
+                    <i class="fa-solid fa-bell cursor-pointer hover:text-white"></i>
+                    <div class="flex items-center gap-2 cursor-pointer">
+                      <div
+                        class="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs">
+                        <i class="fa-solid fa-user"></i>
+                      </div>
+                      <span class="text-xs">管理员</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex-1 flex p-4 gap-4 min-h-0 text-slate-800 bg-[#f4f7f9]">
+                  <div
+                    class="w-[22%] bg-white border border-slate-200 rounded-lg shadow-sm p-3 flex flex-col h-full overflow-y-auto">
+                    <el-input placeholder="关键字过滤" v-model="filterText" size="small" prefix-icon="el-icon-search"
+                      class="mb-4"></el-input>
+                    <el-tree :data="treeData" :props="defaultProps" default-expand-all :filter-node-method="filterNode"
+                      ref="tree" class="text-sm text-slate-700"></el-tree>
+                  </div>
+
+                  <div class="flex-1 flex flex-col h-full overflow-hidden gap-3">
+
+                    <div
+                      class="bg-white border border-slate-200 rounded-lg shadow-sm p-3 flex items-center gap-3 shrink-0">
+                      <el-input placeholder="人员名称" size="small" style="width: 140px;"></el-input>
+                      <el-input placeholder="部门名称" size="small" style="width: 140px;"></el-input>
+                      <el-button type="primary" size="small">查询</el-button>
+                      <el-button size="small">重置</el-button>
+                    </div>
+
+                    <div
+                      class="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-2 flex items-center justify-between shrink-0">
+                      <div class="text-[15px] font-bold text-slate-800 border-l-[4px] border-indigo-500 pl-3">人员数据列表
+                      </div>
+                      <el-button type="primary" size="small" icon="el-icon-plus">新增</el-button>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-lg shadow-sm p-3 flex-1 flex flex-col min-h-0">
+                      <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                        <el-table :data="tableData" size="small" stripe border style="width: 100%"
+                          header-cell-style="{background:'#f8fafc', color:'#475569'}">
+                          <el-table-column prop="id" label="序号" width="60" align="center"></el-table-column>
+                          <el-table-column prop="name" label="姓名" width="80" font-weight="bold"></el-table-column>
+                          <el-table-column prop="dept" label="部门"></el-table-column>
+                          <el-table-column prop="role" label="角色"></el-table-column>
+                          <el-table-column label="状态" width="70" align="center">
+                            <template slot-scope="scope">
+                              <el-tag :type="scope.row.status === '在职' ? 'success' : 'info'" size="mini"
+                                effect="light">{{ scope.row.status }}</el-tag>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="100" align="center">
+                            <template slot-scope="scope">
+                              <el-button type="text" size="mini">编辑</el-button>
+                              <el-button type="text" size="mini" class="text-red-500">删除</el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </div>
+                      <div class="mt-3 flex justify-end shrink-0">
+                        <el-pagination background layout="prev, pager, next" :total="50" small></el-pagination>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 12: Case 3 -->
+    <div class="slide !bg-transparent border-none shadow-none">
+      <div class="bg-image-cover opacity-[0.1]"
+        style="background-image: url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920');">
+      </div>
+      <div class="slide-content h-full flex flex-col relative z-10">
+        <div class="flex justify-between items-center mb-12 shrink-0 stagger-item">
+          <h2 class="text-4xl font-bold text-white"><span
+              class="bg-sky-600/50 border border-sky-400/50 text-sky-200 px-4 py-1.5 rounded-lg mr-4 font-black shadow-[0_0_15px_rgba(14,165,233,0.6)]">实战三</span>
+            沉浸式网页文档生成 (本演示即证明)</h2>
+        </div>
+
+        <div class="flex-1 flex gap-8 pb-2 items-stretch min-h-0">
+          <div class="w-[35%] stagger-item shrink-0">
+            <div
+              class="dark-glass flex flex-col overflow-hidden shadow-xl bg-[#0b1120]/80 p-6 gap-6 h-full group hover:-translate-y-1 transition-transform duration-500">
+              <div class="flex flex-col gap-3 shrink-0">
+                <div class="flex items-center gap-2 text-base font-bold text-sky-400"><i
+                    class="fa-solid fa-bullseye"></i> 业务背景</div>
+                <div
+                  class="p-4 text-[14px] text-slate-300 font-medium leading-relaxed bg-sky-900/20 border border-sky-500/30 rounded-xl shadow-sm">
+                  内网项目结项汇报需要较强的表现力。为打破传统 PPT 的静态束缚，使用大模型直接生成具备自适应缩放、带目录导航和全屏互动的网页级演示文档，完美实现「用项目成果汇报项目」。
+                </div>
+              </div>
+              <div class="flex flex-col gap-3 flex-1 min-h-0">
+                <div class="flex items-center gap-2 text-base font-bold text-sky-400"><i
+                    class="fa-solid fa-terminal"></i> 提示词参考</div>
+                <div
+                  class="p-5 flex-1 text-[13px] text-slate-400 font-mono font-medium leading-[2.2] bg-[#020617]/80 border border-slate-700/80 rounded-xl overflow-y-auto custom-scrollbar shadow-inner">
+                  <span class="text-[#ce9178]">"我需要制作一个清爽专业的项目结项汇报文档。"</span><br>
+                  <span class="text-rose-400 font-bold">【环境要求】</span><br>
+                  统一使用内网地址 <span
+                    class="bg-slate-800 text-sky-300 px-1.5 py-0.5 rounded border border-slate-600 font-mono">10.100.103.210/cdn/</span>
+                  引入 <span
+                    class="bg-sky-900/40 text-sky-300 px-1.5 py-0.5 rounded border border-sky-700/50 font-bold">Tailwind
+                    CSS</span> 和 <span
+                    class="bg-sky-900/40 text-sky-300 px-1.5 py-0.5 rounded border border-sky-700/50 font-bold">FontAwesome</span>
+                  等资源。<br>
+                  <span class="text-rose-400 font-bold">【排版与交互】</span><br>
+                  1. 整体采用<span class="text-sky-400 font-bold">暗黑科技风</span>，使用玻璃拟态布局。<br>
+                  2. 输出单页面 <span class="text-amber-400 font-bold">HTML</span>，页面支持全屏、等比自适应缩放。<br>
+                  3. 支持键盘按键与底部控制栏完成平滑翻页切换，支持目录导航。<br>
+                  4. 可引入 <span class="text-emerald-400 font-bold">GSAP</span>、<span
+                    class="text-emerald-400 font-bold">Three.js</span> 实现简单粒子与动画效果，增强页面沉浸感。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="w-[65%] stagger-item">
+            <div
+              class="flex flex-col relative rounded-2xl overflow-hidden border border-slate-600 bg-gradient-to-br from-slate-800 to-[#020617] shadow-2xl h-full group hover:-translate-y-1 transition-transform duration-500">
+              <div class="h-10 bg-slate-900 flex items-center px-4 gap-2 border-b border-slate-700 shrink-0">
+                <div class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_5px_#ef4444]"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500 shadow-[0_0_5px_#eab308]"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_5px_#22c55e]"></div>
+              </div>
+
+              <div class="flex-1 flex flex-col items-center justify-center p-10 relative overflow-hidden">
+                <div class="absolute inset-0 opacity-20"
+                  style="background-image: radial-gradient(rgba(14, 165, 233, 0.4) 1px, transparent 1px); background-size: 30px 30px;">
+                </div>
+                <div class="absolute w-full h-1/2 bottom-0 bg-gradient-to-t from-sky-900/20 to-transparent"></div>
+
+                <div class="relative z-10 text-center">
+                  <i
+                    class="fa-solid fa-display text-[5rem] text-sky-400 mb-8 drop-shadow-[0_0_30px_rgba(56,189,248,0.6)] animate-pulse"></i>
+                  <h3 class="text-3xl font-bold text-white mb-4 tracking-wide">本演示即为真实案例产物</h3>
+                  <p class="text-slate-300 text-sm mb-10 max-w-lg mx-auto leading-relaxed font-medium">
+                    当前您正在观看的这份网页演示文档，即使放置于内网环境中，只要改用本项目的内网 CDN 资源，依然能够完美运行并保持极强的视觉与交互表现力。
+                  </p>
+                  <div class="inline-flex gap-4 text-xs font-mono text-sky-300 font-bold">
+                    <span
+                      class="bg-sky-900/40 px-5 py-2 rounded-full border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.2)]">Tailwind
+                      CSS</span>
+                    <span
+                      class="bg-sky-900/40 px-5 py-2 rounded-full border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.2)]">FontAwesome</span>
+                    <span
+                      class="bg-sky-900/40 px-5 py-2 rounded-full border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.2)]">GSAP
+                      & Three.js</span>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                class="absolute top-14 right-4 bg-sky-500/20 border border-sky-400/50 text-sky-200 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 backdrop-blur-md shadow-[0_0_15px_rgba(56,189,248,0.5)]">
+                <i class="fa-solid fa-check-circle"></i> 自证成果
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 13: Promotion -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-30 mix-blend-screen"
+        style="background-image: url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920');">
+      </div>
+
+      <div class="slide-content h-full flex flex-col relative z-10">
+        <div id="three-bg-13" class="absolute inset-[-100px] z-0 opacity-80 pointer-events-none"></div>
+
+        <div class="flex justify-between items-center mb-5 shrink-0 stagger-item relative z-10">
+          <h2 class="text-4xl font-bold text-white"><span
+              class="bg-blue-600/50 border border-blue-400/50 text-blue-200 px-4 py-1.5 rounded-lg mr-4 font-black shadow-[0_0_15px_rgba(59,130,246,0.6)]">拓展推广</span>
+            PPT应用与原型构建赋能</h2>
+        </div>
+
+        <div class="flex-1 flex w-full justify-center items-center gap-16 px-10 pb-6 min-h-0 relative z-10">
+
+          <div class="w-[45%] h-[60%] stagger-item">
+            <div
+              class="relative group rounded-2xl cursor-pointer dark-glass p-10 flex flex-col items-center text-center justify-center border-t-[4px] border-t-blue-500 hover:-translate-y-4 transition-transform duration-500 hover:shadow-[0_20px_50px_rgba(59,130,246,0.4)] h-full bg-[#0b1120]/80 overflow-hidden">
+              <div
+                class="absolute inset-0 bg-gradient-to-t from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              </div>
+
+              <div
+                class="w-20 h-20 rounded-2xl bg-blue-900/50 border border-blue-400/50 flex items-center justify-center mb-6 transform group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(59,130,246,0.6)] transition-all duration-300 ease-out z-10">
+                <i class="fa-solid fa-laptop-code text-4xl text-blue-400"></i>
+              </div>
+
+              <h3 class="text-3xl font-black text-white mb-4 tracking-wide z-10">
+                PPT制作使用内网CDN
+              </h3>
+              <p class="text-base text-slate-300 font-medium leading-relaxed max-w-sm z-10">
+                <span class="text-blue-400 font-bold px-1">AI部门同事</span> 使用内网CDN资源完成制作PPT的工具。
+              </p>
+
+              <div
+                class="mt-8 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+                <span
+                  class="px-4 py-1.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-mono tracking-widest shadow-[0_0_10px_rgba(59,130,246,0.3)]">Skill
+                  挂载</span>
+                <span
+                  class="px-4 py-1.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-xs font-mono tracking-widest shadow-[0_0_10px_rgba(34,211,238,0.3)]">动效资源</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="w-[45%] h-[60%] stagger-item">
+            <div
+              class="relative group rounded-2xl cursor-pointer dark-glass p-10 flex flex-col items-center text-center justify-center border-t-[4px] border-t-indigo-500 hover:-translate-y-4 transition-transform duration-500 hover:shadow-[0_20px_50px_rgba(99,102,241,0.4)] h-full bg-[#0b1120]/80 overflow-hidden">
+              <div
+                class="absolute inset-0 bg-gradient-to-t from-indigo-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              </div>
+
+              <div
+                class="w-20 h-20 rounded-2xl bg-indigo-900/50 border border-indigo-400/50 flex items-center justify-center mb-6 transform group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(99,102,241,0.6)] transition-all duration-300 ease-out z-10">
+                <i class="fa-solid fa-compass-drafting text-4xl text-indigo-400"></i>
+              </div>
+
+              <h3 class="text-3xl font-black text-white mb-4 tracking-wide z-10">
+                OpenDesign 直连内网CDN
+              </h3>
+              <p class="text-base text-slate-300 font-medium leading-relaxed max-w-sm z-10">
+                打通 <span class="text-indigo-400 font-bold px-1">UI/设计同事</span> 在专网原型设计的通道。<br>
+                使用OpenDesign接入内网 CDN 资源，快速完成原型设计。
+              </p>
+
+              <div
+                class="mt-8 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+                <span
+                  class="px-4 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-mono tracking-widest shadow-[0_0_10px_rgba(99,102,241,0.3)]">原型设计</span>
+                <span
+                  class="px-4 py-1.5 rounded-full bg-purple-500/20 border border-purple-400/30 text-purple-300 text-xs font-mono tracking-widest shadow-[0_0_10px_rgba(168,85,247,0.3)]">高度还原</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 14: Project Value -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.25] mix-blend-screen"
+        style="background-image: url('https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?q=80&w=1920');">
+      </div>
+      <div class="slide-content h-full flex flex-col relative z-10">
+        <h2 class="text-4xl font-bold mb-4 text-white flex items-center stagger-item"><span
+            class="text-cyan-400 text-5xl mr-4 font-tech drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">08</span>价值赋能：全链路效能跃升与资产沉淀
+        </h2>
+        <div
+          class="w-24 h-1.5 bg-gradient-to-r from-cyan-400 to-blue-600 mb-6 rounded-full shrink-0 stagger-item shadow-[0_0_10px_rgba(34,211,238,0.5)]">
+        </div>
+
+        <div class="relative w-full max-w-[1200px] h-[550px] z-10 mx-auto mt-0 -translate-y-8 stagger-item">
+          <style>
+            @keyframes flowInward {
+              0% {
+                stroke-dashoffset: 1000;
+              }
+
+              100% {
+                stroke-dashoffset: 0;
+              }
+            }
+
+            .flow-line-svg {
+              stroke-dasharray: 60 1000;
+              animation: flowInward 2s linear infinite;
+            }
+          </style>
+
+          <svg class="absolute inset-0 w-[1200px] h-[550px] z-0 pointer-events-none">
+            <defs>
+              <filter id="glow-tree" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="5" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+
+            <g stroke="rgba(255, 255, 255, 0.15)" stroke-width="4" fill="none">
+              <path d="M 380 120 L 580 120 Q 600 120 600 140 L 600 275" />
+              <path d="M 820 120 L 620 120 Q 600 120 600 140 L 600 275" />
+              <path d="M 380 430 L 580 430 Q 600 430 600 410 L 600 275" />
+              <path d="M 820 430 L 620 430 Q 600 430 600 410 L 600 275" />
+            </g>
+
+            <g fill="none" stroke-width="6" stroke-linecap="round" filter="url(#glow-tree)">
+              <path class="flow-line-svg" d="M 380 120 L 580 120 Q 600 120 600 140 L 600 275" stroke="#3b82f6" />
+              <path class="flow-line-svg" d="M 820 120 L 620 120 Q 600 120 600 140 L 600 275" stroke="#8b5cf6"
+                style="animation-delay: 0.5s;" />
+              <path class="flow-line-svg" d="M 380 430 L 580 430 Q 600 430 600 410 L 600 275" stroke="#0ea5e9"
+                style="animation-delay: 1.0s;" />
+              <path class="flow-line-svg" d="M 820 430 L 620 430 Q 600 430 600 410 L 600 275" stroke="#14b8a6"
+                style="animation-delay: 1.5s;" />
+            </g>
+          </svg>
+
+          <div class="absolute left-1/2 top-[275px] -translate-x-1/2 -translate-y-1/2 z-40 flex flex-col items-center">
+            <div
+              class="w-28 h-28 bg-[#020617] rounded-full border-[6px] border-slate-700 flex items-center justify-center shadow-[0_0_40px_rgba(14,165,233,0.6)] relative overflow-hidden">
+              <div
+                class="absolute inset-0 rounded-full border-4 border-dashed border-cyan-400 animate-spin-slow opacity-80">
+              </div>
+              <div class="absolute inset-2 bg-gradient-to-t from-blue-600/40 to-cyan-400/10 rounded-full animate-pulse">
+              </div>
+              <i class="fa-solid fa-server text-4xl text-cyan-400 drop-shadow-lg z-10"></i>
+            </div>
+            <span
+              class="text-cyan-300 text-sm font-mono font-black mt-3 tracking-widest bg-cyan-900/40 border border-cyan-500/50 px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.4)] absolute top-[110px] whitespace-nowrap">CDN
+              CORE ENGINE</span>
+          </div>
+
+          <div class="absolute top-[120px] right-[820px] -translate-y-1/2 pr-4 z-30">
+            <div
+              class="w-[360px] dark-glass p-7 rounded-2xl flex flex-col relative group transition-transform hover:-translate-y-1 border-r-[4px] border-r-indigo-500 bg-[#020617]/50 hover:bg-[#020617]/70 hover:shadow-[0_0_30px_rgba(99,102,241,0.4)]">
+              <div
+                class="absolute top-1/2 -right-[6px] -translate-y-1/2 w-3 h-3 rounded-full bg-indigo-500 shadow-[0_0_15px_#6366f1] border border-[#0f172a] z-10">
+              </div>
+              <div class="flex items-center gap-3 mb-4 justify-start flex-row-reverse">
+                <div
+                  class="w-12 h-12 rounded-full bg-indigo-500/20 border border-indigo-500/50 shadow-sm text-indigo-400 flex items-center justify-center shrink-0">
+                  <i class="fa-solid fa-shield-halved text-xl"></i>
+                </div>
+                <h3 class="text-[20px] font-black text-white tracking-wide text-right">AI智能体基石</h3>
+              </div>
+              <p class="text-[15px] text-slate-200 leading-relaxed text-right font-medium">为智能体补齐“缺资源”短板，确保AI每次生成精准且可用。
+              </p>
+            </div>
+          </div>
+
+          <div class="absolute top-[120px] left-[820px] -translate-y-1/2 pl-4 z-30">
+            <div
+              class="w-[360px] dark-glass p-7 rounded-2xl flex flex-col relative group transition-transform hover:-translate-y-1 border-l-[4px] border-l-teal-500 bg-[#020617]/50 hover:bg-[#020617]/70 hover:shadow-[0_0_30px_rgba(20,184,166,0.4)]">
+              <div
+                class="absolute top-1/2 -left-[6px] -translate-y-1/2 w-3 h-3 rounded-full bg-teal-500 shadow-[0_0_15px_#14b8a6] border border-[#0f172a] z-10">
+              </div>
+              <div class="flex items-center gap-3 mb-4 justify-start">
+                <div
+                  class="w-12 h-12 rounded-full bg-teal-500/20 border border-teal-500/50 shadow-sm text-teal-400 flex items-center justify-center shrink-0">
+                  <i class="fa-solid fa-bolt text-xl"></i>
+                </div>
+                <h3 class="text-[20px] font-black text-white tracking-wide">快速验证方案与演示</h3>
+              </div>
+              <p class="text-[15px] text-slate-200 leading-relaxed text-left font-medium">
+                快速完成方案验证和Demo演示，省去繁琐本地环境搭建，缩短技术预研周期。</p>
+            </div>
+          </div>
+
+          <div class="absolute top-[430px] right-[820px] -translate-y-1/2 pr-4 z-30">
+            <div
+              class="w-[360px] dark-glass p-7 rounded-2xl flex flex-col relative group transition-transform hover:-translate-y-1 border-r-[4px] border-r-blue-500 bg-[#020617]/50 hover:bg-[#020617]/70 hover:shadow-[0_0_30px_rgba(59,130,246,0.4)]">
+              <div
+                class="absolute top-1/2 -right-[6px] -translate-y-1/2 w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_15px_#3b82f6] border border-[#0f172a] z-10">
+              </div>
+              <div class="flex items-center gap-3 mb-4 justify-start flex-row-reverse">
+                <div
+                  class="w-12 h-12 rounded-full bg-blue-500/20 border border-blue-500/50 shadow-sm text-blue-400 flex items-center justify-center shrink-0">
+                  <i class="fa-solid fa-pen-ruler text-xl"></i>
+                </div>
+                <h3 class="text-[20px] font-black text-white tracking-wide text-right">原型生成更真实保真</h3>
+              </div>
+              <p class="text-[15px] text-slate-200 leading-relaxed text-right font-medium">
+                智能体直调开发组件库，实现产品风格高度一致，大幅减少后期视觉微调与沟通误差。</p>
+            </div>
+          </div>
+
+          <div class="absolute top-[430px] left-[820px] -translate-y-1/2 pl-4 z-30">
+            <div
+              class="w-[360px] dark-glass p-7 rounded-2xl flex flex-col relative group transition-transform hover:-translate-y-1 border-l-[4px] border-l-purple-500 bg-[#020617]/50 hover:bg-[#020617]/70 hover:shadow-[0_0_30px_rgba(168,85,247,0.4)]">
+              <div
+                class="absolute top-1/2 -left-[6px] -translate-y-1/2 w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_15px_#a855f7] border border-[#0f172a] z-10">
+              </div>
+              <div class="flex items-center gap-3 mb-4 justify-start">
+                <div
+                  class="w-12 h-12 rounded-full bg-purple-500/20 border border-purple-500/50 shadow-sm text-purple-400 flex items-center justify-center shrink-0">
+                  <i class="fa-solid fa-chart-pie text-xl"></i>
+                </div>
+                <h3 class="text-[20px] font-black text-white tracking-wide">高质量沉浸式汇报</h3>
+              </div>
+              <p class="text-[15px] text-slate-200 leading-relaxed text-left font-medium">
+                网页汇报，大屏演示不再单调，大家都可以制作表现力更强的交互式材料</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 15: Conclusion -->
+     <!-- Slide: AI 学习与使用 (接地气版) -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-[0.08]"
+        style="background-image: url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920');">
+      </div>
+      <div class="slide-content h-full flex flex-col relative z-10">
+        <!-- 头部标题 -->
+        <div class="flex justify-between items-center mb-4 shrink-0 stagger-item">
+          <h2 class="text-4xl font-bold text-white flex items-center">
+            <span class="text-indigo-400 text-5xl mr-4 font-tech drop-shadow-[0_0_15px_rgba(129,140,248,0.5)]">09</span>
+            AI 学习与使用
+          </h2>
+        </div>
+        <div class="w-24 h-1.5 bg-gradient-to-r from-indigo-400 to-cyan-400 mb-10 rounded-full shadow-[0_0_10px_rgba(129,140,248,0.5)] shrink-0 stagger-item"></div>
+
+        <!-- 核心三列内容区 -->
+        <div class="flex-1 flex gap-8 items-stretch min-h-0 w-full stagger-item pb-4">
+          
+          <!-- 列 1: SKILL (定规矩) -->
+          <div class="flex-1 dark-glass p-0 rounded-2xl flex flex-col border-t-[4px] border-t-cyan-500 group hover:-translate-y-2 transition-transform duration-500 bg-[#0b1120]/80 overflow-hidden relative hover:shadow-[0_20px_50px_rgba(34,211,238,0.2)]">
+            <div class="absolute -right-10 -top-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl"></div>
+            
+            <div class="p-8 pb-4 shrink-0 relative z-10">
+              <div class="w-14 h-14 rounded-2xl bg-cyan-500/10 flex items-center justify-center border border-cyan-500/30 text-cyan-400 mb-5 shadow-sm">
+                <i class="fa-solid fa-cube text-2xl"></i>
+              </div>
+              <div class="text-cyan-400 font-tech font-bold text-sm tracking-widest mb-2">01 · SKILL</div>
+              <h3 class="text-2xl font-black text-white mb-2">教 AI 懂我们的设计</h3>
+              <p class="text-sm text-slate-400 font-medium">把规范写在配置里，不用每次都从头教。</p>
+            </div>
+
+            <div class="px-8 pb-8 flex-1 flex flex-col justify-between relative z-10">
+              <div class="space-y-4 mt-4">
+                <div class="flex items-start gap-3">
+                  <i class="fa-solid fa-check text-cyan-400 mt-1 text-xs"></i>
+                  <p class="text-sm text-slate-300 leading-relaxed">我们把前端的颜色、布局库、组件用法整理成了一个本地的 Skill 配置文件。</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <i class="fa-solid fa-check text-cyan-400 mt-1 text-xs"></i>
+                  <p class="text-sm text-slate-300 leading-relaxed">做新页面时，AI 会自动读取这些“规矩”，按我们现有的框架写代码。</p>
+                </div>
+              </div>
+              
+              <div class="mt-6 pt-5 border-t border-white/10">
+                <div class="text-xs text-cyan-500 font-bold mb-2 uppercase tracking-widest">实际效果</div>
+                <div class="bg-cyan-950/30 border border-cyan-500/20 p-3 rounded-lg text-cyan-100 text-[13px] font-medium leading-relaxed">
+                  大家看到的登录页、大屏汇报演示，风格能做到这么一致，就是因为没给 AI 瞎发挥的空间，彻底告别了样式“开盲盒”。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 列 2: AGENTS (找帮手) -->
+          <div class="flex-1 dark-glass p-0 rounded-2xl flex flex-col border-t-[4px] border-t-indigo-500 group hover:-translate-y-2 transition-transform duration-500 bg-[#0b1120]/80 overflow-hidden relative hover:shadow-[0_20px_50px_rgba(99,102,241,0.2)]">
+            <div class="absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl"></div>
+            
+            <div class="p-8 pb-4 shrink-0 relative z-10">
+              <div class="w-14 h-14 rounded-2xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/30 text-indigo-400 mb-5 shadow-sm">
+                <i class="fa-solid fa-network-wired text-2xl"></i>
+              </div>
+              <div class="text-indigo-400 font-tech font-bold text-sm tracking-widest mb-2">02 · AGENTS</div>
+              <h3 class="text-2xl font-black text-white mb-2">复杂任务拆开干</h3>
+              <p class="text-sm text-slate-400 font-medium">不指望一个模型包揽一切，大活儿分发做。</p>
+            </div>
+
+            <div class="px-8 pb-8 flex-1 flex flex-col justify-between relative z-10">
+              <div class="space-y-4 mt-4">
+                <div class="flex items-start gap-3">
+                  <i class="fa-solid fa-check text-indigo-400 mt-1 text-xs"></i>
+                  <p class="text-sm text-slate-300 leading-relaxed">任务太长 AI 容易“脑干缺失”。我们安排了一个主 Agent 当“包工头”。</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <i class="fa-solid fa-check text-indigo-400 mt-1 text-xs"></i>
+                  <p class="text-sm text-slate-300 leading-relaxed">主 Agent 把大需求拆解，找代码的只看代码，做设计的只写方案，干完交差，互不干扰。</p>
+                </div>
+              </div>
+              
+              <div class="mt-6 pt-5 border-t border-white/10">
+                <div class="text-xs text-indigo-500 font-bold mb-2 uppercase tracking-widest">实际效果</div>
+                <div class="bg-indigo-950/30 border border-indigo-500/20 p-3 rounded-lg text-indigo-100 text-[13px] font-medium leading-relaxed">
+                  治好了大模型“聊天太长就忘事”的毛病。现在面对复杂需求，这种类似流水线的组装模式让我们心里非常有底。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 列 3: SUPERPOWERS (守纪律) -->
+          <div class="flex-1 dark-glass p-0 rounded-2xl flex flex-col border-t-[4px] border-t-purple-500 group hover:-translate-y-2 transition-transform duration-500 bg-[#0b1120]/80 overflow-hidden relative hover:shadow-[0_20px_50px_rgba(168,85,247,0.2)]">
+            <div class="absolute -right-10 -top-10 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl"></div>
+            
+            <div class="p-8 pb-4 shrink-0 relative z-10">
+              <div class="w-14 h-14 rounded-2xl bg-purple-500/10 flex items-center justify-center border border-purple-500/30 text-purple-400 mb-5 shadow-sm">
+                <i class="fa-solid fa-shield-halved text-2xl"></i>
+              </div>
+              <div class="text-purple-400 font-tech font-bold text-sm tracking-widest mb-2">03 · SUPERPOWERS</div>
+              <h3 class="text-2xl font-black text-white mb-2">拦住 AI 瞎写代码</h3>
+              <p class="text-sm text-slate-400 font-medium">强迫 AI 想清楚再动手，用流程兜底质量。</p>
+            </div>
+
+            <div class="px-8 pb-8 flex-1 flex flex-col justify-between relative z-10">
+              <div class="space-y-4 mt-4">
+                <div class="flex items-start gap-3">
+                  <i class="fa-solid fa-check text-purple-400 mt-1 text-xs"></i>
+                  <p class="text-sm text-slate-300 leading-relaxed">大模型有个坏毛病：拿到需求直接就敲代码，写完一堆 Bug 跑不通。</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <i class="fa-solid fa-check text-purple-400 mt-1 text-xs"></i>
+                  <p class="text-sm text-slate-300 leading-relaxed">我们在使用中加了死命令：写代码前必须先跟我们“头脑风暴”、定好计划，写完还得自己跑自检。</p>
+                </div>
+              </div>
+              
+              <div class="mt-6 pt-5 border-t border-white/10">
+                <div class="text-xs text-purple-500 font-bold mb-2 uppercase tracking-widest">实际效果</div>
+                <div class="bg-purple-950/30 border border-purple-500/20 p-3 rounded-lg text-purple-100 text-[13px] font-medium leading-relaxed">
+                  通过“探索→写方案→敲代码→跑自检”这套死流程，强行压住了 AI 的性子，产出的代码几乎拿来就能用，不折腾人。
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 16: Conclusion -->
+    <div class="slide">
+      <div class="bg-image-cover opacity-20"
+        style="background-image: url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920');">
+      </div>
+      <div class="slide-content justify-center items-center text-center relative overflow-hidden">
+
+        <div
+          class="relative z-10 dark-glass p-16 rounded-[2.5rem] shadow-2xl max-w-4xl mx-auto w-full border border-cyan-500/30 bg-[#0f172a]/90 stagger-item">
+          <div
+            class="inline-block p-6 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 mb-8 shadow-[0_0_30px_rgba(34,211,238,0.4)] hover:scale-110 transition-transform">
+            <i class="fa-solid fa-handshake-angle text-6xl text-white"></i>
+          </div>
+
+          <h2 class="text-6xl font-black mb-6 tracking-tight text-white drop-shadow-lg">
+            感谢您的聆听
+          </h2>
+          <p class="text-xl text-slate-300 font-medium mb-12 max-w-2xl mx-auto leading-relaxed">
+            AI智能体的离线资源基建已平稳落地，欢迎各位领导批评指导，共同探索前端演示与智能协作的更多可能。
+          </p>
+
+          <div class="flex justify-center gap-6">
+            <div
+              class="px-6 py-2.5 border border-white/20 rounded-full text-slate-300 text-base font-mono bg-white/5 flex items-center backdrop-blur-md">
+              <i class="fa-solid fa-user-astronaut mr-2 text-cyan-400"></i> 汇报人: 袁永潇
+            </div>
+            <div
+              class="px-6 py-2.5 border border-cyan-400/50 bg-cyan-500/20 rounded-full text-cyan-300 text-base font-mono flex items-center font-bold shadow-[0_0_15px_rgba(34,211,238,0.3)]">
+              <i class="fa-solid fa-code-commit mr-2"></i> 交付版本
+            </div>
+          </div>
+        </div>
+
+        <div class="absolute bottom-8 text-slate-500 font-tech tracking-[0.4em] text-xs font-bold stagger-item">
+          内网CDN统一资源站 - PRESENTATION END
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Navigation -->
+  <div id="controls" class="group/toc-container relative">
+    <div class="relative group/toc">
+      <button class="btn-nav" id="tocBtn" title="目录导航"><i class="fa-solid fa-list-ul"></i></button>
+      <div
+        class="absolute bottom-full left-0 mb-4 w-64 bg-[#0f172a]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/toc:opacity-100 group-hover/toc:visible transition-all duration-300 transform translate-y-4 group-hover/toc:translate-y-0 p-2 z-[1000]">
+        <div class="text-xs font-bold text-cyan-400 mb-2 px-3 pt-2">核心篇章导航</div>
+        <div class="flex flex-col gap-1 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+          <button
+            class="toc-item text-left px-3 py-2.5 rounded-lg hover:bg-blue-600/30 text-slate-200 hover:text-white text-sm transition-colors font-bold"
+            data-slide="1"><i class="fa-solid fa-crosshairs w-5"></i> 业务痛点与愿景</button>
+          <button
+            class="toc-item text-left px-3 py-2.5 rounded-lg hover:bg-blue-600/30 text-slate-200 hover:text-white text-sm transition-colors font-bold"
+            data-slide="3"><i class="fa-solid fa-server w-5"></i> 离线基建与扩展</button>
+          <button
+            class="toc-item text-left px-3 py-2.5 rounded-lg hover:bg-blue-600/30 text-slate-200 hover:text-white text-sm transition-colors font-bold"
+            data-slide="6"><i class="fa-solid fa-brain w-5"></i> AI赋能与实操</button>
+          <button
+            class="toc-item text-left px-3 py-2.5 rounded-lg hover:bg-blue-600/30 text-slate-200 hover:text-white text-sm transition-colors font-bold"
+            data-slide="8"><i class="fa-solid fa-chart-pie w-5"></i> 真实场景应用实战</button>
+          <button
+            class="toc-item text-left px-3 py-2.5 rounded-lg hover:bg-blue-600/30 text-slate-200 hover:text-white text-sm transition-colors font-bold"
+            data-slide="12"><i class="fa-solid fa-rocket w-5"></i> 拓展与价值赋能</button>
+        </div>
+      </div>
+    </div>
+    <div class="divider bg-white/20 w-[1px] h-4 mx-1"></div>
+    <button class="btn-nav" id="prevBtn" title="上一页"><i class="fa-solid fa-chevron-left"></i></button>
+    <div id="slide-counter">1 / 15</div>
+    <button class="btn-nav" id="nextBtn" title="下一页"><i class="fa-solid fa-chevron-right"></i></button>
+    <div class="divider bg-white/20 w-[1px] h-4 mx-1"></div>
+    <button class="btn-nav" id="fullscreenBtn" title="全屏演示"><i class="fa-solid fa-expand"></i></button>
+  </div>
+
+  <script>
+    function calculateScale() {
+      if (document.fullscreenElement) {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const scale = Math.min(vw / 1440, vh / 810);
+        document.documentElement.style.setProperty('--ppt-scale', scale);
+      } else {
+        document.documentElement.style.setProperty('--ppt-scale', 1);
+      }
+    }
+
+    window.addEventListener('resize', calculateScale);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      calculateScale();
+      const slides = document.querySelectorAll('.slide');
+      const counter = document.getElementById('slide-counter');
+      let currentSlideIndex = 0;
+      const totalSlides = slides.length;
+
+      const initThree = (containerId) => {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        const geoSphere = new THREE.IcosahedronGeometry(200, 2);
+        const matSphere = new THREE.PointsMaterial({ color: 0x3b82f6, size: 2.5, transparent: true, opacity: 0.6 });
+        const sphere = new THREE.Points(geoSphere, matSphere);
+        scene.add(sphere);
+
+        const geoRing = new THREE.BufferGeometry();
+        const ringVertices = [];
+        for (let i = 0; i < 1500; i++) {
+          const theta = THREE.MathUtils.randFloatSpread(360);
+          const phi = THREE.MathUtils.randFloatSpread(360);
+          const r = 320 + Math.random() * 120;
+          ringVertices.push(r * Math.sin(theta) * Math.cos(phi), r * Math.sin(theta) * Math.sin(phi), r * Math.cos(theta));
+        }
+        geoRing.setAttribute('position', new THREE.Float32BufferAttribute(ringVertices, 3));
+        const matRing = new THREE.PointsMaterial({ color: 0x00f6ff, size: 1.5, transparent: true, opacity: 0.4 });
+        const ring = new THREE.Points(geoRing, matRing);
+        scene.add(ring);
+
+        camera.position.z = 600;
+        camera.position.x = 250;
+
+        const animate = () => {
+          requestAnimationFrame(animate);
+          sphere.rotation.y += 0.0015;
+          sphere.rotation.x += 0.001;
+          ring.rotation.y -= 0.001;
+          ring.rotation.z += 0.0005;
+          renderer.render(scene, camera);
+        };
+        animate();
+      };
+
+      initThree('three-bg');
+      initThree('three-bg-13');
+
+      if (document.getElementById('element-app')) {
+        new Vue({
+          el: '#element-app',
+          data() {
+            return {
+              filterText: '',
+              treeData: [{ label: '集团总部', children: [{ label: '研发中心', children: [{ label: '前端架构' }, { label: '后端服务' }] }, { label: '体验设计部', children: [{ label: 'UI设计组' }] }] }],
+              defaultProps: { children: 'children', label: 'label' },
+              tableData: [
+                { id: 1, name: '张三', dept: '前端架构组', role: '架构师', status: '在职' },
+                { id: 2, name: '李四', dept: '前端架构组', role: '高级研发', status: '在职' },
+                { id: 3, name: '王五', dept: '后端服务组', role: '研发工程师', status: '在职' },
+                { id: 4, name: '赵六', dept: 'UI设计组', role: '初级交互', status: '离职' },
+                { id: 5, name: '孙七', dept: '前端架构组', role: '前端开发', status: '在职' }
+              ]
+            }
+          },
+          watch: { filterText(val) { this.$refs.tree.filter(val); } },
+          methods: { filterNode(value, data) { if (!value) return true; return data.label.indexOf(value) !== -1; } }
+        });
+      }
+
+      let chartsInitialized = false;
+      const initECharts = () => {
+        if (chartsInitialized) return;
+
+        const capDom = document.getElementById('echarts-capacity');
+        if (capDom && capDom.clientWidth > 0) {
+          const capChart = echarts.init(capDom);
+          capChart.setOption({
+            grid: { top: 10, right: 10, bottom: 20, left: 40 },
+            xAxis: { type: 'value', axisLabel: { color: '#00d4ff', fontSize: 9 }, splitLine: { show: false } },
+            yAxis: { type: 'category', data: ['产线E', '产线D', '产线C', '产线B', '产线A'], axisLabel: { color: '#00d4ff', fontSize: 9 } },
+            series: [{ type: 'bar', data: [65, 75, 80, 90, 95], itemStyle: { color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [{ offset: 0, color: '#00d4ff' }, { offset: 1, color: '#1d4ed8' }]) } }]
+          });
+
+          const qualChart = echarts.init(document.getElementById('echarts-quality'));
+          qualChart.setOption({
+            series: [{ type: 'pie', radius: ['40%', '70%'], itemStyle: { borderRadius: 2, borderColor: '#030918', borderWidth: 2 }, label: { show: false }, data: [{ value: 85, name: '合格', itemStyle: { color: '#00d4ff' } }, { value: 10, name: '次品', itemStyle: { color: '#facc15' } }, { value: 5, name: '废品', itemStyle: { color: '#ef4444' } }] }]
+          });
+
+          const trendChart = echarts.init(document.getElementById('echarts-trend'));
+          trendChart.setOption({
+            grid: { top: 10, right: 10, bottom: 20, left: 30 },
+            xAxis: { type: 'category', data: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'], axisLabel: { color: '#00d4ff', fontSize: 9 } },
+            yAxis: { type: 'value', axisLabel: { color: '#00d4ff', fontSize: 9 }, splitLine: { lineStyle: { color: 'rgba(0,212,255,0.1)' } } },
+            series: [{ data: [120, 132, 101, 134, 90, 230, 210], type: 'line', smooth: true, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(0,212,255,0.5)' }, { offset: 1, color: 'rgba(0,212,255,0)' }]) }, itemStyle: { color: '#00d4ff' } }]
+          });
+
+          chartsInitialized = true;
+        }
+      };
+
+      function updateSlides() {
+        slides.forEach((slide, index) => {
+          if (index === currentSlideIndex) {
+            slide.classList.add('active');
+            const currentScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ppt-scale') || 1);
+            gsap.fromTo(slide, { scale: currentScale * 0.95, opacity: 0 }, { scale: currentScale, opacity: 1, duration: 0.6, ease: "power2.out" });
+
+            const staggers = slide.querySelectorAll('.stagger-item');
+            if (staggers.length > 0) {
+              gsap.fromTo(staggers,
+                { y: 30, opacity: 0 },
+                { y: 0, opacity: 1, duration: 0.8, stagger: 0.08, ease: "power3.out", delay: 0.2 }
+              );
+            }
+          } else {
+            slide.classList.remove('active');
+          }
+        });
+
+        counter.textContent = `${currentSlideIndex + 1} / ${totalSlides}`;
+
+        setTimeout(() => {
+          if (document.getElementById('echarts-capacity') && document.getElementById('echarts-capacity').offsetParent !== null) {
+            initECharts();
+          }
+        }, 200);
+      }
+
+      function nextSlide() { if (currentSlideIndex < totalSlides - 1) { currentSlideIndex++; updateSlides(); } }
+      function prevSlide() { if (currentSlideIndex > 0) { currentSlideIndex--; updateSlides(); } }
+
+      document.getElementById('nextBtn').addEventListener('click', nextSlide);
+      document.getElementById('prevBtn').addEventListener('click', prevSlide);
+
+      document.querySelectorAll('.toc-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          const targetSlide = parseInt(e.target.getAttribute('data-slide'));
+          if (targetSlide >= 0 && targetSlide < totalSlides) {
+            currentSlideIndex = targetSlide;
+            updateSlides();
+          }
+        });
+      });
+
+      const fullscreenBtn = document.getElementById('fullscreenBtn');
+      const fullscreenIcon = fullscreenBtn.querySelector('i');
+      fullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen();
+        } else {
+          if (document.exitFullscreen) document.exitFullscreen();
+        }
+      });
+
+      // 监听全屏状态变化触发缩放重算
+     // 监听全屏状态变化触发缩放重算
+      document.addEventListener('fullscreenchange', () => {
+        if (document.fullscreenElement) {
+          fullscreenIcon.className = 'fa-solid fa-compress';
+        } else {
+          fullscreenIcon.className = 'fa-solid fa-expand';
+        }
+        
+        // 定义一个强制更新当前页比例的函数
+        const forceUpdateCurrentSlideScale = () => {
+          calculateScale();
+          const currentScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ppt-scale') || 1);
+          const activeSlide = slides[currentSlideIndex];
+          if (activeSlide) {
+            // 直接通过 GSAP 或原生 style 修改当前页的 scale，无需重播完整的入场动画
+            gsap.set(activeSlide, { scale: currentScale });
+          }
+          // 同步重绘 ECharts 保证图表清晰铺满
+          if (typeof chartInstances !== 'undefined') {
+             chartInstances.forEach(c => c && c.resize());
+          }
+        };
+
+        // 立即执行一次，并利用 setTimeout 确保浏览器渲染全屏动画完成后再次矫正
+        forceUpdateCurrentSlideScale();
+        setTimeout(forceUpdateCurrentSlideScale, 50);
+        setTimeout(forceUpdateCurrentSlideScale, 200);
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', ' '].includes(e.key) && e.target.tagName !== 'INPUT') {
+          e.preventDefault();
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') nextSlide();
+          else prevSlide();
+        }
+      });
+
+      updateSlides();
+    });
+  </script>
+</body>
+
+</html>
