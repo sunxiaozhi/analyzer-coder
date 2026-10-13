@@ -15,6 +15,7 @@ import KnowledgeCardContentSection from './KnowledgeCardContentSection.vue';
 import KnowledgeCardPolicySection from './KnowledgeCardPolicySection.vue';
 import KnowledgeCodeAssociationSection from './KnowledgeCodeAssociationSection.vue';
 import { useKnowledgeCardEditor } from './useKnowledgeCardEditor';
+import { useKnowledgeEditorLeaveGuard } from './useKnowledgeEditorLeaveGuard';
 import KnowledgeBranchScopeSection from './KnowledgeBranchScopeSection.vue';
 import type { RepositoryBranch } from '@/api/branches';
 
@@ -61,7 +62,13 @@ const members = shallowRef<RepositoryMember[]>([]);
 const membersLoading = shallowRef(false);
 const loadedMembersRepository = shallowRef<string | null>(null);
 let referencePrimeVersion = 0;
-
+const { dirty, markPristine, requestClose } = useKnowledgeEditorLeaveGuard({
+  active: () => props.modelValue,
+  busy: () => props.busy || uploading.value,
+  snapshot: () => JSON.stringify({ form, attachments: attachments.value.map(item => item.id), codeReferences: codeReferences.value }),
+  close: () => emit('update:modelValue', false),
+});
+async function beforeClose(done: () => void) { if (await requestClose()) done(); }
 
 watch(
   () => [props.modelValue, props.card] as const,
@@ -75,6 +82,7 @@ watch(
     const cardReferences = props.card?.codeReferences ?? [];
     attachments.value = props.card ? [...props.card.attachments] : [];
     codeReferences.value = [...cardReferences];
+    markPristine();
     if (form.enforcement === 'REQUIRED') void loadMembers();
     const primeVersion = ++referencePrimeVersion;
     if (!props.card && props.initialReference) {
@@ -110,6 +118,7 @@ async function primeInitialReference(
       ElMessage.warning('内容索引中没有可直接绑定的代码片段，请在关联代码区域手动选择');
       return;
     }
+    const wasDirty = dirty.value;
     codeReferences.value = [{
       repositoryId: props.repositoryId,
       chunkId: selected.id,
@@ -121,6 +130,7 @@ async function primeInitialReference(
       contentHash: selected.contentHash,
       stale: false,
     }];
+    if (!wasDirty) markPristine();
     ElMessage.success(`已关联 ${selected.symbolName || selected.filePath}`);
   } catch (error) {
     if (version === referencePrimeVersion) {
@@ -197,7 +207,8 @@ function save() {
 <template>
   <el-dialog :model-value="modelValue" :title="card ? '编辑知识卡片' : '新建知识'"
     width="min(1200px, 96vw)" top="3vh" destroy-on-close
-    :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy"
+    :close-on-click-modal="false" :close-on-press-escape="!busy && !uploading" :show-close="!busy && !uploading"
+    :before-close="beforeClose"
     @update:model-value="emit('update:modelValue', $event)">
     <p class="editor-intro">保存生成草稿修订，确认后通过列表发布。</p>
     <el-form label-position="top" class="knowledge-card-form">
@@ -226,7 +237,7 @@ function save() {
     </el-form>
     <template #footer>
       <el-alert v-if="saveError" class="save-error" type="error" :closable="false" :title="saveError" role="alert" />
-      <el-button :disabled="busy" @click="emit('update:modelValue', false)">取消</el-button>
+      <el-button :disabled="busy || uploading" @click="requestClose()">取消</el-button>
       <el-button type="primary" :loading="busy" :disabled="uploading" @click="save">{{ card ? '保存新修订' : '新建知识' }}</el-button>
     </template>
   </el-dialog>

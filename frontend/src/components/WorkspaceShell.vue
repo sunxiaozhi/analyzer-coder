@@ -25,6 +25,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useWorkspaceTabsStore, type WorkspaceTab } from '@/stores/workspaceTabs';
+import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
 import WorkspaceTabs from '@/components/WorkspaceTabs.vue';
 import ProductLogo from '@/components/ProductLogo.vue';
 import {
@@ -35,6 +36,7 @@ import {
 const route = useRoute(); const router = useRouter(); const auth = useAuthStore(); const repositoryStore = useRepositoryStore();
 const branchContext = useBranchContextStore();
 const workspaceTabs = useWorkspaceTabsStore();
+const leaveGuard = useWorkspaceLeaveGuardStore();
 const refreshVersions = reactive<Record<string, number>>({});
 const systemOpen = shallowRef(true);
 const iconComponents: Record<WorkspaceNavIcon, object> = {
@@ -78,8 +80,12 @@ watch(() => [virtualBranch.value, route.name] as const, () => {
   const destination = knowledgeDestination();
   if (destination) void router.replace(destination);
 }, { immediate: true });
-async function logout() { await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login'); }
+async function logout() {
+  if (!await leaveGuard.requestLeave()) return;
+  await auth.logout(); workspaceTabs.closeAll(); await router.replace('/login');
+}
 async function changeRepository(repositoryId: string | null) {
+  if (repositoryId === repositoryStore.selectedRepositoryId || !await leaveGuard.requestLeave()) return;
   try {
     await repositoryStore.selectRepository(repositoryId);
     const query = unscopedQuery();
@@ -90,10 +96,11 @@ async function changeRepository(repositoryId: string | null) {
 }
 function unscopedQuery() {
   const query = { ...route.query };
-  for (const key of ['branchId', 'contextId', 'path', 'startLine', 'endLine', 'contentVersion', 'symbol', 'cardId', 'create', 'q', 'relation', 'depth']) delete query[key];
+  for (const key of ['branchId', 'contextId', 'path', 'startLine', 'endLine', 'contentVersion', 'symbol', 'cardId', 'create', 'q', 'relation', 'depth', 'issue']) delete query[key];
   return query;
 }
 async function changeBranch(branchId: string, preserveTarget = false) {
+  if (!await leaveGuard.requestLeave()) return;
   try {
     await branchContext.select(branchId);
     const query = {
@@ -108,6 +115,7 @@ async function changeBranch(branchId: string, preserveTarget = false) {
   }
 }
 async function refreshBranchContext() {
+  if (!await leaveGuard.requestLeave()) return;
   try {
     await branchContext.refresh();
     if (branchContext.context) {
@@ -131,12 +139,14 @@ function activateTab(tab: WorkspaceTab) {
   if (tab.fullPath !== route.fullPath) void router.push(tab.fullPath);
 }
 async function refreshTab(tab: WorkspaceTab) {
+  if (!await leaveGuard.requestLeave()) return;
   refreshVersions[tab.name] = (refreshVersions[tab.name] ?? 0) + 1;
   if (tab.fullPath !== route.fullPath) await router.push(tab.fullPath);
   await nextTick();
 }
-function closeTab(tab: WorkspaceTab) {
+async function closeTab(tab: WorkspaceTab) {
   const wasActive = tab.name === activeRouteName.value;
+  if (wasActive && !await leaveGuard.requestLeave()) return;
   const next = workspaceTabs.close(tab.name);
   if (!wasActive) return;
   const target = next?.fullPath ?? '/overview';
@@ -150,17 +160,24 @@ function closeTab(tab: WorkspaceTab) {
     void router.push(target);
   }
 }
-function closeOtherTabs(tab?: WorkspaceTab) {
+async function closeOtherTabs(tab?: WorkspaceTab) {
   const target = tab ?? workspaceTabs.tabs.find(item => item.name === activeRouteName.value);
   if (!target) return;
+  if (target.name !== activeRouteName.value && !await leaveGuard.requestLeave()) return;
   workspaceTabs.closeOthers(target.name);
   if (target.fullPath !== route.fullPath) void router.push(target.fullPath);
 }
-function closeLeftTabs(tab: WorkspaceTab) {
+async function closeLeftTabs(tab: WorkspaceTab) {
+  const index = workspaceTabs.tabs.findIndex(item => item.name === tab.name);
+  if (workspaceTabs.tabs.slice(0, Math.max(0, index)).some(item => item.name === activeRouteName.value)
+    && !await leaveGuard.requestLeave()) return;
   const closed = workspaceTabs.closeLeft(tab.name);
   if (closed.some(item => item.name === activeRouteName.value)) void router.push(tab.fullPath);
 }
-function closeRightTabs(tab: WorkspaceTab) {
+async function closeRightTabs(tab: WorkspaceTab) {
+  const index = workspaceTabs.tabs.findIndex(item => item.name === tab.name);
+  if (index >= 0 && workspaceTabs.tabs.slice(index + 1).some(item => item.name === activeRouteName.value)
+    && !await leaveGuard.requestLeave()) return;
   const closed = workspaceTabs.closeRight(tab.name);
   if (closed.some(item => item.name === activeRouteName.value)) void router.push(tab.fullPath);
 }
@@ -173,7 +190,8 @@ async function copyTabLink(tab: WorkspaceTab) {
     ElMessage.error('复制失败，请检查浏览器剪贴板权限');
   }
 }
-function closeAllTabs() {
+async function closeAllTabs() {
+  if (!await leaveGuard.requestLeave()) return;
   workspaceTabs.closeAll();
   if (route.path !== '/overview') {
     void router.push('/overview');

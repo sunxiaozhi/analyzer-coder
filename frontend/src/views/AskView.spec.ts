@@ -95,6 +95,34 @@ it('uses local evidence only after an explicit choice when a model is available'
   await sendQuestion(wrapper);
   expect(confirmDialog).toHaveBeenCalledWith(expect.any(String), expect.any(String), expect.objectContaining({ cancelButtonText: '仅用本地证据', distinguishCancelAndClose: true }));
   expect(intelligenceApi.ask).toHaveBeenCalledWith('knowledge', expect.any(String), expect.any(String), null, null, 'context');
+  await sendQuestion(wrapper);
+  expect(confirmDialog).toHaveBeenCalledTimes(1);
+  expect(wrapper.text()).toContain('已选择本地证据');
+  wrapper.unmount();
+});
+
+it('remembers an explicit local selection after leaving and returning to the same project', async () => {
+  vi.mocked(intelligenceApi.askModels).mockResolvedValue([model]);
+  const wrapper = mountAsk(); await flushPromises();
+  wrapper.getComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'local-evidence');
+  await flushPromises();
+  await sendQuestion(wrapper);
+  expect(confirmDialog).not.toHaveBeenCalled();
+  wrapper.unmount();
+  const reopened = mountAsk(); await flushPromises();
+  await sendQuestion(reopened);
+  expect(confirmDialog).not.toHaveBeenCalled();
+  expect(intelligenceApi.ask).toHaveBeenLastCalledWith('knowledge', expect.any(String), expect.any(String), null, null, 'context');
+  reopened.unmount();
+});
+
+it('recommends again when the remembered model is no longer available', async () => {
+  usePageMemoryStore().write('ask:knowledge:workspace', { model: 'removed-model' });
+  vi.mocked(intelligenceApi.askModels).mockResolvedValue([model]);
+  const wrapper = mountAsk(); await flushPromises();
+  await sendQuestion(wrapper);
+  expect(confirmDialog).toHaveBeenCalledTimes(1);
+  expect(intelligenceApi.ask).toHaveBeenCalledWith('knowledge', expect.any(String), expect.any(String), null, model.id, 'context');
   wrapper.unmount();
 });
 

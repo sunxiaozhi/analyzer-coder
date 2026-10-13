@@ -9,6 +9,9 @@ import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
 import { branchesApi, type RepositoryBranch } from '@/api/branches';
 import { intelligenceApi } from '@/api/intelligence';
 import { useBranchContextStore } from '@/stores/branchContextStore';
+import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
+import { useWorkspaceTabsStore } from '@/stores/workspaceTabs';
+import WorkspaceTabs from './WorkspaceTabs.vue';
 import type { Repository } from '@/types/api';
 
 let repositories: {
@@ -147,6 +150,33 @@ it('clears context when no project is selected without requesting a branch', asy
   expect(branchesApi.list).not.toHaveBeenCalled();
   expect(branchesApi.context).not.toHaveBeenCalled();
   expect(useBranchContextStore().context).toBeNull();
+  shell.unmount();
+});
+
+it('does not mutate the project, branch or active tab when leaving is canceled', async () => {
+  route.name = 'knowledge'; route.fullPath = '/knowledge';
+  select(project('knowledge'));
+  const shell = mountShell(); await flushPromises();
+  const originalContext = useBranchContextStore().context;
+  const tabs = useWorkspaceTabsStore();
+  const originalTabs = [...tabs.tabs];
+  const guard = vi.fn().mockResolvedValue(false);
+  useWorkspaceLeaveGuardStore().register(guard);
+  vi.mocked(branchesApi.context).mockClear();
+  navigation.replace.mockClear();
+  const selectors = shell.findAllComponents({ name: 'ElSelect' });
+  selectors.find(item => item.classes().includes('global-repository-switcher'))!.vm.$emit('change', 'another-project');
+  await flushPromises();
+  expect(repositories.selectedRepositoryId).toBe('knowledge');
+  selectors.find(item => item.classes().includes('global-branch-switcher'))!.vm.$emit('change', 'other-branch');
+  await flushPromises();
+  expect(branchesApi.context).not.toHaveBeenCalled();
+  expect(useBranchContextStore().context).toBe(originalContext);
+  shell.getComponent(WorkspaceTabs).vm.$emit('close', originalTabs[0]);
+  await flushPromises();
+  expect(tabs.tabs).toEqual(originalTabs);
+  expect(navigation.replace).not.toHaveBeenCalled();
+  expect(guard).toHaveBeenCalledTimes(3);
   shell.unmount();
 });
 

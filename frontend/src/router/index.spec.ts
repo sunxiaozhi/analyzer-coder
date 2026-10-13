@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
 import { router } from './index';
+beforeEach(() => setActivePinia(createPinia()));
 
 vi.mock('@/stores/authStore', () => ({ useAuthStore: () => ({ restore: async () => {}, authenticated: true, isAdmin: false, account: { mustChangePassword: false } }) }));
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => ({ initialized: true, repositories: [{ capabilities: { canUpdate: false } }], selectedRepository: { capabilities: { canUpdate: false } } }) }));

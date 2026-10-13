@@ -3,25 +3,32 @@ import { computed, onDeactivated, shallowRef } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
 import AccountAccessTokens from '@/features/accounts/AccountAccessTokens.vue';
 import McpConfigPanel from './McpConfigPanel.vue';
 
 const auth = useAuthStore();
 const repositories = useRepositoryStore();
+const branches = useBranchContextStore();
 const showTokens = shallowRef(false);
+const coordinates = computed(() => ({
+  repositoryId: repositories.selectedRepositoryId || '<项目 UUID>',
+  branchId: branches.repositoryId === repositories.selectedRepositoryId && branches.selectedBranchId
+    ? branches.selectedBranchId : '<目标分支 UUID；WORKSPACE 也使用 UUID>',
+}));
+const contextExample = computed(() => JSON.stringify(coordinates.value, null, 2));
 
 onDeactivated(() => { showTokens.value = false; });
 
 const searchExample = computed(() => JSON.stringify({
-  repositoryId: repositories.selectedRepositoryId || '<项目 UUID>',
+  ...coordinates.value,
   query: '订单超时在哪里处理，有哪些相关约束？',
   limit: 20,
 }, null, 2));
 
 const scopesExample = JSON.stringify({ page: 1, pageSize: 20 }, null, 2);
 const graphExample = computed(() => JSON.stringify({
-  repositoryId: repositories.selectedRepositoryId || '<项目 UUID>',
-  branchId: '<从 list_codegraph_scopes 选择的分支 UUID>',
+  ...coordinates.value,
   query: '订单超时由哪些函数处理？',
 }, null, 2));
 
@@ -46,7 +53,7 @@ const errors = [
 
     <section class="guide-section">
       <h2>1. 准备项目</h2>
-      <p>先在 <RouterLink to="/repositories">项目管理</RouterLink> 接入项目。联合检索需要已准备的代码版本；图谱查询还需要将目标 Git 分支准备好并发布 CodeGraph 产物。可在 <RouterLink to="/overview">项目总览</RouterLink> 查看准备状态。调用账户至少需要目标项目的 READ 权限。</p>
+      <p>先在 <RouterLink to="/repositories">项目管理</RouterLink> 接入项目。代码项目的检索需要目标分支的内容索引，图谱查询还需要已发布的 CodeGraph 产物。纯知识库使用自动创建的 WORKSPACE 虚拟分支，发布知识后即可检索，无需准备代码或图谱。调用账户至少需要目标项目的 READ 权限。</p>
     </section>
 
     <section class="guide-section">
@@ -62,10 +69,13 @@ const errors = [
 
     <section class="guide-section">
       <h2>4. 搜索代码与知识</h2>
-      <p><code>search_project</code> 接受项目、检索词和可选的结果数量。只传 <code>repositoryId</code> 时读取项目默认版本；传入 <code>branchId</code> 或 <code>contextId</code> 时读取固定分支的代码和适用知识。</p>
+      <p><code>search_project</code> 必须提供 <code>repositoryId</code>、<code>query</code>，以及 <code>branchId</code> 或 <code>contextId</code> 之一。省略分支和上下文会报错，不会回退到默认分支。下方示例跟随顶部选定的项目和分支。</p>
       <pre tabindex="0" aria-label="联合检索参数"><code>{{ searchExample }}</code></pre>
       <p v-if="!repositories.selectedRepositoryId" class="note">请先在顶部选择可访问的项目，示例中的 repositoryId 需要替换为真实 UUID。</p>
-      <div class="tool-row"><code>search_project</code><span>repositoryId、query；可选 limit（1–50）、branchId 或 contextId</span></div>
+      <p>需要连续查询同一版本时，先调用 <code>resolve_project_context</code>：</p>
+      <pre tabindex="0" aria-label="解析项目上下文参数"><code>{{ contextExample }}</code></pre>
+      <p class="note">将返回的 contextId 用于后续调用，替换 branchId，并继续携带 repositoryId。上下文绑定调用账户，有效期一小时；过期或版本变化后重新解析。纯知识库和 ZIP 的 WORKSPACE 都应传分支 UUID，不能直接传分支名称。</p>
+      <div class="tool-row"><code>search_project</code><span>必需 repositoryId、query、branchId 或 contextId；可选 limit（1–50）</span></div>
     </section>
 
     <section class="guide-section">

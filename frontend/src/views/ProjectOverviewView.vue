@@ -6,9 +6,12 @@ import ProjectOverviewSheet from '@/features/overview/ProjectOverviewSheet.vue';
 import KnowledgeProjectSummary from '@/features/knowledge/KnowledgeProjectSummary.vue';
 import { useProjectOverview } from '@/features/overview/useProjectOverview';
 import { useRepositoryStore } from '@/stores/repositoryStore';
+import { useBranchContextStore } from '@/stores/branchContextStore';
+import { parseKnowledgeIssue } from '@/features/knowledge/knowledgeIssueFilter';
 
 const router = useRouter();
 const repositories = useRepositoryStore();
+const branches = useBranchContextStore();
 const {
   preparation,
   codeFacts,
@@ -23,8 +26,12 @@ const {
 const repository = computed(() => repositories.selectedRepository);
 const profile = computed(() => preparation.value?.profile ?? null);
 
-function openKnowledge() {
-  void router.push('/knowledge');
+function openKnowledge(issueCode?: string) {
+  void router.push({ name: 'knowledge', query: {
+    issue: parseKnowledgeIssue(issueCode) ?? undefined,
+    branchId: branches.context?.branchId,
+    contextId: branches.context?.contextId,
+  } });
 }
 
 function openSearch() {

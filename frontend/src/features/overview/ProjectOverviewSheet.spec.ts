@@ -192,7 +192,7 @@ describe('ProjectOverviewSheet', () => {
     await wrapper.get('.issue-row button').trigger('click');
 
     expect(wrapper.emitted('openSearch')).toHaveLength(1);
-    expect(wrapper.emitted('openKnowledge')).toHaveLength(1);
+    expect(wrapper.emitted('openKnowledge')).toEqual([['REQUIRED_KNOWLEDGE_WITHOUT_OWNER']]);
   });
 
   it('routes degraded preparation stages to project management', async () => {

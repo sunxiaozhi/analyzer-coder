@@ -18,7 +18,9 @@ import {
   type MarkdownKnowledgeSourceStatus,
 } from '@/api/intelligence';
 import { usePageMemoryStore } from '@/stores/pageMemory';
+import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
 import { branchScopeLabel } from '@/features/knowledge/knowledgePresentation';
+import { knowledgeIssueLabels, matchesKnowledgeIssue, parseKnowledgeIssue } from '@/features/knowledge/knowledgeIssueFilter';
 import { cardForBranch } from '@/features/knowledge/knowledgeBranchScope';
 import KnowledgeCardDetailDialog from '@/features/knowledge/KnowledgeCardDetailDialog.vue';
 import KnowledgeCardEditorDialog from '@/features/knowledge/KnowledgeCardEditorDialog.vue';
@@ -33,6 +35,7 @@ import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
 import { enforcementLabel, knowledgeKindLabel, statusLabel } from '@/utils/displayLabels';
 
 const repositories = useRepositoryStore();
+const leaveGuard = useWorkspaceLeaveGuardStore();
 const branchContext = useBranchContextStore();
 const readScope = useBranchReadScope();
 const knowledgeOnly = computed(() => repositories.selectedRepository?.sourceType === 'KNOWLEDGE');
@@ -92,6 +95,23 @@ const listElement = shallowRef<HTMLElement | null>(null);
 const scrollTop = shallowRef(0);
 const resumeCardId = shallowRef<string | null>(null);
 const selectedCardId = shallowRef<string | null>(null);
+const issueFilter = computed(() => parseKnowledgeIssue(route.query.issue));
+function applyIssueFilter() {
+  if (!issueFilter.value) return;
+  activeMode.value = 'cards';
+  cardQuery.value = '';
+  searchScope.value = 'ALL';
+  selectedKnowledgeKind.value = allKnowledgeKinds;
+  validationFilter.value = 'ALL';
+  resumeCardId.value = null;
+  selectedCardId.value = null;
+  scrollTop.value = 0;
+}
+function clearIssueFilter() {
+  const query = { ...route.query };
+  delete query.issue;
+  void router.replace({ query });
+}
 let triggerElement: HTMLElement | null = null;
 const pageKey = () => `knowledge:${repositories.selectedRepositoryId}:${branchContext.selectedBranchId ?? 'default'}`;
 let stateKey = pageKey();
@@ -111,6 +131,7 @@ function restoreReadingState() {
   selectedSourceStatus.value = state?.sourceStatus ?? allSourceStatuses;
   validationFilter.value = state?.validation ?? 'ALL'; activeMode.value = state?.mode ?? 'cards';
   scrollTop.value = state?.top ?? 0; selectedCardId.value = state?.selected ?? null; resumeCardId.value = state?.resume ?? null;
+  applyIssueFilter();
 }
 restoreReadingState();
 onBeforeUnmount(() => { remember(); cardsVersion++; sourcesVersion++; driftVersion++; saveVersion++; deleteVersion++; });
@@ -151,7 +172,9 @@ const cardRows = computed(() => cards.value.filter(card => {
   const matchesPublication = !knowledgeOnly.value || searchScope.value === 'ALL'
     || (searchScope.value === 'DRAFT' ? card.publicationStatus === 'DRAFT'
       : card.publicationStatus === 'PUBLISHED' && card.reviewStatus === 'APPROVED');
-  return matchesTitle && matchesType && matchesPublication && (knowledgeOnly.value || !readScope.requiresContext.value || validationFilter.value === 'ALL' || validationState(card) === validationFilter.value);
+  return matchesTitle && matchesType && matchesPublication
+    && matchesKnowledgeIssue(card, issueFilter.value, validationState(card), knowledgeOnly.value)
+    && (knowledgeOnly.value || !readScope.requiresContext.value || validationFilter.value === 'ALL' || validationState(card) === validationFilter.value);
 }));
 const sourceRows = computed(() => (markdownSources.value?.items ?? []).filter(source => {
   const value = sourceQuery.value.trim().toLowerCase();
@@ -255,6 +278,7 @@ function scopeLabel(card: KnowledgeCard) {
   return branchScopeLabel(card.branchScope, branchContext.branches, branchContext.context?.branchName);
 }
 async function refreshKnowledgeLibrary() {
+  if (!await leaveGuard.requestLeave()) return;
   await branchContext.refresh();
   await loadCards();
 }
@@ -375,6 +399,7 @@ async function referenceContext(reference: CodeReference) {
   return branchesApi.context(reference.repositoryId, reference.branchId);
 }
 async function openCode(reference: CodeReference) {
+  if (!await leaveGuard.requestLeave()) return;
   try {
   const context = await referenceContext(reference);
   resumeCardId.value = viewing.value?.id ?? null;
@@ -647,6 +672,9 @@ watch(() => [repositories.selectedRepositoryId, branchContext.identity] as const
   void load();
 });
 watch(() => route.query.cardId, syncRequestedCard);
+watch(() => [route.name, route.query.issue] as const, ([name]) => {
+  if (name === 'knowledge') applyIssueFilter();
+});
 watch(() => [route.query.q, route.query.searchScope] as const, ([query, scope]) => {
   if (typeof query === 'string') cardQuery.value = query;
   if (scope === 'ALL' || scope === 'PUBLISHED' || scope === 'DRAFT') searchScope.value = scope;
@@ -666,7 +694,7 @@ onMounted(() => void load());
       <p>知识卡片必须归属明确项目，才能绑定代码范围、负责人和当前内容版本。</p>
       <el-button type="primary" @click="router.push('/repositories')">前往项目管理</el-button>
     </div>
-    <div v-else class="surface knowledge-surface" :class="{ 'knowledge-library': knowledgeOnly }">
+    <div v-else class="surface knowledge-surface" :class="{ 'knowledge-library': knowledgeOnly, 'has-issue': Boolean(issueFilter) }">
       <KnowledgeLibraryHeader v-if="knowledgeOnly"
         :name="repositories.selectedRepository?.name ?? '知识管理'" :description="repositories.selectedRepository?.description"
         :branch-name="branchContext.context?.branchName ?? 'WORKSPACE'"
@@ -770,6 +798,10 @@ onMounted(() => void load());
           生成待处理（{{ markdownSources?.counts.pending ?? 0 }}）
         </el-button>
       </div>
+      <div v-if="issueFilter" class="knowledge-issue-filter" role="status">
+        <span>当前筛选：{{ knowledgeIssueLabels[issueFilter] }}</span>
+        <el-button link type="primary" @click="clearIssueFilter">清除问题筛选</el-button>
+      </div>
       <p v-if="knowledgeOnly" class="knowledge-search-hint">
         {{ searchScope === 'PUBLISHED' ? '检索已发布知识，按相关度排序；可用时包含语义检索。' : searchScope === 'DRAFT' ? '按标题、正文或标签筛选可见草稿。草稿不会用于问答。' : '按标题、正文或标签筛选全部可见知识，包含草稿；选择“已发布知识”可按相关度检索。' }}
       </p>
@@ -863,6 +895,7 @@ onMounted(() => void load());
 </template>
 
 <style scoped>
+.knowledge-issue-filter { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:8px 18px; color:var(--app-color-warning); background:var(--app-color-warning-soft); font-size:13px; }
 .knowledge-page {
   display: grid !important;
   grid-template-rows: minmax(0, 1fr);
@@ -887,6 +920,8 @@ onMounted(() => void load());
   scrollbar-gutter: stable;
 }
 .knowledge-library { grid-template-rows:auto auto auto minmax(0,1fr); }
+.knowledge-surface.has-issue { grid-template-rows:auto auto minmax(0,1fr); }
+.knowledge-library.has-issue { grid-template-rows:auto auto auto auto minmax(0,1fr); }
 .knowledge-search-hint { margin:0 20px; color:var(--app-text-muted); font-size:12px; line-height:1.6; }
 .knowledge-surface > .toolbar {
   flex-wrap: wrap;

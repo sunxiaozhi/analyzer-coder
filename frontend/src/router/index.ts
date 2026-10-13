@@ -10,6 +10,7 @@ import KnowledgeView from '@/views/KnowledgeView.vue';
 import LoginView from '@/views/LoginView.vue';
 import RepositoriesView from '@/views/RepositoriesM0View.vue';
 import SystemSettingsView from '@/views/SystemSettingsView.vue';
+import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -42,7 +43,8 @@ export const router = createRouter({
   ],
 });
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
+  if (to.fullPath !== from.fullPath && !await useWorkspaceLeaveGuardStore().requestLeave()) return false;
   const { useAuthStore } = await import('@/stores/authStore');
   const auth = useAuthStore();
   await auth.restore();

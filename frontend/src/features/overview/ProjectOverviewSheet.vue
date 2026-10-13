@@ -42,7 +42,7 @@ const emit = defineEmits<{
   prepare: [];
   openManagement: [];
   openSearch: [];
-  openKnowledge: [];
+  openKnowledge: [issueCode?: string];
 }>();
 
 const HEALTH_COPY = {
@@ -103,7 +103,7 @@ function formatTime(value: string | null) {
 
 function issueAction(issue: ProjectHealthIssue) {
   if (issue.actionTarget === 'PREPARATION') emit('prepare');
-  else emit('openKnowledge');
+  else emit('openKnowledge', issue.code);
 }
 
 function canResolveIssue(issue: ProjectHealthIssue) {

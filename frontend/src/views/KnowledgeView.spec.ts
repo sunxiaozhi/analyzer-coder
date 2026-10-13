@@ -17,6 +17,7 @@ import PublishedKnowledgeResults from '@/features/knowledge/PublishedKnowledgeRe
 import { intelligenceApi } from '@/api/intelligence';
 import { branchesApi } from '@/api/branches';
 import { useBranchContextStore } from '@/stores/branchContextStore';
+import { usePageMemoryStore } from '@/stores/pageMemory';
 
 let route: { name: string; query: Record<string, string> };
 let repositories: {
@@ -76,6 +77,47 @@ describe('knowledge evidence access', () => {
     vi.mocked(intelligenceApi.cards).mockResolvedValue(original.map(card => ({ ...card, publicationStatus: 'DRAFT' })));
     const wrapper = mountView(); await flushPromises(); return wrapper;
   }
+
+  it('opens the overview issue without old filters and lets the user clear it', async () => {
+    const [original] = await intelligenceApi.cards('repo-1', 'ctx-main');
+    vi.mocked(intelligenceApi.cards).mockResolvedValue([
+      { ...original, id: 'missing-owner', enforcement: 'REQUIRED', ownerAccountId: null },
+      { ...original, id: 'owned', enforcement: 'REQUIRED', ownerAccountId: 'owner' },
+      { ...original, id: 'reference', enforcement: 'REFERENCE', ownerAccountId: null },
+      { ...original, id: 'archived', enforcement: 'REQUIRED', ownerAccountId: null, publicationStatus: 'ARCHIVED' },
+    ]);
+    usePageMemoryStore().write('knowledge:repo-1:main', { query: '旧关键词', kind: 'FAQ', validation: 'CURRENT', mode: 'markdown' });
+    route.query = { issue: 'REQUIRED_KNOWLEDGE_WITHOUT_OWNER', branchId: 'main' };
+    const wrapper = mountView(); await flushPromises();
+    expect(wrapper.findAllComponents(KnowledgeCardListItem).map(item => item.props('card').id)).toEqual(['missing-owner']);
+    expect(wrapper.text()).toContain('强约束知识缺少维护人');
+    wrapper.get('.knowledge-issue-filter').getComponent({ name: 'ElButton' }).vm.$emit('click');
+    await flushPromises();
+    expect(router.replace).toHaveBeenCalledWith({ query: { branchId: 'main' } });
+    route.query = { branchId: 'main' }; await flushPromises();
+    expect(wrapper.findAllComponents(KnowledgeCardListItem)).toHaveLength(4);
+    wrapper.unmount();
+  });
+
+  it('filters review issues by current revision branch validation rather than global source state', async () => {
+    const [original] = await intelligenceApi.cards('repo-1', 'ctx-main');
+    vi.mocked(intelligenceApi.cards).mockResolvedValue([
+      { ...original, id: 'review', sourceVersionStatus: 'CURRENT' },
+      { ...original, id: 'invalid', sourceVersionStatus: 'CURRENT' },
+      { ...original, id: 'current', sourceVersionStatus: 'SUSPECT' },
+      { ...original, id: 'old-revision', revision: 2, sourceVersionStatus: 'SUSPECT' },
+    ]);
+    vi.mocked(branchesApi.validations).mockResolvedValue([
+      { cardId: 'review', revision: 1, state: 'REVIEW_REQUIRED', title: '', content: '', note: '' },
+      { cardId: 'invalid', revision: 1, state: 'INVALID', title: '', content: '', note: '' },
+      { cardId: 'current', revision: 1, state: 'CURRENT', title: '', content: '', note: '' },
+      { cardId: 'old-revision', revision: 1, state: 'REVIEW_REQUIRED', title: '', content: '', note: '' },
+    ]);
+    route.query = { issue: 'KNOWLEDGE_REVIEW_REQUIRED' };
+    const wrapper = mountView(); await flushPromises();
+    expect(wrapper.findAllComponents(KnowledgeCardListItem).map(item => item.props('card').id)).toEqual(['review', 'invalid']);
+    wrapper.unmount();
+  });
 
   it('loads knowledge without Markdown, code drift or branch validations for knowledge projects', async () => {
     repositories.selectedRepository.sourceType = 'KNOWLEDGE';

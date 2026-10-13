@@ -34,6 +34,14 @@ const historyLoading = shallowRef(false);
 const readinessLoading = shallowRef(false);
 const askModels = shallowRef<AskModel[]>([]);
 const selectedModelId = shallowRef('');
+const localEvidenceSelected = shallowRef(false);
+const answerMode = computed({
+  get: () => selectedModelId.value || (localEvidenceSelected.value ? 'local-evidence' : ''),
+  set: (value: string) => {
+    localEvidenceSelected.value = value === 'local-evidence';
+    selectedModelId.value = localEvidenceSelected.value ? '' : value;
+  },
+});
 const modelsLoading = shallowRef(false);
 const modelsReady = shallowRef(false);
 const submissionPending = shallowRef(false);
@@ -47,11 +55,11 @@ const memory = usePageMemoryStore();
 const scopeKey = () => `ask:${repositories.selectedRepositoryId}:${branchContext.selectedBranchId ?? 'default'}`;
 let stateKey = scopeKey();
 let hasContext = false;
-type AskState = { thread: string | null; question: string; answer: string | null; top: number; expanded: string[]; history: boolean; model: string };
+type AskState = { thread: string | null; question: string; answer: string | null; top: number; expanded: string[]; history: boolean; model: string; localEvidenceSelected?: boolean };
 function rememberConversation() {
   if (!hasContext) return;
   memory.write<AskState>(stateKey, { thread: conversation.threadId.value, question: conversation.question.value,
-    answer: conversation.activeAnswerId.value, top: readingTop.value, expanded: [...expandedEvidence.value], history: historyOpen.value, model: selectedModelId.value });
+    answer: conversation.activeAnswerId.value, top: readingTop.value, expanded: [...expandedEvidence.value], history: historyOpen.value, model: selectedModelId.value, localEvidenceSelected: localEvidenceSelected.value });
 }
 function expandEvidence(id: string, open: boolean) {
   expandedEvidence.value = open ? [...new Set([...expandedEvidence.value, id])] : expandedEvidence.value.filter(item => item !== id);
@@ -78,6 +86,7 @@ async function loadContext(repositoryId: string | null) {
   stateKey = scopeKey();
   const saved = memory.read<AskState>(stateKey);
   selectedModelId.value = saved?.model ?? '';
+  localEvidenceSelected.value = !selectedModelId.value && saved?.localEvidenceSelected === true;
   historyOpen.value = saved?.history ?? defaultHistoryOpen();
   expandedEvidence.value = saved?.expanded ?? [];
   readingTop.value = saved?.top ?? 0;
@@ -162,7 +171,7 @@ async function refreshReadinessForAsk(repositoryId: string): Promise<boolean | n
 }
 
 async function confirmAnswerMode(isCurrent: () => boolean): Promise<boolean> {
-  if (selectedModelId.value || !askModels.value.length) return true;
+  if (selectedModelId.value || localEvidenceSelected.value || !askModels.value.length) return true;
   const model = recommendedModel.value;
   try {
     await ElMessageBox.confirm(
@@ -178,9 +187,12 @@ async function confirmAnswerMode(isCurrent: () => boolean): Promise<boolean> {
     );
     if (!isCurrent()) return false;
     selectedModelId.value = model?.id ?? '';
+    localEvidenceSelected.value = !model;
     return true;
   } catch (action) {
-    return action === 'cancel' && Boolean(model) && isCurrent();
+    if (action !== 'cancel' || !model || !isCurrent()) return false;
+    localEvidenceSelected.value = true;
+    return true;
   }
 }
 
@@ -347,6 +359,7 @@ onMounted(async () => {
       </div>
       <div v-else-if="!modelsLoading && !selectedModel" class="command-notice">
         <span v-if="!modelsReady">问答模型加载失败，请刷新页面后重试。</span>
+        <span v-else-if="localEvidenceSelected">已选择本地证据：返回摘录与引用，不生成模型推理。可随时切换问答模型。</span>
         <span v-else-if="recommendedModel">已配置可用问答模型，发送问题时将推荐使用。</span>
         <span v-else-if="askModels.length">已配置的问答模型暂不可用，请先检测模型。</span>
         <span v-else>{{ knowledgeOnly ? '本地证据模式：返回知识摘录与引用，不生成模型推理。' : '本地证据模式：返回源码摘录与引用，不生成模型推理。' }}</span>
@@ -356,13 +369,13 @@ onMounted(async () => {
         <div class="model-selector">
           <span>回答方式</span>
           <el-select
-            v-model="selectedModelId"
+            v-model="answerMode"
             :loading="modelsLoading"
             :disabled="submissionPending"
-            placeholder="本地证据模式"
+            placeholder="请选择回答方式"
             aria-label="问答模型"
           >
-            <el-option label="本地证据 · 无需问答模型" value="" />
+            <el-option label="本地证据 · 无需问答模型" value="local-evidence" />
             <el-option
               v-for="item in askModels"
               :key="item.id"
