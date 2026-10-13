@@ -42,7 +42,8 @@ class BranchPreparationJobsTest {
             var db = new JdbcTemplate(source);
             db.execute(
                     "CREATE TABLE accounts(id UUID PRIMARY KEY,username TEXT,display_name TEXT,account_role TEXT,enabled BOOLEAN,must_change_password BOOLEAN)");
-            db.execute("CREATE TABLE repositories(id UUID PRIMARY KEY,deleted_at TIMESTAMPTZ)");
+            db.execute(
+                    "CREATE TABLE repositories(id UUID PRIMARY KEY,deleted_at TIMESTAMPTZ,source_type TEXT NOT NULL DEFAULT 'LOCAL_GIT')");
             db.execute(
                     "CREATE TABLE repository_branches(id UUID PRIMARY KEY,repo_id UUID,content_version UUID,content_indexed_at TIMESTAMPTZ,tracking_status TEXT DEFAULT 'ACTIVE',UNIQUE(repo_id,id))");
             db.execute(
@@ -76,7 +77,7 @@ class BranchPreparationJobsTest {
             db.update(
                     "INSERT INTO accounts VALUES(?,'owner','Owner','SUPER_ADMIN',TRUE,FALSE)",
                     account);
-            db.update("INSERT INTO repositories VALUES(?,NULL)", repo);
+            db.update("INSERT INTO repositories(id,deleted_at) VALUES(?,NULL)", repo);
             db.update("INSERT INTO repository_branches(id,repo_id) VALUES(?,?)", branch, repo);
             var actor =
                     new AuthenticatedAccount(

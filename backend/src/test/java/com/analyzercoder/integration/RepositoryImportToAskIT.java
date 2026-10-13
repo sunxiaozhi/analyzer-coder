@@ -3,16 +3,15 @@ package com.analyzercoder.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.analyzercoder.CodebaseKnowledgeApplication;
-import com.analyzercoder.application.indexing.IndexJobProcessor;
-import com.analyzercoder.application.indexing.IndexJobUseCase;
-import com.analyzercoder.application.indexing.StartIndexCommand;
+import com.analyzercoder.application.branch.BranchCodeOperationsService;
+import com.analyzercoder.application.branch.RepositoryBranchService;
 import com.analyzercoder.application.intelligence.IntelligenceService;
 import com.analyzercoder.application.repository.RepositorySourceImportService;
-import com.analyzercoder.domain.indexing.IndexJobStatus;
-import com.analyzercoder.domain.indexing.IndexJobType;
 import com.analyzercoder.domain.repository.CodeRepository;
-import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import com.analyzercoder.infrastructure.persistence.mapper.AuthMapper;
+import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
+import com.analyzercoder.security.AccountRole;
+import com.analyzercoder.security.AuthenticatedAccount;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -32,8 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
         properties = "app.workers.enabled=false")
 class RepositoryImportToAskIT {
     @Autowired RepositorySourceImportService imports;
-    @Autowired IndexJobUseCase jobs;
-    @Autowired IndexJobProcessor processor;
+    @Autowired RepositoryBranchService branches;
+    @Autowired BranchCodeOperationsService operations;
     @Autowired IntelligenceService intelligence;
     @Autowired AuthMapper auth;
     @Autowired GitBranchContentVersionFactory managedFiles;
@@ -47,16 +46,34 @@ class RepositoryImportToAskIT {
                 "UPDATE vector_model_activation SET active_config_id='00000000-0000-0000-0000-000000000064' WHERE singleton_id=1");
 
         var owner = auth.listAccounts().get(0);
+        var actor =
+                new AuthenticatedAccount(
+                        owner.id(),
+                        owner.username(),
+                        owner.displayName(),
+                        AccountRole.valueOf(owner.accountRole()),
+                        false,
+                        null);
         MockMultipartFile upload =
                 new MockMultipartFile("file", "e2e.zip", "application/zip", repositoryZip());
         CodeRepository repository = null;
         try {
             repository =
                     imports.importZip("import-to-ask-" + UUID.randomUUID(), upload, owner.id());
-            var queued = jobs.start(new StartIndexCommand(repository.id(), IndexJobType.FULL));
-
-            assertThat(processor.processNextQueuedJob()).isTrue();
-            assertThat(jobs.get(queued.id()).status()).isEqualTo(IndexJobStatus.SUCCEEDED);
+            var workspace = branches.list(actor, repository.id().value()).get(0);
+            var context =
+                    operations.executeSync(
+                            actor,
+                            repository.id().value(),
+                            workspace.id(),
+                            null,
+                            (stage, detail) -> {},
+                            () -> {});
+            operations.indexContent(actor, context, () -> {});
+            intelligence.prepareBranchEmbeddings(
+                    repository.id().value(), context.contentVersion(), () -> {});
+            context = branches.resolve(actor, repository.id().value(), workspace.id(), null);
+            assertThat(operations.status(actor, context).contentReady()).isTrue();
 
             IntelligenceService.Answer answer =
                     intelligence.ask(
@@ -65,26 +82,29 @@ class RepositoryImportToAskIT {
                             "OrderCheckoutWorkflow 在哪里定义？",
                             UUID.randomUUID(),
                             null,
-                            null);
+                            null,
+                            context);
 
-            assertThat(answer.contentVersion()).isEqualTo(repository.currentContentVersion().value());
+            assertThat(answer.contentVersion()).isEqualTo(context.contentVersion());
             assertThat(answer.evidenceStatus()).isEqualTo("DEGRADED");
             assertThat(answer.fallbackReason()).isEqualTo("LOCAL_EVIDENCE_MODE");
             assertThat(answer.citations()).isNotEmpty();
             assertThat(answer.citations().get(0).filePath())
                     .isEqualTo("src/OrderCheckoutWorkflow.java");
             assertThat(answer.retrieval().enabledChannels()).contains("CODE_KEYWORD");
-            assertThat(answer.retrieval().contentVersion())
-                    .isEqualTo(repository.currentContentVersion().value());
+            assertThat(answer.retrieval().contentVersion()).isEqualTo(context.contentVersion());
             assertThat(
                             intelligence
                                     .historyDetail(
-                                            repository.id().value(), owner.id(), answer.threadId())
+                                            repository.id().value(),
+                                            owner.id(),
+                                            answer.threadId(),
+                                            context)
                                     .turns())
                     .hasSize(1);
 
             // Switching models must invalidate coverage before any user query is made.
-            var beforeSwitch = vectors.summary(repository.id().value());
+            var beforeSwitch = vectors.summary(context);
             assertThat(beforeSwitch.missingChunks()).isZero();
             assertThat(beforeSwitch.totalChunks()).isPositive();
             UUID nextModel = UUID.randomUUID();
@@ -97,23 +117,25 @@ class RepositoryImportToAskIT {
             jdbc.update(
                     "UPDATE vector_model_activation SET active_config_id=? WHERE singleton_id=1",
                     nextModel);
-            var afterSwitch = vectors.summary(repository.id().value());
+            var afterSwitch = vectors.summary(context);
             assertThat(afterSwitch.vectorModel()).isEqualTo(nextModelName);
             assertThat(afterSwitch.missingChunks()).isEqualTo(beforeSwitch.totalChunks());
-            assertThat(
-                            vectors.chunks(repository.id().value(), null, "MISSING", null, 1, 15)
-                                    .items())
+            assertThat(vectors.chunks(context, null, "MISSING", null, 1, 15).items())
                     .hasSize((int) beforeSwitch.totalChunks());
             assertThat(
                             intelligence
                                     .hybridSearchDetailed(
-                                            repository.id().value(), "OrderCheckoutWorkflow", 10)
+                                            repository.id().value(),
+                                            "OrderCheckoutWorkflow",
+                                            10,
+                                            context)
                                     .hits())
                     .isNotEmpty();
-            assertThat(vectors.summary(repository.id().value()).missingChunks())
+            assertThat(vectors.summary(context).missingChunks())
                     .isEqualTo(beforeSwitch.totalChunks());
-            assertThat(intelligence.prepareRepositoryEmbeddings(repository.id().value())).isTrue();
-            assertThat(vectors.summary(repository.id().value()).missingChunks()).isZero();
+            intelligence.prepareBranchEmbeddings(
+                    repository.id().value(), context.contentVersion(), () -> {});
+            assertThat(vectors.summary(context).missingChunks()).isZero();
         } finally {
             if (repository != null) managedFiles.deleteRepository(repository.id());
         }

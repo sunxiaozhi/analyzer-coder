@@ -3,7 +3,7 @@ package com.analyzercoder.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.analyzercoder.CodebaseKnowledgeApplication;
-import com.analyzercoder.application.indexing.IndexJobProcessor;
+import com.analyzercoder.application.branch.BranchPreparationJobs;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -31,7 +31,7 @@ import org.springframework.util.LinkedMultiValueMap;
         properties = {"app.workers.enabled=false", "app.security.cookie-secure=false"})
 class RepositoryHttpWorkflowIT {
     @Autowired TestRestTemplate http;
-    @Autowired IndexJobProcessor processor;
+    @Autowired BranchPreparationJobs processor;
 
     @Test
     void importsIndexesAnswersAndRestoresEvidenceThroughHttp() throws Exception {
@@ -91,16 +91,14 @@ class RepositoryHttpWorkflowIT {
         String repositoryId = imported.path("id").asText();
         assertThat(repositoryId).isNotBlank();
         String base = "/api/repositories/" + repositoryId;
-        JsonNode queued = send(HttpMethod.POST, base + "/index", Map.of("type", "FULL"), headers);
-        String jobUrl = "/api/index-jobs/" + queued.path("id").asText();
-        JsonNode status = null;
-        for (int attempt = 0; attempt < 20; attempt++) {
-            processor.processNextQueuedJob();
-            status = send(HttpMethod.GET, jobUrl, null, headers);
-            if ("SUCCEEDED".equals(status.path("status").asText())
-                    || "FAILED".equals(status.path("status").asText())) break;
-        }
-        assertThat(status.path("status").asText()).isEqualTo("SUCCEEDED");
+        JsonNode workspace = send(HttpMethod.GET, base + "/branches", null, headers).get(0);
+        String branchId = workspace.path("id").asText();
+        runBranchJob(base, branchId, Map.of("kind", "SYNC"), headers);
+        JsonNode context =
+                send(HttpMethod.POST, base + "/contexts", Map.of("branchId", branchId), headers);
+        String contextId = context.path("contextId").asText();
+        runBranchJob(base, branchId, Map.of("kind", "CONTENT", "contextId", contextId), headers);
+        headers.set("X-Branch-Context", contextId);
 
         JsonNode search =
                 send(
@@ -131,7 +129,7 @@ class RepositoryHttpWorkflowIT {
         assertThat(answer.path("citations").get(0).path("filePath").asText())
                 .isEqualTo("src/OrderCheckoutWorkflow.java");
         assertThat(answer.path("contentVersion").asText())
-                .isEqualTo(imported.path("contentVersion").asText());
+                .isEqualTo(context.path("contentVersion").asText());
         JsonNode history =
                 send(
                         HttpMethod.GET,
@@ -143,6 +141,29 @@ class RepositoryHttpWorkflowIT {
                 .isEqualTo(answer.path("citations"));
         assertThat(http.getForEntity(base + "/chunks", JsonNode.class).getStatusCode().value())
                 .isEqualTo(401);
+    }
+
+    private void runBranchJob(String base, String branchId, Object operation, HttpHeaders headers)
+            throws Exception {
+        JsonNode queued =
+                send(
+                        HttpMethod.POST,
+                        base + "/branches/" + branchId + "/code-jobs",
+                        operation,
+                        headers);
+        JsonNode status = queued;
+        for (int attempt = 0; attempt < 20; attempt++) {
+            processor.processNext();
+            for (JsonNode job :
+                    send(HttpMethod.GET, base + "/branch-preparation-jobs", null, headers)) {
+                if (job.path("id").equals(queued.path("id"))) status = job;
+            }
+            if ("SUCCEEDED".equals(status.path("status").asText())
+                    || "FAILED".equals(status.path("status").asText())) break;
+        }
+        assertThat(status.path("status").asText())
+                .as("branch job: %s", status)
+                .isEqualTo("SUCCEEDED");
     }
 
     private JsonNode send(HttpMethod method, String url, Object body, HttpHeaders headers) {
