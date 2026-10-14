@@ -18,17 +18,19 @@ let branches: any;
 const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock('@/stores/repositoryStore', () => ({ useRepositoryStore: () => store }));
 vi.mock('@/stores/branchContextStore', () => ({ useBranchContextStore: () => branches }));
+vi.mock('@/stores/authStore', () => ({ useAuthStore: () => ({ account: { id: 'tester' } }) }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: navigation.push, replace: navigation.replace }) }));
 vi.mock('@/api/repositories', () => ({ createKnowledgeProject: vi.fn(), listRepositoryPage: vi.fn(), updateRepository: vi.fn() }));
 vi.mock('@/api/projectDrafts', () => ({ projectDraftsApi: { list: vi.fn(), remove: vi.fn(), create: vi.fn(), configure: vi.fn(), complete: vi.fn() } }));
 vi.mock('@/api/sourceImports', () => ({ sourceImportsApi: { remoteJob: vi.fn(), job: vi.fn() } }));
 vi.mock('element-plus', async importOriginal => ({
   ...await importOriginal<typeof import('element-plus')>(),
-  ElMessage: { success: vi.fn(), error: vi.fn() },
+  ElMessage: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
   ElMessageBox: { confirm: vi.fn() },
 }));
 beforeEach(() => {
   vi.resetAllMocks();
+  sessionStorage.clear();
   branches = reactive({ selectedBranchId: 'main', context: null, refresh: vi.fn(), select: vi.fn(async (id: string) => { branches.selectedBranchId = id; branches.context = { contextId: 'ctx-' + id, branchId: id, branchName: id }; }) });
   vi.mocked(projectDraftsApi.list).mockResolvedValue([]);
   vi.mocked(projectDraftsApi.remove).mockResolvedValue(undefined);

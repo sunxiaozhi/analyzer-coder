@@ -89,6 +89,7 @@ public class CodeGraphController {
             @RequestParam(defaultValue = "both") String direction,
             @RequestParam(defaultValue = "1") int depth,
             @RequestParam(defaultValue = "240") int limit,
+            @RequestParam(defaultValue = "") String filePath,
             HttpServletRequest request) {
         access.require(
                 SecurityContext.account(request),
@@ -97,7 +98,7 @@ public class CodeGraphController {
         if (query.length() > 500 || module.length() > 500)
             throw new IllegalArgumentException("查询范围过长");
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
-        var options = new CodeGraphExplorer.Options(focusId, direction, depth, limit);
+        var options = new CodeGraphExplorer.Options(focusId, direction, depth, limit, filePath);
         if (context != null)
             return service.exploreContentVersion(
                     repoId, context.contentVersion(), module, query, options);

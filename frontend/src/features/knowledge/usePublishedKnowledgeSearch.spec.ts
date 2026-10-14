@@ -37,6 +37,20 @@ it('discards an old project response after switching contexts', async () => {
   scope.stop();
 });
 
+it('searches within the selected knowledge kind and invalidates results when the kind changes', async () => {
+  const kind = shallowRef<string | undefined>('RUNBOOK');
+  vi.mocked(intelligenceApi.unifiedSearch).mockResolvedValue(response('runbook'));
+  const scope = effectScope();
+  const search = scope.run(() => usePublishedKnowledgeSearch({ query: '退款', context: context(), knowledgeKind: kind }))!;
+  await vi.advanceTimersByTimeAsync(250);
+  expect(intelligenceApi.unifiedSearch).toHaveBeenLastCalledWith('project', '退款', 50, 'ctx-project', 'RUNBOOK');
+  kind.value = 'BUSINESS_RULE'; await nextTick();
+  expect(search.hits.value).toEqual([]);
+  await vi.advanceTimersByTimeAsync(250);
+  expect(intelligenceApi.unifiedSearch).toHaveBeenLastCalledWith('project', '退款', 50, 'ctx-project', 'BUSINESS_RULE');
+  scope.stop();
+});
+
 it('reports failures, supports retry and preserves degraded results', async () => {
   vi.mocked(intelligenceApi.unifiedSearch).mockRejectedValueOnce(new Error('检索暂不可用')).mockResolvedValue(response('rule', true));
   const scope = effectScope();

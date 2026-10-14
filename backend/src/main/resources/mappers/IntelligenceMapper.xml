@@ -115,7 +115,7 @@
         LIMIT #{limit}
     </select>
 
-    <select id="searchKnowledgeKeyword" resultType="map">
+    <sql id="searchKnowledgeKeywordQuery">
         SELECT <include refid="knowledgeColumns"/>,
         LEAST(1.0,
           CASE WHEN POSITION(#{query} IN LOWER(c.title))&gt;0 THEN .95 ELSE 0 END
@@ -133,7 +133,8 @@
           ) / #{termCount}
         ) lexical_score,0.0 semantic_score
         FROM knowledge_cards c
-        WHERE <include refid="validKnowledge"/> AND(
+        WHERE <include refid="validKnowledge"/>
+        <if test="knowledgeKind != null and knowledgeKind != ''">AND c.knowledge_kind=#{knowledgeKind}</if> AND(
           POSITION(#{query} IN LOWER(c.title))&gt;0
           OR POSITION(#{query} IN LOWER(c.content))&gt;0
           OR POSITION(#{query} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0
@@ -145,16 +146,35 @@
         )
         ORDER BY lexical_score DESC,c.updated_at DESC
         LIMIT #{limit}
+    </sql>
+
+    <select id="searchKnowledgeKeyword" resultType="map">
+        <bind name="knowledgeKind" value="null"/>
+        <include refid="searchKnowledgeKeywordQuery"/>
     </select>
 
-    <select id="searchKnowledgeVector" resultType="map">
+    <select id="searchKnowledgeKeywordByKind" resultType="map">
+        <include refid="searchKnowledgeKeywordQuery"/>
+    </select>
+
+    <sql id="searchKnowledgeVectorQuery">
         SELECT <include refid="knowledgeColumns"/>,0.0 lexical_score,
         GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
         FROM knowledge_card_embeddings e
         JOIN knowledge_cards c ON c.id=e.card_id AND c.revision=e.revision
-        WHERE <include refid="validKnowledge"/> AND e.model=#{model} AND e.dimension=#{dimension}
+        WHERE <include refid="validKnowledge"/>
+        <if test="knowledgeKind != null and knowledgeKind != ''">AND c.knowledge_kind=#{knowledgeKind}</if> AND e.model=#{model} AND e.dimension=#{dimension}
         ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.updated_at DESC
         LIMIT #{limit}
+    </sql>
+
+    <select id="searchKnowledgeVector" resultType="map">
+        <bind name="knowledgeKind" value="null"/>
+        <include refid="searchKnowledgeVectorQuery"/>
+    </select>
+
+    <select id="searchKnowledgeVectorByKind" resultType="map">
+        <include refid="searchKnowledgeVectorQuery"/>
     </select>
 
     <insert id="insertConversation">
@@ -537,7 +557,7 @@
         LIMIT #{limit}
     </select>
 
-    <select id="searchBranchKnowledgeKeyword" resultType="map">
+    <sql id="searchBranchKnowledgeKeywordQuery">
         SELECT <include refid="knowledgeColumns"/>,
         CASE WHEN scope.mode='ALL_BRANCHES' THEN '项目共享' WHEN cardinality(scope.branch_ids)>1 THEN '指定分支共享' ELSE '分支 · '||scope_branch.name END source_scope,
         LEAST(1.0,
@@ -560,7 +580,8 @@
         JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
         JOIN repository_branches scope_branch ON scope_branch.id=#{branchId}
         JOIN knowledge_branch_scope_history scope ON scope.card_id=c.id AND scope.revision=c.revision
-        WHERE <include refid="validBranchKnowledge"/> AND(
+        WHERE <include refid="validBranchKnowledge"/>
+        <if test="knowledgeKind != null and knowledgeKind != ''">AND c.knowledge_kind=#{knowledgeKind}</if> AND(
           POSITION(#{query} IN LOWER(c.title))&gt;0
           OR POSITION(#{query} IN LOWER(c.content))&gt;0
           OR POSITION(#{query} IN LOWER(ARRAY_TO_STRING(c.tags,' ')))&gt;0
@@ -572,9 +593,18 @@
         )
         ORDER BY lexical_score DESC,c.changed_at DESC
         LIMIT #{limit}
+    </sql>
+
+    <select id="searchBranchKnowledgeKeyword" resultType="map">
+        <bind name="knowledgeKind" value="null"/>
+        <include refid="searchBranchKnowledgeKeywordQuery"/>
     </select>
 
-    <select id="searchBranchKnowledgeVector" resultType="map">
+    <select id="searchBranchKnowledgeKeywordByKind" resultType="map">
+        <include refid="searchBranchKnowledgeKeywordQuery"/>
+    </select>
+
+    <sql id="searchBranchKnowledgeVectorQuery">
         SELECT <include refid="knowledgeColumns"/>,
         CASE WHEN scope.mode='ALL_BRANCHES' THEN '项目共享' WHEN cardinality(scope.branch_ids)>1 THEN '指定分支共享' ELSE '分支 · '||scope_branch.name END source_scope,
         0.0 lexical_score,
@@ -585,8 +615,18 @@
         JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
         JOIN repository_branches scope_branch ON scope_branch.id=#{branchId}
         JOIN knowledge_branch_scope_history scope ON scope.card_id=c.id AND scope.revision=c.revision
-        WHERE <include refid="validBranchKnowledge"/> AND e.model=#{model} AND e.dimension=#{dimension}
+        WHERE <include refid="validBranchKnowledge"/>
+        <if test="knowledgeKind != null and knowledgeKind != ''">AND c.knowledge_kind=#{knowledgeKind}</if> AND e.model=#{model} AND e.dimension=#{dimension}
         ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.changed_at DESC
         LIMIT #{limit}
+    </sql>
+
+    <select id="searchBranchKnowledgeVector" resultType="map">
+        <bind name="knowledgeKind" value="null"/>
+        <include refid="searchBranchKnowledgeVectorQuery"/>
+    </select>
+
+    <select id="searchBranchKnowledgeVectorByKind" resultType="map">
+        <include refid="searchBranchKnowledgeVectorQuery"/>
     </select>
 </mapper>

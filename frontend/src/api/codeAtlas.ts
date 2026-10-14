@@ -15,8 +15,9 @@ export interface AtlasView {
   repositoryId: string; contentVersion: string; level: 'MODULE' | 'SYMBOL';
   nodes: AtlasNode[]; edges: AtlasEdge[]; totalNodes: number; totalEdges: number; partial: boolean;
   repositoryNodes?: number; repositoryEdges?: number; unmappedNodes?: number; relationKinds?: string[];
+  filePath?: string; totalFileNodes?: number; loadedFileNodes?: number;
 }
-export interface AtlasExploreOptions { focusId?: string; direction?: 'both' | 'in' | 'out'; depth?: number; limit?: number }
+export interface AtlasExploreOptions { focusId?: string; direction?: 'both' | 'in' | 'out'; depth?: number; limit?: number; filePath?: string }
 export const atlasEdgeKey = (edge: AtlasEdge) => JSON.stringify([edge.source, edge.target, edge.kind]);
 export function getCodeAtlas(repositoryId: string, module = '', query = '', contextId?: string | null, options: AtlasExploreOptions = {}) {
   const params = new URLSearchParams({ module, query });

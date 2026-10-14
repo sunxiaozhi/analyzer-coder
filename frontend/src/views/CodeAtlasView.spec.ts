@@ -351,10 +351,28 @@ it('starts with file cards, drills into a file and keeps only its symbols and di
   expect(wrapper.findAll('[data-node]')).toHaveLength(3);
   expect(wrapper.get('.atlas-stage').text()).not.toContain('unrelated');
   expect(wrapper.get('[aria-label="图谱路径"]').text()).toContain('a.ts');
-  expect(getCodeAtlas).toHaveBeenCalledTimes(1);
+  expect(getCodeAtlas).toHaveBeenLastCalledWith('a', '', '', 'ctx-main', { filePath: 'src/a.ts', limit: 240 });
   await wrapper.get('[aria-label="退出文件范围"]').trigger('click');
+  await flushPromises();
   expect(wrapper.findAll('[data-card-kind="FILE"]')).toHaveLength(3);
   expect(wrapper.find('.scope-hint').exists()).toBe(false);
+  wrapper.unmount();
+});
+
+it('fetches file symbols missing from the initial scene and keeps file scope while loading more', async () => {
+  const initial = fileGraph(); initial.partial = true;
+  const scoped: AtlasView = { ...view(), filePath: 'src/a.ts', totalFileNodes: 300, loadedFileNodes: 2, totalNodes: 300, partial: true,
+    nodes: [...view().nodes, { ...view().nodes[0], id: 'later', label: 'notInInitialScene', startLine: 999 }] };
+  vi.mocked(getCodeAtlas).mockResolvedValueOnce(initial).mockResolvedValue(scoped);
+  const wrapper = mount(CodeAtlasView); await flushPromises();
+  expect(wrapper.text()).not.toContain('notInInitialScene');
+  await wrapper.findAll('.tree-file').find(node => node.attributes('title') === 'src/a.ts')!.trigger('click');
+  await flushPromises();
+  expect(wrapper.get('.atlas-stage').text()).toContain('notInInitialScene');
+  expect(wrapper.get('.atlas-status').text()).toContain('本文件 2 / 300 符号');
+  await wrapper.findAll('.atlas-status button').find(button => button.text() === '加载更多')!.trigger('click');
+  await flushPromises();
+  expect(getCodeAtlas).toHaveBeenLastCalledWith('a', '', '', 'ctx-main', { filePath: 'src/a.ts', limit: 480 });
   wrapper.unmount();
 });
 

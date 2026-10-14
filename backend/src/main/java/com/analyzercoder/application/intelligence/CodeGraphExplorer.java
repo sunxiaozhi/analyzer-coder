@@ -54,16 +54,26 @@ public final class CodeGraphExplorer {
             int repositoryNodes,
             int repositoryEdges,
             int unmappedNodes,
-            List<String> relationKinds) {}
+            List<String> relationKinds,
+            String filePath,
+            int totalFileNodes,
+            int loadedFileNodes) {}
 
-    public record Options(String focusId, String direction, int depth, int limit) {
+    public record Options(String focusId, String direction, int depth, int limit, String filePath) {
+        public Options(String focusId, String direction, int depth, int limit) {
+            this(focusId, direction, depth, limit, "");
+        }
+
         public Options {
             focusId = focusId == null ? "" : focusId;
+            filePath = filePath == null ? "" : filePath.replace('\\', '/');
             direction = direction == null ? "both" : direction;
             if (!Set.of("both", "in", "out").contains(direction))
                 throw new IllegalArgumentException("关系方向必须为 both、in 或 out");
             if (depth < 1 || depth > 3 || limit < 1 || limit > 1200 || focusId.length() > 500)
                 throw new IllegalArgumentException("展开深度为 1–3，节点数量为 1–1200");
+            if (filePath.length() > 2000 || !filePath.isBlank() && !focusId.isBlank())
+                throw new IllegalArgumentException("文件范围无效，不能同时指定文件和焦点符号");
         }
 
         public static Options defaults() {
@@ -158,6 +168,10 @@ public final class CodeGraphExplorer {
                 symbols.values().stream()
                         .filter(
                                 n ->
+                                        options.filePath().isBlank()
+                                                || options.filePath().equals(n.filePath()))
+                        .filter(
+                                n ->
                                         module == null
                                                 || module.isBlank()
                                                 || module.equals(n.module()))
@@ -190,6 +204,7 @@ public final class CodeGraphExplorer {
                     if (i < group.size()) scope.add(group.get(i).id());
         }
         if (!options.focusId().isBlank()
+                || !options.filePath().isBlank()
                 || !term.isBlank()
                 || (module != null && !module.isBlank())) {
             Set<String> frontier = new LinkedHashSet<>(scope);
@@ -266,6 +281,14 @@ public final class CodeGraphExplorer {
                 symbols.size(),
                 relations.size(),
                 graph.path("nodes").size() - symbols.size(),
-                List.copyOf(kinds));
+                List.copyOf(kinds),
+                options.filePath(),
+                options.filePath().isBlank() ? 0 : matches.size(),
+                options.filePath().isBlank()
+                        ? 0
+                        : (int)
+                                nodes.stream()
+                                        .filter(n -> options.filePath().equals(n.filePath()))
+                                        .count());
     }
 }

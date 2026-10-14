@@ -5,13 +5,14 @@ import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { usePublishedKnowledgeSearch } from './usePublishedKnowledgeSearch';
 import { knowledgeExcerpt } from './knowledgePresentation';
-const props = defineProps<{ query: string; cardIds?: string[] }>();
+const props = defineProps<{ query: string; knowledgeKind?: string }>();
+const emit = defineEmits<{ clearType: []; allKnowledge: []; clearQuery: [] }>();
 const router = useRouter();
 const branches = useBranchContextStore();
 const repositories = useRepositoryStore();
 const search = usePublishedKnowledgeSearch({ query: () => props.query, context: () =>
-  branches.context?.repositoryId === repositories.selectedRepositoryId ? branches.context : null });
-const visibleHits = computed(() => search.hits.value.filter(hit => !props.cardIds || props.cardIds.includes(hit.knowledgeCardId!)));
+  branches.context?.repositoryId === repositories.selectedRepositoryId ? branches.context : null, knowledgeKind: () => props.knowledgeKind });
+const visibleHits = computed(() => search.hits.value);
 function open(id: string) {
   void router.push({ name: 'knowledge', query: { branchId: branches.context?.branchId, contextId: branches.context?.contextId, cardId: id, q: props.query, searchScope: 'PUBLISHED' } });
 }
@@ -22,7 +23,11 @@ function open(id: string) {
     <el-alert v-if="search.error.value" :title="search.error.value" type="error" :closable="false"><el-button @click="search.retry">重试检索</el-button></el-alert>
     <el-alert v-if="search.degraded.value" title="部分检索通道不可用，已保留可用结果。" type="info" :closable="false" />
     <p v-if="!search.loading.value && !search.error.value" role="status">找到 {{ visibleHits.length }} 条已发布知识（最多返回 50 条）</p>
-    <el-empty v-if="!search.loading.value && !search.error.value && !visibleHits.length" description="没有找到相关的已发布知识，请调整关键词或筛选范围" />
+    <el-empty v-if="!search.loading.value && !search.error.value && !visibleHits.length" description="没有找到相关的已发布知识，请调整关键词或筛选范围">
+      <el-button v-if="knowledgeKind" @click="emit('clearType')">清除类型筛选</el-button>
+      <el-button @click="emit('allKnowledge')">在全部知识中筛选</el-button>
+      <el-button @click="emit('clearQuery')">清除关键词</el-button>
+    </el-empty>
     <div class="published-grid">
       <article v-for="(hit, index) in visibleHits" :key="`${hit.knowledgeCardId}:${index}`" class="published-hit">
         <small>已发布知识 · {{ branches.context?.branchName }} 虚拟分支</small>

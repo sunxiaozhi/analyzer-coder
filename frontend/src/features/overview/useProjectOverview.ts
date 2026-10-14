@@ -1,4 +1,4 @@
-import { onScopeDispose, shallowReadonly, shallowRef, watch } from 'vue';
+import { computed, onScopeDispose, shallowReadonly, shallowRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   getBranchOverview,
@@ -7,7 +7,8 @@ import {
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
-import { branchesApi } from '@/api/branches';
+import { branchesApi, type BranchCodeOperation, type BranchPreparationJob } from '@/api/branches';
+import { useBranchPreparation } from '@/features/branches/useBranchPreparation';
 
 export function useProjectOverview() {
   const repositories = useRepositoryStore();
@@ -22,6 +23,13 @@ export function useProjectOverview() {
   let loadVersion = 0;
   let contextVersion = 0;
   let disposed = false;
+
+  const tasks = useBranchPreparation(
+    () => repositories.selectedRepository?.sourceType === 'KNOWLEDGE' ? '' : repositories.selectedRepositoryId ?? '',
+    async () => { await branches.refresh(); await load(repositories.selectedRepositoryId); },
+    () => branches.selectedBranchId,
+  );
+  const taskRunning = computed(() => tasks.jobs.value.some(job => job.status === 'QUEUED' || job.status === 'RUNNING'));
 
   function isCurrent(repositoryId: string, version: number) {
     return !disposed && version === contextVersion && repositoryId === repositories.selectedRepositoryId;
@@ -67,27 +75,31 @@ export function useProjectOverview() {
     }
   }
 
-  async function runPreparation(stage?: PreparationStage['key']) {
+  async function runPreparation(stage?: PreparationStage['key'], operation?: BranchCodeOperation) {
     const repositoryId = repositories.selectedRepositoryId;
-    if (!repositoryId || preparing.value) return;
+    if (!repositoryId || preparing.value || taskRunning.value) return;
     const branchId = branches.selectedBranchId;
     if (!branchId) { ElMessage.warning('请在项目管理中选择分支'); return; }
     const version = contextVersion;
     preparing.value = true;
     try {
       if (stage === 'knowledge_drift') { ElMessage.warning('请在知识页验证当前分支的知识'); return; }
-      const kind = stage === 'content' ? 'CONTENT' : stage === 'graph' ? 'GRAPH' : stage === 'vectors' ? 'VECTORS' : 'PREPARE';
+      const kind = operation ?? (stage === 'content' ? 'CONTENT' : stage === 'graph' ? 'GRAPH' : stage === 'vectors' ? 'VECTORS' : 'PREPARE');
+      let job;
       if (kind === 'VECTORS' && branches.context) {
-        await branchesApi.prepareVectors(branches.context);
+        job = await branchesApi.prepareVectors(branches.context);
       } else if (kind === 'VECTORS') {
         throw new Error(readScope.reason.value);
       } else if (kind === 'CONTENT' || kind === 'GRAPH') {
         if (!branches.context || readScope.blocked.value) throw new Error(readScope.reason.value);
-        await branchesApi.codeOperation(repositoryId, branchId, kind, branches.context.contextId);
+        job = await branchesApi.codeOperation(repositoryId, branchId, kind, branches.context.contextId);
       } else {
-        await branchesApi.codeOperation(repositoryId, branchId, 'PREPARE');
+        job = await branchesApi.codeOperation(repositoryId, branchId, kind);
       }
-      if (isCurrent(repositoryId, version)) ElMessage.success('已提交当前分支任务，可在项目管理中查看进度');
+      if (isCurrent(repositoryId, version) && job) {
+        tasks.accepted(job);
+        ElMessage.success('已提交当前分支任务，完成后自动刷新总览');
+      }
     } catch (cause) {
       if (isCurrent(repositoryId, version)) ElMessage.error(cause instanceof Error ? cause.message : '分支任务提交失败');
     } finally { if (isCurrent(repositoryId, version)) preparing.value = false; }
@@ -103,9 +115,11 @@ export function useProjectOverview() {
   return {
     preparation: shallowReadonly(preparation), codeFacts: shallowReadonly(codeFacts),
     health: shallowReadonly(health), loading: shallowReadonly(loading),
-    preparing: shallowReadonly(preparing), error: shallowReadonly(error),
+    preparing: computed(() => preparing.value || taskRunning.value), error: shallowReadonly(error),
+    jobs: tasks.jobs, taskError: tasks.error, refreshTasks: tasks.refresh,
     reload: () => load(repositories.selectedRepositoryId),
     prepare: () => runPreparation(),
     retryStage: (stage: PreparationStage['key']) => runPreparation(stage),
+    retryTask: (kind: BranchPreparationJob['kind']) => kind === 'VECTORS' ? runPreparation('vectors') : runPreparation(undefined, kind),
   };
 }

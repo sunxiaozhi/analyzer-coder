@@ -89,6 +89,7 @@ const kindOptions: { value: KnowledgeKind; label: string }[] = [
           <input type="file" multiple :disabled="uploading" @change="emit('chooseFiles', $event)" />
         </label>
         <span>图片最大 10 MiB；文档最大 50 MiB；每个修订最多 20 个。</span>
+        <p class="attachment-search-hint">附件仅供保存和下载，Word/PDF 等附件正文暂不参与检索和问答。需要检索的内容请整理到知识正文并发布。</p>
       </div>
       <KnowledgeAttachmentList
         :items="attachments"
@@ -117,6 +118,7 @@ const kindOptions: { value: KnowledgeKind; label: string }[] = [
 .attachment-field { margin-bottom: 0; }
 .attachment-field :deep(.el-form-item__content) { display: grid; gap: 10px; }
 .upload-area { display: flex; align-items: center; gap: 12px; }
+.attachment-search-hint { flex-basis:100%; margin:0; color:var(--app-text-muted); font-size:13px; line-height:1.6; }
 .upload-area > span { color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.5; }
 .upload-button {
   display: inline-flex;

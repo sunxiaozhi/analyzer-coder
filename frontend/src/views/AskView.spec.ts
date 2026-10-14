@@ -20,7 +20,7 @@ vi.mock('element-plus', async importOriginal => ({
 }));
 const model: AskModel = { id: 'model-1', name: '知识问答', model: 'qa-model', availability: 'AVAILABLE', breakerState: 'CLOSED', available: true };
 function mountAsk() {
-  return shallowMount(AskView, { global: { stubs: { ElTag: { template: '<span><slot /></span>' }, ElButton: true, ElOption: true, ElSelect: true } } });
+  return shallowMount(AskView, { global: { stubs: { ElTag: { template: '<span><slot /></span>' }, ElButton: { name: 'ElButton', template: '<button><slot /></button>' }, ElOption: true, ElSelect: true } } });
 }
 async function sendQuestion(wrapper: ReturnType<typeof mountAsk>) {
   const panel = wrapper.getComponent(AskConversationPanel);
@@ -173,6 +173,23 @@ it('requires an explicit local evidence choice if all configured models are unav
   expect(confirmDialog).toHaveBeenCalledWith(expect.any(String), '问答模型暂不可用', expect.objectContaining({ confirmButtonText: '仅用本地证据' }));
   await sendQuestion(wrapper);
   expect(intelligenceApi.ask).toHaveBeenCalledWith('knowledge', expect.any(String), expect.any(String), null, null, 'context');
+  wrapper.unmount();
+});
+
+it('allows an explicit local evidence choice after the model list fails and can retry models without losing the question', async () => {
+  vi.mocked(intelligenceApi.askModels).mockRejectedValueOnce(new Error('模型列表不可用')).mockResolvedValue([model]);
+  const wrapper = mountAsk(); await flushPromises();
+  await sendQuestion(wrapper);
+  expect(intelligenceApi.ask).not.toHaveBeenCalled();
+  wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'local-evidence');
+  await sendQuestion(wrapper);
+  expect(intelligenceApi.ask).toHaveBeenCalledWith('knowledge', expect.any(String), expect.any(String), null, null, 'context');
+  wrapper.getComponent(AskConversationPanel).vm.$emit('update:modelValue', '保留这个问题');
+  wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text().includes('重试加载模型'))!.vm.$emit('click');
+  await flushPromises();
+  expect(intelligenceApi.askModels).toHaveBeenCalledTimes(2);
+  expect(wrapper.getComponent(AskConversationPanel).props('modelValue')).toBe('保留这个问题');
+  expect(confirmDialog).not.toHaveBeenCalled();
   wrapper.unmount();
 });
 

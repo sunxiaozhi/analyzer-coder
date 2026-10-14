@@ -445,9 +445,9 @@ export interface CardRevision {
 }
 
 export const intelligenceApi = {
-  unifiedSearch: (repositoryId: string, query: string, limit = 50, contextId?: string | null) =>
+  unifiedSearch: (repositoryId: string, query: string, limit = 50, contextId?: string | null, knowledgeKind?: string) =>
     request<UnifiedSearchResponse>(
-      `/api/repositories/${repositoryId}/evidence-search?query=${encodeURIComponent(query)}&limit=${limit}`,
+      `/api/repositories/${repositoryId}/evidence-search?query=${encodeURIComponent(query)}&limit=${limit}${knowledgeKind ? `&knowledgeKind=${encodeURIComponent(knowledgeKind)}` : ''}`,
       branchContextOptions(contextId),
     ),
   codeEvidenceContext: (repositoryId: string, filePath: string, symbol: string | null, contextId?: string | null) => {

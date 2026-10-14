@@ -150,4 +150,51 @@ class CodeGraphExplorerTest {
         assertThatThrownBy(() -> new CodeGraphExplorer.Options("", "both", 1, 1201))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void fileScopeQueriesAllSymbolsBeforeTruncationAndDoesNotMatchSimilarFileNames() {
+        var graph = json.createObjectNode();
+        var nodes = graph.putArray("nodes");
+        graph.putArray("edges");
+        for (int i = 0; i < 300; i++) {
+            nodes.addObject()
+                    .put("id", "unrelated" + i)
+                    .put("source_file", "src/a.ts")
+                    .put("label", "first" + i);
+            nodes.addObject()
+                    .put("id", "target" + i)
+                    .put("source_file", "src/z.ts")
+                    .put("label", "last" + i);
+        }
+        nodes.addObject()
+                .put("id", "similar")
+                .put("source_file", "test/src/z.ts")
+                .put("label", "similar");
+        UUID repo = UUID.randomUUID(), version = UUID.randomUUID();
+        assertThat(CodeGraphExplorer.project(graph, repo, version, "", "").nodes())
+                .noneMatch(node -> node.filePath().equals("src/z.ts"));
+        var first =
+                CodeGraphExplorer.project(
+                        graph,
+                        repo,
+                        version,
+                        "",
+                        "",
+                        new CodeGraphExplorer.Options("", "both", 1, 240, "src/z.ts"));
+        assertThat(first.totalFileNodes()).isEqualTo(300);
+        assertThat(first.loadedFileNodes()).isEqualTo(240);
+        assertThat(first.nodes()).allMatch(node -> node.filePath().equals("src/z.ts"));
+        assertThat(first.partial()).isTrue();
+        var more =
+                CodeGraphExplorer.project(
+                        graph,
+                        repo,
+                        version,
+                        "",
+                        "",
+                        new CodeGraphExplorer.Options("", "both", 1, 480, "src/z.ts"));
+        assertThat(more.loadedFileNodes()).isEqualTo(300);
+        assertThat(more.partial()).isFalse();
+        assertThat(more.nodes()).noneMatch(node -> node.id().equals("similar"));
+    }
 }

@@ -9,11 +9,11 @@ import { useAtlasExplorer } from './useAtlasExplorer';
 import CodeAtlas2D from './CodeAtlas2D.vue';
 import AtlasDetailDrawer from './AtlasDetailDrawer.vue';
 const CodeAtlas3D = defineAsyncComponent(() => import('./CodeAtlas3D.vue'));
-const { repositories, branches, data, selected, query, module, loading, error, notice, depth, limit,
+const { repositories, branches, data, selected, query, module, focusFile, loading, error, notice, depth, limit,
   impact, pathIndex, select, clearSelection, load, overview, loadMore, expand, traceImpact, openSource } = useAtlasExplorer();
 const router = useRouter();
 const mode = shallowRef<'3d' | '2d'>('2d'), level = shallowRef<AtlasCardLevel>('files');
-const focusFile = shallowRef(''), hasSearchResults = shallowRef(false);
+const hasSearchResults = shallowRef(false);
 const navigatorByMode = ref({ '2d': true, '3d': false });
 const navigatorOpen = computed({
   get: () => navigatorByMode.value[mode.value],
@@ -27,6 +27,10 @@ const drawerNode = shallowRef<AtlasNode | null>(null);
 const kinds = computed(() => data.value?.relationKinds ?? [...new Set(data.value?.edges.map(e => e.kind) ?? [])].sort());
 const byId = computed(() => new Map(data.value?.nodes.map(n => [n.id, n]) ?? []));
 const fileCount = computed(() => new Set(data.value?.nodes.map(n => n.filePath).filter(Boolean)).size);
+const loadedFileSymbols = computed(() => data.value?.nodes.filter(node => node.filePath === focusFile.value).length ?? 0);
+const coverageLabel = computed(() => !data.value ? '' : data.value.repositoryNodes === undefined
+  ? `已加载 ${data.value.nodes.length} 符号`
+  : `项目符号覆盖 ${data.value.nodes.length} / ${data.value.repositoryNodes}`);
 const tree = computed(() => {
   const groups = new Map<string, Map<string, number>>();
   for (const node of data.value?.nodes ?? []) {
@@ -84,10 +88,17 @@ function showEdge(edge: AtlasEdge) {
   const node = byId.value.get(edge.source); if (!node) return;
   openDrawer(edge.sourceLines?.length ? 'source' : 'relations', node, edge.sourceLines?.[0]);
 }
-function openFileScope(path: string) { focusFile.value = path; level.value = 'symbols'; clearSelection(); drawer.value = null; mode.value = '2d'; }
+function openFileScope(path: string) {
+  focusFile.value = path; module.value = ''; query.value = ''; level.value = 'symbols';
+  clearSelection(); drawer.value = null; mode.value = '2d'; void load();
+}
 function openModule(name: string) { focusFile.value = ''; module.value = name; query.value = ''; level.value = 'files'; drawer.value = null; void load(); }
 function goOverview() { focusFile.value = ''; level.value = 'files'; drawer.value = null; overview(); }
-function chooseLevel(next: AtlasCardLevel) { level.value = next; focusFile.value = ''; clearSelection(); drawer.value = null; }
+function chooseLevel(next: AtlasCardLevel) {
+  const wasFile = Boolean(focusFile.value);
+  level.value = next; focusFile.value = ''; clearSelection(); drawer.value = null;
+  if (wasFile) void load();
+}
 function search() { focusFile.value = ''; drawer.value = null; void load(); }
 function chooseMode(value: '3d' | '2d') { mode.value = value; threeError.value = ''; }
 function changeRenderer(compatible: boolean) { forceCompatibility.value = compatible; compatibility3d.value = compatible; threeError.value = ''; diagnosticReason.value = ''; mode.value = '3d'; rendererVersion.value++; }
@@ -101,7 +112,7 @@ function fallback3d(reason = '') { diagnosticReason.value = reason; mode.value =
 function camera() { return mode.value === '3d' ? threeView.value : flatView.value; }
 function dismissSelection() { clearSelection(); drawer.value = null; }
 watch([() => data.value?.repositoryId, () => data.value?.contentVersion], () => {
-  drawer.value = null; relationKind.value = ''; focusFile.value = '';
+  drawer.value = null; relationKind.value = '';
   hasSearchResults.value = !!data.value && !!query.value.trim();
   if (data.value) level.value = fileCount.value <= 1 ? 'symbols' : 'files';
 });
@@ -133,14 +144,15 @@ watch([() => data.value?.repositoryId, () => data.value?.contentVersion], () => 
     </div>
     <div class="atlas-caption">
       <span class="branch-chip" :title="branches.context?.branchName || '当前版本'"><GitBranch :size="13"/>{{ branches.context?.branchName || '当前版本' }}</span>
-      <nav aria-label="图谱路径"><button @click="goOverview"><Layers :size="13"/>{{ repositories.selectedRepository?.name || '全部代码' }}</button><template v-if="module"><ChevronRight :size="12"/><button @click="openModule(module)">{{ module }}</button></template><template v-if="focusFile"><ChevronRight :size="12"/><span :title="focusFile">{{ focusFile.replace(/\\/g, '/').split('/').pop() }}</span></template><span v-else-if="hasSearchResults">/ 搜索结果</span></nav>
+      <nav aria-label="图谱路径"><button @click="goOverview"><Layers :size="13"/>{{ repositories.selectedRepository?.name || '项目范围' }}</button><template v-if="module"><ChevronRight :size="12"/><button @click="openModule(module)">{{ module }}</button></template><template v-if="focusFile"><ChevronRight :size="12"/><span :title="focusFile">{{ focusFile.replace(/\\/g, '/').split('/').pop() }}</span></template><span v-else-if="hasSearchResults">/ 搜索结果</span></nav>
       <span v-if="threeError" class="render-notice" role="status">{{ threeError }}</span>
       <div v-if="mode === '2d' && !hasSearchResults" class="level-switch" aria-label="图谱层级"><button :aria-pressed="effectiveLevel === 'files'" @click="chooseLevel('files')">文件概览</button><button :aria-pressed="effectiveLevel === 'symbols'" @click="chooseLevel('symbols')">符号关系</button></div>
     </div>
     <div class="atlas-workbench">
       <aside v-if="navigatorOpen" class="atlas-navigator" aria-label="代码结构">
-        <div class="navigator-heading"><span>代码结构</span><span>{{ fileCount }} 文件</span></div>
-        <button class="repository-root" :class="{ active: !focusFile && !module }" @click="goOverview"><Layers :size="15"/><span>全部代码</span><ChevronRight :size="13"/></button>
+        <div class="navigator-heading"><span>已加载文件</span><span>{{ fileCount }} 文件</span></div>
+        <p class="tree-empty">仅列出当前已加载符号所在的文件，可搜索其他文件。</p>
+        <button class="repository-root" :class="{ active: !focusFile && !module }" @click="goOverview"><Layers :size="15"/><span>项目范围</span><ChevronRight :size="13"/></button>
         <div class="tree-scroll">
           <details v-for="group in tree" :key="group.name" open class="tree-module">
             <summary><ChevronRight class="tree-chevron" :size="12"/><Folder :size="14"/><span :title="group.name">{{ group.name || '根目录' }}</span><small>{{ group.files.length }}</small></summary>
@@ -154,7 +166,7 @@ watch([() => data.value?.repositoryId, () => data.value?.contentVersion], () => 
       <div class="atlas-stage" :class="{ 'is-spatial': mode === '3d' }">
         <CodeAtlas3D v-if="mode === '3d' && data?.nodes.length" :key="rendererVersion" ref="threeView" :nodes="canvasNodes" :edges="visibleEdges" :layout-edges="data.edges" :selected-id="selected?.id" :connected="connected" :highlighted="highlighted" :auto-rotate="autoRotate" :force-compatibility="forceCompatibility" @select="selectNode" @clear-selection="dismissSelection(); drawer = null" @expand="selectNode($event); expand()" @edge="showEdge" @ready="ready3d" @degraded="degraded3d" @unavailable="fallback3d"/>
         <CodeAtlas2D v-if="mode === '2d' && data?.nodes.length" ref="flatView" :nodes="canvasNodes" :edges="visibleEdges" :selected-id="selected?.id" :connected="connected" :highlighted="highlighted" :level="effectiveLevel" :scope-key="focusFile" @select="selectNode" @expand="selectNode($event); expand()" @edge="showEdge" @file="openFileScope" @module="openModule"/>
-        <div v-if="!data?.nodes.length" class="atlas-empty"><div class="empty-icon"><Network :size="30"/></div><h2>{{ loading ? '正在展开代码结构' : error ? '图谱暂不可用' : '当前范围没有代码' }}</h2><p>{{ error || '选择已构建图谱的项目，或搜索其他文件与符号。' }}</p><button v-if="!data" @click="router.push('/overview')">前往项目准备</button><button v-else @click="goOverview">返回全部代码</button></div>
+        <div v-if="!data?.nodes.length" class="atlas-empty"><div class="empty-icon"><Network :size="30"/></div><h2>{{ loading ? '正在展开代码结构' : error ? '图谱暂不可用' : '当前范围没有代码' }}</h2><p>{{ error || '选择已构建图谱的项目，或搜索其他文件与符号。' }}</p><button v-if="!data" @click="router.push('/overview')">前往项目准备</button><button v-else @click="goOverview">返回项目范围</button></div>
         <div v-if="loading && data?.nodes.length" class="graph-notice" role="status">正在加载关联…</div>
         <div v-else-if="error && data" class="graph-notice error" role="alert">{{ error }}</div>
         <div v-else-if="notice" class="graph-notice" role="status">{{ notice }}</div>
@@ -169,7 +181,7 @@ watch([() => data.value?.repositoryId, () => data.value?.contentVersion], () => 
       </div>
       <AtlasDetailDrawer v-if="drawer && drawerNode && data" :repository-id="data.repositoryId" :content-version="data.contentVersion" :context-id="branches.context?.contextId" :node="drawerNode" :nodes="data.nodes" :edges="data.edges" :tab="drawer" :line="sourceLine" @close="drawer = null" @tab="drawer = $event" @select="selectNode" @source="(node, line) => openDrawer('source', node, line)" @open-file="openSource"/>
     </div>
-    <footer class="atlas-status"><span class="status-dot"/><span v-if="data">画布 {{ mode === '2d' ? projection.cards.length : canvasNodes.length }} {{ mode === '2d' ? '卡片' : '节点' }} · {{ mode === '2d' ? projection.edges.length : visibleEdges.length }} 关系</span><span v-if="data">已加载 {{ data.nodes.length }} 节点</span><span v-if="hiddenEdges" class="partial">{{ hiddenEdges }} 条关系暂未绘制</span><span v-if="data?.partial" class="partial">部分数据</span><button v-if="data?.partial && limit < 1200" :disabled="loading" @click="loadMore">加载更多</button><span v-if="data" class="version-tag" :title="data.contentVersion">CodeGraph · {{ data.contentVersion.slice(0, 8) }}</span></footer>
+    <footer class="atlas-status"><span class="status-dot"/><span v-if="data">画布 {{ mode === '2d' ? projection.cards.length : canvasNodes.length }} {{ mode === '2d' ? '卡片' : '节点' }} · {{ mode === '2d' ? projection.edges.length : visibleEdges.length }} 关系</span><span v-if="data">{{ coverageLabel }}</span><span v-if="focusFile && data?.totalFileNodes !== undefined">本文件 {{ loadedFileSymbols }} / {{ data.totalFileNodes }} 符号</span><span v-if="hiddenEdges" class="partial">{{ hiddenEdges }} 条关系暂未绘制</span><span v-if="data?.partial" class="partial">部分数据</span><button v-if="data?.partial && limit < 1200" :disabled="loading" @click="loadMore">加载更多</button><span v-if="focusFile && data?.partial && limit >= 1200" class="partial">已达画布上限，可搜索具体符号继续查看</span><span v-if="data" class="version-tag" :title="data.contentVersion">CodeGraph · {{ data.contentVersion.slice(0, 8) }}</span></footer>
   </section>
 </template>
 <style scoped>

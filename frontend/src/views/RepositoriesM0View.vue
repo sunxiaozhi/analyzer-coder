@@ -5,6 +5,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import AppPagination from '@/components/AppPagination.vue';
 import RepositoryFormDialog from '@/features/repositories/RepositoryFormDialog.vue';
+import RepositoryImportProgress from '@/features/repositories/RepositoryImportProgress.vue';
+import { useRepositoryImportMonitor } from '@/features/repositories/useRepositoryImportMonitor';
+import { useAuthStore } from '@/stores/authStore';
 import RepositoryEditDialog from '@/features/repositories/RepositoryEditDialog.vue';
 import RepositoryGovernanceDialog from '@/features/repositories/RepositoryGovernanceDialog.vue';
 import ProjectSettingsPanel from '@/features/repositories/ProjectSettingsPanel.vue';
@@ -51,6 +54,10 @@ let searchTimer: number | undefined;
 
 type Input = { sourceType: 'REMOTE_GIT' | 'GITLAB' | 'ZIP' | 'KNOWLEDGE'; name: string; description: string; url: string; branch: string; credentialId: string; file: File | null };
 const unfinishedDrafts = computed(() => projectDrafts.value.filter(draft => draft.lifecycleStatus !== 'READY'));
+const imports = useRepositoryImportMonitor(`analyzer-coder:imports:${useAuthStore().account?.id ?? 'session'}`, async () => {
+  try { await reloadAll(); }
+  catch (error) { if (alive) ElMessage.error(error instanceof Error ? error.message : '项目列表刷新失败，请重试'); }
+});
 
 async function loadPage() {
   const version = ++pageVersion;
@@ -123,7 +130,15 @@ async function create(input: Input) {
         credentialId: input.credentialId || undefined,
         projectDraftId: draft.id,
       });
-      await waitForImport(job.id);
+      imports.track(input.name, job);
+      const completed = await imports.wait(job.id);
+      if (!alive) return;
+      if (!completed) {
+        dialogOpen.value = false; retryingDraft.value = null;
+        await reloadAll();
+        ElMessage.info('项目接入仍在后台运行，可在项目接入进度中继续查看');
+        return;
+      }
     }
     dialogOpen.value = false;
     retryingDraft.value = null;
@@ -131,6 +146,7 @@ async function create(input: Input) {
     await reloadAll();
     ElMessage.success('项目代码版本已验证并发布');
   } catch (error) {
+    if (!alive) return;
     projectDrafts.value = await projectDraftsApi.list().catch(() => projectDrafts.value);
     if (retryingDraft.value) {
       retryingDraft.value = projectDrafts.value.find(draft => draft.id === retryingDraft.value?.id) ?? retryingDraft.value;
@@ -139,7 +155,11 @@ async function create(input: Input) {
   }
   finally { importing.value = false; }
 }
-async function waitForImport(id:string){for(let attempt=0;attempt<120;attempt++){const job=await sourceImportsApi.job(id);if(job.status==='SUCCEEDED')return job;if(job.status==='FAILED'||job.status==='CANCELED')throw new Error(job.errorMessage??'项目接入未完成');await new Promise(resolve=>window.setTimeout(resolve,1000));}throw new Error('项目接入仍在后台运行，请稍后刷新列表')}
+async function openImportedProject(id: string) {
+  const project = store.repositories.find(item => item.id === id);
+  if (project) await selectProject(project);
+  else { await reloadAll(); const refreshed = store.repositories.find(item => item.id === id); if (refreshed) await selectProject(refreshed); }
+}
 function retryDraft(draft: ProjectDraft) { retryingDraft.value = draft; dialogOpen.value = true; }
 async function removeDraft(draft: ProjectDraft) {
   if (deletingDraftId.value || importing.value || draft.lifecycleStatus === 'IMPORTING') return;
@@ -219,6 +239,8 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
         <div class="project-list-heading"><div><h2 class="project-list-title">项目</h2><span class="project-list-count">{{ total }} 个项目</span></div><el-button type="primary" :icon="Plus" :loading="importing" @click="retryingDraft=null; dialogOpen=true">导入项目</el-button></div>
         <div class="project-list-toolbar"><el-input v-model="query" :prefix-icon="Search" placeholder="搜索项目名称" aria-label="搜索项目" clearable /></div>
         <el-alert v-if="pageError || store.error" :title="pageError ?? store.error ?? ''" type="error" :closable="false" />
+        <RepositoryImportProgress :tasks="imports.tasks.value" :refreshing="imports.refreshing.value"
+          @refresh="imports.refresh" @open="openImportedProject" @dismiss="imports.dismiss" />
         <div v-if="unfinishedDrafts.length" class="draft-stack">
           <div v-for="draft in unfinishedDrafts.slice(0, 3)" :key="draft.id" class="draft-row">
             <span class="draft-copy"><b>{{ draft.name }}</b><small :title="draft.error ?? undefined">{{ draft.error ?? (draft.lifecycleStatus === 'IMPORTING' ? '正在接入，请等待导入结束' : '等待配置代码来源') }}</small></span>

@@ -4,6 +4,9 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import KnowledgeCardEditorDialog from './KnowledgeCardEditorDialog.vue';
 import KnowledgeCardContentSection from './KnowledgeCardContentSection.vue';
+import KnowledgeConflictReview from './KnowledgeConflictReview.vue';
+import { knowledgeCardInput } from './useKnowledgeCardEditor';
+import type { KnowledgeCard } from '@/api/intelligence';
 import KnowledgeCodeAssociationSection from './KnowledgeCodeAssociationSection.vue';
 import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
 
@@ -86,5 +89,21 @@ it('opens only one confirmation when competing leave actions are clicked', async
   expect(await useWorkspaceLeaveGuardStore().requestLeave()).toBe(false);
   expect(ElMessageBox.confirm).toHaveBeenCalledTimes(1);
   finish(); expect(await pending).toBe(false);
+  wrapper.unmount();
+});
+
+it('applies reviewed changes without resetting the editor and uses the new revision on save and the next conflict', async () => {
+  const base = { id: 'card', revision: 1, title: '原题', cardType: '知识卡片', content: '原文', tags: [], knowledgeKind: 'REFERENCE', severity: 'INFO', enforcement: 'REFERENCE', ownerAccountId: null, scope: { pathPatterns: [], symbols: [], modules: [] }, obligations: { requiredTests: [], requiredApproverAccountIds: [], instructions: [], prohibitedPathPatterns: [], knowledgeUpdateRequired: false }, attachments: [], codeReferences: [] } as unknown as KnowledgeCard;
+  const wrapper = mountEditor(); await wrapper.setProps({ card: base, saveConflict: true }); await edit(wrapper);
+  const latest = { ...base, revision: 2, content: '他人更新的正文' };
+  const merged = { ...knowledgeCardInput(latest), title: '未保存的业务规则' };
+  wrapper.getComponent(KnowledgeConflictReview).vm.$emit('resolve', merged, latest); await flushPromises();
+  expect(wrapper.getComponent(KnowledgeConflictReview).props('base').revision).toBe(2);
+  const content = wrapper.findAllComponents(KnowledgeCardContentSection)[0];
+  expect(content.props('title')).toBe('未保存的业务规则'); expect(content.props('content')).toBe('他人更新的正文');
+  await wrapper.setProps({ saveConflict: false });
+  await wrapper.findAll('button').at(-1)!.trigger('click');
+  expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ expectedRevision: 2, title: '未保存的业务规则', content: '他人更新的正文' });
+  expect(wrapper.emitted('conflictResolved')).toHaveLength(1);
   wrapper.unmount();
 });

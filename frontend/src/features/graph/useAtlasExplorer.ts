@@ -11,6 +11,7 @@ export function useAtlasExplorer() {
   const scope = useBranchReadScope(), route = useRoute(), router = useRouter();
   const data = shallowRef<AtlasView | null>(null), selectedId = shallowRef('');
   const query = shallowRef(''), module = shallowRef(''), loading = shallowRef(false), error = shallowRef('');
+  const focusFile = shallowRef('');
   const notice = shallowRef(''), depth = shallowRef(1), limit = shallowRef(240);
   const impact = shallowRef<GraphResult | null>(null), pathIndex = shallowRef(-1);
   const selected = computed(() => data.value?.nodes.find(n => n.id === selectedId.value) ?? null);
@@ -51,18 +52,20 @@ export function useAtlasExplorer() {
     }
     loading.value = true;
     try {
-      const options = more ? { limit: limit.value } : undefined;
+      const options = focusFile.value ? { filePath: focusFile.value, limit: limit.value }
+        : more ? { limit: limit.value } : undefined;
       let result = options
         ? await getCodeAtlas(id, module.value, query.value.trim(), branches.context?.contextId, options)
         : await getCodeAtlas(id, module.value, query.value.trim(), branches.context?.contextId);
       const targetPath = typeof route.query.path === 'string' ? route.query.path : '';
-      if (targetPath && query.value === route.query.symbol && !result.nodes.some(n => n.filePath === targetPath)) {
+      if (!focusFile.value && targetPath && query.value === route.query.symbol && !result.nodes.some(n => n.filePath === targetPath)) {
         if (ticket !== revision) return;
         result = await getCodeAtlas(id, module.value, targetPath, branches.context?.contextId);
       }
       if (ticket !== revision || id !== repositories.selectedRepositoryId) return;
       validate(result);
-      if (more) { merge(result); data.value = { ...data.value!, totalNodes: result.totalNodes, totalEdges: result.totalEdges, partial: result.partial }; }
+      if (more) { merge(result); data.value = { ...data.value!, totalNodes: result.totalNodes, totalEdges: result.totalEdges, partial: result.partial,
+        filePath: result.filePath, totalFileNodes: result.totalFileNodes, loadedFileNodes: result.loadedFileNodes }; }
       else data.value = result;
       const target = result.nodes.find(n => n.filePath === targetPath && n.label === route.query.symbol)
         ?? result.nodes.find(n => n.filePath === targetPath);
@@ -106,7 +109,7 @@ export function useAtlasExplorer() {
   }
   function select(node: AtlasNode) { selectedId.value = node.id; pathIndex.value = -1; }
   function clearSelection() { selectedId.value = ''; pathIndex.value = -1; }
-  function overview() { module.value = ''; query.value = ''; void load(); }
+  function overview() { focusFile.value = ''; module.value = ''; query.value = ''; void load(); }
   function loadMore() { limit.value = Math.min(1200, limit.value + 240); void load(true); }
   function openSource(node: AtlasNode, line?: number) {
     if (!data.value) return;
@@ -115,10 +118,11 @@ export function useAtlasExplorer() {
   }
   watch(() => [repositories.selectedRepositoryId, branches.identity, route.query.path, route.query.symbol, route.query.contentVersion], () => {
     module.value = ''; query.value = typeof route.query.symbol === 'string' ? route.query.symbol : typeof route.query.path === 'string' ? route.query.path : '';
+    focusFile.value = '';
     void load();
   }, { immediate: true });
   onMounted(() => { if (!repositories.repositories.length) void repositories.loadRepositories(); });
   onBeforeUnmount(() => { revision++; });
-  return { repositories, branches, data, selected, query, module, loading, error, notice, depth, limit,
+  return { repositories, branches, data, selected, query, module, focusFile, loading, error, notice, depth, limit,
     impact, pathIndex, select, clearSelection, load, overview, loadMore, expand, traceImpact, openSource };
 }

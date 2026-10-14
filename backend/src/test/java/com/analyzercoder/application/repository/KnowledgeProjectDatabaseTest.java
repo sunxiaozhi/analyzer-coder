@@ -150,13 +150,54 @@ class KnowledgeProjectDatabaseTest {
                 .isInstanceOf(ApiSecurityException.class);
     }
 
+    @Test
+    void knowledgeKindIsFilteredBeforeTheCandidateLimit() {
+        var owner = account();
+        UUID repo = projects.create(owner, "类型筛选测试", "").id().value();
+        UUID branch = branches.list(owner, repo).get(0).id();
+        var context = branches.resolve(owner, repo, branch, null);
+        var target =
+                intelligence.createCard(
+                        repo, branch, owner.id(), input("退款操作", "退款操作处理流程", "RUNBOOK"));
+        publication.publish(owner, context, target.id(), target.revision());
+        for (int i = 0; i < 60; i++) {
+            var other =
+                    intelligence.createCard(
+                            repo, branch, owner.id(), input("退款操作参考" + i, "退款操作处理流程"));
+            publication.publish(owner, context, other.id(), other.revision());
+        }
+        db.update(
+                "UPDATE knowledge_card_revisions SET changed_at=CURRENT_TIMESTAMP+INTERVAL '1 day' WHERE repo_id=? AND card_id<>?",
+                repo,
+                target.id());
+        // Equal vector distances make both channels fill their candidate budgets with the newer
+        // reference cards, so the runbook is outside the unfiltered result deterministically.
+        db.update(
+                "UPDATE knowledge_card_embeddings SET embedding=(SELECT embedding FROM knowledge_card_embeddings WHERE card_id=? LIMIT 1) WHERE card_id IN(SELECT id FROM knowledge_cards WHERE repo_id=?)",
+                target.id(),
+                repo);
+        context = branches.resolve(owner, repo, branch, null);
+        assertThat(intelligence.unifiedSearchDetailed(repo, "退款操作", 50, context).evidence())
+                .noneMatch(hit -> target.id().equals(hit.knowledgeCardId()));
+        assertThat(
+                        intelligence
+                                .unifiedSearchDetailed(repo, "退款操作", 50, context, "RUNBOOK")
+                                .evidence())
+                .singleElement()
+                .satisfies(hit -> assertThat(hit.knowledgeCardId()).isEqualTo(target.id()));
+    }
+
     private IntelligenceService.CardInput input(String title, String content) {
+        return input(title, content, "REFERENCE");
+    }
+
+    private IntelligenceService.CardInput input(String title, String content, String kind) {
         return new IntelligenceService.CardInput(
                 title,
                 "REFERENCE",
                 content,
                 List.of("退款"),
-                "REFERENCE",
+                kind,
                 "INFO",
                 "REFERENCE",
                 null,

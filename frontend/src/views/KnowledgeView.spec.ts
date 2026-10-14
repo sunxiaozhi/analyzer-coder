@@ -146,7 +146,7 @@ describe('knowledge evidence access', () => {
     scope.vm.$emit('update:modelValue', 'DRAFT'); await flushPromises();
     expect(wrapper.findAllComponents(KnowledgeCardListItem).map(item => item.props('card').id)).toEqual(['draft']);
     scope.vm.$emit('update:modelValue', 'PUBLISHED');
-    const query = wrapper.findAllComponents({ name: 'ElInput' }).find(item => item.attributes('placeholder') === '搜索标题、正文或标签')!;
+    const query = wrapper.findAllComponents({ name: 'ElInput' }).find(item => item.classes().includes('knowledge-search'))!;
     query.vm.$emit('update:modelValue', '支持语义的搜索'); await flushPromises();
     expect(wrapper.getComponent(PublishedKnowledgeResults).props('query')).toBe('支持语义的搜索');
     expect(wrapper.findComponent(KnowledgeCardListItem).exists()).toBe(false);
@@ -299,6 +299,43 @@ describe('knowledge evidence access', () => {
     expect(wrapper.findComponent(KnowledgeCardEditorDialog).props('busy')).toBe(false);
     expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('card')).toBeNull();
     expect(wrapper.findComponent(KnowledgeCardDetailDialog).props('modelValue')).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('renders 30 of 1000 cards, filters the full collection, and remembers the selected page', async () => {
+    route.query = {};
+    const [original] = await intelligenceApi.cards('repo-1', 'ctx-main');
+    const rows = Array.from({ length: 1000 }, (_, index) => ({ ...original, id: `card-${index}`, title: index === 999 ? '唯一末尾知识' : `知识 ${index}` }));
+    vi.mocked(intelligenceApi.cards).mockResolvedValue(rows);
+    const wrapper = mountView(); await flushPromises();
+    expect(wrapper.findAllComponents(KnowledgeCardListItem)).toHaveLength(30);
+    const pagination = wrapper.getComponent({ name: 'KnowledgeListPagination' });
+    expect(pagination.props()).toMatchObject({ total: 1000, pages: 34 });
+    pagination.vm.$emit('change', 34); await flushPromises();
+    expect(wrapper.findAllComponents(KnowledgeCardListItem).map(item => item.props('card').id)).toContain('card-999');
+    wrapper.unmount();
+    const restored = mountView(); await flushPromises();
+    expect(restored.getComponent({ name: 'KnowledgeListPagination' }).props('page')).toBe(34);
+    const query = restored.findAllComponents({ name: 'ElInput' }).find(item => item.classes().includes('knowledge-search'))!;
+    query.vm.$emit('update:modelValue', '唯一末尾知识'); await flushPromises();
+    expect(restored.findAllComponents(KnowledgeCardListItem).map(item => item.props('card').id)).toEqual(['card-999']);
+    expect(restored.getComponent({ name: 'KnowledgeListPagination' }).props('page')).toBe(1);
+    restored.unmount();
+  });
+
+  it('offers revision comparison only for an editing revision conflict', async () => {
+    repositories.selectedRepository.capabilities.canUpdate = true;
+    const wrapper = mountView(); await flushPromises();
+    const item = wrapper.getComponent(KnowledgeCardListItem);
+    item.vm.$emit('edit', item.props('card')); await flushPromises();
+    const editor = wrapper.getComponent(KnowledgeCardEditorDialog);
+    vi.mocked(intelligenceApi.updateCard).mockRejectedValueOnce(new ApiError(409, 'KNOWLEDGE_REVISION_CONFLICT', '知识已修改'));
+    editor.vm.$emit('submit', { title: '我的修改', content: '保留输入' }); await flushPromises();
+    expect(editor.props('saveConflict')).toBe(true);
+    expect(editor.props('modelValue')).toBe(true);
+    editor.vm.$emit('conflictResolved'); await flushPromises();
+    expect(editor.props('saveError')).toBeNull();
+    expect(editor.props('saveConflict')).toBe(false);
     wrapper.unmount();
   });
 

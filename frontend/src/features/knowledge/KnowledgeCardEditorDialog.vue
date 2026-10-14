@@ -17,6 +17,7 @@ import KnowledgeCodeAssociationSection from './KnowledgeCodeAssociationSection.v
 import { useKnowledgeCardEditor } from './useKnowledgeCardEditor';
 import { useKnowledgeEditorLeaveGuard } from './useKnowledgeEditorLeaveGuard';
 import KnowledgeBranchScopeSection from './KnowledgeBranchScopeSection.vue';
+import KnowledgeConflictReview from './KnowledgeConflictReview.vue';
 import type { RepositoryBranch } from '@/api/branches';
 
 const props = defineProps<{
@@ -27,6 +28,7 @@ const props = defineProps<{
   card: KnowledgeCard | null;
   busy: boolean;
   saveError?: string | null;
+  saveConflict?: boolean;
   branchName?: string | null;
   branchId?: string | null;
   branches?: RepositoryBranch[];
@@ -40,10 +42,24 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean];
   submit: [value: CardInput];
   openCode: [reference: CodeReference];
+  conflictResolved: [];
 }>();
 
 const auth = useAuthStore();
-const { form, reset, toPayload } = useKnowledgeCardEditor(() => auth.account?.id ?? null, () => props.branchId ?? null);
+const { form, scopeText, reset, toPayload } = useKnowledgeCardEditor(() => auth.account?.id ?? null, () => props.branchId ?? null);
+const editBase = shallowRef<KnowledgeCard | null>(null);
+const draft = computed(() => toPayload({ attachmentIds: attachments.value.map(item => item.id), codeReferences: codeReferences.value }));
+function applyConflict(input: CardInput, latest: KnowledgeCard) {
+  if (props.busy || uploading.value) return;
+  const availableAttachments = new Map([...attachments.value, ...latest.attachments].map(item => [item.id, item]));
+  const availableReferences = new Map([...codeReferences.value, ...latest.codeReferences].map(item => [item.chunkId, item]));
+  Object.assign(form, input);
+  editBase.value = latest;
+  scopeText.paths = input.scope.pathPatterns.join('\n'); scopeText.symbols = input.scope.symbols.join('\n');
+  attachments.value = input.attachmentIds.map(id => availableAttachments.get(id)!).filter(Boolean);
+  codeReferences.value = input.codeReferences.map(item => availableReferences.get(item.chunkId)!).filter(Boolean);
+  emit('conflictResolved');
+}
 const submitted = shallowRef(false);
 const titleError = computed(() => submitted.value && !form.title.trim() ? '请填写标题' : '');
 const contentError = computed(() => submitted.value && !form.content.trim() ? '请填写知识正文' : '');
@@ -78,6 +94,7 @@ watch(
       return;
     }
     reset(props.card);
+    editBase.value = props.card;
     submitted.value = false;
     const cardReferences = props.card?.codeReferences ?? [];
     attachments.value = props.card ? [...props.card.attachments] : [];
@@ -211,41 +228,45 @@ function save() {
     :before-close="beforeClose"
     @update:model-value="emit('update:modelValue', $event)">
     <p class="editor-intro">保存生成草稿修订，确认后通过列表发布。</p>
-    <el-form label-position="top" class="knowledge-card-form">
-      <KnowledgeBranchScopeSection v-if="branchId && !knowledgeOnly" v-model="form.branchScope" class="editor-scope"
-        :key="card?.id ?? 'new'" :current-branch-id="branchId" :branch-name="branchName" :branches="branches ?? []" :error="scopeError" />
-      <KnowledgeCardContentSection class="editor-content"
-        v-model:title="form.title" v-model:knowledge-kind="form.knowledgeKind" v-model:content="form.content" v-model:tags="form.tags"
-        :repository-id="repositoryId" :attachments="attachments" :uploading="uploading" :title-error="titleError" :content-error="contentError" />
-      <aside class="editor-settings" aria-label="知识设置">
-        <KnowledgeCardContentSection part="settings"
+    <div class="editor-workspace">
+      <KnowledgeConflictReview v-if="saveConflict && editBase" :repository-id="repositoryId" :context-id="contextId" :base="editBase" :local="draft" :disabled="busy || uploading" @resolve="applyConflict" />
+      <el-form label-position="top" class="knowledge-card-form">
+        <KnowledgeBranchScopeSection v-if="branchId && !knowledgeOnly" v-model="form.branchScope" class="editor-scope"
+          :key="card?.id ?? 'new'" :current-branch-id="branchId" :branch-name="branchName" :branches="branches ?? []" :error="scopeError" />
+        <KnowledgeCardContentSection class="editor-content"
           v-model:title="form.title" v-model:knowledge-kind="form.knowledgeKind" v-model:content="form.content" v-model:tags="form.tags"
-          :repository-id="repositoryId" :attachments="attachments" :uploading="uploading"
-          @choose-files="chooseFiles" @remove-attachment="removeAttachment" @insert-attachment="insertAttachment" />
-        <details v-if="!knowledgeOnly" class="settings-group">
-          <summary>关联代码 · {{ codeReferences.length }} 处</summary>
-          <KnowledgeCodeAssociationSection v-model:references="codeReferences" :context-id="contextId"
-            :repository-id="repositoryId" @open-code="emit('openCode', $event)" />
-        </details>
-        <details class="settings-group">
-          <summary>约束设置 · {{ policySummary }}</summary>
-          <KnowledgeCardPolicySection v-model:enforcement="form.enforcement" v-model:owner-account-id="form.ownerAccountId"
-            :members="members" :members-loading="membersLoading" :current-account-available="Boolean(auth.account)"
-            @use-current-account="useCurrentAccount" />
-        </details>
-      </aside>
-    </el-form>
+          :repository-id="repositoryId" :attachments="attachments" :uploading="uploading" :title-error="titleError" :content-error="contentError" />
+        <aside class="editor-settings" aria-label="知识设置">
+          <KnowledgeCardContentSection part="settings"
+            v-model:title="form.title" v-model:knowledge-kind="form.knowledgeKind" v-model:content="form.content" v-model:tags="form.tags"
+            :repository-id="repositoryId" :attachments="attachments" :uploading="uploading"
+            @choose-files="chooseFiles" @remove-attachment="removeAttachment" @insert-attachment="insertAttachment" />
+          <details v-if="!knowledgeOnly" class="settings-group">
+            <summary>关联代码 · {{ codeReferences.length }} 处</summary>
+            <KnowledgeCodeAssociationSection v-model:references="codeReferences" :context-id="contextId"
+              :repository-id="repositoryId" @open-code="emit('openCode', $event)" />
+          </details>
+          <details class="settings-group">
+            <summary>约束设置 · {{ policySummary }}</summary>
+            <KnowledgeCardPolicySection v-model:enforcement="form.enforcement" v-model:owner-account-id="form.ownerAccountId"
+              :members="members" :members-loading="membersLoading" :current-account-available="Boolean(auth.account)"
+              @use-current-account="useCurrentAccount" />
+          </details>
+        </aside>
+      </el-form>
+    </div>
     <template #footer>
       <el-alert v-if="saveError" class="save-error" type="error" :closable="false" :title="saveError" role="alert" />
       <el-button :disabled="busy || uploading" @click="requestClose()">取消</el-button>
-      <el-button type="primary" :loading="busy" :disabled="uploading" @click="save">{{ card ? '保存新修订' : '新建知识' }}</el-button>
+      <el-button type="primary" :loading="busy" :disabled="uploading || saveConflict" @click="save">{{ card ? '保存新修订' : '新建知识' }}</el-button>
     </template>
   </el-dialog>
 </template>
 
 <style scoped>
 .editor-intro { margin: 0 0 16px; color: var(--app-text-muted); font-size: 14px; }
-.knowledge-card-form { display: grid; grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr); grid-template-rows: auto 1fr; align-items: start; max-height: calc(94dvh - 190px); gap: 16px; overflow: auto; overscroll-behavior: contain; padding: 2px; }
+.editor-workspace { max-height:calc(94dvh - 220px); min-height:120px; overflow:auto; overscroll-behavior:contain; }
+.knowledge-card-form { display: grid; grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr); grid-template-rows: auto 1fr; align-items: start; gap: 16px; padding: 2px; }
 .editor-content { grid-column: 1; grid-row: 1 / 3; min-width: 0; }
 .editor-scope { grid-column: 2; grid-row: 1; min-width: 0; }
 .editor-settings { grid-column: 2; display: grid; gap: 12px; min-width: 0; }

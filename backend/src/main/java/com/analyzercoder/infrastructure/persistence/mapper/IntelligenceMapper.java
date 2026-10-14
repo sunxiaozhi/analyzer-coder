@@ -39,6 +39,17 @@ public interface IntelligenceMapper {
             @Param("termCount") int termCount,
             @Param("limit") int limit);
 
+    List<Map<String, Object>> searchBranchKnowledgeKeywordByKind(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("contentVersion") UUID contentVersion,
+            @Param("branchId") UUID branchId,
+            @Param("contextId") UUID contextId,
+            @Param("query") String query,
+            @Param("terms") List<String> terms,
+            @Param("termCount") int termCount,
+            @Param("limit") int limit,
+            @Param("knowledgeKind") String knowledgeKind);
+
     List<Map<String, Object>> searchBranchKnowledgeVector(
             @Param("repositoryId") UUID repositoryId,
             @Param("contentVersion") UUID contentVersion,
@@ -48,6 +59,17 @@ public interface IntelligenceMapper {
             @Param("model") String model,
             @Param("dimension") int dimension,
             @Param("limit") int limit);
+
+    List<Map<String, Object>> searchBranchKnowledgeVectorByKind(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("contentVersion") UUID contentVersion,
+            @Param("branchId") UUID branchId,
+            @Param("contextId") UUID contextId,
+            @Param("vector") String vector,
+            @Param("model") String model,
+            @Param("dimension") int dimension,
+            @Param("limit") int limit,
+            @Param("knowledgeKind") String knowledgeKind);
 
     /**
      * 按给定条件查询匹配数据。
@@ -100,6 +122,14 @@ public interface IntelligenceMapper {
             @Param("termCount") int termCount,
             @Param("limit") int limit);
 
+    List<Map<String, Object>> searchKnowledgeKeywordByKind(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("query") String query,
+            @Param("terms") List<String> terms,
+            @Param("termCount") int termCount,
+            @Param("limit") int limit,
+            @Param("knowledgeKind") String knowledgeKind);
+
     /**
      * 按给定条件查询匹配数据。
      *
@@ -116,6 +146,14 @@ public interface IntelligenceMapper {
             @Param("model") String model,
             @Param("dimension") int dimension,
             @Param("limit") int limit);
+
+    List<Map<String, Object>> searchKnowledgeVectorByKind(
+            @Param("repositoryId") UUID repositoryId,
+            @Param("vector") String vector,
+            @Param("model") String model,
+            @Param("dimension") int dimension,
+            @Param("limit") int limit,
+            @Param("knowledgeKind") String knowledgeKind);
 
     /**
      * 创建并持久化一条新记录。

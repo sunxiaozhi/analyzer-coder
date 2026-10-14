@@ -41,3 +41,23 @@ describe('local evidence conversation', () => {
     expect(conversation.requestState.value).toBe('succeeded');
   });
 });
+
+it('stops waiting promptly, ignores a late response, and reuses the request key when fetching again', async () => {
+  let complete!: (value: Answer) => void;
+  vi.mocked(intelligenceApi.ask).mockClear();
+  vi.mocked(intelligenceApi.ask).mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+  const conversation = useAskConversation(); conversation.question.value = '慢问题';
+  const waiting = conversation.send('repo', null, 'ctx');
+  const firstCall = vi.mocked(intelligenceApi.ask).mock.calls[0];
+  conversation.stopWaiting();
+  expect(await waiting).toBeNull();
+  expect(conversation.requestState.value).toBe('stopped');
+  expect(conversation.question.value).toBe('慢问题');
+  const answer = { conversationId: 'saved', threadId: 'thread', turnNo: 1, citations: [] } as unknown as Answer;
+  complete(answer); await Promise.resolve();
+  expect(conversation.turns.value).toEqual([]);
+  vi.mocked(intelligenceApi.ask).mockResolvedValueOnce(answer);
+  await conversation.retry('repo', null, 'ctx');
+  expect(vi.mocked(intelligenceApi.ask).mock.calls[1]).toEqual(firstCall);
+  expect(conversation.turns.value).toEqual([answer]);
+});

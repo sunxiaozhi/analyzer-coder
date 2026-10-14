@@ -1,7 +1,7 @@
-import { onBeforeUnmount, shallowRef, watch } from 'vue';
+import { onScopeDispose, shallowRef, watch } from 'vue';
 import { branchesApi, type BranchPreparationJob } from '@/api/branches';
 
-export function useBranchPreparation(repositoryId: () => string, onCompleted: () => Promise<void>) {
+export function useBranchPreparation(repositoryId: () => string, onCompleted: () => Promise<void>, branchId?: () => string | null) {
   const jobs = shallowRef<BranchPreparationJob[]>([]);
   const error = shallowRef('');
   let generation = 0;
@@ -11,9 +11,13 @@ export function useBranchPreparation(repositoryId: () => string, onCompleted: ()
   async function refresh() {
     const version = ++generation;
     clearTimeout(timer);
+    const id = repositoryId();
+    const selectedBranch = branchId?.();
+    if (!id || branchId && !selectedBranch) { jobs.value = []; error.value = ''; return; }
     try {
-      const rows = await branchesApi.preparationJobs(repositoryId());
-      if (stopped || version !== generation) return;
+      const result = await branchesApi.preparationJobs(id);
+      if (stopped || version !== generation || id !== repositoryId() || selectedBranch !== branchId?.()) return;
+      const rows = branchId ? result.filter(job => job.branchId === selectedBranch) : result;
       const previous = jobs.value;
       jobs.value = rows;
       error.value = '';
@@ -32,7 +36,7 @@ export function useBranchPreparation(repositoryId: () => string, onCompleted: ()
     void refresh();
   }
 
-  watch(repositoryId, () => { jobs.value = []; void refresh(); }, { immediate: true });
-  onBeforeUnmount(() => { stopped = true; ++generation; clearTimeout(timer); });
-  return { jobs, error, accepted };
+  watch(() => [repositoryId(), branchId?.()], () => { jobs.value = []; void refresh(); }, { immediate: true, flush: 'sync' });
+  onScopeDispose(() => { stopped = true; ++generation; clearTimeout(timer); });
+  return { jobs, error, accepted, refresh };
 }

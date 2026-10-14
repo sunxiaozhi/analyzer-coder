@@ -14,6 +14,7 @@ import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
 import AskHistorySidebar from '@/features/ask/AskHistorySidebar.vue';
 import { usePageMemoryStore } from '@/stores/pageMemory';
 import { useAskConversation } from '@/features/ask/useAskConversation';
+import { useAskHistory } from '@/features/ask/useAskHistory';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
@@ -29,8 +30,9 @@ const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const conversation = useAskConversation();
-const history = shallowRef<QaHistoryRecord[]>([]);
-const historyLoading = shallowRef(false);
+const historyState = useAskHistory(() => repositories.selectedRepositoryId && !readScope.blocked.value
+  ? { repositoryId: repositories.selectedRepositoryId, contextId: branchContext.context?.contextId } : null);
+const { records: history, loading: historyLoading } = historyState;
 const readinessLoading = shallowRef(false);
 const askModels = shallowRef<AskModel[]>([]);
 const selectedModelId = shallowRef('');
@@ -93,7 +95,7 @@ async function loadContext(repositoryId: string | null) {
   const version = ++contextVersion;
   const branchIdentity = branchContext.identity;
   conversation.invalidate();
-  history.value = [];
+  historyState.reset();
   branchContentReady.value = false;
   askModels.value = [];
   modelsReady.value = false;
@@ -117,13 +119,26 @@ async function loadContext(repositoryId: string | null) {
       if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法检查项目状态');
     })
     .finally(() => { if (isCurrent()) readinessLoading.value = false; });
-  const historyTask = intelligenceApi.history(repositoryId, 50, 0, branchContext.context?.contextId)
-    .then((result) => { if (isCurrent()) history.value = result; })
-    .catch((error) => {
-      if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法加载历史记录');
-    })
-    .finally(() => { if (isCurrent()) historyLoading.value = false; });
-  const modelsTask = intelligenceApi.askModels(repositoryId)
+  const historyTask = historyState.refresh();
+  const modelsTask = loadAskModels(repositoryId, version, branchIdentity);
+  await Promise.allSettled([profileTask, historyTask, modelsTask]);
+  if (!isCurrent()) return;
+  hasContext = true;
+  if (saved?.thread) {
+    await openHistory({ repositoryId, threadId: saved.thread }, true);
+    if (!isCurrent()) return;
+    if (saved?.answer) conversation.selectAnswer(saved.answer);
+  }
+  if (typeof route.query.q === 'string') conversation.question.value = route.query.q;
+  else conversation.question.value = saved?.question ?? '';
+}
+
+async function loadAskModels(repositoryId = repositories.selectedRepositoryId, version = contextVersion, branchIdentity = branchContext.identity) {
+  if (!repositoryId || modelsLoading.value && modelsReady.value) return;
+  const isCurrent = () => version === contextVersion && repositoryId === repositories.selectedRepositoryId
+    && branchIdentity === branchContext.identity;
+  modelsLoading.value = true;
+  return intelligenceApi.askModels(repositoryId)
     .then((result) => {
       if (!isCurrent()) return;
       askModels.value = result;
@@ -135,29 +150,10 @@ async function loadContext(repositoryId: string | null) {
       if (isCurrent()) ElMessage.error(error instanceof Error ? error.message : '无法加载问答模型');
     })
     .finally(() => { if (isCurrent()) modelsLoading.value = false; });
-  await Promise.allSettled([profileTask, historyTask, modelsTask]);
-  if (!isCurrent()) return;
-  hasContext = true;
-  const record = history.value.find(item => item.threadId === saved?.thread);
-  if (record) {
-    await openHistory(record, true);
-    if (!isCurrent()) return;
-    if (saved?.answer) conversation.selectAnswer(saved.answer);
-  }
-  if (typeof route.query.q === 'string') conversation.question.value = route.query.q;
-  else conversation.question.value = saved?.question ?? '';
 }
 
 async function reloadHistory() {
-  const repositoryId = repositories.selectedRepositoryId;
-  if (!repositoryId || readScope.blocked.value) return;
-  const identity = branchContext.identity;
-  const isCurrent = () => repositoryId === repositories.selectedRepositoryId && identity === branchContext.identity;
-  historyLoading.value = true;
-  try {
-    const result = await intelligenceApi.history(repositoryId, 50, 0, branchContext.context?.contextId);
-    if (isCurrent()) history.value = result;
-  } finally { if (isCurrent()) historyLoading.value = false; }
+  await historyState.refresh();
 }
 
 async function refreshReadinessForAsk(repositoryId: string): Promise<boolean | null> {
@@ -204,7 +200,7 @@ async function submitQuestion(retrying = false) {
   if (readScope.blocked.value) {
     return ElMessage.warning('当前分支内容版本尚未就绪，请先在分支工作区完成准备');
   }
-  if (!modelsReady.value) return ElMessage.warning(modelsLoading.value ? '正在加载问答模型，请稍候再发送' : '问答模型加载失败，请刷新页面后重试');
+  if (!modelsReady.value && !localEvidenceSelected.value) return ElMessage.warning(modelsLoading.value ? '正在加载问答模型，请稍候再发送，或明确选择本地证据' : '问答模型加载失败，请重试加载或明确选择本地证据');
   const version = contextVersion;
   const identity = branchContext.identity;
   const isCurrent = () => version === contextVersion && identity === branchContext.identity
@@ -228,7 +224,7 @@ async function submitQuestion(retrying = false) {
 function send() { return submitQuestion(); }
 function retry() { return submitQuestion(true); }
 
-async function openHistory(record: QaHistoryRecord, preservePosition = false) {
+async function openHistory(record: Pick<QaHistoryRecord, 'repositoryId' | 'threadId'>, preservePosition = false) {
   const request = ++historyRequest;
   const identity = branchContext.identity;
   const repositoryId = repositories.selectedRepositoryId;
@@ -358,11 +354,13 @@ onMounted(async () => {
         <el-button link type="primary" @click="openReadinessAction">{{ knowledgeOnly ? '刷新知识' : repository ? '去准备项目' : '选择项目' }}</el-button>
       </div>
       <div v-else-if="!modelsLoading && !selectedModel" class="command-notice">
-        <span v-if="!modelsReady">问答模型加载失败，请刷新页面后重试。</span>
+        <span v-if="!modelsReady">问答模型加载失败。{{ localEvidenceSelected ? '已选择本地证据，可继续提问。' : '请重试加载或明确选择本地证据。' }}</span>
         <span v-else-if="localEvidenceSelected">已选择本地证据：返回摘录与引用，不生成模型推理。可随时切换问答模型。</span>
         <span v-else-if="recommendedModel">已配置可用问答模型，发送问题时将推荐使用。</span>
         <span v-else-if="askModels.length">已配置的问答模型暂不可用，请先检测模型。</span>
         <span v-else>{{ knowledgeOnly ? '本地证据模式：返回知识摘录与引用，不生成模型推理。' : '本地证据模式：返回源码摘录与引用，不生成模型推理。' }}</span>
+        <el-button v-if="!modelsReady" link type="primary" :loading="modelsLoading" @click="loadAskModels()">重试加载模型</el-button>
+        <el-button v-if="!modelsReady && !localEvidenceSelected" link type="primary" @click="answerMode = 'local-evidence'">使用本地证据</el-button>
         <el-button v-if="auth.isAdmin && !recommendedModel" link type="primary" @click="openModelSettings">配置并检测模型</el-button>
       </div>
       <div class="command-actions">
@@ -393,7 +391,8 @@ onMounted(async () => {
     </header>
 
     <AskHistorySidebar v-show="historyOpen" :records="history" :active-thread-id="conversation.threadId.value" :loading="historyLoading"
-      @open="openHistory" @refresh="reloadHistory" @rename="renameHistory" @delete="deleteHistory" />
+      :has-more="historyState.hasMore.value" :loading-more="historyState.loadingMore.value" :error="historyState.error.value"
+      @open="openHistory" @refresh="reloadHistory" @load-more="historyState.loadMore" @rename="renameHistory" @delete="deleteHistory" />
 
     <AskConversationPanel
       v-model="conversation.question.value"
@@ -406,8 +405,10 @@ onMounted(async () => {
       :pending-question="conversation.pendingQuestion.value"
       :request-state="conversation.requestState.value"
       :error="conversation.error.value"
-      :disabled="!repository || !canAsk || modelsLoading || submissionPending"
+      :local-evidence="localEvidenceSelected"
+      :disabled="!repository || !canAsk || (modelsLoading && !localEvidenceSelected) || submissionPending"
       @send="send" @retry="retry" @select-answer="conversation.selectAnswer"
+      @stop-waiting="conversation.stopWaiting" @refresh-history="historyOpen = true; reloadHistory()"
       @open-knowledge="openKnowledge" @open-code="openCode" @open-graph="openGraph"
     />
 

@@ -1,0 +1,33 @@
+import { flushPromises, shallowMount } from '@vue/test-utils';
+import { expect, it, vi } from 'vitest';
+import { intelligenceApi, type KnowledgeCard } from '@/api/intelligence';
+import { knowledgeCardInput } from './useKnowledgeCardEditor';
+import KnowledgeConflictReview from './KnowledgeConflictReview.vue';
+vi.mock('@/api/intelligence', () => ({ intelligenceApi: { cards: vi.fn() } }));
+const base = { id: 'card', revision: 1, title: '标题', cardType: '知识卡片', content: '原文', tags: [], knowledgeKind: 'REFERENCE', severity: 'INFO', enforcement: 'REFERENCE', ownerAccountId: null, scope: { pathPatterns: [], symbols: [], modules: [] }, obligations: { requiredTests: [], requiredApproverAccountIds: [], instructions: [], prohibitedPathPatterns: [], knowledgeUpdateRequired: false }, attachments: [], codeReferences: [] } as unknown as KnowledgeCard;
+const button = { props: ['disabled'], template: '<button :disabled="disabled"><slot/></button>' };
+it('loads the current branch revision, requires a conflict choice, and emits a draft without saving', async () => {
+  const latest = { ...base, revision: 2, content: '新正文', title: '新标题' };
+  vi.mocked(intelligenceApi.cards).mockResolvedValue([latest]);
+  const wrapper = shallowMount(KnowledgeConflictReview, { props: { base, local: { ...knowledgeCardInput(base), content: '我的正文' }, repositoryId: 'repo', contextId: 'ctx', disabled: false }, global: { stubs: { ElButton: button } } });
+  await wrapper.get('button').trigger('click'); await flushPromises();
+  expect(intelligenceApi.cards).toHaveBeenCalledWith('repo', 'ctx');
+  expect(wrapper.text()).toContain('新正文'); expect(wrapper.text()).toContain('我的正文');
+  const apply = wrapper.findAll('button').at(-1)!;
+  expect(apply.attributes('disabled')).toBeDefined();
+  await wrapper.findAll('input[type=radio]')[0].setValue();
+  expect(apply.attributes('disabled')).toBeUndefined();
+  await apply.trigger('click');
+  expect(wrapper.emitted('resolve')?.[0]?.[0]).toMatchObject({ content: '我的正文', title: '新标题', expectedRevision: 2 });
+  wrapper.unmount();
+});
+it('ignores a latest-revision response after switching the branch context', async () => {
+  let finish!: (cards: KnowledgeCard[]) => void;
+  vi.mocked(intelligenceApi.cards).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  const wrapper = shallowMount(KnowledgeConflictReview, { props: { base, local: knowledgeCardInput(base), repositoryId: 'repo', contextId: 'old', disabled: false }, global: { stubs: { ElButton: button } } });
+  await wrapper.get('button').trigger('click');
+  await wrapper.setProps({ contextId: 'new' });
+  finish([{ ...base, title: '旧分支修订' }]); await flushPromises();
+  expect(wrapper.text()).not.toContain('旧分支修订'); expect(wrapper.emitted('resolve')).toBeUndefined();
+  wrapper.unmount();
+});

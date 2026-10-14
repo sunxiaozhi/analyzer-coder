@@ -2,8 +2,8 @@
 import { Clock, Delete, EditPen, Refresh } from '@element-plus/icons-vue';
 import type { QaHistoryRecord } from '@/api/intelligence';
 
-defineProps<{ records: readonly QaHistoryRecord[]; activeThreadId: string | null; loading: boolean }>();
-const emit = defineEmits<{ open: [record: QaHistoryRecord]; refresh: []; rename: [record: QaHistoryRecord]; delete: [record: QaHistoryRecord] }>();
+defineProps<{ records: readonly QaHistoryRecord[]; activeThreadId: string | null; loading: boolean; loadingMore?: boolean; hasMore?: boolean; error?: string }>();
+const emit = defineEmits<{ open: [record: QaHistoryRecord]; refresh: []; loadMore: []; rename: [record: QaHistoryRecord]; delete: [record: QaHistoryRecord] }>();
 
 function statusLabel(status: QaHistoryRecord['evidenceStatus']) {
   return ({
@@ -20,11 +20,12 @@ function statusLabel(status: QaHistoryRecord['evidenceStatus']) {
 <template>
   <aside class="history-sidebar surface">
     <header class="history-head">
-      <div><b>历史记录</b><small>{{ records.length }} 个多轮会话</small></div>
+      <div><b>历史记录</b><small>已加载 {{ records.length }} 个会话</small></div>
       <el-button link :icon="Refresh" :loading="loading" title="刷新" @click="emit('refresh')" />
     </header>
     <el-empty v-if="!loading && !records.length" :image-size="54" description="还没有历史记录" />
     <div v-loading="loading" class="history-list">
+      <el-alert v-if="error" :title="error" type="error" :closable="false"><el-button link @click="hasMore ? emit('loadMore') : emit('refresh')">重试加载</el-button></el-alert>
       <article v-for="record in records" :key="record.threadId" :class="{ active: record.threadId === activeThreadId }">
         <button class="history-main" type="button" :aria-current="record.threadId === activeThreadId ? 'true' : undefined" @click="emit('open', record)">
           <b>{{ record.title }}</b><p>{{ record.question }}</p>
@@ -36,11 +37,13 @@ function statusLabel(status: QaHistoryRecord['evidenceStatus']) {
           <el-button link type="danger" :icon="Delete" title="删除" @click="emit('delete', record)" />
         </div>
       </article>
+      <el-button v-if="hasMore" class="history-more" :loading="loadingMore" :disabled="loading" @click="emit('loadMore')">加载更早的会话</el-button>
     </div>
   </aside>
 </template>
 
 <style scoped>
+.history-more { display:block; margin:12px auto; }
 .history-sidebar { display:grid; grid-template-rows:auto minmax(0,1fr); min-width:0; min-height:0; }.history-head { display:flex; align-items:center; justify-content:space-between; min-height:54px; padding:10px 12px; border-bottom:1px solid #e7e8eb; }.history-head>div { display:grid; gap:3px; }.history-head b { font-size:15px; }.history-head small { color: var(--app-text-muted); font-size: 13px; }
 .history-list { min-height:0; overflow:auto; }.history-list article { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px; padding:12px 8px 10px; border-bottom:1px solid #eceef0; box-shadow:inset 3px 0 transparent; }.history-list article:hover { background:#f8fafc; }.history-list article.active { background:var(--app-selection-bg); box-shadow:inset 3px 0 var(--app-color-action); }
 .history-main { display:grid; min-width:0; gap:5px; padding:0 4px; text-align:left; border:0; background:transparent; }.history-main b,.history-main p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.history-main b { color:#2f3338; font-size:13px; }.history-main p { margin:0; color:#656c73; font-size: 13px; }.history-main span { display:flex; align-items:center; gap:4px; color: var(--app-text-muted); font-size: 13px; }.history-main span svg { width:10px; }.history-main small { color: var(--app-text-muted); font-size: 13px; }

@@ -29,7 +29,7 @@ function emptyForm(ownerAccountId: string | null): CardInput {
   };
 }
 
-function cardForm(card: KnowledgeCard): CardInput {
+export function knowledgeCardInput(card: KnowledgeCard): CardInput {
   return {
     branchScope: card.branchScope ? { mode: card.branchScope.mode, branchIds: [...card.branchScope.branchIds] } : undefined,
     expectedRevision: card.revision,
@@ -69,7 +69,7 @@ export function useKnowledgeCardEditor(currentAccountId: () => string | null, cu
   const scopeText = reactive({ paths: '', symbols: '' });
 
   function reset(card: KnowledgeCard | null) {
-    const next = card ? cardForm(card) : emptyForm(currentAccountId());
+    const next = card ? knowledgeCardInput(card) : emptyForm(currentAccountId());
     Object.assign(form, next);
     form.branchScope = next.branchScope ?? { mode: 'SELECTED_BRANCHES', branchIds: currentBranchId() ? [currentBranchId()!] : [] };
     scopeText.paths = next.scope.pathPatterns.join('\n');

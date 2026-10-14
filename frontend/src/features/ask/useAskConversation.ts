@@ -1,7 +1,7 @@
 import { computed, shallowRef } from 'vue';
 import { intelligenceApi, type Answer, type QaThreadDetail } from '@/api/intelligence';
 
-export type AskRequestState = 'idle' | 'sending' | 'failed' | 'succeeded';
+export type AskRequestState = 'idle' | 'sending' | 'failed' | 'succeeded' | 'stopped';
 
 function createClientRequestId() {
   if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -27,6 +27,15 @@ export function useAskConversation() {
   const threadId = shallowRef<string | null>(null);
   let clientRequestId: string | null = null;
   let requestVersion = 0;
+  let releaseWait: (() => void) | null = null;
+
+  function stopWaiting() {
+    if (requestState.value !== 'sending') return;
+    requestVersion++;
+    requestState.value = 'stopped';
+    releaseWait?.();
+    releaseWait = null;
+  }
 
   const activeAnswer = computed(() =>
     turns.value.find(turn => turn.conversationId === activeAnswerId.value)
@@ -48,14 +57,17 @@ export function useAskConversation() {
     error.value = null;
     try {
       if (!retrying || !clientRequestId) clientRequestId = createClientRequestId();
-      const result = contextId
-        ? await intelligenceApi.ask(
+      const stopped = new Promise<null>(resolve => { releaseWait = () => resolve(null); });
+      const response = contextId
+        ? intelligenceApi.ask(
           repositoryId, value, clientRequestId, threadId.value, modelConfigId, contextId,
         )
-        : await intelligenceApi.ask(
+        : intelligenceApi.ask(
           repositoryId, value, clientRequestId, threadId.value, modelConfigId,
         );
-      if (version !== requestVersion) return null;
+      const result = await Promise.race([response, stopped]);
+      if (version !== requestVersion || !result) return null;
+      releaseWait = null;
       threadId.value = result.threadId;
       turns.value = [...turns.value.filter(turn => turn.conversationId !== result.conversationId), result]
         .sort((left, right) => left.turnNo - right.turnNo);
@@ -68,6 +80,7 @@ export function useAskConversation() {
       return result;
     } catch (exception) {
       if (version !== requestVersion) return null;
+      releaseWait = null;
       error.value = exception instanceof Error ? exception.message : '问答失败';
       requestState.value = 'failed';
       throw exception;
@@ -80,6 +93,7 @@ export function useAskConversation() {
 
   function restore(thread: QaThreadDetail) {
     requestVersion++;
+    releaseWait?.(); releaseWait = null;
     threadId.value = thread.threadId;
     turns.value = [...thread.turns].sort((left, right) => left.turnNo - right.turnNo);
     activeAnswerId.value = null;
@@ -100,6 +114,7 @@ export function useAskConversation() {
 
   function reset() {
     requestVersion++;
+    releaseWait?.(); releaseWait = null;
     question.value = '';
     turns.value = [];
     activeAnswerId.value = null;
@@ -123,6 +138,7 @@ export function useAskConversation() {
     pendingQuestion,
     send,
     retry,
+    stopWaiting,
     restore,
     reset,
     invalidate: reset,

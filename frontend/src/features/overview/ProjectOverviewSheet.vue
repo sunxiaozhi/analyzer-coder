@@ -24,6 +24,8 @@ import type {
 } from '@/api/repositories';
 import type { Repository } from '@/types/api';
 import ProjectCompositionOverview from './ProjectCompositionOverview.vue';
+import OverviewPreparationProgress from './OverviewPreparationProgress.vue';
+import type { BranchPreparationJob } from '@/api/branches';
 
 interface Props {
   repository: Repository;
@@ -33,6 +35,8 @@ interface Props {
   health: ProjectHealthOverview | null;
   loading: boolean;
   preparing: boolean;
+  jobs?: BranchPreparationJob[];
+  taskError?: string;
 }
 
 const props = defineProps<Props>();
@@ -42,7 +46,10 @@ const emit = defineEmits<{
   prepare: [];
   openManagement: [];
   openSearch: [];
+  openAsk: [];
   openKnowledge: [issueCode?: string];
+  refreshTasks: [];
+  retryTask: [kind: BranchPreparationJob['kind']];
 }>();
 
 const HEALTH_COPY = {
@@ -176,6 +183,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         </button>
       </div>
     </header>
+    <OverviewPreparationProgress :ready-for-search="health?.readyForSearch" @open-search="emit('openSearch')" @open-ask="emit('openAsk')" :jobs="jobs ?? []" :error="taskError ?? ''" :busy="preparing" :can-prepare="Boolean(repository.capabilities?.canIndex)" @refresh="emit('refreshTasks')" @retry="emit('retryTask', $event)" />
 
     <section class="availability-summary" aria-label="当前分支可用能力">
       <div><b>代码检索</b><span>{{ loading ? '正在读取状态' : health ? health.readyForSearch ? '可开始联合检索' : '准备完成后可检索' : '尚未获取' }}</span></div>

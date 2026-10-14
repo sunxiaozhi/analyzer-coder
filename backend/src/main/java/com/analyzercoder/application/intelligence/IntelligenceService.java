@@ -125,13 +125,28 @@ public class IntelligenceService {
     @Transactional
     public EvidenceSearchResult unifiedSearchDetailed(
             UUID repositoryId, String query, int limit, BranchReadContext context) {
+        return unifiedSearchDetailed(repositoryId, query, limit, context, null);
+    }
+
+    @Transactional
+    public EvidenceSearchResult unifiedSearchDetailed(
+            UUID repositoryId,
+            String query,
+            int limit,
+            BranchReadContext context,
+            String knowledgeKind) {
+        String kind =
+                knowledgeKind == null || knowledgeKind.isBlank()
+                        ? null
+                        : KnowledgeKind.valueOf(knowledgeKind).name();
         RetrievalQueryAnalyzer.Query analyzed = queryAnalyzer.analyze(query);
         if (analyzed.normalized().isBlank()) {
             return new EvidenceSearchResult(
                     List.of(), RetrievalDiagnostics.notExecuted("EMPTY_QUERY"));
         }
         int resolvedLimit = Math.max(1, Math.min(limit, 50));
-        RetrievalOutcome outcome = retrieve(repositoryId, analyzed, true, resolvedLimit, context);
+        RetrievalOutcome outcome =
+                retrieve(repositoryId, analyzed, true, resolvedLimit, context, kind);
         return new EvidenceSearchResult(
                 outcome.ranked().stream()
                         .map(candidate -> evidence(repositoryId, candidate))
@@ -709,6 +724,16 @@ public class IntelligenceService {
             boolean includeKnowledge,
             int limit,
             BranchReadContext context) {
+        return retrieve(repositoryId, query, includeKnowledge, limit, context, null);
+    }
+
+    private RetrievalOutcome retrieve(
+            UUID repositoryId,
+            RetrievalQueryAnalyzer.Query query,
+            boolean includeKnowledge,
+            int limit,
+            BranchReadContext context,
+            String knowledgeKind) {
         try (var ignored =
                 ModelCallLogContext.open(
                         null,
@@ -723,7 +748,8 @@ public class IntelligenceService {
                     includeKnowledge,
                     limit);
             RetrievalOutcome outcome =
-                    retrieveOnce(repositoryId, query, includeKnowledge, limit, context);
+                    retrieveOnce(
+                            repositoryId, query, includeKnowledge, limit, context, knowledgeKind);
             var d = outcome.diagnostics();
             LOG.info(
                     "证据检索完成: {}, recalledCount={}, degraded={}, vectorModel={}, enabledChannels={}, unavailableChannels={}, channelMetrics={}, elapsedMs={}",
@@ -744,7 +770,8 @@ public class IntelligenceService {
             RetrievalQueryAnalyzer.Query query,
             boolean includeKnowledge,
             int limit,
-            BranchReadContext context) {
+            BranchReadContext context,
+            String knowledgeKind) {
         if (context != null && !repositoryId.equals(context.repositoryId()))
             throw new IllegalArgumentException("上下文项目不匹配");
         long retrievalStarted = System.nanoTime();
@@ -823,21 +850,40 @@ public class IntelligenceService {
             try {
                 List<Map<String, Object>> knowledgeRows =
                         context != null
-                                ? mapper.searchBranchKnowledgeKeyword(
-                                        repositoryId,
-                                        context.contentVersion(),
-                                        context.branchId(),
-                                        context.contextId(),
-                                        query.normalized(),
-                                        query.terms(),
-                                        termCount,
-                                        candidateLimit)
-                                : mapper.searchKnowledgeKeyword(
-                                        repositoryId,
-                                        query.normalized(),
-                                        query.terms(),
-                                        termCount,
-                                        candidateLimit);
+                                ? (knowledgeKind == null
+                                        ? mapper.searchBranchKnowledgeKeyword(
+                                                repositoryId,
+                                                context.contentVersion(),
+                                                context.branchId(),
+                                                context.contextId(),
+                                                query.normalized(),
+                                                query.terms(),
+                                                termCount,
+                                                candidateLimit)
+                                        : mapper.searchBranchKnowledgeKeywordByKind(
+                                                repositoryId,
+                                                context.contentVersion(),
+                                                context.branchId(),
+                                                context.contextId(),
+                                                query.normalized(),
+                                                query.terms(),
+                                                termCount,
+                                                candidateLimit,
+                                                knowledgeKind))
+                                : (knowledgeKind == null
+                                        ? mapper.searchKnowledgeKeyword(
+                                                repositoryId,
+                                                query.normalized(),
+                                                query.terms(),
+                                                termCount,
+                                                candidateLimit)
+                                        : mapper.searchKnowledgeKeywordByKind(
+                                                repositoryId,
+                                                query.normalized(),
+                                                query.terms(),
+                                                termCount,
+                                                candidateLimit,
+                                                knowledgeKind));
                 channels.add(channel("KNOWLEDGE_KEYWORD", 1.2, "KNOWLEDGE", knowledgeRows, true));
                 metrics.add(metric("KNOWLEDGE_KEYWORD", knowledgeRows.size(), channelStarted));
             } catch (RuntimeException exception) {
@@ -896,21 +942,40 @@ public class IntelligenceService {
                 try {
                     List<Map<String, Object>> vectorRows =
                             context != null
-                                    ? mapper.searchBranchKnowledgeVector(
-                                            repositoryId,
-                                            context.contentVersion(),
-                                            context.branchId(),
-                                            context.contextId(),
-                                            vector,
-                                            model,
-                                            embedding.dimension(),
-                                            candidateLimit)
-                                    : mapper.searchKnowledgeVector(
-                                            repositoryId,
-                                            vector,
-                                            model,
-                                            embedding.dimension(),
-                                            candidateLimit);
+                                    ? (knowledgeKind == null
+                                            ? mapper.searchBranchKnowledgeVector(
+                                                    repositoryId,
+                                                    context.contentVersion(),
+                                                    context.branchId(),
+                                                    context.contextId(),
+                                                    vector,
+                                                    model,
+                                                    embedding.dimension(),
+                                                    candidateLimit)
+                                            : mapper.searchBranchKnowledgeVectorByKind(
+                                                    repositoryId,
+                                                    context.contentVersion(),
+                                                    context.branchId(),
+                                                    context.contextId(),
+                                                    vector,
+                                                    model,
+                                                    embedding.dimension(),
+                                                    candidateLimit,
+                                                    knowledgeKind))
+                                    : (knowledgeKind == null
+                                            ? mapper.searchKnowledgeVector(
+                                                    repositoryId,
+                                                    vector,
+                                                    model,
+                                                    embedding.dimension(),
+                                                    candidateLimit)
+                                            : mapper.searchKnowledgeVectorByKind(
+                                                    repositoryId,
+                                                    vector,
+                                                    model,
+                                                    embedding.dimension(),
+                                                    candidateLimit,
+                                                    knowledgeKind));
                     channels.add(
                             channel(knowledgeVectorChannel, 1.05, "KNOWLEDGE", vectorRows, false));
                     metrics.add(metric(knowledgeVectorChannel, vectorRows.size(), channelStarted));

@@ -1,17 +1,18 @@
 import { effectScope, reactive } from 'vue';
 import { flushPromises } from '@vue/test-utils';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as api from '@/api/repositories';
 import { branchesApi } from '@/api/branches';
 import { useProjectOverview } from './useProjectOverview';
 let repositories: any;
 let branches: any;
+afterEach(() => vi.useRealTimers());
 vi.mock('@/stores/repositoryStore',()=>({useRepositoryStore:()=>repositories}));
 vi.mock('@/stores/branchContextStore',()=>({useBranchContextStore:()=>branches}));
 vi.mock('@/api/repositories',()=>({
   getBranchOverview:vi.fn(),
 }));
-vi.mock('@/api/branches',()=>({branchesApi:{codeOperation:vi.fn(),prepareVectors:vi.fn()}}));
+vi.mock('@/api/branches',()=>({branchesApi:{codeOperation:vi.fn(),prepareVectors:vi.fn(),preparationJobs:vi.fn()}}));
 vi.mock('element-plus',()=>({ElMessage:{success:vi.fn(),warning:vi.fn(),error:vi.fn()}}));
 function pin(contentVersion='s') {
   branches.selectedBranchId='release';
@@ -24,8 +25,9 @@ function overview(contentVersion='s') {
 beforeEach(()=>{
   vi.resetAllMocks();
   repositories=reactive({selectedRepositoryId:'p',selectedRepository:{sourceType:'LOCAL_GIT'}});
-  branches=reactive({selectedBranchId:null,context:null,identity:'pending',error:null,loading:false});
+  branches=reactive({selectedBranchId:null,context:null,identity:'pending',error:null,loading:false,refresh:vi.fn().mockResolvedValue(undefined)});
   vi.mocked(api.getBranchOverview).mockResolvedValue(overview());
+  vi.mocked(branchesApi.preparationJobs).mockResolvedValue([]);
 });
 it('does not read default overview data when a Git branch context is missing',async()=>{
   const scope=effectScope();
@@ -80,5 +82,36 @@ it('shows loading while the branch contentVersion is being pinned and loads the 
     expect(result.preparation.value?.contentVersion).toBe('s');
     expect(result.loading.value).toBe(false);
     expect(result.error.value).toBeNull();
+  } finally { scope.stop(); }
+});
+
+it('tracks the selected branch task and refreshes overview after completion', async () => {
+  vi.useFakeTimers(); pin();
+  let rows: any[] = [];
+  vi.mocked(branchesApi.preparationJobs).mockImplementation(async () => rows);
+  const job = { id: 'job', branchId: 'release', kind: 'PREPARE', stage: 'QUEUED', status: 'QUEUED', error: null, contentVersion: 's' } as const;
+  vi.mocked(branchesApi.codeOperation).mockImplementation(async () => { rows = [job]; return job; });
+  const scope = effectScope(); const result = scope.run(useProjectOverview)!;
+  try {
+    await flushPromises(); await result.prepare(); await flushPromises();
+    expect(result.preparing.value).toBe(true);
+    await result.prepare(); expect(branchesApi.codeOperation).toHaveBeenCalledTimes(1);
+    rows = [{ ...job, stage: 'COMPLETED', status: 'SUCCEEDED' }];
+    await vi.advanceTimersByTimeAsync(2500); await flushPromises();
+    expect(branches.refresh).toHaveBeenCalledTimes(1);
+    expect(api.getBranchOverview).toHaveBeenCalledTimes(2);
+    expect(result.preparing.value).toBe(false);
+  } finally { scope.stop(); }
+});
+
+it('retries the failed task kind with its required context rather than always preparing everything', async () => {
+  pin();
+  const scope = effectScope(); const result = scope.run(useProjectOverview)!;
+  try {
+    await flushPromises();
+    await result.retryTask('SYNC'); await result.retryTask('CONTENT'); await result.retryTask('VECTORS');
+    expect(branchesApi.codeOperation).toHaveBeenNthCalledWith(1, 'p', 'release', 'SYNC');
+    expect(branchesApi.codeOperation).toHaveBeenNthCalledWith(2, 'p', 'release', 'CONTENT', 'ctx-s');
+    expect(branchesApi.prepareVectors).toHaveBeenCalledWith(branches.context);
   } finally { scope.stop(); }
 });

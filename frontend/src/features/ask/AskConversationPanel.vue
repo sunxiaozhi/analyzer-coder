@@ -5,6 +5,7 @@ import { marked } from 'marked';
 import { nextTick, onActivated, watch, useTemplateRef } from 'vue';
 import type { Answer, Citation, CodeReference } from '@/api/intelligence';
 import AnswerEvidencePanel from './AnswerEvidencePanel.vue';
+import AskRequestProgress from './AskRequestProgress.vue';
 import type { AskRequestState } from './useAskConversation';
 
 const question = defineModel<string>({ required: true });
@@ -19,10 +20,13 @@ const props = defineProps<{
   restoredThreadId?: string | null;
   scrollTop?: number;
   expandedEvidence?: string[];
+  localEvidence?: boolean;
 }>();
 const emit = defineEmits<{
   send: [];
   retry: [];
+  stopWaiting: [];
+  refreshHistory: [];
   selectAnswer: [conversationId: string];
   openKnowledge: [citation: Citation, branchId?: string | null];
   scrollPosition: [top: number];
@@ -147,8 +151,14 @@ function shortcut(event: KeyboardEvent) {
       </article>
       <article v-if="requestState === 'sending'" class="message assistant pending">
         <span>助手</span>
-        <div class="answer-loading">
-          <i></i><div><b>正在结合上下文检索当前项目</b><small>{{ knowledgeOnly ? '正在核对知识证据…' : '正在核对代码和知识证据…' }}</small></div>
+        <AskRequestProgress :local-evidence="Boolean(localEvidence)" @stop="emit('stopWaiting')" />
+      </article>
+
+      <article v-if="requestState === 'stopped'" class="message assistant">
+        <span>助手</span>
+        <div><p>已停止等待，问题已保留。服务端可能仍在运行，完成的回答可在历史记录中查看。</p>
+          <el-button @click="emit('refreshHistory')">刷新并查看历史记录</el-button>
+          <el-button @click="emit('retry')">重新获取本轮结果</el-button>
         </div>
       </article>
       <article v-if="requestState === 'failed'" class="message assistant failed">

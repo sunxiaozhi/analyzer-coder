@@ -5,6 +5,7 @@ import type { BranchContext } from '@/api/branches';
 export function usePublishedKnowledgeSearch(options: {
   query: MaybeRefOrGetter<string>;
   context: MaybeRefOrGetter<BranchContext | null>;
+  knowledgeKind?: MaybeRefOrGetter<string | undefined>;
 }) {
   const hits = shallowRef<UnifiedSearchHit[]>([]);
   const loading = shallowRef(false);
@@ -12,15 +13,17 @@ export function usePublishedKnowledgeSearch(options: {
   const degraded = shallowRef(false);
   let version = 0;
   const refreshKey = shallowRef(0);
-  watch(() => [toValue(options.query).trim(), toValue(options.context), refreshKey.value] as const,
-    ([query, context], _, onCleanup) => {
+  watch(() => [toValue(options.query).trim(), toValue(options.context), toValue(options.knowledgeKind), refreshKey.value] as const,
+    ([query, context, kind], _, onCleanup) => {
       const request = ++version;
       hits.value = []; error.value = ''; degraded.value = false;
       loading.value = Boolean(query && context);
       if (!query || !context) return;
       const timer = setTimeout(async () => {
         try {
-          const result = await intelligenceApi.unifiedSearch(context.repositoryId, query, 50, context.contextId);
+          const result = kind
+            ? await intelligenceApi.unifiedSearch(context.repositoryId, query, 50, context.contextId, kind)
+            : await intelligenceApi.unifiedSearch(context.repositoryId, query, 50, context.contextId);
           if (request !== version) return;
           hits.value = result.evidence.filter(hit => hit.sourceType === 'KNOWLEDGE' && hit.knowledgeCardId);
           degraded.value = result.retrieval.degraded;

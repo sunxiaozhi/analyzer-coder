@@ -29,6 +29,7 @@ import MarkdownKnowledgeSourceList from '@/features/knowledge/MarkdownKnowledgeS
 import MarkdownPreview from '@/components/MarkdownPreview.vue';
 import KnowledgeLibraryHeader from '@/features/knowledge/KnowledgeLibraryHeader.vue';
 import PublishedKnowledgeResults from '@/features/knowledge/PublishedKnowledgeResults.vue';
+import KnowledgeListPagination from '@/features/knowledge/KnowledgeListPagination.vue';
 import { useRepositoryStore } from '@/stores/repositoryStore';
 import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
@@ -53,8 +54,10 @@ const cards = shallowRef<KnowledgeCard[]>([]);
 const branchValidations = shallowRef<BranchValidationCard[]>([]);
 const validationFilter = shallowRef<BranchValidationState | 'ALL'>('ALL');
 const validationLabels: Record<BranchValidationState, string> = { CURRENT: '已验证', UNVERIFIED: '未验证', REVIEW_REQUIRED: '待复核', INVALID: '不适用' };
+const validationsByCard = computed(() => new Map(branchValidations.value.map(item => [item.cardId, item])));
 function validationState(card: KnowledgeCard): BranchValidationState {
-  return branchValidations.value.find(item => item.cardId === card.id && item.revision === card.revision)?.state ?? 'UNVERIFIED';
+  const validation = validationsByCard.value.get(card.id);
+  return validation?.revision === card.revision ? validation.state : 'UNVERIFIED';
 }
 const markdownSources = shallowRef<MarkdownKnowledgeSourceOverview | null>(null);
 const cardQuery = shallowRef('');
@@ -71,6 +74,9 @@ const detailDialog = shallowRef(false);
 const historyDialog = shallowRef(false);
 const busy = shallowRef(false);
 const saveError = shallowRef<string | null>(null);
+const saveConflict = shallowRef(false);
+const listPage = shallowRef(1);
+const pageSize = 30;
 const cardLoadError = shallowRef<string | null>(null);
 const cardsLoading = shallowRef(false);
 const sourcesLoading = shallowRef(false);
@@ -115,9 +121,9 @@ function clearIssueFilter() {
 let triggerElement: HTMLElement | null = null;
 const pageKey = () => `knowledge:${repositories.selectedRepositoryId}:${branchContext.selectedBranchId ?? 'default'}`;
 let stateKey = pageKey();
-type ReadingState = { query: string; searchScope?: KnowledgeSearchScope; sourceQuery: string; kind: typeof selectedKnowledgeKind.value; sourceStatus: typeof selectedSourceStatus.value; validation: typeof validationFilter.value; mode: KnowledgeMode; top: number; selected: string | null; resume: string | null };
+type ReadingState = { page?: number; query: string; searchScope?: KnowledgeSearchScope; sourceQuery: string; kind: typeof selectedKnowledgeKind.value; sourceStatus: typeof selectedSourceStatus.value; validation: typeof validationFilter.value; mode: KnowledgeMode; top: number; selected: string | null; resume: string | null };
 function remember() {
-  memory.write<ReadingState>(stateKey, { query: cardQuery.value, searchScope: searchScope.value, sourceQuery: sourceQuery.value, kind: selectedKnowledgeKind.value,
+  memory.write<ReadingState>(stateKey, { page: listPage.value, query: cardQuery.value, searchScope: searchScope.value, sourceQuery: sourceQuery.value, kind: selectedKnowledgeKind.value,
     sourceStatus: selectedSourceStatus.value, validation: validationFilter.value, mode: activeMode.value,
     top: scrollTop.value, selected: selectedCardId.value, resume: resumeCardId.value });
 }
@@ -132,6 +138,7 @@ function restoreReadingState() {
   validationFilter.value = state?.validation ?? 'ALL'; activeMode.value = state?.mode ?? 'cards';
   scrollTop.value = state?.top ?? 0; selectedCardId.value = state?.selected ?? null; resumeCardId.value = state?.resume ?? null;
   applyIssueFilter();
+  listPage.value = issueFilter.value ? 1 : Math.max(1, state?.page ?? 1);
 }
 restoreReadingState();
 onBeforeUnmount(() => { remember(); cardsVersion++; sourcesVersion++; driftVersion++; saveVersion++; deleteVersion++; });
@@ -148,6 +155,8 @@ function detailClosed() {
 }
 async function locateCard(card: KnowledgeCard) {
   selectedCardId.value = card.id;
+  const index = cardRows.value.findIndex(item => item.id === card.id);
+  if (index >= 0) listPage.value = Math.floor(index / pageSize) + 1;
   await nextTick();
   const row = Array.from(listElement.value?.querySelectorAll<HTMLElement>('[data-card-id]') ?? [])
     .find(item => item.dataset.cardId === card.id);
@@ -160,13 +169,14 @@ const canMaintain = computed(() => repositories.selectedRepository?.capabilities
 const canManage = computed(() => repositories.selectedRepository?.capabilities.canConfigure ?? false);
 const publishedCount = computed(() => cards.value.filter(card => card.publicationStatus === 'PUBLISHED' && card.reviewStatus === 'APPROVED').length);
 const draftCount = computed(() => cards.value.filter(card => card.publicationStatus === 'DRAFT').length);
-const searchTypeCardIds = computed(() => selectedKnowledgeKind.value === allKnowledgeKinds ? undefined
-  : cards.value.filter(card => card.knowledgeKind === selectedKnowledgeKind.value).map(card => card.id));
+const searchKnowledgeKind = computed(() => selectedKnowledgeKind.value === allKnowledgeKinds ? undefined : selectedKnowledgeKind.value);
 const knowledgeKinds = computed(() => [...new Set(cards.value.map(card => card.knowledgeKind))]
   .sort((left, right) => knowledgeKindLabel(left).localeCompare(knowledgeKindLabel(right), 'zh-CN')));
+const cardSearchIndex = computed(() => new Map(cards.value.map(card => [card.id, [card.title, card.content, ...card.tags].join(' ').toLowerCase()])));
+const normalizedCardQuery = computed(() => cardQuery.value.trim().toLowerCase());
 const cardRows = computed(() => cards.value.filter(card => {
-  const value = cardQuery.value.trim().toLowerCase();
-  const matchesTitle = !value || [card.title, card.content, ...card.tags].join(' ').toLowerCase().includes(value);
+  const value = normalizedCardQuery.value;
+  const matchesTitle = !value || cardSearchIndex.value.get(card.id)?.includes(value);
   const matchesType = selectedKnowledgeKind.value === allKnowledgeKinds
     || card.knowledgeKind === selectedKnowledgeKind.value;
   const matchesPublication = !knowledgeOnly.value || searchScope.value === 'ALL'
@@ -176,6 +186,13 @@ const cardRows = computed(() => cards.value.filter(card => {
     && matchesKnowledgeIssue(card, issueFilter.value, validationState(card), knowledgeOnly.value)
     && (knowledgeOnly.value || !readScope.requiresContext.value || validationFilter.value === 'ALL' || validationState(card) === validationFilter.value);
 }));
+const pageCount = computed(() => Math.max(1, Math.ceil(cardRows.value.length / pageSize)));
+const currentPage = computed(() => Math.min(listPage.value, pageCount.value));
+const pagedCardRows = computed(() => cardRows.value.slice((currentPage.value - 1) * pageSize, currentPage.value * pageSize));
+const cardSearchPlaceholder = computed(() => knowledgeOnly.value && searchScope.value === 'PUBLISHED' ? '检索已发布知识，按相关度排序' : '筛选标题、正文或标签');
+function changeListPage(page: number) { listPage.value = page; scrollTop.value = 0; void restoreListPosition(); }
+function clearCardFilters() { cardQuery.value = ''; selectedKnowledgeKind.value = allKnowledgeKinds; validationFilter.value = 'ALL'; clearIssueFilter(); }
+watch([cardQuery, selectedKnowledgeKind, searchScope, validationFilter, issueFilter], () => { changeListPage(1); }, { flush: 'sync' });
 const sourceRows = computed(() => (markdownSources.value?.items ?? []).filter(source => {
   const value = sourceQuery.value.trim().toLowerCase();
   const matchesQuery = !value
@@ -272,7 +289,7 @@ function syncRequestedCard() {
   detailDialog.value = true;
   void loadDrift(card);
 }
-function openCreate() { saveError.value = null; initialReference.value = null; editing.value = null; dialog.value = true; }
+function openCreate() { saveConflict.value = false; saveError.value = null; initialReference.value = null; editing.value = null; dialog.value = true; }
 function scopeLabel(card: KnowledgeCard) {
   if (knowledgeOnly.value) return `虚拟分支 · ${branchContext.context?.branchName ?? 'WORKSPACE'}`;
   return branchScopeLabel(card.branchScope, branchContext.branches, branchContext.context?.branchName);
@@ -282,7 +299,7 @@ async function refreshKnowledgeLibrary() {
   await branchContext.refresh();
   await loadCards();
 }
-function openEdit(card: KnowledgeCard) { saveError.value = null; initialReference.value = null; editing.value = card; detailDialog.value = false; dialog.value = true; }
+function openEdit(card: KnowledgeCard) { saveConflict.value = false; saveError.value = null; initialReference.value = null; editing.value = card; detailDialog.value = false; dialog.value = true; }
 function syncRequestedCreate() {
   const path = typeof route.query.path === 'string' ? route.query.path : null;
   if (route.query.create !== '1' || !path || !canMaintain.value) return;
@@ -552,7 +569,7 @@ async function save(input: CardInput) {
   const isCurrent = () => request === saveVersion && repositoryId === repositories.selectedRepositoryId
     && identity === branchContext.identity;
   busy.value = true;
-  saveError.value = null;
+  saveError.value = null; saveConflict.value = false;
   try {
     const saved = card ? await intelligenceApi.updateCard(repositoryId, card.id, input, contextId)
       : await intelligenceApi.createCard(repositoryId, input, contextId);
@@ -564,8 +581,9 @@ async function save(input: CardInput) {
     ElMessage.success(card ? '已保存为新修订，请确认后发布' : '已保存为草稿，可确认并发布');
   } catch (error) {
     if (!isCurrent()) return;
+    saveConflict.value = Boolean(card && error instanceof ApiError && error.code === 'KNOWLEDGE_REVISION_CONFLICT');
     saveError.value = error instanceof ApiError && error.status === 409
-      ? '知识已被修改，请刷新后重新核对；当前输入保留'
+      ? saveConflict.value ? '知识已被修改，当前输入保留；请查看最新修订并对照后继续编辑' : `${error.message}；当前输入保留`
       : error instanceof Error ? error.message : '保存失败，当前输入保留';
   } finally { if (isCurrent()) busy.value = false; }
 }
@@ -731,7 +749,7 @@ onMounted(() => void load());
           v-model="cardQuery"
           class="app-search-input knowledge-search"
           :prefix-icon="Search"
-          placeholder="搜索标题、正文或标签"
+          :placeholder="cardSearchPlaceholder"
           clearable
         />
         <el-input
@@ -815,11 +833,15 @@ onMounted(() => void load());
         v-loading="cardsLoading"
       >
         <el-alert v-if="cardLoadError" type="error" :closable="false" :title="cardLoadError"><el-button @click="loadCards">重新加载</el-button></el-alert>
-        <PublishedKnowledgeResults v-else-if="publishedSearch" :query="cardQuery" :card-ids="searchTypeCardIds" />
-        <el-empty v-else-if="!cardsLoading && !cardRows.length" :description="cardEmptyDescription" />
+        <PublishedKnowledgeResults v-else-if="publishedSearch" :query="cardQuery" :knowledge-kind="searchKnowledgeKind" @clear-type="selectedKnowledgeKind = allKnowledgeKinds" @all-knowledge="searchScope = 'ALL'" @clear-query="cardQuery = ''" />
+        <el-empty v-else-if="!cardsLoading && !cardRows.length" :description="cardEmptyDescription">
+          <el-button v-if="cards.length" @click="clearCardFilters">清除筛选</el-button>
+          <el-button v-if="knowledgeOnly && searchScope !== 'ALL'" @click="searchScope = 'ALL'">查看全部知识</el-button>
+          <el-button v-if="canMaintain" type="primary" @click="openCreate">新建知识</el-button>
+        </el-empty>
         <div v-else class="knowledge-grid">
           <KnowledgeCardListItem
-            v-for="card in cardRows"
+            v-for="card in pagedCardRows"
             :key="card.id"
             :card="card"
             :can-manage="canManage"
@@ -837,6 +859,7 @@ onMounted(() => void load());
             @delete="deleteCard"
           />
         </div>
+        <KnowledgeListPagination v-if="!publishedSearch && !cardLoadError" :page="currentPage" :pages="pageCount" :total="cardRows.length" :page-size="pageSize" @change="changeListPage" />
       </div>
       <div
         v-else
@@ -878,7 +901,8 @@ onMounted(() => void load());
     />
     <KnowledgeCardEditorDialog v-if="canMaintain && repositories.selectedRepositoryId" v-model="dialog"
       :context-id="branchContext.context?.contextId"
-      :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy" :save-error="saveError"
+      :repository-id="repositories.selectedRepositoryId" :card="editing" :busy="busy" :save-error="saveError" :save-conflict="saveConflict"
+      @conflict-resolved="saveConflict = false; saveError = null"
       :knowledge-only="knowledgeOnly" :initial-reference="initialReference"
       :branch-name="branchContext.context?.branchName ?? null"
       :branch-id="branchContext.context?.branchId" :branches="branchContext.branches"

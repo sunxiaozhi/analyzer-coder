@@ -64,9 +64,12 @@ public class IntelligenceController {
             @PathVariable UUID repoId,
             @RequestParam String query,
             @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false) String knowledgeKind,
             HttpServletRequest request) {
         require(request, repoId, RepositoryPermission.READ);
         var context = branchContexts == null ? null : branchContexts.resolve(request, repoId);
+        if (knowledgeKind != null && !knowledgeKind.isBlank())
+            return service.unifiedSearchDetailed(repoId, query, limit, context, knowledgeKind);
         return context == null
                 ? service.unifiedSearchDetailed(repoId, query, limit)
                 : service.unifiedSearchDetailed(repoId, query, limit, context);
