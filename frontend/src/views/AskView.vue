@@ -13,6 +13,7 @@ import {
 import AskConversationPanel from '@/features/ask/AskConversationPanel.vue';
 import AskHistorySidebar from '@/features/ask/AskHistorySidebar.vue';
 import { usePageMemoryStore } from '@/stores/pageMemory';
+import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
 import { useAskConversation } from '@/features/ask/useAskConversation';
 import { useAskHistory } from '@/features/ask/useAskHistory';
 import { useRepositoryStore } from '@/stores/repositoryStore';
@@ -47,6 +48,9 @@ const answerMode = computed({
 const modelsLoading = shallowRef(false);
 const modelsReady = shallowRef(false);
 const submissionPending = shallowRef(false);
+const unregisterAutomaticRefresh = useWorkspaceLeaveGuardStore().register(async () => true,
+  () => submissionPending.value || conversation.requestState.value === 'sending');
+onBeforeUnmount(unregisterAutomaticRefresh);
 let contextVersion = 0;
 let historyRequest = 0;
 const defaultHistoryOpen = () => typeof window.matchMedia !== 'function' || !window.matchMedia('(max-width: 900px)').matches;

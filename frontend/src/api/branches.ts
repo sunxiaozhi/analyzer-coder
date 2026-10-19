@@ -14,6 +14,7 @@ export interface RemoteBranch {
 export interface BranchPreparationJob {
   id: string; branchId: string; status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
   stage: string; error: string | null;
+  createdAt?: string | null; updatedAt?: string | null;
   kind: 'SYNC' | 'CONTENT' | 'GRAPH' | 'PREPARE' | 'VECTORS'; contentVersion: string | null;
 }
 export type BranchCodeOperation = 'SYNC' | 'CONTENT' | 'GRAPH' | 'PREPARE';

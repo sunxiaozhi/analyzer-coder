@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, shallowRef, watch } from 'vue';
 import { branchesApi, type BranchPreparationJob } from '@/api/branches';
+import TaskDuration from '@/features/indexing/TaskDuration.vue';
 import AppPagination from '@/components/AppPagination.vue';
 const props = defineProps<{ repositoryId: string; branchId: string; revision: string }>();
 const jobs = shallowRef<BranchPreparationJob[]>([]);
@@ -28,9 +29,9 @@ onBeforeUnmount(() => { alive = false; version++; });
   <section class="branch-history" aria-label="当前分支任务记录">
     <div class="history-heading"><p>任务记录属于执行时的代码版本，历史任务不会改变当前索引状态。</p><el-button :loading="loading" @click="load">刷新记录</el-button></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <div class="history-scroll"><table><thead><tr><th>任务</th><th>状态</th><th>执行阶段</th><th>代码内容版本</th></tr></thead><tbody>
-      <template v-for="job in jobs" :key="job.id"><tr><td>{{ kinds[job.kind] }}</td><td>{{ states[job.status] }}</td><td>{{ stages[job.stage] ?? job.stage }}</td><td><code>{{ job.contentVersion?.slice(0, 8) || '等待锁定' }}</code></td></tr><tr v-if="job.error" class="history-error"><td colspan="4">{{ job.error }}</td></tr></template>
-      <tr v-if="!jobs.length"><td colspan="4" class="history-empty">{{ loading ? '正在加载任务记录…' : '当前分支还没有任务记录' }}</td></tr>
+    <div class="history-scroll"><table><thead><tr><th>任务</th><th>状态</th><th>执行阶段</th><th>代码内容版本</th><th>耗时（含排队）</th></tr></thead><tbody>
+      <template v-for="job in jobs" :key="job.id"><tr><td>{{ kinds[job.kind] }}</td><td>{{ states[job.status] }}</td><td>{{ stages[job.stage] ?? job.stage }}</td><td><code>{{ job.contentVersion?.slice(0, 8) || '等待锁定' }}</code></td><td><TaskDuration :task="job" mode="total" /></td></tr><tr v-if="job.error" class="history-error"><td colspan="5">{{ job.error }}</td></tr></template>
+      <tr v-if="!jobs.length"><td colspan="5" class="history-empty">{{ loading ? '正在加载任务记录…' : '当前分支还没有任务记录' }}</td></tr>
     </tbody></table></div>
     <AppPagination :page-num="pageNum" :page-size="pageSize" :total="total" :disabled="loading" compact @page-change="value => pageNum = value" @size-change="value => { pageSize = value; pageNum = 1; }" />
   </section>

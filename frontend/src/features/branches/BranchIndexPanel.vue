@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import TaskProgress from '@/features/indexing/TaskProgress.vue';
 import type { BranchCodeOperation, BranchContext, BranchIndexStatus, BranchPreparationJob, RepositoryBranch } from '@/api/branches';
 const props=defineProps<{
   branch: RepositoryBranch; context: BranchContext | null; status?: BranchIndexStatus;
@@ -58,6 +59,7 @@ const statuses:Record<string,string>={QUEUED:'排队中',RUNNING:'执行中',SUC
       <div v-for="job in currentJobs" :key="job.id" class="branch-task">
         <strong>{{ labels[job.kind] }}</strong><span>{{ statuses[job.status] }} · {{ stages[job.stage] ?? job.stage }}</span>
         <small>{{ job.contentVersion ? '内容版本 '+job.contentVersion.slice(0,8) : '等待锁定提交' }}{{ job.contentVersion && job.contentVersion!==branch.contentVersion?' · 历史版本任务':'' }}</small>
+        <TaskProgress :task="job" />
         <p v-if="job.error" class="task-error">{{ job.error }}</p>
       </div>
     </div>

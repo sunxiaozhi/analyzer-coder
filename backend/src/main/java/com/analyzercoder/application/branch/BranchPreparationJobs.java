@@ -13,6 +13,7 @@ import com.analyzercoder.security.AuthenticatedAccount;
 import com.analyzercoder.security.RepositoryPermission;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -60,7 +61,9 @@ public class BranchPreparationJobs {
             String stage,
             String error,
             String kind,
-            UUID contentVersion) {}
+            UUID contentVersion,
+            Instant createdAt,
+            Instant updatedAt) {}
 
     /** Full task history; list() continues to return only the latest task per branch/kind. */
     public PageResult<Job> history(
@@ -81,7 +84,7 @@ public class BranchPreparationJobs {
         arguments.add(((long) pageNum - 1) * pageSize);
         List<Job> rows =
                 db.query(
-                        "SELECT id,branch_id,status,stage,error,kind,target_content_version FROM branch_preparation_jobs"
+                        "SELECT id,branch_id,status,stage,error,kind,target_content_version,created_at,updated_at FROM branch_preparation_jobs"
                                 + filter
                                 + " ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
                         (r, n) ->
@@ -92,7 +95,9 @@ public class BranchPreparationJobs {
                                         r.getString("stage"),
                                         r.getString("error"),
                                         r.getString("kind"),
-                                        r.getObject("target_content_version", UUID.class)),
+                                        r.getObject("target_content_version", UUID.class),
+                                        r.getTimestamp("created_at").toInstant(),
+                                        r.getTimestamp("updated_at").toInstant()),
                         arguments.toArray());
         return new PageResult<>(
                 rows,
@@ -106,7 +111,7 @@ public class BranchPreparationJobs {
         access.require(actor, CodeRepositoryId.of(repoId), RepositoryPermission.READ);
         return db.query(
                 """
-                SELECT DISTINCT ON (branch_id,kind) id,branch_id,status,stage,error,kind,target_content_version
+                SELECT DISTINCT ON (branch_id,kind) id,branch_id,status,stage,error,kind,target_content_version,created_at,updated_at
                 FROM branch_preparation_jobs WHERE repo_id=?
                 ORDER BY branch_id,kind,created_at DESC,id DESC
                 """,
@@ -118,7 +123,9 @@ public class BranchPreparationJobs {
                                 r.getString("stage"),
                                 r.getString("error"),
                                 r.getString("kind"),
-                                r.getObject("target_content_version", UUID.class)),
+                                r.getObject("target_content_version", UUID.class),
+                                r.getTimestamp("created_at").toInstant(),
+                                r.getTimestamp("updated_at").toInstant()),
                 repoId);
     }
 

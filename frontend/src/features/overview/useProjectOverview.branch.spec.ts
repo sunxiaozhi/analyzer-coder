@@ -1,3 +1,5 @@
+import { createPinia, setActivePinia } from 'pinia';
+import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
 import { effectScope, reactive } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -23,9 +25,9 @@ function overview(contentVersion='s') {
   return {preparation:{contentVersion:contentVersion,commitSha:contentVersion,state:'READY'},codeFacts:{contentVersion:contentVersion,commitSha:contentVersion},health:{contentVersion:contentVersion,commitSha:contentVersion}} as api.BranchOverview;
 }
 beforeEach(()=>{
-  vi.resetAllMocks();
+  vi.resetAllMocks(); setActivePinia(createPinia());
   repositories=reactive({selectedRepositoryId:'p',selectedRepository:{sourceType:'LOCAL_GIT'}});
-  branches=reactive({selectedBranchId:null,context:null,identity:'pending',error:null,loading:false,refresh:vi.fn().mockResolvedValue(undefined)});
+  branches=reactive({selectedBranchId:null,context:null,identity:'pending',error:null,loading:false,refresh:vi.fn().mockResolvedValue(undefined),refreshCurrent:vi.fn().mockResolvedValue(true)});
   vi.mocked(api.getBranchOverview).mockResolvedValue(overview());
   vi.mocked(branchesApi.preparationJobs).mockResolvedValue([]);
 });
@@ -98,7 +100,7 @@ it('tracks the selected branch task and refreshes overview after completion', as
     await result.prepare(); expect(branchesApi.codeOperation).toHaveBeenCalledTimes(1);
     rows = [{ ...job, stage: 'COMPLETED', status: 'SUCCEEDED' }];
     await vi.advanceTimersByTimeAsync(2500); await flushPromises();
-    expect(branches.refresh).toHaveBeenCalledTimes(1);
+    expect(branches.refreshCurrent).toHaveBeenCalledTimes(1);
     expect(api.getBranchOverview).toHaveBeenCalledTimes(2);
     expect(result.preparing.value).toBe(false);
   } finally { scope.stop(); }
@@ -113,5 +115,41 @@ it('retries the failed task kind with its required context rather than always pr
     expect(branchesApi.codeOperation).toHaveBeenNthCalledWith(1, 'p', 'release', 'SYNC');
     expect(branchesApi.codeOperation).toHaveBeenNthCalledWith(2, 'p', 'release', 'CONTENT', 'ctx-s');
     expect(branchesApi.prepareVectors).toHaveBeenCalledWith(branches.context);
+  } finally { scope.stop(); }
+});
+
+it('defers a completed task while an editor blocks refresh, then refreshes once safe', async () => {
+  vi.useFakeTimers(); pin();
+  const job = { id: 'job', branchId: 'release', kind: 'PREPARE', stage: 'INDEXING', status: 'RUNNING', error: null, contentVersion: 's' } as const;
+  let rows: any[] = [job];
+  vi.mocked(branchesApi.preparationJobs).mockImplementation(async () => rows);
+  let dirty = true;
+  const leave = vi.fn().mockResolvedValue(false);
+  const unregister = useWorkspaceLeaveGuardStore().register(leave, () => dirty);
+  const scope = effectScope(); const result = scope.run(useProjectOverview)!;
+  try {
+    await flushPromises(); rows = [{ ...job, status: 'SUCCEEDED' }];
+    await result.refreshTasks();
+    expect(result.refreshPending.value).toBe(true); expect(branches.refreshCurrent).not.toHaveBeenCalled();
+    expect(leave).not.toHaveBeenCalled();
+    dirty = false; await result.refreshTasks();
+    expect(result.refreshPending.value).toBe(false); expect(branches.refreshCurrent).toHaveBeenCalledTimes(1);
+  } finally { unregister(); scope.stop(); }
+});
+
+it('retains completion refresh work after a failed overview read and retries it', async () => {
+  vi.useFakeTimers(); pin();
+  const job = { id: 'job', branchId: 'release', kind: 'PREPARE', stage: 'INDEXING', status: 'RUNNING', error: null, contentVersion: 's' } as const;
+  let rows: any[] = [job];
+  vi.mocked(branchesApi.preparationJobs).mockImplementation(async () => rows);
+  const scope = effectScope(); const result = scope.run(useProjectOverview)!;
+  try {
+    await flushPromises(); rows = [{ ...job, status: 'SUCCEEDED' }];
+    vi.mocked(api.getBranchOverview).mockRejectedValueOnce(new Error('overview offline'));
+    await result.refreshTasks();
+    expect(result.refreshPending.value).toBe(true); expect(result.taskError.value).toContain('overview offline');
+    await result.refreshTasks();
+    expect(result.refreshPending.value).toBe(false); expect(result.taskError.value).toBe('');
+    expect(branches.refreshCurrent).toHaveBeenCalledTimes(2);
   } finally { scope.stop(); }
 });

@@ -8,7 +8,7 @@ vi.mock('@/api/branches', () => ({ branchesApi: { list: vi.fn(), preparationHist
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 afterEach(() => vi.resetAllMocks());
 const projects = [{ id:'p1', name:'项目一', sourceType:'REMOTE_GIT' }, { id:'p2', name:'项目二', sourceType:'LOCAL_GIT' }] as Repository[];
-const job: BranchPreparationJob = { id:'j1',branchId:'b1',kind:'CONTENT',status:'FAILED',stage:'FAILED',error:'索引错误',contentVersion:'old' };
+const job: BranchPreparationJob = { id:'j1',branchId:'b1',kind:'CONTENT',status:'FAILED',stage:'FAILED',error:'索引错误；任务编号：j1',contentVersion:'old',createdAt:'2026-10-15T00:00:00Z',updatedAt:'2026-10-15T00:02:05Z' };
 function panel() { return mount(BranchTasksPanel, { props:{repositories:projects,initialRepositoryId:'p1'},global:{stubs:{ElButton:{template:'<button><slot /></button>'},ElAlert:{props:['title'],template:'<p>{{ title }}</p>'},ElEmpty:true,AppPagination:true,ElDialog:{props:['modelValue'],template:'<div v-if="modelValue" role="dialog"><slot /><slot name="footer" /></div>'}}} }); }
 it('shows task history and requests server-side branch filtering', async () => {
   vi.mocked(branchesApi.list).mockResolvedValue([{id:'b1',name:'release'}] as never);
@@ -17,8 +17,12 @@ it('shows task history and requests server-side branch filtering', async () => {
   expect(wrapper.findAllComponents(ElSelect)[1].text()).toContain('全部分支');
   expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   expect(wrapper.text()).not.toContain('索引错误');
+  expect(wrapper.get('tbody').text()).toContain('2分5秒');
   await wrapper.get('tbody button').trigger('click');
   expect(wrapper.get('[role="dialog"]').text()).toContain('索引错误');
+  expect(wrapper.get('[role="dialog"]').text()).not.toContain('任务编号');
+  expect(wrapper.get('[role="dialog"]').text()).not.toContain('内容版本编号');
+  expect(wrapper.get('[role="dialog"]').text()).toContain('总耗时（含排队）2分5秒');
   expect(wrapper.get('[role="dialog"]').text()).toContain('历史任务不代表当前分支');
   await wrapper.get('[role="dialog"] button').trigger('click');
   expect(wrapper.find('[role="dialog"]').exists()).toBe(false);

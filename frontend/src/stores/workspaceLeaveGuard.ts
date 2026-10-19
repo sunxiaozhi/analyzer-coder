@@ -2,12 +2,12 @@ import { defineStore } from 'pinia';
 
 /** Check active editors before navigation or an action that replaces their context. */
 export const useWorkspaceLeaveGuardStore = defineStore('workspace-leave-guard', () => {
-  const guards = new Map<symbol, () => Promise<boolean>>();
+  const guards = new Map<symbol, { leave: () => Promise<boolean>; blocksRefresh: () => boolean }>();
   let pending = false;
 
-  function register(guard: () => Promise<boolean>) {
+  function register(guard: () => Promise<boolean>, blocksRefresh: () => boolean = () => false) {
     const key = Symbol('editor');
-    guards.set(key, guard);
+    guards.set(key, { leave: guard, blocksRefresh });
     return () => { guards.delete(key); };
   }
 
@@ -17,11 +17,15 @@ export const useWorkspaceLeaveGuardStore = defineStore('workspace-leave-guard', 
     pending = true;
     try {
       for (const guard of guards.values()) {
-        if (!await guard()) return false;
+        if (!await guard.leave()) return false;
       }
       return true;
     } finally { pending = false; }
   }
 
-  return { register, requestLeave };
+  function canRefreshAutomatically() {
+    return !pending && [...guards.values()].every(guard => !guard.blocksRefresh());
+  }
+
+  return { register, requestLeave, canRefreshAutomatically };
 });

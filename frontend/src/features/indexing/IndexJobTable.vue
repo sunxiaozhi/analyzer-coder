@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { taskStageLabel } from './taskProgress';
+import TaskDuration from './TaskDuration.vue';
 import TaskStatusTag from '@/features/indexing/TaskStatusTag.vue';
 import type { Repository } from '@/types/api';
 import type { Task } from '@/types/tasks';
@@ -43,7 +45,12 @@ function typeLabel(type: Task['type']) {
     <el-table-column label="状态" width="110">
       <template #default="{ row }"><TaskStatusTag :status="row.status" /></template>
     </el-table-column>
-    <el-table-column prop="currentStep" label="当前阶段" min-width="170" />
+    <el-table-column label="当前阶段" min-width="170">
+      <template #default="{ row }">{{ taskStageLabel(row.currentStep, row.status) }}</template>
+    </el-table-column>
+    <el-table-column label="执行耗时" min-width="140">
+      <template #default="{ row }"><TaskDuration :task="row" /></template>
+    </el-table-column>
     <el-table-column label="创建时间" width="190">
       <template #default="{ row }">{{ new Date(row.createdAt).toLocaleString() }}</template>
     </el-table-column>

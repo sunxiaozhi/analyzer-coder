@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed,shallowRef,watch } from 'vue';
+import { auditEventLabel } from './auditEventLabels';
 import AppPagination from '@/components/AppPagination.vue';
 import type { AuditEvent } from '@/types/security';
 import { formatRelativeTime,formatShanghaiDateTime,shanghaiDateTimeTitle } from '@/utils/dateTime';
@@ -12,7 +13,6 @@ const eventTypes=computed(()=>unique(props.rows.map(row=>row.eventType)));
 const results=computed(()=>unique(props.rows.map(row=>row.result)));
 const filteredRows=computed(()=>props.rows.filter(row=>(!actor.value||row.actorUsername===actor.value)&&(!target.value||row.targetUsername===target.value)&&(!eventType.value||row.eventType===eventType.value)&&(!result.value||row.result===result.value)&&(!range.value||(new Date(row.createdAt)>=range.value[0]&&new Date(row.createdAt)<=endOfDay(range.value[1])))));
 const pagedRows=computed(()=>filteredRows.value.slice((page.value-1)*pageSize.value,page.value*pageSize.value));
-const eventLabels:Record<string,string>={INITIAL_ADMIN_CREATED:'创建初始管理员',LOGIN_FAILED:'登录失败',LOGIN_SUCCEEDED:'登录成功',LOGOUT:'退出登录',ACCOUNT_LOCKED:'账号锁定',ACCOUNT_CREATED:'创建账号',ACCOUNT_UPDATED:'更新账号',ACCOUNT_DISABLED:'停用账号',ACCOUNT_UNLOCKED:'账号解锁',PASSWORD_CHANGED:'修改密码',PASSWORD_RESET:'重置密码',REPOSITORY_PERMISSION_CHANGED:'修改项目权限',REPOSITORY_PERMISSION_REVOKED:'撤销项目权限'};
 
 watch(()=>[props.focusUsername,props.focusVersion] as const,([username])=>{target.value=username;page.value=1;},{immediate:true});
 watch([actor,target,eventType,result,range],()=>{page.value=1;});
@@ -29,7 +29,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
       <div class="audit-toolbar">
         <el-select v-model="actor" placeholder="操作者" clearable filterable><el-option v-for="item in actors" :key="item" :label="item" :value="item"/></el-select>
         <el-select v-model="target" placeholder="目标账号" clearable filterable><el-option v-for="item in targets" :key="item" :label="item" :value="item"/></el-select>
-        <el-select v-model="eventType" placeholder="事件类型" clearable filterable><el-option v-for="item in eventTypes" :key="item" :label="eventLabels[item]??item" :value="item"/></el-select>
+        <el-select v-model="eventType" placeholder="事件类型" clearable filterable><el-option v-for="item in eventTypes" :key="item" :label="auditEventLabel(item)" :value="item"/></el-select>
         <el-select v-model="result" placeholder="结果" clearable><el-option v-for="item in results" :key="item" :label="item==='SUCCESS'?'成功':'拒绝/失败'" :value="item"/></el-select>
         <el-date-picker v-model="range" class="audit-date-range" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期"/>
         <el-button @click="clearFilters">清空</el-button>
@@ -39,8 +39,7 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
     </div>
     <div class="audit-table-region">
       <el-table :data="pagedRows" v-loading="loading" empty-text="没有符合条件的审计事件">
-        <el-table-column type="expand" width="44"><template #default="{row}"><pre class="audit-event-detail">{{ JSON.stringify(row, null, 2) }}</pre></template></el-table-column>
-        <el-table-column label="事件" min-width="180"><template #default="{row}"><div class="primary-cell"><b>{{eventLabels[row.eventType]??row.eventType}}</b><span class="mono">{{row.eventType}}</span></div></template></el-table-column>
+        <el-table-column label="事件" min-width="180"><template #default="{row}"><div class="primary-cell"><b>{{auditEventLabel(row.eventType)}}</b></div></template></el-table-column>
         <el-table-column label="结果" width="100"><template #default="{row}"><el-tag :type="row.result==='SUCCESS'?'success':'danger'" effect="plain">{{row.result==='SUCCESS'?'成功':'拒绝'}}</el-tag></template></el-table-column>
         <el-table-column prop="actorUsername" label="操作者" min-width="120"><template #default="{row}">{{row.actorUsername??'系统'}}</template></el-table-column>
         <el-table-column prop="targetUsername" label="目标账号" min-width="120"><template #default="{row}">{{row.targetUsername??'—'}}</template></el-table-column>
@@ -75,5 +74,4 @@ function changePageSize(value:number){pageSize.value=value;page.value=1;}
   .audit-toolbar .audit-date-range{width:100%}
   .audit-table-region{overflow:visible}
 }
-.audit-event-detail { margin: 12px 16px; padding: 16px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--app-surface-subtle); font-size: 12px; }
 </style>

@@ -47,7 +47,8 @@ router.beforeEach(async (to, from) => {
   if (to.fullPath !== from.fullPath && !await useWorkspaceLeaveGuardStore().requestLeave()) return false;
   const { useAuthStore } = await import('@/stores/authStore');
   const auth = useAuthStore();
-  await auth.restore();
+  try { await auth.restore(); }
+  catch { return false; }
   if (to.meta.public) {
     if (auth.authenticated && !auth.account?.mustChangePassword) return '/overview';
     return true;

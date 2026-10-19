@@ -88,7 +88,7 @@ export ANALYZER_INSTALLATION_ROOT="$PWD"
 docker compose exec -T analyzer /usr/local/bin/analyzer-healthcheck
 # 内部健康接口不对公网开放。
 docker compose exec -T analyzer curl -fsS http://127.0.0.1:8081/actuator/health
-# 检查实际执行历史，应仅有 version=1、success=t。
+# 检查初始化记录，执行结果应均为 success=t。
 docker compose exec -T -u postgres analyzer \
   psql -U codebase_kb -d codebase_kb -c \
   'SELECT version,description,success FROM public.flyway_schema_history ORDER BY installed_rank;'
@@ -96,7 +96,7 @@ docker compose exec -T -u postgres analyzer \
 
 健康接口预期返回 `{"status":"UP"}`。若修改了数据库名或用户名，相应调整 psql 参数。浏览器确认可登录，并导入一个测试项目验证代码读取和图谱。
 
-**本版使用安装目录内的 bind 挂载，不使用旧版隐藏命名卷。**
+服务使用安装目录内的 bind 挂载，数据与配置位置如下。
 
 | 宿主机位置（安装目录为 /opt/analyzer-coder） | 容器路径 / 用途 |
 | --- | --- |
@@ -263,11 +263,3 @@ HTTP 客户端自带的 200 日志只表示响应状态；应用的“模型调�
 | CITATION_VALIDATION_FAILED | 模型已返回正文，但引用校验未通过；这是回答质量校验，与网络调用失败不同。 |
 
 本地故障注入测试验证调用链行为，不能替代目标服务器、目标网关和实际长文本的验证。
-
-## 11. 知识草稿删除与菜单调整
-
-研发工作菜单顺序为：项目总览 → 项目问答 → 联合检索 → 代码图谱。
-
-具备项目管理权限的用户可在知识草稿的“更多”菜单选择“删除草稿”。已发布或已归档知识须先“撤回为草稿”。确认框会列出知识共享范围；删除对该卡片的全部使用分支生效，并永久清理修订记录、知识向量及 Markdown 预备知识关联。服务端会再次检查管理权限、当前分支适用性、草稿状态及修订号；卡片被修改时拒绝删除，清理失败时整体回滚。
-
-原 Markdown 文件和预备知识条目保留，无其他关联知识时恢复为“待生成”，可重新生成草稿；如果同一来源仍关联其他知识，则保留那些有效关联。页面会同步刷新知识和 Markdown 预备知识列表。历史问答保留当时的证据快照。

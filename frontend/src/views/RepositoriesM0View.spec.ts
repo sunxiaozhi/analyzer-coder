@@ -1,4 +1,5 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
 import { reactive } from 'vue';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -29,9 +30,9 @@ vi.mock('element-plus', async importOriginal => ({
   ElMessageBox: { confirm: vi.fn() },
 }));
 beforeEach(() => {
-  vi.resetAllMocks();
+  vi.resetAllMocks(); setActivePinia(createPinia());
   sessionStorage.clear();
-  branches = reactive({ selectedBranchId: 'main', context: null, refresh: vi.fn(), select: vi.fn(async (id: string) => { branches.selectedBranchId = id; branches.context = { contextId: 'ctx-' + id, branchId: id, branchName: id }; }) });
+  branches = reactive({ selectedBranchId: 'main', context: null, refresh: vi.fn(), refreshCurrent: vi.fn().mockResolvedValue(true), select: vi.fn(async (id: string) => { branches.selectedBranchId = id; branches.context = { contextId: 'ctx-' + id, branchId: id, branchName: id }; }) });
   vi.mocked(projectDraftsApi.list).mockResolvedValue([]);
   vi.mocked(projectDraftsApi.remove).mockResolvedValue(undefined);
   vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>);

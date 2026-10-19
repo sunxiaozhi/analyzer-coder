@@ -49,7 +49,8 @@ export function useKnowledgeEditorLeaveGuard(options: Options) {
     event.preventDefault();
     event.returnValue = '';
   }
-  const unregister = useWorkspaceLeaveGuardStore().register(requestClose);
+  const unregister = useWorkspaceLeaveGuardStore().register(requestClose,
+    () => options.active() && !discarded.value && (dirty.value || options.busy()));
   window.addEventListener('beforeunload', beforeUnload);
   onScopeDispose(() => {
     generation++;

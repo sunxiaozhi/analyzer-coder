@@ -37,3 +37,34 @@ it('keeps branch task responses isolated during a rapid branch change', async ()
   expect(tasks.jobs.value).toEqual([job]); expect(completed).not.toHaveBeenCalled();
   wrapper.unmount();
 });
+
+it('retries failed completion work without changing the successful task status', async () => {
+  vi.useFakeTimers();
+  const job = { id: 'job', branchId: 'b', kind: 'PREPARE', status: 'RUNNING', stage: 'INDEXING', error: null, contentVersion: 'v' } as const;
+  vi.mocked(branchesApi.preparationJobs).mockResolvedValueOnce([job]).mockResolvedValue([{ ...job, status: 'SUCCEEDED' }]);
+  const completed = vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValue(undefined);
+  let tasks!: ReturnType<typeof useBranchPreparation>;
+  const wrapper = mount(defineComponent({ setup() { tasks = useBranchPreparation(() => 'repo', completed); return () => null; } }));
+  try {
+    await flushPromises(); await tasks.refresh();
+    expect(tasks.jobs.value[0].status).toBe('SUCCEEDED'); expect(tasks.refreshPending.value).toBe(true);
+    expect(tasks.error.value).toBe('network');
+    await tasks.refresh(); expect(completed).toHaveBeenCalledTimes(2);
+    expect(tasks.refreshPending.value).toBe(false); expect(tasks.error.value).toBe('');
+    await tasks.refresh(); expect(completed).toHaveBeenCalledTimes(2);
+  } finally { wrapper.unmount(); }
+});
+
+it('clears deferred completion work when the user changes scope', async () => {
+  const branch = shallowRef<string | null>('old');
+  const job = { id: 'job', branchId: 'old', kind: 'PREPARE', status: 'RUNNING', stage: 'INDEXING', error: null, contentVersion: 'v' } as const;
+  vi.mocked(branchesApi.preparationJobs).mockResolvedValueOnce([job]).mockResolvedValue([{ ...job, status: 'SUCCEEDED' }]);
+  const completed = vi.fn().mockResolvedValue(false);
+  let tasks!: ReturnType<typeof useBranchPreparation>;
+  const wrapper = mount(defineComponent({ setup() { tasks = useBranchPreparation(() => 'repo', completed, () => branch.value); return () => null; } }));
+  try {
+    await flushPromises(); await tasks.refresh(); expect(tasks.refreshPending.value).toBe(true);
+    branch.value = 'new'; await flushPromises();
+    expect(tasks.refreshPending.value).toBe(false); expect(completed).toHaveBeenCalledTimes(1);
+  } finally { wrapper.unmount(); }
+});

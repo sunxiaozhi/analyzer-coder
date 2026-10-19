@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import TaskProgress from './TaskProgress.vue';
+import TaskDuration from './TaskDuration.vue';
 import TaskStatusTag from '@/features/indexing/TaskStatusTag.vue';
 import type { Repository } from '@/types/api';
 import type { Task } from '@/types/tasks';
@@ -54,18 +56,18 @@ function fallbackLabel(reason: string | null) {
     <template v-if="job">
       <div class="section-head"><h2>任务详情</h2><TaskStatusTag :status="job.status" /></div>
       <dl class="meta-grid">
-        <div class="meta-wide"><dt>任务编号</dt><dd class="mono">{{ job.id }}</dd></div>
         <div><dt>项目</dt><dd>{{ repositoryName(job.repositoryId) }}</dd></div>
         <div><dt>请求类型</dt><dd>{{ typeLabel(job.type) }}</dd></div>
         <div v-if="job.type === 'FULL' || job.type === 'INCREMENTAL'"><dt>实际模式</dt><dd>{{ modeLabel(job.executionMode) }}</dd></div>
         <div v-if="job.fallbackReason"><dt>回退原因</dt><dd>{{ fallbackLabel(job.fallbackReason) }}</dd></div>
-        <div class="meta-wide"><dt>阶段</dt><dd class="mono">{{ job.currentStep ?? '—' }}</dd></div>
+        <div><dt>执行耗时</dt><dd><TaskDuration :task="job" /></dd></div>
         <div><dt>创建时间</dt><dd>{{ new Date(job.createdAt).toLocaleString() }}</dd></div>
         <div><dt>开始时间</dt><dd>{{ job.startedAt ? new Date(job.startedAt).toLocaleString() : '—' }}</dd></div>
         <div><dt>最近心跳</dt><dd>{{ job.heartbeatAt ? new Date(job.heartbeatAt).toLocaleString() : '—' }}</dd></div>
         <div><dt>超时截止</dt><dd>{{ job.timeoutAt ? new Date(job.timeoutAt).toLocaleString() : '—' }}</dd></div>
         <div><dt>结束时间</dt><dd>{{ job.finishedAt ? new Date(job.finishedAt).toLocaleString() : '—' }}</dd></div>
       </dl>
+      <TaskProgress :task="{ kind: job.type, status: job.status, stage: job.currentStep }" />
       <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" show-icon />
       <el-alert
         v-else-if="job.status === 'CANCEL_REQUESTED'"
@@ -84,16 +86,16 @@ function fallbackLabel(reason: string | null) {
 </template>
 
 <style scoped>
+.detail-panel > .task-progress {
+  padding: 0 16px;
+}
+
 .meta-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .meta-grid > div {
   min-width: 0;
-}
-
-.meta-grid .meta-wide {
-  grid-column: 1 / -1;
 }
 
 .meta-grid dd {

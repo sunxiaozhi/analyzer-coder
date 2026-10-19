@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TaskDuration from './TaskDuration.vue';
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue';
 import { ElOption, ElSelect } from 'element-plus';
 import { useRouter } from 'vue-router';
@@ -81,18 +82,19 @@ onBeforeUnmount(() => { stopped = true; ++version; clearTimeout(timer); });
     <el-empty v-if="!projects.length" description="没有可读取的 Git 项目" />
     <template v-else>
       <div class="branch-task-table">
-        <table><thead><tr><th>分支</th><th>任务</th><th>状态</th><th>阶段</th><th>内容版本</th><th>操作</th></tr></thead>
+        <table><thead><tr><th>分支</th><th>任务</th><th>状态</th><th>阶段</th><th>内容版本</th><th>耗时（含排队）</th><th>操作</th></tr></thead>
           <tbody><tr v-for="job in rows" :key="job.id" :class="{ selected: selected?.id === job.id }">
             <td>{{ branchName(job.branchId) }}</td><td>{{ kinds[job.kind] }}</td><td>{{ states[job.status] }}</td><td>{{ stages[job.stage] ?? job.stage }}</td><td><code>{{ job.contentVersion?.slice(0, 8) ?? '等待锁定' }}</code></td>
+            <td><TaskDuration :task="job" mode="total" /></td>
             <td><button type="button" @click="selectedId = job.id">查看</button></td>
-          </tr><tr v-if="!rows.length"><td colspan="6">{{ loading ? '正在加载任务' : '当前筛选下没有分支任务' }}</td></tr></tbody>
+          </tr><tr v-if="!rows.length"><td colspan="7">{{ loading ? '正在加载任务' : '当前筛选下没有分支任务' }}</td></tr></tbody>
         </table>
       </div>
       <AppPagination :page-num="pageNum" :page-size="pageSize" :total="total" :disabled="loading" @page-change="value => pageNum = value" @size-change="value => pageSize = value" />
       <BranchTaskDetailDialog v-if="selected" v-model="detailOpen" :job="selected"
         :project-name="projects.find(project => project.id === repositoryId)?.name ?? repositoryId"
         :branch-name="branchName(selected.branchId)" :kind-label="kinds[selected.kind] ?? selected.kind"
-        :status-label="states[selected.status] ?? selected.status" :stage-label="stages[selected.stage] ?? selected.stage"
+        :status-label="states[selected.status] ?? selected.status"
         @manage="router.push({ path: '/repositories', query: { repositoryId, branchId: selected.branchId } })" />
     </template>
   </section>
@@ -107,5 +109,5 @@ onBeforeUnmount(() => { stopped = true; ++version; clearTimeout(timer); });
 th, td { padding: 16px 14px; border-bottom: 1px solid #dbe3ec; } thead { background: #f5f7fa; } .selected { background: var(--app-selection-bg); } .selected > td:first-child { box-shadow: inset 3px 0 var(--app-color-action); }
 td button { background: none; border: 0; color: #2563eb; cursor: pointer; }
 code { overflow-wrap: anywhere; }
-@media (max-width: 760px) { .branch-task-table { flex: none; min-height: 160px; } table { min-width: 660px; } .task-filters label { min-width: 0; flex: 1 1 160px; } }
+@media (max-width: 760px) { .branch-task-table { flex: none; min-height: 160px; } table { min-width: 800px; } .task-filters label { min-width: 0; flex: 1 1 160px; } }
 </style>

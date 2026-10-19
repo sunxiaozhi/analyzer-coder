@@ -37,6 +37,7 @@ interface Props {
   preparing: boolean;
   jobs?: BranchPreparationJob[];
   taskError?: string;
+  refreshPending?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -60,8 +61,13 @@ const HEALTH_COPY = {
   PREPARING: { label: '正在准备', detail: '正在更新代码证据', tone: 'running' },
 } as const;
 
-const healthState = computed(() => props.health?.state ?? 'UNKNOWN');
-const healthCopy = computed(() => HEALTH_COPY[healthState.value]);
+const healthState = computed(() => props.preparing ? 'PREPARING' : props.refreshPending ? 'UNKNOWN' : props.health?.state ?? 'UNKNOWN');
+const healthCopy = computed(() => props.refreshPending && !props.preparing
+  ? { label: '任务已完成，状态待刷新', detail: '在下方状态区重试刷新', tone: 'muted' }
+  : HEALTH_COPY[healthState.value]);
+const canSearch = computed(() => Boolean(props.health?.readyForSearch) && !props.preparing && !props.refreshPending);
+const readinessDetail = computed(() => props.preparing ? '正在执行当前分支任务，完成后更新状态'
+  : props.refreshPending ? '当前分支状态尚未刷新' : props.preparation ? '当前已发布版本的可用状态' : '尚未获取当前分支状态');
 const knowledge = computed(() => props.health?.knowledge);
 const vectorCoverage = computed(() => {
   if (!props.profile?.chunkCount) return '—';
@@ -82,12 +88,12 @@ const prepareLabel = computed(() => {
   return '修复准备状态';
 });
 const searchActionLabel = computed(() => (
-  props.health?.readyForSearch ? '开始联合检索' : '准备完成后检索'
+  canSearch.value ? '开始联合检索' : '准备完成后检索'
 ));
 const searchActionTitle = computed(() => (
-  props.health?.readyForSearch
+  canSearch.value
     ? '同时检索当前内容版本中的代码片段和项目知识'
-    : '请先处理右侧准备流程和当前问题'
+    : '请先处理下方分支状态和当前问题'
 ));
 
 function short(value: string | null | undefined, length: number) {
@@ -154,8 +160,8 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         <button
           type="button"
           class="review-action"
-          :title="searchActionTitle" :class="{ 'is-primary': health?.readyForSearch }"
-          :disabled="loading || preparing || !health?.readyForSearch"
+          :title="searchActionTitle" :class="{ 'is-primary': canSearch }"
+          :disabled="loading || !canSearch"
           @click="emit('openSearch')"
         >
           {{ searchActionLabel }}
@@ -183,10 +189,9 @@ function canResolveIssue(issue: ProjectHealthIssue) {
         </button>
       </div>
     </header>
-    <OverviewPreparationProgress :ready-for-search="health?.readyForSearch" @open-search="emit('openSearch')" @open-ask="emit('openAsk')" :jobs="jobs ?? []" :error="taskError ?? ''" :busy="preparing" :can-prepare="Boolean(repository.capabilities?.canIndex)" @refresh="emit('refreshTasks')" @retry="emit('retryTask', $event)" />
 
     <section class="availability-summary" aria-label="当前分支可用能力">
-      <div><b>代码检索</b><span>{{ loading ? '正在读取状态' : health ? health.readyForSearch ? '可开始联合检索' : '准备完成后可检索' : '尚未获取' }}</span></div>
+      <div><b>代码检索</b><span>{{ preparing ? '任务执行中' : refreshPending ? '状态待刷新' : loading ? '正在读取状态' : health ? health.readyForSearch ? '可开始联合检索' : '准备完成后可检索' : '尚未获取' }}</span></div>
       <div><b>项目知识</b><span>{{ knowledge ? `已审核的当前知识 ${knowledge.trusted} 条 · 未归档 ${knowledge.total} 条` : '尚未获取' }}</span><button type="button" @click="emit('openKnowledge')">查看知识</button></div>
     </section>
     <details class="technical-statistics"><summary>代码、图谱与向量统计</summary>
@@ -276,10 +281,11 @@ function canResolveIssue(issue: ProjectHealthIssue) {
 
         <section class="side-section readiness-section" aria-labelledby="readiness-title">
           <header class="side-heading">
-            <h2 id="readiness-title">准备流程</h2>
-            <p>{{ preparation?.message ?? '尚未获取准备状态' }}</p>
+            <h2 id="readiness-title">当前分支状态</h2>
+            <p>{{ readinessDetail }}</p>
           </header>
-          <div v-if="preparation?.stages.length" class="preparation-track">
+          <OverviewPreparationProgress :refresh-pending="refreshPending" :content-version="preparation?.contentVersion" :jobs="jobs ?? []" :error="taskError ?? ''" :busy="preparing" :can-prepare="Boolean(repository.capabilities?.canIndex)" @refresh="emit('refreshTasks')" @retry="emit('retryTask', $event)" />
+          <div v-if="!preparing && !refreshPending && preparation?.stages.length" class="preparation-track">
             <article v-for="stage in preparation.stages" :key="stage.key" class="preparation-stage" :data-tone="stageTone(stage.state)">
               <span class="stage-marker">
                 <Check v-if="stage.state === 'READY'" :size="11" />
@@ -300,7 +306,7 @@ function canResolveIssue(issue: ProjectHealthIssue) {
               </div>
             </article>
           </div>
-          <p v-else class="empty-copy">暂无准备记录。</p>
+          <p v-else-if="!preparing && !refreshPending" class="empty-copy">尚未获取当前分支状态。</p>
         </section>
       </aside>
     </div>

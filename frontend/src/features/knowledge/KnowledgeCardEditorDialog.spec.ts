@@ -107,3 +107,15 @@ it('applies reviewed changes without resetting the editor and uses the new revis
   expect(wrapper.emitted('conflictResolved')).toHaveLength(1);
   wrapper.unmount();
 });
+
+it('blocks automatic context refresh while dirty or uploading without prompting or closing', async () => {
+  const wrapper = mountEditor();
+  const guard = useWorkspaceLeaveGuardStore();
+  expect(guard.canRefreshAutomatically()).toBe(true);
+  await edit(wrapper);
+  expect(guard.canRefreshAutomatically()).toBe(false);
+  expect(ElMessageBox.confirm).not.toHaveBeenCalled(); expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+  await wrapper.setProps({ modelValue: false });
+  expect(guard.canRefreshAutomatically()).toBe(true);
+  wrapper.unmount();
+});

@@ -51,7 +51,9 @@ export const useBranchContextStore = defineStore('branch-context', () => {
       if (version !== requestVersion || repositoryId.value !== nextRepositoryId) return;
       branches.value = loaded;
       const active = loaded.filter(item => item.trackingStatus === 'ACTIVE');
-      const persisted = localStorage.getItem(storageKey(nextRepositoryId));
+      let persisted: string | null = null;
+      try { persisted = localStorage.getItem(storageKey(nextRepositoryId)); }
+      catch { /* Preferences are optional when browser storage is unavailable. */ }
       const target = active.find(item => item.id === preferredBranchId)
         ?? active.find(item => item.id === persisted)
         ?? active.find(item => item.name === defaultBranch)
@@ -78,7 +80,8 @@ export const useBranchContextStore = defineStore('branch-context', () => {
     context.value = null;
     error.value = null;
     loading.value = false;
-    localStorage.setItem(storageKey(currentRepositoryId), branchId);
+    try { localStorage.setItem(storageKey(currentRepositoryId), branchId); }
+    catch { /* Keep the in-memory selection and create the server read context. */ }
     if (branch.status !== 'READY') return;
     loading.value = true;
     try {
@@ -93,6 +96,24 @@ export const useBranchContextStore = defineStore('branch-context', () => {
     } finally {
       if (version === requestVersion) loading.value = false;
     }
+  }
+
+  /** Read in the background and replace the pin only when the caller can safely apply it. */
+  async function refreshCurrent(canApply: () => boolean = () => true) {
+    const id = repositoryId.value, branchId = selectedBranchId.value;
+    if (!id || !branchId || loading.value || !canApply()) return false;
+    const version = ++requestVersion;
+    const isCurrent = () => version === requestVersion && id === repositoryId.value && branchId === selectedBranchId.value;
+    const loaded = await branchesApi.list(id);
+    if (!isCurrent()) return false;
+    const target = loaded.find(item => item.id === branchId && item.trackingStatus === 'ACTIVE');
+    if (!target || target.status !== 'READY') throw new Error('当前分支尚未就绪，请稍后刷新');
+    const created = await branchesApi.context(id, branchId);
+    if (!isCurrent() || !canApply()) return false;
+    branches.value = loaded;
+    context.value = created;
+    error.value = null;
+    return true;
   }
 
   async function refresh() {
@@ -113,6 +134,7 @@ export const useBranchContextStore = defineStore('branch-context', () => {
     load,
     select,
     refresh,
+    refreshCurrent,
     clear,
   };
 });

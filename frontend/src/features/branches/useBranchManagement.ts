@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { branchesApi, type BranchCodeOperation, type BranchContext, type RemoteBranch, type RepositoryBranch } from '@/api/branches';
 import { useBranchIndexes } from './useBranchIndexes';
 import { useBranchPreparation } from './useBranchPreparation';
+import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
 
 interface Options {
   repositoryId: () => string;
@@ -11,10 +12,12 @@ interface Options {
   remoteSource: () => boolean;
   initialBranchId: () => string | undefined;
   changed: () => void;
+  completed?: () => Promise<void | boolean>;
   externalBusy?: () => boolean;
 }
 
 export function useBranchManagement(options: Options) {
+  const leaveGuard = useWorkspaceLeaveGuardStore();
   const branches = shallowRef<RepositoryBranch[]>([]);
   const remoteBranches = shallowRef<RemoteBranch[]>([]);
   const selectedId = shallowRef(options.initialBranchId() ?? '');
@@ -28,7 +31,14 @@ export function useBranchManagement(options: Options) {
   let contextVersion = 0;
   let alive = true;
   const indexes = useBranchIndexes(options.repositoryId);
-  const preparation = useBranchPreparation(options.repositoryId, async () => { await reload(); if (alive) options.changed(); });
+  const preparation = useBranchPreparation(options.repositoryId, async () => {
+    if (!leaveGuard.canRefreshAutomatically()) return false;
+    await reload();
+    if (error.value || indexes.error.value) throw new Error(error.value || indexes.error.value);
+    if (!alive || !leaveGuard.canRefreshAutomatically()) return false;
+    if (options.completed) return options.completed();
+    options.changed();
+  });
   const busy = computed(() => loading.value || acting.value || resolving.value || Boolean(options.externalBusy?.()));
   const selected = computed(() => branches.value.find(branch => branch.id === selectedId.value));
   const selectedStatus = computed(() => indexes.statuses.value.find(status => status.branchId === selectedId.value && status.contentVersion === selected.value?.contentVersion));

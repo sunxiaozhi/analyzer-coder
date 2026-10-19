@@ -257,3 +257,51 @@ it('summarizes system layers and omits low-value sample paths', async () => {
   expect(wrapper.text()).not.toContain('来源版本标记为 CURRENT');
   expect(wrapper.text()).not.toContain('覆盖率只衡量向量齐备程度');
 });
+
+
+it('keeps completed history out of the overview and places live work inside branch status', async () => {
+  const wrapper = mountSheet();
+  const job = { id: 'job', branchId: 'branch', kind: 'PREPARE' as const, stage: 'COMPLETED', status: 'SUCCEEDED' as const, error: null, contentVersion: preparation.contentVersion };
+  await wrapper.setProps({ jobs: [job] });
+  expect(wrapper.find('[aria-label="当前分支任务进度"]').exists()).toBe(false);
+  expect(wrapper.get('.readiness-section').text()).toContain('当前已发布版本的可用状态');
+  await wrapper.setProps({ jobs: [{ ...job, status: 'RUNNING', stage: 'INDEXING' }], preparing: true });
+  expect(wrapper.get('.readiness-section [aria-label="当前分支任务进度"]').text()).toContain('执行中 · 构建内容索引');
+  expect(wrapper.get('.health-callout').text()).toContain('正在准备');
+  expect(wrapper.get('.availability-summary').text()).not.toContain('可开始联合检索');
+  expect(wrapper.find('.preparation-track').exists()).toBe(false);
+  expect(wrapper.find('.project-hero + .preparation-progress').exists()).toBe(false);
+  wrapper.unmount();
+});
+
+it('holds back old readiness until completion refresh succeeds and preserves refresh retry', async () => {
+  const wrapper = mountSheet();
+  await wrapper.setProps({ refreshPending: true, taskError: '读取暂不可用' });
+  expect(wrapper.get('.health-callout').text()).toContain('状态待刷新');
+  expect(wrapper.find('.preparation-track').exists()).toBe(false);
+  expect(wrapper.get('.review-action').attributes('disabled')).toBeDefined();
+  const status = wrapper.get('.readiness-section');
+  expect(status.text()).toContain('重试刷新页面状态');
+  status.findComponent({ name: 'OverviewPreparationProgress' }).vm.$emit('refresh');
+  expect(wrapper.emitted('refreshTasks')).toHaveLength(1);
+  await wrapper.setProps({ refreshPending: false, taskError: '' });
+  expect(wrapper.find('.preparation-track').exists()).toBe(true);
+  expect(wrapper.find('[aria-label="当前分支任务进度"]').exists()).toBe(false);
+  wrapper.unmount();
+});
+
+it('hides old failures but keeps failures observed during this preparation and retries the same kind', async () => {
+  const wrapper = mountSheet();
+  const job = { id: 'job', branchId: 'branch', kind: 'GRAPH' as const, stage: 'GRAPH', status: 'FAILED' as const, error: '图谱失败', contentVersion: preparation.contentVersion };
+  await wrapper.setProps({ jobs: [job] });
+  expect(wrapper.find('[aria-label="当前分支任务进度"]').exists()).toBe(false);
+  await wrapper.setProps({ jobs: [{ ...job, status: 'RUNNING' }], preparing: true });
+  await wrapper.setProps({ jobs: [job], preparing: false });
+  const progress = wrapper.getComponent({ name: 'OverviewPreparationProgress' });
+  expect(progress.text()).toContain('本次任务失败');
+  progress.vm.$emit('retry', 'GRAPH');
+  expect(wrapper.emitted('retryTask')).toEqual([['GRAPH']]);
+  await wrapper.setProps({ preparation: { ...preparation, contentVersion: 'new-version' } });
+  expect(wrapper.find('[aria-label="当前分支任务进度"]').exists()).toBe(false);
+  wrapper.unmount();
+});

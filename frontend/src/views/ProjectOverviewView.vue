@@ -22,7 +22,7 @@ const {
   error,
   reload,
   prepare,
-  retryTask, jobs, taskError, refreshTasks,
+  retryTask, jobs, taskError, refreshPending, refreshTasks,
 } = useProjectOverview();
 
 const repository = computed(() => repositories.selectedRepository);
@@ -56,7 +56,7 @@ function openManagement() {
     </div>
 
     <el-alert v-else-if="error" :title="error" type="error" :closable="false">
-      <OverviewPreparationProgress :jobs="jobs" :error="taskError" :busy="preparing" :can-prepare="Boolean(repository?.capabilities?.canIndex)" @refresh="refreshTasks" @retry="retryTask" />
+      <OverviewPreparationProgress :refresh-pending="refreshPending" :jobs="jobs" :error="taskError" :busy="preparing" :can-prepare="Boolean(repository?.capabilities?.canIndex)" @refresh="refreshTasks" @retry="retryTask" />
       <el-button size="small" @click="reload">重新加载</el-button>
       <el-button size="small" @click="router.push('/repositories')">管理当前分支</el-button>
     </el-alert>
@@ -71,7 +71,7 @@ function openManagement() {
       :health="health"
       :loading="loading"
       :preparing="preparing"
-      :jobs="jobs" :task-error="taskError"
+      :jobs="jobs" :task-error="taskError" :refresh-pending="refreshPending"
       @refresh-tasks="refreshTasks"
       @retry-task="retryTask"
       @refresh="reload"

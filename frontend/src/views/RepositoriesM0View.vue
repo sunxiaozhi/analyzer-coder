@@ -7,6 +7,7 @@ import AppPagination from '@/components/AppPagination.vue';
 import RepositoryFormDialog from '@/features/repositories/RepositoryFormDialog.vue';
 import RepositoryImportProgress from '@/features/repositories/RepositoryImportProgress.vue';
 import { useRepositoryImportMonitor } from '@/features/repositories/useRepositoryImportMonitor';
+import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
 import { useAuthStore } from '@/stores/authStore';
 import RepositoryEditDialog from '@/features/repositories/RepositoryEditDialog.vue';
 import RepositoryGovernanceDialog from '@/features/repositories/RepositoryGovernanceDialog.vue';
@@ -189,8 +190,16 @@ async function saveEdit(input: { name: string; description: string; defaultBranc
   finally { editBusy.value = false; }
 }
 async function branchesChanged() {
+  const guards = useWorkspaceLeaveGuardStore();
+  if (!guards.canRefreshAutomatically()) return false;
   await reloadAll();
-  await branchContext.refresh();
+  if (!alive || !guards.canRefreshAutomatically()) return false;
+  if (store.error || pageError.value) throw new Error(store.error || pageError.value!);
+  return branchContext.refreshCurrent(() => guards.canRefreshAutomatically());
+}
+async function manualBranchesChanged() {
+  try { await branchesChanged(); }
+  catch (cause) { ElMessage.error(cause instanceof Error ? cause.message : '分支状态刷新失败，请重试'); }
 }
 async function readBranch(branchId: string, target?: 'search' | 'atlas') {
   if (readingBusy.value) return;
@@ -266,7 +275,7 @@ onBeforeUnmount(() => { alive = false; ++pageVersion; window.clearTimeout(search
         </div>
         <BranchWorkspace v-else :key="selectedProject.id" :repository-id="selectedProject.id"
           :can-maintain="selectedProject.capabilities.canUpdate" :can-manage="selectedProject.capabilities.canConfigure"
-          :can-track="selectedProject.sourceType !== 'ZIP'" :default-branch="selectedProject.branch || 'WORKSPACE'" :reading-busy="readingBusy" :remote-source="['REMOTE_GIT', 'GITLAB'].includes(selectedProject.sourceType)" :reading-branch-id="branchContext.selectedBranchId" :initial-branch-id="typeof route.query.branchId === 'string' ? route.query.branchId : undefined" show-branch-list @changed="branchesChanged" @read="readBranch" />
+          :can-track="selectedProject.sourceType !== 'ZIP'" :default-branch="selectedProject.branch || 'WORKSPACE'" :reading-busy="readingBusy" :remote-source="['REMOTE_GIT', 'GITLAB'].includes(selectedProject.sourceType)" :reading-branch-id="branchContext.selectedBranchId" :initial-branch-id="typeof route.query.branchId === 'string' ? route.query.branchId : undefined" show-branch-list :refresh-after-task="branchesChanged" @changed="manualBranchesChanged" @read="readBranch" />
       </template>
       <el-empty v-else description="从左侧选择项目，或先接入一个项目" />
     </section>

@@ -9,11 +9,13 @@ import { useBranchContextStore } from '@/stores/branchContextStore';
 import { useBranchReadScope } from '@/features/branches/useBranchReadScope';
 import { branchesApi, type BranchCodeOperation, type BranchPreparationJob } from '@/api/branches';
 import { useBranchPreparation } from '@/features/branches/useBranchPreparation';
+import { useWorkspaceLeaveGuardStore } from '@/stores/workspaceLeaveGuard';
 
 export function useProjectOverview() {
   const repositories = useRepositoryStore();
   const branches = useBranchContextStore();
   const readScope = useBranchReadScope();
+  const leaveGuard = useWorkspaceLeaveGuardStore();
   const preparation = shallowRef<RepositoryPreparation | null>(null);
   const codeFacts = shallowRef<ProjectCodeFacts | null>(null);
   const health = shallowRef<ProjectHealthOverview | null>(null);
@@ -26,7 +28,12 @@ export function useProjectOverview() {
 
   const tasks = useBranchPreparation(
     () => repositories.selectedRepository?.sourceType === 'KNOWLEDGE' ? '' : repositories.selectedRepositoryId ?? '',
-    async () => { await branches.refresh(); await load(repositories.selectedRepositoryId); },
+    async () => {
+      if (!leaveGuard.canRefreshAutomatically()) return false;
+      if (!await branches.refreshCurrent(() => leaveGuard.canRefreshAutomatically())) return false;
+      if (!await load(repositories.selectedRepositoryId)) throw new Error(error.value ?? '总览刷新未完成，请重试');
+      return true;
+    },
     () => branches.selectedBranchId,
   );
   const taskRunning = computed(() => tasks.jobs.value.some(job => job.status === 'QUEUED' || job.status === 'RUNNING'));
@@ -63,7 +70,7 @@ export function useProjectOverview() {
         preparation.value = result.preparation;
         codeFacts.value = result.codeFacts;
         health.value = result.health;
-        return;
+        return true;
       }
       throw new Error(readScope.reason.value);
     } catch (exception) {
@@ -116,7 +123,7 @@ export function useProjectOverview() {
     preparation: shallowReadonly(preparation), codeFacts: shallowReadonly(codeFacts),
     health: shallowReadonly(health), loading: shallowReadonly(loading),
     preparing: computed(() => preparing.value || taskRunning.value), error: shallowReadonly(error),
-    jobs: tasks.jobs, taskError: tasks.error, refreshTasks: tasks.refresh,
+    jobs: tasks.jobs, taskError: tasks.error, refreshPending: tasks.refreshPending, refreshTasks: tasks.refresh,
     reload: () => load(repositories.selectedRepositoryId),
     prepare: () => runPreparation(),
     retryStage: (stage: PreparationStage['key']) => runPreparation(stage),
