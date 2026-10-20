@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
 import type { BranchContext, BranchValidationState } from '@/api/branches';
 import KnowledgeBranchValidationPanel from './KnowledgeBranchValidationPanel.vue';
 import type { CodeReference, KnowledgeCard, KnowledgeDriftEvent } from '@/api/intelligence';
@@ -37,6 +37,8 @@ const visible = defineModel<boolean>({ required: true });
 const auth = useAuthStore();
 const status = computed(() => props.card ? knowledgeStatus(props.card, props.branchContext, props.validationState) : null);
 const maintenanceOpen = ref(false);
+const expanded = shallowRef(false);
+watch(visible, value => { if (!value) expanded.value = false; });
 const needsValidation = computed(() => Boolean(props.card?.publicationStatus === 'PUBLISHED'
   && ['UNVERIFIED', 'REVIEW_REQUIRED', 'INVALID'].includes(props.validationState ?? '')
   && !(props.validationState === 'UNVERIFIED' && props.card.enforcement === 'REFERENCE' && !props.card.codeReferences.length)));
@@ -64,14 +66,16 @@ const hasScope = computed(() => Boolean(props.card && (
 </script>
 
 <template>
-  <el-drawer v-model="visible" :title="card?.title ?? '知识卡片详情'" size="min(760px, 100vw)"
+  <el-drawer v-model="visible" :title="card?.title ?? '知识卡片详情'" :size="expanded ? '100vw' : 'min(1280px, 75vw)'"
     class="knowledge-reader" :modal="false" :lock-scroll="false" @closed="emit('closed')">
     <template #header>
       <div class="reader-heading"><h2>{{ card?.title ?? '知识卡片详情' }}</h2>
+        <el-button class="reader-expand" :aria-pressed="expanded" @click="expanded = !expanded">{{ expanded ? '恢复侧栏' : '展开阅读' }}</el-button>
         <el-button v-if="card && canMaintain" @click="emit('edit', card)">编辑</el-button>
       </div>
     </template>
     <template v-if="card">
+      <div class="reader-document">
       <div class="detail-meta">
         <el-tag v-if="status" :type="status.type">{{ status.label }}</el-tag>
         <span>{{ scopeLabel }}</span>
@@ -125,15 +129,24 @@ const hasScope = computed(() => Boolean(props.card && (
         <div v-if="card.scope.pathPatterns.length"><b>路径</b><code v-for="item in card.scope.pathPatterns" :key="item">{{ item }}</code></div>
         <div v-if="card.scope.symbols.length"><b>符号</b><code v-for="item in card.scope.symbols" :key="item">{{ item }}</code></div>
       </section>
+      </div>
     </template>
   </el-drawer>
 </template>
 
 <style scoped>
-.reader-heading { display: flex; gap: 12px; align-items: start; min-width: 0; }
+.reader-heading { display: flex; gap: 12px; align-items: start; min-width: 0; flex: 1; }
+.reader-heading .el-button { flex-shrink: 0; }
 .reader-heading h2 { flex: 1; margin: 0; font-size: 20px; line-height: 1.5; overflow-wrap: anywhere; }
 :global(.knowledge-reader .el-drawer__header) { margin-bottom: 0; padding: 16px 20px; border-bottom: 1px solid var(--app-border); }
-:global(.knowledge-reader .el-drawer__body) { padding: 20px; }
+:global(.knowledge-reader .el-drawer__body) { padding: 28px clamp(20px, 3vw, 48px) 40px; }
+.reader-document { width: 100%; max-width: 960px; min-width: 0; margin: 0 auto; }
+.detail-content :deep(.markdown-body) { font-size: 15px; }
+
+@media (max-width: 900px) {
+  :global(.knowledge-reader.el-drawer) { width: 100vw !important; }
+  .reader-expand { display: none; }
+}
 
 .maintenance-details { margin-top: 16px; }
 .maintenance-details > summary { cursor: pointer; padding: 10px 0; color: #50647a; }

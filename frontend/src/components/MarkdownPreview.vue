@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, shallowRef, useTemplateRef, watch, watchPostEffect } from 'vue';
 import DOMPurify from 'dompurify';
 import { renderMarkdown } from '@/features/knowledge/markdown';
+import { renderMermaidBlocks } from '@/features/knowledge/mermaid';
+import MermaidViewerDialog from './MermaidViewerDialog.vue';
 
 const props = defineProps<{
   content: string;
@@ -10,6 +12,19 @@ const props = defineProps<{
   embedded?: boolean;
 }>();
 const emit = defineEmits<{ openPath: [path: string] }>();
+const markdownBody = useTemplateRef<HTMLElement>('markdownBody');
+const activeDiagram = shallowRef('');
+const diagramVisible = shallowRef(false);
+watch(() => [props.content, props.repositoryId, props.sourcePath], () => { diagramVisible.value = false; activeDiagram.value = ''; });
+
+watchPostEffect(onCleanup => {
+  // Track the rendered document as well as its mounted element.
+  void renderedMarkdown.value;
+  const root = markdownBody.value;
+  let current = true;
+  onCleanup(() => { current = false; });
+  if (root) void renderMermaidBlocks(root, () => current);
+});
 
 function repositoryPath(sourcePath: string, reference: string) {
   if (!reference || /^(?:[a-z]+:|\/|#)/i.test(reference)) return null;
@@ -64,6 +79,15 @@ const renderedMarkdown = computed(() => {
 });
 
 function handleClick(event: MouseEvent) {
+  const figure = event.target instanceof Element ? event.target.closest<HTMLElement>('.markdown-mermaid') : null;
+  const svg = figure?.querySelector('svg');
+  if (svg) {
+    event.preventDefault();
+    figure?.querySelector<HTMLButtonElement>('button')?.focus();
+    activeDiagram.value = svg.outerHTML;
+    diagramVisible.value = true;
+    return;
+  }
   const target = event.target instanceof Element
     ? event.target.closest<HTMLAnchorElement>('a[data-repository-path]')
     : null;
@@ -77,11 +101,25 @@ function handleClick(event: MouseEvent) {
 <template>
   <section class="markdown-preview-scroll" :class="{ 'markdown-preview-embedded': embedded }" role="document" aria-label="Markdown 预览">
     <!-- Markdown 先由 DOMPurify 清理，再作为受控 HTML 渲染。 -->
-    <article class="markdown-body" v-html="renderedMarkdown" @click="handleClick"></article>
+    <article ref="markdownBody" class="markdown-body" v-html="renderedMarkdown" @click="handleClick"></article>
+    <MermaidViewerDialog v-if="activeDiagram" v-model="diagramVisible" :svg="activeDiagram" />
   </section>
 </template>
 
 <style scoped>
+.markdown-body :deep(.markdown-mermaid) {
+  margin: 18px 0;
+  padding: 16px;
+  overflow-x: auto;
+  background: #fff;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  cursor: zoom-in;
+}
+.markdown-body :deep(.markdown-mermaid-expand) { display: block; margin: 12px 0 0 auto; padding: 6px 12px; color: var(--el-color-primary); background: var(--el-color-primary-light-9); border: 1px solid var(--el-border-color); border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; }
+.markdown-body :deep(.markdown-mermaid-expand:focus-visible) { outline: 2px solid var(--el-color-primary); outline-offset: 3px; }
+.markdown-body :deep(.markdown-mermaid svg) { display: block; max-width: 100%; height: auto; margin: auto; }
+.markdown-body :deep(.markdown-mermaid-error) { color: var(--el-color-warning); font-size: 13px; }
 .markdown-preview-scroll {
   min-width: 0;
   min-height: 0;
@@ -218,7 +256,29 @@ function handleClick(event: MouseEvent) {
   background: transparent;
   color: inherit;
   line-height: 1.7;
+  white-space: pre;
 }
+
+.markdown-body :deep(pre .hljs-comment),
+.markdown-body :deep(pre .hljs-quote) { color: #8b949e; font-style: italic; }
+.markdown-body :deep(pre .hljs-keyword),
+.markdown-body :deep(pre .hljs-selector-tag),
+.markdown-body :deep(pre .hljs-type) { color: #ff7ab2; }
+.markdown-body :deep(pre .hljs-string),
+.markdown-body :deep(pre .hljs-attribute),
+.markdown-body :deep(pre .hljs-template-tag),
+.markdown-body :deep(pre .hljs-template-variable) { color: #a8cc8c; }
+.markdown-body :deep(pre .hljs-number),
+.markdown-body :deep(pre .hljs-literal),
+.markdown-body :deep(pre .hljs-variable),
+.markdown-body :deep(pre .hljs-regexp) { color: #d2a8ff; }
+.markdown-body :deep(pre .hljs-title) { color: #82aaff; }
+.markdown-body :deep(pre .hljs-built_in),
+.markdown-body :deep(pre .hljs-symbol),
+.markdown-body :deep(pre .hljs-meta) { color: #f7c66f; }
+.markdown-body :deep(pre .hljs-params),
+.markdown-body :deep(pre .hljs-property),
+.markdown-body :deep(pre .hljs-attr) { color: #c9d1d9; }
 
 .markdown-body :deep(.markdown-table-scroll) {
   max-width: 100%;
