@@ -34,12 +34,18 @@
     </resultMap>
 
     <sql id="codeColumns">
-        c.id,c.content_version,c.file_path,c.symbol_name,c.symbol_kind,c.start_line,c.end_line,
+        c.id,c.repo_id,c.branch_id,c.content_version,c.file_path,c.symbol_name,c.symbol_kind,c.start_line,c.end_line,
         c.content,c.content_hash
     </sql>
     <sql id="knowledgeColumns">
-        c.id,c.title,c.card_type,c.content,c.revision,
+        c.id,c.repo_id,c.title,c.card_type,c.content,c.revision,
+        origin.source_path,origin.source_branch_id,origin.source_content_version,
+        (origin.card_id IS NULL) curated_knowledge,
         MD5(CONCAT(c.title,E'\n',c.content,E'\n',ARRAY_TO_STRING(c.tags,' '))) content_hash
+    </sql>
+    <sql id="knowledgeOriginJoin">
+        LEFT JOIN knowledge_card_markdown_source_links origin
+          ON origin.card_id=c.id AND origin.revision=c.revision AND origin.repo_id=c.repo_id
     </sql>
     <sql id="validKnowledge">
         c.repo_id=#{repositoryId} AND c.publication_status='PUBLISHED'
@@ -133,6 +139,7 @@
           ) / #{termCount}
         ) lexical_score,0.0 semantic_score
         FROM knowledge_cards c
+        <include refid="knowledgeOriginJoin"/>
         WHERE <include refid="validKnowledge"/>
         <if test="knowledgeKind != null and knowledgeKind != ''">AND c.knowledge_kind=#{knowledgeKind}</if> AND(
           POSITION(#{query} IN LOWER(c.title))&gt;0
@@ -162,6 +169,7 @@
         GREATEST(0.0,1-(e.embedding &lt;=&gt; CAST(#{vector} AS vector))) semantic_score
         FROM knowledge_card_embeddings e
         JOIN knowledge_cards c ON c.id=e.card_id AND c.revision=e.revision
+        <include refid="knowledgeOriginJoin"/>
         WHERE <include refid="validKnowledge"/>
         <if test="knowledgeKind != null and knowledgeKind != ''">AND c.knowledge_kind=#{knowledgeKind}</if> AND e.model=#{model} AND e.dimension=#{dimension}
         ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.updated_at DESC
@@ -580,6 +588,7 @@
         JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
         JOIN repository_branches scope_branch ON scope_branch.id=#{branchId}
         JOIN knowledge_branch_scope_history scope ON scope.card_id=c.id AND scope.revision=c.revision
+        <include refid="knowledgeOriginJoin"/>
         WHERE <include refid="validBranchKnowledge"/>
         <if test="knowledgeKind != null and knowledgeKind != ''">AND c.knowledge_kind=#{knowledgeKind}</if> AND(
           POSITION(#{query} IN LOWER(c.title))&gt;0
@@ -615,6 +624,7 @@
         JOIN branch_context_knowledge pin ON pin.card_id=c.id AND pin.revision=c.revision AND pin.context_id=#{contextId}
         JOIN repository_branches scope_branch ON scope_branch.id=#{branchId}
         JOIN knowledge_branch_scope_history scope ON scope.card_id=c.id AND scope.revision=c.revision
+        <include refid="knowledgeOriginJoin"/>
         WHERE <include refid="validBranchKnowledge"/>
         <if test="knowledgeKind != null and knowledgeKind != ''">AND c.knowledge_kind=#{knowledgeKind}</if> AND e.model=#{model} AND e.dimension=#{dimension}
         ORDER BY e.embedding &lt;=&gt; CAST(#{vector} AS vector),c.changed_at DESC

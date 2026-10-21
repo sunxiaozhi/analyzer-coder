@@ -33,7 +33,7 @@ cp.spawnSync=function(command,args,options){
   if(process.env.FAIL_SAVE)return {status:1,stderr:'simulated export failure'};
   fs.writeFileSync(args[args.indexOf('--output')+1],'fixture image');
  }
- const stdout=args[0]==='info'?'linux':args[0]==='image'?JSON.stringify({Os:'linux',Architecture:process.env.WRONG_ARCH?'arm64':'amd64',Id:'sha256:fixture',Created:'2026-10-08T00:00:00Z'}):'';
+ const stdout=args[0]==='info'?'linux':args[0]==='image'?JSON.stringify({Os:'linux',Architecture:process.env.WRONG_ARCH?'arm64':'amd64',RootFS:{Layers:Array(Number(process.env.IMAGE_LAYERS||30)).fill('sha256:layer')},Id:'sha256:fixture',Created:'2026-10-08T00:00:00Z'}):'';
  return {status:0,stdout,stderr:''};
 };
 require('node:module').syncBuiltinESMExports();
@@ -101,4 +101,13 @@ test('CI versions keep the project release prefix',t=>{
   const destination=path.join(f.root,'delivery with spaces/analyzer-coder-docker-1.2.3-ci.abc123');
   assert.equal(JSON.parse(fs.readFileSync(path.join(destination,'MANIFEST.json'))).releaseVersion,'1.2.3-ci.abc123');
   assert.ok(fs.existsSync(destination+'.tar.gz'));
+});
+
+test('excessive or unverifiable image depth cannot be delivered',t=>{
+  for(const depth of ['65','131','0']){
+    const f=fixture(t), result=f.launch({IMAGE_LAYERS:depth});
+    assert.notEqual(result.status,0);
+    assert.ok(!fs.existsSync(f.destination));
+    assert.match(result.stderr,/filesystem layer/);
+  }
 });

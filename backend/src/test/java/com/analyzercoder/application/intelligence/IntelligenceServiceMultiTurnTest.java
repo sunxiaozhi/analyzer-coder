@@ -1283,6 +1283,134 @@ class IntelligenceServiceMultiTurnTest {
                 .thenReturn(List.of());
     }
 
+    @Test
+    void callExpansionDoesNotReintroduceMergedMarkdown() {
+        UUID repo = UUID.randomUUID(), version = UUID.randomUUID(), branch = UUID.randomUUID();
+        UUID card = UUID.randomUUID(), chunk = UUID.randomUUID(), model = UUID.randomUUID();
+        String content = "Refund policy allows refunds within seven days. ".repeat(5);
+        Map<String, Object> raw =
+                new HashMap<>(
+                        Map.of(
+                                "id",
+                                chunk,
+                                "repo_id",
+                                repo,
+                                "branch_id",
+                                branch,
+                                "content_version",
+                                version,
+                                "file_path",
+                                "rules.md",
+                                "content",
+                                content,
+                                "lexical_score",
+                                .95d,
+                                "content_hash",
+                                "hash"));
+        Map<String, Object> knowledge =
+                new HashMap<>(
+                        Map.of(
+                                "id",
+                                card,
+                                "repo_id",
+                                repo,
+                                "source_branch_id",
+                                branch,
+                                "source_content_version",
+                                version,
+                                "source_path",
+                                "rules.md",
+                                "revision",
+                                1,
+                                "title",
+                                "Refund policy",
+                                "content",
+                                content,
+                                "lexical_score",
+                                .8d));
+        when(mapper.currentContentVersion(repo)).thenReturn(version);
+        when(mapper.searchCodeKeyword(eq(repo), anyString(), anyList(), anyInt(), anyInt()))
+                .thenReturn(List.of(raw));
+        when(mapper.searchKnowledgeKeyword(eq(repo), anyString(), anyList(), anyInt(), anyInt()))
+                .thenReturn(List.of(knowledge));
+        when(mapper.codeReferences(repo, card, 1))
+                .thenReturn(
+                        List.of(
+                                Map.of(
+                                        "chunk_id",
+                                        chunk,
+                                        "content_version",
+                                        version,
+                                        "file_path",
+                                        "rules.md",
+                                        "content_hash",
+                                        "hash",
+                                        "stale",
+                                        false)));
+        when(llm.generate(eq(model), anyString()))
+                .thenReturn(
+                        Optional.of(new LlmSettingsService.GenerationResult("规则 [S1]。", "model")));
+        var answer =
+                service.ask(
+                        repo, UUID.randomUUID(), "refund policy", UUID.randomUUID(), null, model);
+        assertEquals(1, answer.citations().size());
+        assertEquals("KNOWLEDGE", answer.citations().get(0).sourceType());
+        assertTrue(answer.relatedEvidence().isEmpty());
+        assertEquals(2, answer.citations().get(0).sources().size());
+        verify(mapper, never()).findChunkAtContentVersion(repo, chunk, version);
+    }
+
+    @Test
+    void snapshotsExactPromptPassageAndUncitedEvidenceWithStableReferences() throws Exception {
+        UUID repo = UUID.randomUUID(), model = UUID.randomUUID();
+        String full = "Unrelated introduction.\n\n".repeat(300) + "Refund policy: seven days.\n";
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            rows.add(
+                    Map.of(
+                            "id",
+                            UUID.randomUUID(),
+                            "title",
+                            "Policy " + i,
+                            "content",
+                            full,
+                            "revision",
+                            3,
+                            "lexical_score",
+                            1.0d));
+        }
+        when(mapper.searchKnowledgeKeyword(eq(repo), anyString(), anyList(), anyInt(), anyInt()))
+                .thenReturn(rows);
+        List<String> prompts = new ArrayList<>();
+        when(llm.generate(eq(model), anyString()))
+                .thenAnswer(
+                        invocation -> {
+                            prompts.add(invocation.getArgument(1));
+                            return Optional.of(
+                                    new LlmSettingsService.GenerationResult(
+                                            "Refund policy [S10]。", "model"));
+                        });
+        var answer =
+                service.ask(
+                        repo, UUID.randomUUID(), "refund policy", UUID.randomUUID(), null, model);
+        assertEquals(10, answer.citations().get(0).rank());
+        assertEquals(9, answer.relatedEvidence().size());
+        var cited = answer.citations().get(0);
+        assertEquals(3, cited.knowledgeRevision());
+        assertEquals(full, cited.content());
+        assertTrue(cited.excerpt().contains("Refund policy"));
+        assertTrue(cited.excerptStartLine() > 500);
+        assertTrue(prompts.get(0).contains("[S10][KNOWLEDGE]"));
+        assertTrue(prompts.get(0).contains(cited.excerpt()));
+        String evidencePrompt = prompts.get(0).split("本轮证据：", 2)[1].split("请用中文回答", 2)[0];
+        assertTrue(evidencePrompt.length() <= 14000);
+        ObjectMapper json = new ObjectMapper().findAndRegisterModules();
+        var restored =
+                json.readValue(json.writeValueAsString(answer), IntelligenceService.Answer.class);
+        assertEquals(cited.excerpt(), restored.citations().get(0).excerpt());
+        assertEquals(answer.relatedEvidence(), restored.relatedEvidence());
+    }
+
     private static Map<String, Object> row(
             UUID id, UUID threadId, UUID repositoryId, int turnNo, String question) {
         return Map.ofEntries(

@@ -9,6 +9,16 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const options = { version: null, platform: 'linux/amd64', output: 'release', runtimeImage: null };
 const deliveryFiles = ['analyzer.sh', 'analyzer.ps1', 'compose.yaml', 'image.env', 'README.md'];
 const imageFiles = ['configure.mjs', 'runtime.env.example', 'application.yml', 'postgresql.conf', 'nginx.conf'];
+// Keep ample room below legacy overlay2's 128-layer limit, including container layers.
+const maxImageLayers = 64;
+function checkLayerDepth(details, reserve = 0) {
+  const layers = details.RootFS?.Layers;
+  if (!Array.isArray(layers) || layers.length === 0) throw new Error('Cannot verify image filesystem layer count.');
+  if (layers.length + reserve > maxImageLayers) {
+    throw new Error(`Image has ${layers.length} filesystem layers; limit is ${maxImageLayers - reserve}. Rebuild from the original Dockerfile without --runtime-image to avoid max depth exceeded.`);
+  }
+  return layers.length;
+}
 function command(executable, args, cwd = root, capture = false) {
   const result = spawnSync(executable, args, {
     cwd, encoding: 'utf8', windowsHide: true,
@@ -33,6 +43,7 @@ async function hash(file) {
 async function buildWithRuntime(image) {
   const base = JSON.parse(docker(['image', 'inspect', options.runtimeImage, '--format', '{{json .}}'], true));
   if (`${base.Os}/${base.Architecture}` !== options.platform) throw new Error('Runtime image architecture mismatch.');
+  checkLayerDepth(base, 10);
   docker(['run', '--rm', '--entrypoint', 'sh', options.runtimeImage, '-c',
     'set -eu; java -version; postgres --version; nginx -v; git --version; curl --version >/dev/null; command -v tini; python3 --version; codegraph --version']);
   const packages = JSON.parse(docker(['run', '--rm', '--entrypoint', 'npm', options.runtimeImage, 'list', '--global', '--depth=0', '--json'], true));
@@ -123,6 +134,7 @@ async function main() {
   else docker(['build', '--platform', options.platform, '--tag', image, '--file', 'Dockerfile', '.']);
   const details = JSON.parse(docker(['image', 'inspect', image, '--format', '{{json .}}'], true));
   if (`${details.Os}/${details.Architecture}` !== options.platform) throw new Error('Built image architecture mismatch.');
+  const filesystemLayers = checkLayerDepth(details);
   console.log('Verifying external data/configuration, graph tools and container replacement...');
   command(process.execPath, [path.join(root, 'scripts/smoke-docker-image.mjs'), image]);
   fs.mkdirSync(destination, { recursive: true });
@@ -141,7 +153,7 @@ async function main() {
   } catch { /* Source archives may omit Git metadata. */ }
   fs.writeFileSync(path.join(destination, 'MANIFEST.json'), JSON.stringify({
     releaseVersion: options.version, image, platform: options.platform, imageId: details.Id, created: details.Created,
-    codegraphVersion: '1.6.0', sourceCommit, sourceDirty, runtime,
+    codegraphVersion: '1.6.0', sourceCommit, sourceDirty, runtime, filesystemLayers,
     dataMount: './data:/data', configMount: './config:/config:ro',
   }, null, 2) + '\n');
   const sums = [];

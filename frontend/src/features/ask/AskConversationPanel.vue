@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { Promotion, RefreshRight } from '@element-plus/icons-vue';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import { nextTick, onActivated, watch, useTemplateRef } from 'vue';
 import type { Answer, Citation, CodeReference } from '@/api/intelligence';
 import AnswerEvidencePanel from './AnswerEvidencePanel.vue';
+import AnswerContent from './AnswerContent.vue';
 import AskRequestProgress from './AskRequestProgress.vue';
 import type { AskRequestState } from './useAskConversation';
 
@@ -36,10 +35,15 @@ const emit = defineEmits<{
 }>();
 const messagesElement = useTemplateRef<HTMLElement>('messages');
 
-function renderedAnswer(answer: string) {
-  return DOMPurify.sanitize(marked.parse(answer, { async: false, gfm: true }), {
-    USE_PROFILES: { html: true },
-  });
+async function locateCitation(conversationId: string, rank: number) {
+  await nextTick();
+  const answer = [...(messagesElement.value?.querySelectorAll<HTMLElement>('[data-answer-id]') ?? [])]
+    .find(element => element.dataset.answerId === conversationId);
+  const target = answer?.querySelector<HTMLDetailsElement>(`details[data-citation-rank="${rank}"]`);
+  if (!target) return;
+  target.open = true;
+  target.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+  target.focus({ preventScroll: true });
 }
 
 async function scrollToLatest() {
@@ -52,7 +56,14 @@ watch(() => props.restoredThreadId, async (threadId, previousThreadId) => {
   await nextTick();
   if (messagesElement.value) messagesElement.value.scrollTop = 0;
 });
-watch(() => [props.turns.length, props.requestState], async () => {
+watch(() => [props.turns.length, props.requestState] as const, async ([count], [previousCount, previousState]) => {
+  if (count > previousCount && previousState === 'sending') {
+    await nextTick();
+    // Expanded originals can be long; start reading at the answer, not the final source.
+    const answers = messagesElement.value?.querySelectorAll<HTMLElement>('[data-answer-id]');
+    answers?.[answers.length - 1]?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    return;
+  }
   if (props.scrollTop === undefined || props.requestState === 'sending') await scrollToLatest();
   else { await nextTick(); if (messagesElement.value) messagesElement.value.scrollTop = props.scrollTop; }
 });
@@ -92,18 +103,26 @@ function shortcut(event: KeyboardEvent) {
           <p>{{ turn.question }}</p>
         </article>
         <article
+          :data-answer-id="turn.conversationId"
           :class="['message', 'assistant', { selected: turn.conversationId === activeAnswerId }]"
           @click="emit('selectAnswer', turn.conversationId)"
         >
           <span>{{ turn.evidenceStatus === 'DEGRADED' ? '证据' : '助手' }}</span>
           <div class="assistant-content">
             <small v-if="turn.evidenceStatus === 'DEGRADED'" class="local-evidence-label">本地证据摘录 · 未生成模型推理</small>
-            <div class="answer-markdown" v-html="renderedAnswer(turn.answer)"></div>
+            <AnswerContent :answer="turn.answer" :citations="turn.citations" @locate-citation="locateCitation(turn.conversationId, $event)" />
+            <b v-if="turn.citations.length" class="evidence-section-label">引用原文 · {{ turn.citations.length }} 条</b>
             <AnswerEvidencePanel v-if="turn.citations.length" :citations="turn.citations" :branch-id="turn.branchId" :branch-name="turn.branchName"
               :knowledge-only="knowledgeOnly"
-              :expanded="expandedEvidence?.includes(turn.conversationId)" @update:expanded="emit('expandEvidence', turn.conversationId, $event)" @click.stop
+              @click.stop
               @open-knowledge="emit('openKnowledge', $event, turn.branchId)" @open-code="emit('openCode', $event)"
               @open-graph="emit('openGraph', $event)" />
+            <details v-if="turn.relatedEvidence?.length" class="related-evidence" @click.stop>
+              <summary>更多相关证据 · {{ turn.relatedEvidence.length }} 条（本轮回答未引用）</summary>
+              <AnswerEvidencePanel :citations="turn.relatedEvidence" :branch-id="turn.branchId" :branch-name="turn.branchName"
+                :knowledge-only="knowledgeOnly" @open-knowledge="emit('openKnowledge', $event, turn.branchId)"
+                @open-code="emit('openCode', $event)" @open-graph="emit('openGraph', $event)" />
+            </details>
             <div class="answer-trust">
               <strong :data-status="turn.evidenceStatus">{{ statusLabel(turn.evidenceStatus) }}</strong>
               <em v-if="turn.conversationId === activeAnswerId" class="current-turn">当前轮次</em>
@@ -204,6 +223,9 @@ function shortcut(event: KeyboardEvent) {
 .message.assistant { padding:12px 14px; cursor:pointer; border:1px solid transparent; border-radius:8px; transition:background-color .16s ease,border-color .16s ease; }
 .message.assistant.selected { border-color:var(--app-color-action); background:var(--app-selection-bg); }
 .assistant-content { display:grid; gap:12px; min-width:0; padding:2px 4px 4px 0; }
+.evidence-section-label { color:var(--app-text-muted); font-size:13px; font-weight:600; }
+.related-evidence { min-width:0; color:var(--app-text-muted); font-size:13px; }
+.related-evidence > summary { padding:8px 0; cursor:pointer; }
 .answer-markdown { min-width:0; max-width:100%; color:#30363d; font-size:15px; line-height:1.72; overflow-wrap:anywhere; }
 .answer-markdown :deep(h1),.answer-markdown :deep(h2),.answer-markdown :deep(h3),.answer-markdown :deep(h4) { color:#1f2933; line-height:1.4; }
 .answer-markdown :deep(h1) { margin:0 0 18px; padding-bottom:9px; border-bottom:1px solid #dfe3e8; font-size:21px; }

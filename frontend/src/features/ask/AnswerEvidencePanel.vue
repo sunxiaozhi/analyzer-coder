@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Connection, Document, Reading, View } from '@element-plus/icons-vue';
 import type { Citation, CodeReference } from '@/api/intelligence';
+import CitationExcerpt from './CitationExcerpt.vue';
 
 const props = defineProps<{ citations: Citation[]; branchId?: string | null; branchName?: string | null; knowledgeOnly?: boolean }>();
-const expanded = defineModel<boolean>('expanded', { default: false });
 const emit = defineEmits<{
   openKnowledge: [citation: Citation];
   openCode: [reference: CodeReference];
@@ -28,29 +28,42 @@ function citationReference(citation: Citation): CodeReference | null {
 </script>
 
 <template>
-  <details class="answer-evidence" :open="expanded" @toggle="expanded = ($event.target as HTMLDetailsElement).open">
-    <summary><b>引用证据 {{ citations.length }} 条</b><span>{{ knowledgeOnly ? '展开查看知识来源' : '展开查看知识与代码来源' }}</span></summary>
-    <article
+  <section class="answer-evidence" aria-label="证据原文">
+    <details
       v-for="citation in citations"
       :key="citation.id"
       class="evidence-card"
+      :data-citation-rank="citation.rank"
+      :open="citation.sourceType === 'KNOWLEDGE'"
+      tabindex="-1"
     >
+      <summary class="evidence-summary">
       <div class="evidence-heading">
         <span :class="['source-badge', citation.sourceType.toLowerCase()]">
           <el-icon><Reading v-if="citation.sourceType === 'KNOWLEDGE'" /><Document v-else /></el-icon>
           {{ citation.sourceType === 'KNOWLEDGE' ? (citation.sourceScope || '团队知识') : '代码' }}
         </span>
-        <small>S{{ citation.rank }}<template v-if="!knowledgeOnly"> · {{ branchName || branchId || '来源分支未提供' }}</template></small>
+        <small><template v-if="!knowledgeOnly">{{ branchName || branchId || '来源分支未提供' }}</template></small>
       </div>
       <div class="evidence-title">
         <b>{{ citation.title }}</b>
-        <span v-if="citation.sourceType === 'KNOWLEDGE'">知识库内容</span>
+        <span>{{ citation.sourceType === 'KNOWLEDGE' ? '知识原文' : '展开代码原文' }}</span>
       </div>
+      </summary>
+      <div class="evidence-body">
       <div v-if="citation.sourceType === 'CODE'" class="code-location">
         <span class="mono">{{ citation.filePath }}</span>
         <small>L{{ citation.startLine ?? '?' }}–{{ citation.endLine ?? '?' }}</small>
       </div>
-      <p class="evidence-excerpt">{{ citation.content.slice(0, 360) }}</p>
+      <CitationExcerpt :citation="citation" />
+      <details v-if="citation.sources?.length" class="source-origins">
+        <summary>来源记录 · {{ citation.sources.length }} 处</summary>
+        <p v-for="(source, index) in citation.sources" :key="index">
+          {{ source.filePath }}<template v-if="source.startLine"> · L{{ source.startLine }}–{{ source.endLine }}</template>
+          <small v-if="source.branchId">来源分支：{{ source.branchId }}</small>
+          <small v-if="source.contentVersion">内容版本：{{ source.contentVersion }}</small>
+        </p>
+      </details>
 
       <div class="evidence-actions">
         <template v-if="citation.sourceType === 'KNOWLEDGE' && citation.knowledgeCardId">
@@ -62,7 +75,8 @@ function citationReference(citation: Citation): CodeReference | null {
         </template>
       </div>
 
-      <div v-if="citation.codeReferences.length" class="knowledge-code-links">
+      <details v-if="citation.codeReferences.length" class="knowledge-code-links">
+        <summary>关联代码 · {{ citation.codeReferences.length }} 处</summary>
         <div class="linked-code-heading">
           <span>关联代码</span>
           <small>{{ citation.codeReferences.length }} 处</small>
@@ -84,14 +98,15 @@ function citationReference(citation: Citation): CodeReference | null {
             <el-icon><View /></el-icon>
           </span>
         </button>
+      </details>
       </div>
-    </article>
-  </details>
+    </details>
+  </section>
 </template>
 
 <style scoped>
 .answer-evidence {
-  width: min(100%, 760px);
+  width: 100%;
   min-width: 0;
   border: 1px solid #dedee3;
   border-radius: 6px;
@@ -108,12 +123,17 @@ function citationReference(citation: Citation): CodeReference | null {
 }
 .answer-evidence > summary b { font-size: 13px; }
 .evidence-card {
-  display: grid;
-  gap: 10px;
   padding: 16px;
   border-bottom: 1px solid #ededf0;
   transition: background-color .18s ease;
 }
+.evidence-card:focus { outline:2px solid var(--app-color-action); outline-offset:-2px; background:var(--app-selection-bg); }
+.evidence-summary { cursor:pointer; }
+.evidence-summary::marker { color:var(--app-text-muted); }
+.evidence-body { display:grid; gap:12px; min-width:0; margin-top:12px; }
+.source-origins { font-size:12px; color:var(--app-text-muted); overflow-wrap:anywhere; }
+.source-origins summary { cursor:pointer; }
+.source-origins small { display:block; margin-top:4px; }
 .evidence-heading,
 .evidence-actions { display: flex; align-items: center; }
 .evidence-heading { justify-content: space-between; }

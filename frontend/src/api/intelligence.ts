@@ -42,6 +42,22 @@ export interface Citation {
   channels: string[];
   sourceScope: string | null;
   codeReferences: CodeReference[];
+  knowledgeRevision?: number | null;
+  sources?: EvidenceSource[] | null;
+  excerpt?: string | null;
+  excerptStartLine?: number | null;
+  excerptEndLine?: number | null;
+}
+
+export interface EvidenceSource {
+  sourceType: string;
+  id: string | null;
+  filePath: string;
+  branchId: string | null;
+  contentVersion: string | null;
+  revision: number | null;
+  startLine: number | null;
+  endLine: number | null;
 }
 
 export interface CitationAssessment {
@@ -169,6 +185,7 @@ export interface Answer {
   branchName: string | null;
   commitSha: string | null;
   citations: Citation[];
+  relatedEvidence?: Citation[];
   provider: string;
   evidenceStatus:
     | 'CITATION_COMPLETE'

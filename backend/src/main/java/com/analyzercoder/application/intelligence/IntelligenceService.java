@@ -344,6 +344,13 @@ public class IntelligenceService {
             return new ChainContext(evidence, List.of());
         }
         List<Evidence> expanded = new ArrayList<>(evidence);
+        Set<String> mergedChunkIds =
+                evidence.stream()
+                        .flatMap(item -> item.sources().stream())
+                        .filter(source -> "CODE".equals(source.sourceType()))
+                        .map(EvidenceSource::id)
+                        .filter(Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toSet());
         Map<UUID, Integer> citationIndexes = new LinkedHashMap<>();
         for (int index = 0; index < expanded.size(); index++) {
             UUID id = expanded.get(index).chunkId();
@@ -365,6 +372,7 @@ public class IntelligenceService {
                 if (seedIds.size() >= 4 || expanded.size() >= 12) break;
                 UUID id = reference.chunkId();
                 if (id == null
+                        || mergedChunkIds.contains(id.toString())
                         || reference.stale()
                         || !contentVersion.equals(reference.contentVersion())
                         || seedIds.contains(id)) continue;
@@ -400,7 +408,7 @@ public class IntelligenceService {
         List<CallLink> links = new ArrayList<>();
         for (Map<String, Object> row : neighbors) {
             UUID neighborId = uuid(row, "id");
-            if (neighborId == null) continue;
+            if (neighborId == null || mergedChunkIds.contains(neighborId.toString())) continue;
             if (!citationIndexes.containsKey(neighborId) && expanded.size() < 14) {
                 expanded.add(codeEvidence(repositoryId, row, "HEURISTIC_CALL_REFERENCE"));
                 citationIndexes.put(neighborId, expanded.size());
@@ -444,6 +452,8 @@ public class IntelligenceService {
                 "HEURISTIC",
                 List.of(channel),
                 null,
+                List.of(),
+                null,
                 List.of());
     }
 
@@ -468,6 +478,8 @@ public class IntelligenceService {
                         .filter(Objects::nonNull)
                         .findFirst()
                         .orElse(retrieval.contentVersion());
+        List<EvidenceExcerptSelector.Excerpt> excerpts =
+                prepareExcerpts(question, evidence, callLinks);
         String answer;
         boolean knowledgeOnly = context != null && context.knowledgeOnly();
         String provider = "deterministic-local";
@@ -504,7 +516,12 @@ public class IntelligenceService {
                             : llm.generate(
                                     modelConfigId,
                                     llmPrompt(
-                                            question, history, evidence, callLinks, knowledgeOnly));
+                                            question,
+                                            history,
+                                            evidence,
+                                            callLinks,
+                                            knowledgeOnly,
+                                            excerpts));
             if (generated.isPresent()) {
                 ModelCallLogContext.stage("VALIDATE_CITATIONS");
                 AnswerCitationValidator.Validation validation =
@@ -550,7 +567,17 @@ public class IntelligenceService {
             }
         }
         Instant createdAt = Instant.now();
-        List<Citation> citations = citations(cited);
+        List<Citation> citations = citations(cited, excerpts);
+        Set<Integer> citedIndices =
+                cited.stream()
+                        .map(IndexedEvidence::index)
+                        .collect(java.util.stream.Collectors.toSet());
+        List<Citation> relatedEvidence =
+                citations(
+                        indexed(evidence, evidence.size()).stream()
+                                .filter(item -> !citedIndices.contains(item.index()))
+                                .toList(),
+                        excerpts);
         Answer result =
                 new Answer(
                         conversationId,
@@ -570,7 +597,8 @@ public class IntelligenceService {
                         fallbackReason,
                         citationAssessment,
                         retrieval,
-                        createdAt);
+                        createdAt,
+                        relatedEvidence);
         ModelCallLogContext.stage("PERSIST");
         LOG.info(
                 "知识问答阶段: {}, conversationId={}, threadId={}, turnNo={}, citations={}",
@@ -1113,7 +1141,9 @@ public class IntelligenceService {
                     similarityKind(candidate.channels()),
                     candidate.channels(),
                     string(row, "source_scope"),
-                    codeReferences(repositoryId, cardId, revision));
+                    codeReferences(repositoryId, cardId, revision),
+                    revision,
+                    evidenceSources(candidate));
         }
         return new Evidence(
                 repositoryId,
@@ -1137,10 +1167,48 @@ public class IntelligenceService {
                 similarityKind(candidate.channels()),
                 candidate.channels(),
                 null,
-                List.of());
+                List.of(),
+                null,
+                evidenceSources(candidate));
     }
 
-    private List<Citation> citations(List<IndexedEvidence> cited) {
+    private static List<EvidenceSource> evidenceSources(RetrievalRanker.RankedCandidate candidate) {
+        List<EvidenceSource> sources = new ArrayList<>();
+        Map<String, Object> row = candidate.row();
+        if (string(row, "source_path") != null) {
+            sources.add(
+                    new EvidenceSource(
+                            "MARKDOWN",
+                            null,
+                            string(row, "source_path"),
+                            string(row, "source_branch_id"),
+                            string(row, "source_content_version"),
+                            integer(row, "revision"),
+                            null,
+                            null));
+        }
+        for (Map<String, Object> merged : RetrievalRanker.mergedSources(row)) {
+            boolean knowledge = "KNOWLEDGE".equals(string(merged, "source_type"));
+            sources.add(
+                    new EvidenceSource(
+                            string(merged, "source_type"),
+                            string(merged, "id"),
+                            knowledge
+                                    ? "knowledge://" + string(merged, "id")
+                                    : string(merged, "file_path"),
+                            string(merged, knowledge ? "source_branch_id" : "branch_id"),
+                            string(
+                                    merged,
+                                    knowledge ? "source_content_version" : "content_version"),
+                            integer(merged, "revision"),
+                            integer(merged, "start_line"),
+                            integer(merged, "end_line")));
+        }
+        return List.copyOf(sources);
+    }
+
+    private List<Citation> citations(
+            List<IndexedEvidence> cited, List<EvidenceExcerptSelector.Excerpt> excerpts) {
         List<Citation> citations = new ArrayList<>();
         for (IndexedEvidence indexed : cited) {
             Evidence item = indexed.evidence();
@@ -1166,9 +1234,18 @@ public class IntelligenceService {
                             item.similarityKind(),
                             item.channels(),
                             item.sourceScope(),
-                            item.codeReferences()));
+                            item.codeReferences(),
+                            item.knowledgeRevision(),
+                            item.sources(),
+                            excerpts.get(indexed.index() - 1).text(),
+                            excerptLine(item, excerpts.get(indexed.index() - 1).startLine()),
+                            excerptLine(item, excerpts.get(indexed.index() - 1).endLine())));
         }
         return citations;
+    }
+
+    private static int excerptLine(Evidence item, int relativeLine) {
+        return (item.startLine() == null ? 1 : item.startLine()) + relativeLine - 1;
     }
 
     private void persistCitations(UUID conversationId, List<Citation> citations) {
@@ -1224,12 +1301,59 @@ public class IntelligenceService {
                 .toString();
     }
 
+    private static List<EvidenceExcerptSelector.Excerpt> prepareExcerpts(
+            String question, List<Evidence> evidence, List<CallLink> links) {
+        if (evidence.isEmpty()) return List.of();
+        int headerLength = 0;
+        for (int i = 0; i < evidence.size(); i++)
+            headerLength += evidenceHeader(evidence.get(i), i + 1).length();
+        int contentLimit =
+                Math.min(
+                        2400,
+                        Math.max(
+                                1,
+                                ((links.isEmpty() ? 14000 : 12000) - headerLength) / evidence.size()
+                                        - 80));
+        List<String> terms = new RetrievalQueryAnalyzer().analyze(question).terms();
+        return evidence.stream()
+                .map(item -> EvidenceExcerptSelector.select(item.content(), terms, contentLimit))
+                .toList();
+    }
+
+    private static String evidenceHeader(Evidence item, int index) {
+        String references =
+                item.codeReferences().stream()
+                        .limit(3)
+                        .map(
+                                ref ->
+                                        "\n关联代码："
+                                                + limitText(ref.filePath(), 120)
+                                                + ":"
+                                                + ref.startLine())
+                        .collect(java.util.stream.Collectors.joining());
+        return "\n[S"
+                + index
+                + "]["
+                + item.sourceType()
+                + "] "
+                + limitText(item.title(), 120)
+                + "\n来源："
+                + limitText(item.filePath(), 160)
+                + (item.startLine() == null ? "" : ":" + item.startLine() + "-" + item.endLine())
+                + (item.sourceScope() == null ? "" : " · " + limitText(item.sourceScope(), 60))
+                + (item.knowledgeRevision() == null ? "" : " · 修订 " + item.knowledgeRevision())
+                + (item.contentVersion() == null ? "" : " · 版本 " + item.contentVersion())
+                + references
+                + "\n";
+    }
+
     private static String llmPrompt(
             String question,
             List<Answer> history,
             List<Evidence> evidence,
             List<CallLink> links,
-            boolean knowledgeOnly) {
+            boolean knowledgeOnly,
+            List<EvidenceExcerptSelector.Excerpt> excerpts) {
         StringBuilder prompt =
                 new StringBuilder(
                                 "你是项目知识与代码问答助手。只能依据下面带编号的本轮证据回答；"
@@ -1246,35 +1370,14 @@ public class IntelligenceService {
         }
         if (history.isEmpty()) prompt.append("无");
         prompt.append("\n当前问题：").append(limitText(question, 1_200)).append("\n本轮证据：");
-        int remaining = links.isEmpty() ? 14_000 : 12_000;
-        int contentLimit = links.isEmpty() ? 2_400 : Math.min(2_400, 10_000 / evidence.size());
-        for (int index = 0; index < evidence.size() && remaining > 0; index++) {
-            Evidence item = evidence.get(index);
-            String header =
-                    "\n[S"
-                            + (index + 1)
-                            + "]["
-                            + item.sourceType()
-                            + "] "
-                            + limitText(item.title(), 120)
-                            + (item.startLine() == null ? "" : ":" + item.startLine())
-                            + "\n";
-            prompt.append(header);
-            remaining -= header.length();
-            int length =
-                    Math.min(
-                            Math.min(item.content().length(), contentLimit),
-                            Math.max(0, remaining));
-            prompt.append(item.content(), 0, length);
-            remaining -= length;
-            if (links.isEmpty()) {
-                for (CodeReference reference : item.codeReferences()) {
-                    String link = "\n关联代码：" + reference.filePath() + ":" + reference.startLine();
-                    if (link.length() > remaining) break;
-                    prompt.append(link);
-                    remaining -= link.length();
-                }
-            }
+        for (int index = 0; index < evidence.size(); index++) {
+            prompt.append(evidenceHeader(evidence.get(index), index + 1));
+            prompt.append("原文摘录行：")
+                    .append(excerptLine(evidence.get(index), excerpts.get(index).startLine()))
+                    .append('-')
+                    .append(excerptLine(evidence.get(index), excerpts.get(index).endLine()))
+                    .append('\n');
+            prompt.append(excerpts.get(index).text());
         }
         if (!links.isEmpty()) {
             prompt.append("\n候选调用关系（来自启发式索引，箭头表示调用方向，须结合代码核实）：");
@@ -2110,7 +2213,8 @@ public class IntelligenceService {
                     string(row, "fallback_reason"),
                     CitationAssessment.empty(),
                     RetrievalDiagnostics.notExecuted("LEGACY_RECORD"),
-                    instant(row, "created_at"));
+                    instant(row, "created_at"),
+                    List.of());
         }
         try {
             Answer restored = json.readValue(payload, Answer.class);
@@ -2145,7 +2249,8 @@ public class IntelligenceService {
                     restored.retrieval() == null
                             ? RetrievalDiagnostics.notExecuted("LEGACY_RECORD")
                             : restored.retrieval(),
-                    restored.createdAt());
+                    restored.createdAt(),
+                    restored.relatedEvidence() == null ? List.of() : restored.relatedEvidence());
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("无法恢复问答记录", exception);
         }
@@ -2339,7 +2444,9 @@ public class IntelligenceService {
             String similarityKind,
             List<String> channels,
             String sourceScope,
-            List<CodeReference> codeReferences) {}
+            List<CodeReference> codeReferences,
+            Integer knowledgeRevision,
+            List<EvidenceSource> sources) {}
 
     public record Citation(
             UUID id,
@@ -2361,7 +2468,22 @@ public class IntelligenceService {
             String similarityKind,
             List<String> channels,
             String sourceScope,
-            List<CodeReference> codeReferences) {}
+            List<CodeReference> codeReferences,
+            Integer knowledgeRevision,
+            List<EvidenceSource> sources,
+            String excerpt,
+            Integer excerptStartLine,
+            Integer excerptEndLine) {}
+
+    public record EvidenceSource(
+            String sourceType,
+            String id,
+            String filePath,
+            String branchId,
+            String contentVersion,
+            Integer revision,
+            Integer startLine,
+            Integer endLine) {}
 
     public record Answer(
             UUID conversationId,
@@ -2381,7 +2503,8 @@ public class IntelligenceService {
             String fallbackReason,
             CitationAssessment citationAssessment,
             RetrievalDiagnostics retrieval,
-            Instant createdAt) {}
+            Instant createdAt,
+            List<Citation> relatedEvidence) {}
 
     public record ThreadDetail(
             UUID threadId,

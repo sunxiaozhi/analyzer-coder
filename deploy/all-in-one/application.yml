@@ -2,6 +2,8 @@
 # Keep managed files beneath /data so upgrades preserve them.
 # Internal database/backend addresses and ports are fixed by the entrypoint.
 app:
+  retrieval:
+    curated-knowledge-boost: ${APP_RETRIEVAL_CURATED_KNOWLEDGE_BOOST:0.04}
   llm:
     endpoint-exceptions: []
   codegraph:

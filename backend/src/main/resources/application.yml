@@ -48,6 +48,9 @@ management:
         include: health,info,metrics
 
 app:
+  retrieval:
+    # 相关度门槛之后的知识加分系数，0 关闭；生效范围 0–0.08，Markdown 派生知识不加分。
+    curated-knowledge-boost: ${APP_RETRIEVAL_CURATED_KNOWLEDGE_BOOST:0.04}
   credentials:
     # Git/GitLab 凭据加密主密钥；兼容旧部署时回退到 LLM 主密钥，生产环境应单独配置。
     master-key: ${APP_CREDENTIAL_MASTER_KEY:${APP_LLM_MASTER_KEY}}

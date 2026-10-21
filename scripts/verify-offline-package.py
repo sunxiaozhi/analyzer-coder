@@ -50,6 +50,14 @@ manifest = json.loads((directory / 'MANIFEST.json').read_text())
 assert manifest['releaseVersion'] == version
 assert manifest['image'] == f'analyzer-coder:{version}'
 assert manifest['platform'] == 'linux/amd64'
+with tarfile.open(directory / 'image.tar') as image_archive:
+    images = json.load(image_archive.extractfile('manifest.json'))
+    assert len(images) == 1 and images[0]['RepoTags'] == [manifest['image']]
+    config = json.load(image_archive.extractfile(images[0]['Config']))
+    layer_count = len(config['rootfs']['diff_ids'])
+    assert 0 < layer_count <= 64, f'Unsafe image depth: {layer_count}'
+    assert len(images[0]['Layers']) == layer_count
+    assert manifest['filesystemLayers'] == layer_count
 readme = (directory / 'README.md').read_text(encoding='utf-8')
 assert '{{RELEASE_VERSION}}' not in readme and version in readme
 assert f'analyzer-coder:{version}' in (directory / 'image.env').read_text()

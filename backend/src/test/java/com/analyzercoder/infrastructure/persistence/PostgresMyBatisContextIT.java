@@ -11,7 +11,6 @@ import com.analyzercoder.application.indexing.VectorIndexQueryService;
 import com.analyzercoder.application.llm.LlmSettingsService;
 import com.analyzercoder.application.repository.RepositorySourceImportService;
 import com.analyzercoder.domain.repository.CodeRepository;
-import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import com.analyzercoder.infrastructure.persistence.mapper.AuthMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.CaptchaMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.CodeChunkMapper;
@@ -23,6 +22,7 @@ import com.analyzercoder.infrastructure.persistence.mapper.MarkdownKnowledgeSour
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryGovernanceMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.RepositoryMapper;
 import com.analyzercoder.infrastructure.persistence.mapper.VectorIndexQueryMapper;
+import com.analyzercoder.infrastructure.repository.GitBranchContentVersionFactory;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.util.UUID;
@@ -42,6 +42,35 @@ import org.springframework.transaction.annotation.Transactional;
         webEnvironment = SpringBootTest.WebEnvironment.NONE,
         properties = {"spring.main.lazy-initialization=false", "app.workers.enabled=false"})
 class PostgresMyBatisContextIT {
+    @Test
+    void executesSourceAwareRetrievalQueries() {
+        UUID repo = UUID.randomUUID(),
+                version = UUID.randomUUID(),
+                branch = UUID.randomUUID(),
+                context = UUID.randomUUID();
+        var terms = java.util.List.of("refund");
+        assertTrue(intelligence.searchKnowledgeKeyword(repo, "refund", terms, 1, 10).isEmpty());
+        assertTrue(intelligence.searchKnowledgeVector(repo, "[1,0,0]", "test", 3, 10).isEmpty());
+        assertTrue(
+                intelligence
+                        .searchBranchKnowledgeKeyword(
+                                repo, version, branch, context, "refund", terms, 1, 10)
+                        .isEmpty());
+        assertTrue(
+                intelligence
+                        .searchBranchKnowledgeVector(
+                                repo, version, branch, context, "[1,0,0]", "test", 3, 10)
+                        .isEmpty());
+        assertTrue(
+                intelligence
+                        .searchBranchCodeKeyword(repo, version, "refund", terms, 1, 10)
+                        .isEmpty());
+        assertTrue(
+                intelligence
+                        .searchBranchCodeVector(repo, version, "[1,0,0]", "test", 3, 10)
+                        .isEmpty());
+    }
+
     @Autowired AuthMapper auth;
     @Autowired RepositoryMapper repositories;
     @Autowired RepositoryGovernanceMapper governance;
@@ -179,7 +208,8 @@ class PostgresMyBatisContextIT {
                 "current-only");
 
         assertEquals(1, chunks.count(repositoryId, null, null));
-        assertEquals("src/Current.java", chunks.find(repositoryId, null, null, 20, 0).get(0).filePath());
+        assertEquals(
+                "src/Current.java", chunks.find(repositoryId, null, null, 20, 0).get(0).filePath());
         assertTrue(chunks.find(repositoryId, null, "old-only", 20, 0).isEmpty());
 
         jdbc.update(
@@ -188,7 +218,8 @@ class PostgresMyBatisContextIT {
                 repositoryId);
 
         assertEquals(1, chunks.count(repositoryId, null, null));
-        assertEquals("src/Old.java", chunks.find(repositoryId, null, null, 20, 0).get(0).filePath());
+        assertEquals(
+                "src/Old.java", chunks.find(repositoryId, null, null, 20, 0).get(0).filePath());
         assertTrue(chunks.find(repositoryId, null, "current-only", 20, 0).isEmpty());
         assertEquals(
                 3, jdbc.queryForObject("SELECT vector_dims('[1,2,3]'::vector)", Integer.class));
