@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Promotion, RefreshRight } from '@element-plus/icons-vue';
-import { nextTick, onActivated, watch, useTemplateRef } from 'vue';
+import { nextTick, onActivated, shallowRef, watch, useTemplateRef } from 'vue';
 import type { Answer, Citation, CodeReference } from '@/api/intelligence';
 import AnswerEvidencePanel from './AnswerEvidencePanel.vue';
 import AnswerContent from './AnswerContent.vue';
@@ -35,15 +35,9 @@ const emit = defineEmits<{
 }>();
 const messagesElement = useTemplateRef<HTMLElement>('messages');
 
-async function locateCitation(conversationId: string, rank: number) {
-  await nextTick();
-  const answer = [...(messagesElement.value?.querySelectorAll<HTMLElement>('[data-answer-id]') ?? [])]
-    .find(element => element.dataset.answerId === conversationId);
-  const target = answer?.querySelector<HTMLDetailsElement>(`details[data-citation-rank="${rank}"]`);
-  if (!target) return;
-  target.open = true;
-  target.scrollIntoView({ block: 'nearest', behavior: 'auto' });
-  target.focus({ preventScroll: true });
+const citationLocation = shallowRef<{ conversationId: string; rank: number; sequence: number } | null>(null);
+function locateCitation(conversationId: string, rank: number) {
+  citationLocation.value = { conversationId, rank, sequence: (citationLocation.value?.sequence ?? 0) + 1 };
 }
 
 async function scrollToLatest() {
@@ -111,18 +105,11 @@ function shortcut(event: KeyboardEvent) {
           <div class="assistant-content">
             <small v-if="turn.evidenceStatus === 'DEGRADED'" class="local-evidence-label">本地证据摘录 · 未生成模型推理</small>
             <AnswerContent :answer="turn.answer" :citations="turn.citations" @locate-citation="locateCitation(turn.conversationId, $event)" />
-            <b v-if="turn.citations.length" class="evidence-section-label">引用原文 · {{ turn.citations.length }} 条</b>
-            <AnswerEvidencePanel v-if="turn.citations.length" :citations="turn.citations" :branch-id="turn.branchId" :branch-name="turn.branchName"
-              :knowledge-only="knowledgeOnly"
-              @click.stop
+            <AnswerEvidencePanel v-if="turn.citations.length || turn.relatedEvidence?.length" :citations="turn.citations" :related-evidence="turn.relatedEvidence"
+              :branch-id="turn.branchId" :branch-name="turn.branchName" :knowledge-only="knowledgeOnly"
+              :location="citationLocation?.conversationId === turn.conversationId ? citationLocation : null" @click.stop
               @open-knowledge="emit('openKnowledge', $event, turn.branchId)" @open-code="emit('openCode', $event)"
               @open-graph="emit('openGraph', $event)" />
-            <details v-if="turn.relatedEvidence?.length" class="related-evidence" @click.stop>
-              <summary>更多相关证据 · {{ turn.relatedEvidence.length }} 条（本轮回答未引用）</summary>
-              <AnswerEvidencePanel :citations="turn.relatedEvidence" :branch-id="turn.branchId" :branch-name="turn.branchName"
-                :knowledge-only="knowledgeOnly" @open-knowledge="emit('openKnowledge', $event, turn.branchId)"
-                @open-code="emit('openCode', $event)" @open-graph="emit('openGraph', $event)" />
-            </details>
             <div class="answer-trust">
               <strong :data-status="turn.evidenceStatus">{{ statusLabel(turn.evidenceStatus) }}</strong>
               <em v-if="turn.conversationId === activeAnswerId" class="current-turn">当前轮次</em>

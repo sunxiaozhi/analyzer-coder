@@ -1,40 +1,42 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue';
+import { computed } from 'vue';
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import type { Citation } from '@/api/intelligence';
 import MarkdownPreview from '@/components/MarkdownPreview.vue';
+import { citationMarkdown, isMarkdown } from './evidenceGroups';
 
-const props = defineProps<{ citation: Citation }>();
-const full = shallowRef(false);
-watch(() => props.citation.id, () => { full.value = false; });
-const hasExcerpt = computed(() => props.citation.excerpt != null);
-const canExpand = computed(() => hasExcerpt.value && props.citation.excerpt !== props.citation.content);
-const text = computed(() => full.value || !hasExcerpt.value ? props.citation.content : props.citation.excerpt!);
-const markdown = computed(() => {
-  if (props.citation.sourceType === 'KNOWLEDGE' || /\.(md|markdown)$/i.test(props.citation.filePath)) return text.value;
-  const extension = props.citation.filePath.split('.').pop()?.toLowerCase() ?? '';
-  const language = ({ ts: 'typescript', js: 'javascript', py: 'python', sh: 'bash', yml: 'yaml' } as Record<string, string>)[extension] ?? extension;
-  const fence = '`'.repeat([...text.value.matchAll(/`+/g)].reduce((size, match) => Math.max(size, match[0].length + 1), 3));
-  return `${fence}${/^[a-z0-9]+$/.test(language) ? language : ''}\n${text.value}\n${fence}`;
+const props = defineProps<{ citation: Citation; expanded: boolean }>();
+// Legacy records did not save the prompt passage; keep their preview bounded and labelled.
+const passage = computed(() => props.citation.excerpt ?? props.citation.content.slice(0, 1200));
+const markdown = computed(() => citationMarkdown(props.citation, passage.value));
+const preview = computed(() => {
+  if (props.citation.sourceType === 'CODE' && !isMarkdown(props.citation.filePath)) {
+    return passage.value.replace(/\s+/g, ' ').trim().slice(0, 280) || '暂无文字预览';
+  }
+  const html = DOMPurify.sanitize(marked.parse(passage.value.slice(0, 1600), { async: false }), { USE_PROFILES: { html: true } });
+  const document = new DOMParser().parseFromString(html, 'text/html');
+  document.querySelectorAll('pre').forEach(node => node.replaceWith(node.querySelector('.language-mermaid') ? '【图表，展开查看】' : '【代码片段，展开查看】'));
+  document.querySelectorAll('img').forEach(node => node.replaceWith(`【图片：${node.getAttribute('alt') || '展开查看'}】`));
+  document.querySelectorAll('br, p, li, h1, h2, h3, h4, pre, tr').forEach(node => node.append(' '));
+  return (document.body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 280) || '暂无文字预览';
 });
 </script>
 
 <template>
   <div class="citation-excerpt">
     <small class="excerpt-label">
-      {{ !hasExcerpt ? '历史原文快照' : full ? '引用时的完整原文' : '本轮证据原文' }}
-      <template v-if="hasExcerpt && !full"> · L{{ citation.excerptStartLine }}–{{ citation.excerptEndLine }}</template>
+      {{ citation.excerpt == null ? '历史原文预览 · 未保存本轮片段' : '本轮相关片段' }}
+      <template v-if="citation.excerptStartLine != null"> · L{{ citation.excerptStartLine }}–{{ citation.excerptEndLine }}</template>
       <template v-if="citation.knowledgeRevision"> · 修订 {{ citation.knowledgeRevision }}</template>
     </small>
-    <MarkdownPreview :content="markdown" :repository-id="citation.repositoryId" embedded />
-    <button v-if="canExpand" class="expand-original" type="button" :aria-expanded="full" @click="full = !full">
-      {{ full ? '收起完整原文' : '展开完整原文' }}
-    </button>
+    <MarkdownPreview v-if="expanded" :content="markdown" :repository-id="citation.repositoryId" embedded />
+    <p v-else class="excerpt-preview">{{ preview }}</p>
   </div>
 </template>
 
 <style scoped>
-.citation-excerpt { min-width:0; padding:12px; border-left:3px solid var(--app-border-strong, #c9dbe9); background:var(--app-surface, #fff); }
-.excerpt-label { display:block; margin-bottom:10px; color:var(--app-text-muted); font-size:12px; }
-.expand-original { margin-top:12px; padding:4px 0; border:0; background:transparent; color:var(--app-color-action); cursor:pointer; }
-.expand-original:focus-visible { outline:2px solid var(--app-color-action); outline-offset:3px; }
+.citation-excerpt { min-width:0; }
+.excerpt-label { display:block; margin-bottom:8px; color:var(--app-text-muted, #66717c); font-size:12px; }
+.excerpt-preview { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; max-height:4.8em; margin:0; color:var(--app-text-secondary, #4f5e6c); font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
 </style>
