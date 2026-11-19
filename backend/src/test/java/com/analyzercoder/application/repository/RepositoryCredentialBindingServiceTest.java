@@ -93,9 +93,30 @@ class RepositoryCredentialBindingServiceTest {
         verify(auth)
                 .audit(
                         actor.id(),
-                        credentialId,
+                        null,
                         repository.id().value(),
                         "REPOSITORY_CREDENTIAL_BOUND",
+                        "SUCCESS",
+                        "127.0.0.1");
+    }
+
+    @Test
+    void unbindsAndAuditsTheRepositoryWithoutATargetAccount() {
+        RepositoryCredentialService.CredentialView bound =
+                mock(RepositoryCredentialService.CredentialView.class);
+        when(bound.id()).thenReturn(UUID.randomUUID());
+        when(credentials.boundView(repository.id().value())).thenReturn(bound);
+
+        service.unbind(actor, repository.id(), "127.0.0.1");
+
+        verify(access).requireOwner(actor, repository.id());
+        verify(credentials).unbindForRepository(repository.id().value());
+        verify(auth)
+                .audit(
+                        actor.id(),
+                        null,
+                        repository.id().value(),
+                        "REPOSITORY_CREDENTIAL_UNBOUND",
                         "SUCCESS",
                         "127.0.0.1");
     }

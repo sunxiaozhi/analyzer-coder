@@ -178,11 +178,15 @@ public class RepositoryCredentialService {
 
     @Transactional
     public void delete(AuthenticatedAccount actor, UUID id, String sourceIp) {
-        requireOwned(actor, id);
+        requireOwned(actor, mapper.findForUpdate(id));
         int bindings = mapper.countBindings(id);
         if (bindings > 0) {
             throw new IllegalStateException("凭据仍被 " + bindings + " 个项目使用，请先更换或解绑");
         }
+        if (mapper.hasActiveImport(id)) {
+            throw new IllegalStateException("凭据仍被排队或执行中的导入任务使用，请等待任务结束后再删除");
+        }
+        mapper.clearFinishedImportCredentials(id);
         mapper.delete(id);
         auth.audit(actor.id(), null, null, "REPOSITORY_CREDENTIAL_DELETED", "SUCCESS", sourceIp);
     }
@@ -222,7 +226,10 @@ public class RepositoryCredentialService {
     }
 
     private Map<String, Object> requireOwned(AuthenticatedAccount actor, UUID id) {
-        Map<String, Object> row = mapper.find(id);
+        return requireOwned(actor, mapper.find(id));
+    }
+
+    private Map<String, Object> requireOwned(AuthenticatedAccount actor, Map<String, Object> row) {
         if (row == null) {
             throw new IllegalArgumentException("Git 凭据不存在");
         }

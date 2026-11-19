@@ -51,7 +51,7 @@ public class RepositoryCredentialBindingService {
         credentials.bind(repositoryId.value(), credentialId, actor.id());
         auth.audit(
                 actor.id(),
-                credentialId,
+                null,
                 repositoryId.value(),
                 "REPOSITORY_CREDENTIAL_BOUND",
                 "SUCCESS",
@@ -62,12 +62,10 @@ public class RepositoryCredentialBindingService {
     @Transactional
     public void unbind(AuthenticatedAccount actor, CodeRepositoryId repositoryId, String sourceIp) {
         remoteUrl(actor, repositoryId);
-        RepositoryCredentialService.CredentialView bound =
-                credentials.boundView(repositoryId.value());
         credentials.unbindForRepository(repositoryId.value());
         auth.audit(
                 actor.id(),
-                bound == null ? null : bound.id(),
+                null,
                 repositoryId.value(),
                 "REPOSITORY_CREDENTIAL_UNBOUND",
                 "SUCCESS",

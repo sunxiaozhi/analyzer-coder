@@ -28,6 +28,12 @@ public interface RepositoryCredentialMapper {
      */
     Map<String, Object> find(@Param("id") UUID id);
 
+    Map<String, Object> findForUpdate(@Param("id") UUID id);
+
+    boolean hasActiveImport(@Param("id") UUID id);
+
+    int clearFinishedImportCredentials(@Param("id") UUID id);
+
     /**
      * 创建并持久化一条新记录。
      *

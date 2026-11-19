@@ -127,6 +127,36 @@ try {
     assert.equal(sql(`SELECT count(*) FROM ${table} WHERE ${column}='${cardId}'`), '0');
   }
   console.log('PASS: knowledge workspace context and HTTP draft deletion with revision/scope cascades.');
+  const credentialApi = base + '/api/repository-credentials';
+  const remoteUrl = 'https://example.org/smoke.git';
+  const createdCredential = await fetch(credentialApi, {
+    method: 'POST', headers, body: JSON.stringify({
+      type: 'GIT_HTTP_TOKEN', displayName: 'Smoke credential', serverUrl: 'https://example.org',
+      username: 'git', secret: randomUUID(),
+    }),
+  });
+  assert.equal(createdCredential.status, 200);
+  const credentialId = (await createdCredential.json()).id;
+  const remoteRepo = randomUUID(), importJob = randomUUID();
+  sql(`INSERT INTO repositories(id,name,normalized_name,path,codegraph_path,source_type,remote_url,owner_account_id,created_at,updated_at)
+       VALUES('${remoteRepo}','Smoke remote','smoke-remote','/data/smoke-remote','/data/smoke-remote/.codegraph','REMOTE_GIT','${remoteUrl}','${account.id}',now(),now());
+       INSERT INTO repository_credential_bindings(repository_id,credential_id,usage_type,bound_by)
+       VALUES('${remoteRepo}','${credentialId}','CLONE','${account.id}');
+       INSERT INTO repository_import_jobs(id,account_id,credential_id,source_type,repository_name,remote_url,status)
+       VALUES('${importJob}','${account.id}','${credentialId}','REMOTE_GIT','Smoke remote','${remoteUrl}','RUNNING');`);
+  const removeCredential = () => fetch(credentialApi + '/' + credentialId, { method: 'DELETE', headers });
+  assert.equal((await removeCredential()).status, 409);
+  assert.equal((await fetch(base + '/api/repositories/' + remoteRepo + '/credential', { method: 'DELETE', headers })).status, 200);
+  const inUse = await removeCredential();
+  assert.equal(inUse.status, 409);
+  assert.match(await inUse.text(), /导入任务/);
+  assert.equal(sql(`SELECT credential_id FROM repository_import_jobs WHERE id='${importJob}'`), credentialId);
+  sql(`UPDATE repository_import_jobs SET status='SUCCEEDED',result_repository_id='${remoteRepo}' WHERE id='${importJob}'`);
+  assert.equal((await removeCredential()).status, 200);
+  assert.equal(sql(`SELECT count(*) FROM git_credentials WHERE id='${credentialId}'`), '0');
+  assert.equal(sql(`SELECT count(*) FROM repository_import_jobs WHERE id='${importJob}' AND status='SUCCEEDED'
+       AND result_repository_id='${remoteRepo}' AND credential_id IS NULL`), '1');
+  console.log('PASS: HTTP credential unbind and deletion with import history, active-job protection and preserved job result.');
   sql("CREATE TABLE docker_smoke_marker (value text); INSERT INTO docker_smoke_marker VALUES ('persisted');");
   const oldId = docker(['inspect',name,'--format','{{.Id}}']);
   stopAndRemove();
